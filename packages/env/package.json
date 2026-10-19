@@ -1,0 +1,36 @@
+{
+	"name": "@axi/env",
+	"version": "0.1.0-rc.1",
+	"type": "module",
+	"main": "./dist/index.js",
+	"types": "./dist/index.d.ts",
+	"exports": {
+		".": {
+			"source": "./src/index.ts",
+			"types": "./dist/index.d.ts",
+			"import": "./dist/index.js",
+			"default": "./dist/index.js"
+		}
+	},
+	"sideEffects": false,
+	"files": [
+		"dist",
+		"bin",
+		"docs",
+		"README.md"
+	],
+	"scripts": {
+		"build": "tsc -p tsconfig.json",
+		"build:daemon": "node scripts/build-daemon.mjs"
+	},
+	"dependencies": {
+		"@axi/chord": "0.1.0-rc.1",
+		"@axi/durable": "0.1.0-rc.1"
+	},
+	"engines": {
+		"node": ">=22.19.0"
+	},
+	"private": true,
+	"description": "Native local and remote execution environments.",
+	"license": "MIT"
+}

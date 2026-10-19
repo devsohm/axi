@@ -1,0 +1,17 @@
+{
+	"name": "axi-workers-tests",
+	"private": true,
+	"type": "module",
+	"dependencies": {
+		"miniflare": "4.20260730.0"
+	},
+	"devDependencies": {
+		"esbuild": "0.28.2"
+	},
+	"overrides": {
+		"miniflare": {
+			"sharp": "0.35.5",
+			"undici": "7.29.1"
+		}
+	}
+}

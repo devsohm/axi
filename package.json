@@ -1,0 +1,38 @@
+{
+	"name": "axi-toolkit",
+	"private": true,
+	"type": "module",
+	"workspaces": [
+		"packages/telemetry",
+		"packages/chord",
+		"packages/ai",
+		"packages/codemode",
+		"packages/mcp",
+		"packages/durable",
+		"packages/env"
+	],
+	"scripts": {
+		"build": "npm run build --workspaces --if-present",
+		"check": "tsc -p tsconfig.json",
+		"format": "biome format --write .",
+		"format:check": "biome format .",
+		"test": "vitest run",
+		"pack": "node scripts/pack.mjs",
+		"verify:packages": "node scripts/verify-packages.mjs",
+		"test:workers": "node test/workers/run.mjs && node test/workers/codemode-example.mjs"
+	},
+	"devDependencies": {
+		"@biomejs/biome": "2.3.5",
+		"@types/node": "22.19.19",
+		"@types/ws": "8.18.2",
+		"typescript": "7.0.2",
+		"vitest": "4.1.11",
+		"ws": "8.21.0",
+		"@types/cross-spawn": "6.0.6"
+	},
+	"version": "0.1.0-rc.1",
+	"license": "MIT",
+	"engines": {
+		"node": ">=22.19.0"
+	}
+}

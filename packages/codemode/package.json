@@ -1,0 +1,58 @@
+{
+	"name": "@axi/codemode",
+	"version": "0.1.0-rc.1",
+	"type": "module",
+	"main": "./dist/index.js",
+	"types": "./dist/index.d.ts",
+	"sideEffects": false,
+	"exports": {
+		".": {
+			"source": "./src/index.ts",
+			"types": "./dist/index.d.ts",
+			"import": "./dist/index.js"
+		},
+		"./source": {
+			"source": "./src/source.ts",
+			"types": "./dist/source.d.ts",
+			"import": "./dist/source.js"
+		},
+		"./declarations": {
+			"source": "./src/declarations.ts",
+			"types": "./dist/declarations.d.ts",
+			"import": "./dist/declarations.js"
+		},
+		"./portable": {
+			"source": "./src/portable.ts",
+			"types": "./dist/portable.d.ts",
+			"import": "./dist/portable.js"
+		},
+		"./cloudflare": {
+			"source": "./src/cloudflare.ts",
+			"types": "./dist/cloudflare.d.ts",
+			"import": "./dist/cloudflare.js"
+		},
+		"./worker": {
+			"source": "./src/runtime/worker.ts",
+			"types": "./dist/runtime/worker.d.ts",
+			"import": "./dist/runtime/worker.js"
+		}
+	},
+	"files": [
+		"dist",
+		"README.md",
+		"docs",
+		"examples"
+	],
+	"scripts": {
+		"build": "tsc -p tsconfig.json"
+	},
+	"dependencies": {
+		"quickjs-wasi": "3.6.2"
+	},
+	"engines": {
+		"node": ">=22.19.0"
+	},
+	"private": true,
+	"description": "Isolated JavaScript execution with tool calls.",
+	"license": "MIT"
+}

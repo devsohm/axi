@@ -1,0 +1,31 @@
+{
+	"name": "@axi/telemetry",
+	"version": "0.1.0-rc.1",
+	"scripts": {
+		"build": "tsc -p tsconfig.json"
+	},
+	"type": "module",
+	"main": "./dist/index.js",
+	"types": "./dist/index.d.ts",
+	"exports": {
+		".": {
+			"types": "./dist/index.d.ts",
+			"import": "./dist/index.js"
+		},
+		"./testing": {
+			"types": "./dist/testing/index.d.ts",
+			"import": "./dist/testing/index.js"
+		}
+	},
+	"files": [
+		"dist",
+		"docs",
+		"README.md"
+	],
+	"engines": {
+		"node": ">=22.19.0"
+	},
+	"private": true,
+	"description": "Typed callback spans and local telemetry recording.",
+	"license": "MIT"
+}

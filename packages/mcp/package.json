@@ -1,0 +1,42 @@
+{
+	"name": "@axi/mcp",
+	"version": "0.1.0-rc.1",
+	"type": "module",
+	"main": "./dist/index.js",
+	"types": "./dist/index.d.ts",
+	"sideEffects": false,
+	"exports": {
+		".": {
+			"source": "./src/index.ts",
+			"types": "./dist/index.d.ts",
+			"import": "./dist/index.js"
+		},
+		"./oauth": {
+			"source": "./src/oauth/index.ts",
+			"types": "./dist/oauth/index.d.ts",
+			"import": "./dist/oauth/index.js"
+		},
+		"./testing": {
+			"source": "./src/testing/index.ts",
+			"types": "./dist/testing/index.d.ts",
+			"import": "./dist/testing/index.js"
+		}
+	},
+	"files": [
+		"dist",
+		"README.md",
+		"docs"
+	],
+	"scripts": {
+		"build": "tsc -p tsconfig.json"
+	},
+	"dependencies": {
+		"cross-spawn": "7.0.6"
+	},
+	"engines": {
+		"node": ">=22.19.0"
+	},
+	"private": true,
+	"description": "An independent Model Context Protocol client.",
+	"license": "MIT"
+}

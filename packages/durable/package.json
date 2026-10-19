@@ -1,0 +1,130 @@
+{
+	"name": "@axi/durable",
+	"version": "0.1.0-rc.1",
+	"type": "module",
+	"main": "./dist/index.js",
+	"types": "./dist/index.d.ts",
+	"sideEffects": false,
+	"exports": {
+		"./tool-search": {
+			"source": "./src/tool-search/index.ts",
+			"types": "./dist/tool-search/index.d.ts",
+			"import": "./dist/tool-search/index.js",
+			"default": "./dist/tool-search/index.js"
+		},
+		"./package.json": "./package.json",
+		"./storage/memory": {
+			"source": "./src/storage/memory.ts",
+			"types": "./dist/storage/memory.d.ts",
+			"import": "./dist/storage/memory.js",
+			"default": "./dist/storage/memory.js"
+		},
+		"./env": {
+			"source": "./src/env/index.ts",
+			"types": "./dist/env/index.d.ts",
+			"import": "./dist/env/index.js",
+			"default": "./dist/env/index.js"
+		},
+		"./env/node": {
+			"source": "./src/env/node.ts",
+			"types": "./dist/env/node.d.ts",
+			"import": "./dist/env/node.js",
+			"default": "./dist/env/node.js"
+		},
+		".": {
+			"source": "./src/index.ts",
+			"types": "./dist/index.d.ts",
+			"import": "./dist/index.js",
+			"default": "./dist/index.js"
+		},
+		"./storage/sqlite": {
+			"source": "./src/storage/sqlite/index.ts",
+			"types": "./dist/storage/sqlite/index.d.ts",
+			"import": "./dist/storage/sqlite/index.js",
+			"default": "./dist/storage/sqlite/index.js"
+		},
+		"./storage/sqlite/node": {
+			"source": "./src/storage/sqlite/node.ts",
+			"types": "./dist/storage/sqlite/node.d.ts",
+			"import": "./dist/storage/sqlite/node.js",
+			"default": "./dist/storage/sqlite/node.js"
+		},
+		"./storage/sqlite/cloudflare": {
+			"source": "./src/storage/sqlite/cloudflare.ts",
+			"types": "./dist/storage/sqlite/cloudflare.d.ts",
+			"import": "./dist/storage/sqlite/cloudflare.js",
+			"default": "./dist/storage/sqlite/cloudflare.js"
+		},
+		"./storage/jsonl": {
+			"source": "./src/storage/jsonl/index.ts",
+			"types": "./dist/storage/jsonl/index.d.ts",
+			"import": "./dist/storage/jsonl/index.js",
+			"default": "./dist/storage/jsonl/index.js"
+		},
+		"./storage/jsonl/node": {
+			"source": "./src/storage/jsonl/node.ts",
+			"types": "./dist/storage/jsonl/node.d.ts",
+			"import": "./dist/storage/jsonl/node.js",
+			"default": "./dist/storage/jsonl/node.js"
+		},
+		"./tools": {
+			"source": "./src/tools/index.ts",
+			"types": "./dist/tools/index.d.ts",
+			"import": "./dist/tools/index.js",
+			"default": "./dist/tools/index.js"
+		},
+		"./images": {
+			"source": "./src/images/index.ts",
+			"types": "./dist/images/index.d.ts",
+			"import": "./dist/images/index.js",
+			"default": "./dist/images/index.js"
+		},
+		"./images/node": {
+			"source": "./src/images/node.ts",
+			"types": "./dist/images/node.d.ts",
+			"import": "./dist/images/node.js",
+			"default": "./dist/images/node.js"
+		},
+		"./images/cloudflare": {
+			"source": "./src/images/cloudflare.ts",
+			"types": "./dist/images/cloudflare.d.ts",
+			"import": "./dist/images/cloudflare.js",
+			"default": "./dist/images/cloudflare.js"
+		},
+		"./codemode": {
+			"source": "./src/codemode/index.ts",
+			"types": "./dist/codemode/index.d.ts",
+			"import": "./dist/codemode/index.js",
+			"default": "./dist/codemode/index.js"
+		},
+		"./testing": {
+			"source": "./src/testing/index.ts",
+			"types": "./dist/testing/index.d.ts",
+			"import": "./dist/testing/index.js",
+			"default": "./dist/testing/index.js"
+		}
+	},
+	"files": [
+		"dist",
+		"docs",
+		"README.md"
+	],
+	"scripts": {
+		"build": "tsc -p tsconfig.json"
+	},
+	"dependencies": {
+		"@axi/ai": "0.1.0-rc.1",
+		"@axi/chord": "0.1.0-rc.1",
+		"@axi/codemode": "0.1.0-rc.1",
+		"@axi/telemetry": "0.1.0-rc.1",
+		"@silvia-odwyer/photon": "0.3.3",
+		"diff": "8.0.4",
+		"typebox": "1.3.27"
+	},
+	"engines": {
+		"node": ">=22.19.0"
+	},
+	"private": true,
+	"description": "Durable conversations, tasks, tools, and storage.",
+	"license": "MIT"
+}

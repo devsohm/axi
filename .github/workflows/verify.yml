@@ -1,0 +1,174 @@
+name: Verify packages
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  native:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            target: linux-x64
+          - runner: ubuntu-24.04-arm
+            target: linux-arm64
+          - runner: macos-15-intel
+            target: darwin-x64
+          - runner: macos-15
+            target: darwin-arm64
+          - runner: windows-2025
+            target: windows-x64
+          - runner: windows-11-arm
+            target: windows-arm64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: 26.10.0
+          cache: npm
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec
+        with:
+          toolchain: 1.98.1
+      - run: npm ci
+      - run: npm run build
+      - run: npm run build:daemon --workspace @axi/env
+      - run: cargo test --locked --manifest-path packages/env/daemon/Cargo.toml
+      - run: npm run check
+      - run: npm test
+      - run: npm run pack -- release/package
+      - run: npm run verify:packages -- release/package
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: native-${{ matrix.target }}
+          path: packages/env/bin
+          if-no-files-found: error
+
+  android:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - triple: aarch64-linux-android
+            compiler: aarch64-linux-android24-clang
+            target: android-arm64
+          - triple: x86_64-linux-android
+            compiler: x86_64-linux-android24-clang
+            target: android-x64
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: 26.10.0
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec
+        with:
+          toolchain: 1.98.1
+          targets: ${{ matrix.triple }}
+      - name: Select the Android linker
+        env:
+          TARGET: ${{ matrix.triple }}
+          COMPILER: ${{ matrix.compiler }}
+        run: |
+          test -n "$ANDROID_NDK_LATEST_HOME"
+          key="CARGO_TARGET_$(echo "$TARGET" | tr '[:lower:]-' '[:upper:]_')_LINKER"
+          echo "$key=$ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/$COMPILER" >> "$GITHUB_ENV"
+      - run: npm ci
+      - run: npm run build:daemon --workspace @axi/env
+        env:
+          CARGO_BUILD_TARGET: ${{ matrix.triple }}
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: native-${{ matrix.target }}
+          path: packages/env/bin
+          if-no-files-found: error
+
+  compatibility:
+    needs: native
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [22.19.0, 24.20.0]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: ${{ matrix.node }}
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with:
+          name: native-linux-x64
+          path: packages/env/bin
+      - run: chmod +x packages/env/bin/axi-env-linux-x64/axi-env
+      - run: npm ci
+      - run: npm run build
+      - run: npm run check
+      - run: npm test
+      - run: npm run pack -- release/package
+      - run: npm run verify:packages -- release/package
+
+  archive:
+    needs: [native, android, compatibility]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: 26.10.0
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with:
+          pattern: native-*
+          path: packages/env/bin
+          merge-multiple: true
+      - run: find packages/env/bin -type f -name axi-env -exec chmod +x {} +
+      - run: npm ci
+      - run: npm run build
+      - name: Check native coverage
+        run: |
+          for target in linux-x64 linux-arm64 darwin-x64 darwin-arm64 android-x64 android-arm64; do test -x "packages/env/bin/axi-env-$target/axi-env"; done
+          for target in windows-x64 windows-arm64; do test -s "packages/env/bin/axi-env-$target/axi-env.exe"; done
+      - run: npm ci --prefix test/workers --ignore-scripts
+      - run: npm run test:workers
+      - run: npm run pack -- release/package
+      - run: npm run verify:packages -- release/package
+      - name: Create the archive
+        run: |
+          version=$(node -p 'require("./package.json").version')
+          tar -C release/package -czf "release/axi-toolkit-$version.tar.gz" .
+          cd release
+          sha256sum "axi-toolkit-$version.tar.gz" > SHA256SUMS
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: axi-toolkit
+          path: |
+            release/*.tar.gz
+            release/SHA256SUMS
+          if-no-files-found: error
+  draft:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: archive
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with:
+          name: axi-toolkit
+          path: release
+      - name: Create a draft GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          test "$GITHUB_REF_NAME" = "v$(node -p 'require("./package.json").version')"
+          gh release create "$GITHUB_REF_NAME" release/*.tar.gz release/SHA256SUMS --draft --generate-notes

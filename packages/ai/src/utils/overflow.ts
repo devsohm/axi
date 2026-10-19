@@ -1,0 +1,47 @@
+import type { AssistantMessage } from "../types.ts";
+const patterns = [
+	/prompt (?:is )?too long/i,
+	/prompt exceeds max length/i,
+	/request_too_large/i,
+	/input is too long for requested model/i,
+	/exceeds the context window/i,
+	/exceeds (?:the )?(?:model'?s )?maximum context length(?: of [\d,]+ tokens?|\s*\([\d,]+\))/i,
+	/input token count.*exceeds the maximum/i,
+	/maximum prompt length is \d+/i,
+	/reduce the length of the messages/i,
+	/maximum context length is \d+ tokens/i,
+	/exceeds (?:the )?maximum allowed input length of [\d,]+ tokens?/i,
+	/input \(\d+ tokens\) is longer than the model'?s context length \(\d+ tokens\)/i,
+	/exceeds the limit of \d+/i,
+	/exceeds the available context size/i,
+	/greater than the context length/i,
+	/context window exceeds limit/i,
+	/exceeded model token limit/i,
+	/too large for model with \d+ maximum context length/i,
+	/prompt has [\d,]+ tokens?, but the configured context size is [\d,]+ tokens?/i,
+	/model_context_window_exceeded/i,
+	/prompt too long; exceeded (?:max )?context length/i,
+	/range of input length should be/i,
+	/context[_ ]length[_ ]exceeded/i,
+	/too many tokens/i,
+	/token limit exceeded/i,
+];
+export function getOverflowPatterns(): RegExp[] {
+	return [...patterns];
+}
+export function isRecoverableLength(message: AssistantMessage, desiredMaxOutput: number): boolean {
+	return message.stopReason === "length" && desiredMaxOutput > 0 && message.usage.output < desiredMaxOutput;
+}
+export function isContextOverflow(message: AssistantMessage, contextWindow?: number): boolean {
+	if (message.stopReason === "error" && message.errorMessage) {
+		const text = message.errorMessage;
+		if (!/^(?:Throttling error|Service unavailable):|rate limit|too many requests/i.test(text)) {
+			if (patterns.some((pattern) => pattern.test(text))) return true;
+			if (message.provider === "cerebras" && /^4(?:00|13)\s*(?:status code)?\s*\(no body\)/i.test(text)) return true;
+		}
+	}
+	if (!contextWindow) return false;
+	if (message.stopReason === "stop") return message.usage.input + message.usage.cacheRead > contextWindow;
+	if (message.stopReason !== "length" || message.usage.output !== 0) return false;
+	return message.usage.input + message.usage.cacheRead >= contextWindow * 0.99;
+}

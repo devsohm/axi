@@ -1,0 +1,257 @@
+import {
+	AMAZON_BEDROCK_MODELS,
+	AMAZON_BEDROCK_IMAGE_MODELS,
+	AMAZON_BEDROCK_CLASSIFIER_MODELS,
+} from "./providers/amazon-bedrock.models.ts";
+import { ANT_LING_MODELS, ANT_LING_IMAGE_MODELS, ANT_LING_CLASSIFIER_MODELS } from "./providers/ant-ling.models.ts";
+import { ANTHROPIC_MODELS, ANTHROPIC_IMAGE_MODELS, ANTHROPIC_CLASSIFIER_MODELS } from "./providers/anthropic.models.ts";
+import { AZURE_MODELS, AZURE_IMAGE_MODELS, AZURE_CLASSIFIER_MODELS } from "./providers/azure.models.ts";
+import { BASETEN_MODELS, BASETEN_IMAGE_MODELS, BASETEN_CLASSIFIER_MODELS } from "./providers/baseten.models.ts";
+import { CEREBRAS_MODELS, CEREBRAS_IMAGE_MODELS, CEREBRAS_CLASSIFIER_MODELS } from "./providers/cerebras.models.ts";
+import {
+	CLOUDFLARE_AI_GATEWAY_MODELS,
+	CLOUDFLARE_AI_GATEWAY_IMAGE_MODELS,
+	CLOUDFLARE_AI_GATEWAY_CLASSIFIER_MODELS,
+} from "./providers/cloudflare-ai-gateway.models.ts";
+import {
+	CLOUDFLARE_WORKERS_AI_MODELS,
+	CLOUDFLARE_WORKERS_AI_IMAGE_MODELS,
+	CLOUDFLARE_WORKERS_AI_CLASSIFIER_MODELS,
+} from "./providers/cloudflare-workers-ai.models.ts";
+import { DEEPSEEK_MODELS, DEEPSEEK_IMAGE_MODELS, DEEPSEEK_CLASSIFIER_MODELS } from "./providers/deepseek.models.ts";
+import { FIREWORKS_MODELS, FIREWORKS_IMAGE_MODELS, FIREWORKS_CLASSIFIER_MODELS } from "./providers/fireworks.models.ts";
+import {
+	GITHUB_COPILOT_MODELS,
+	GITHUB_COPILOT_IMAGE_MODELS,
+	GITHUB_COPILOT_CLASSIFIER_MODELS,
+} from "./providers/github-copilot.models.ts";
+import { GOOGLE_MODELS, GOOGLE_IMAGE_MODELS, GOOGLE_CLASSIFIER_MODELS } from "./providers/google.models.ts";
+import {
+	GOOGLE_VERTEX_MODELS,
+	GOOGLE_VERTEX_IMAGE_MODELS,
+	GOOGLE_VERTEX_CLASSIFIER_MODELS,
+} from "./providers/google-vertex.models.ts";
+import { GROQ_MODELS, GROQ_IMAGE_MODELS, GROQ_CLASSIFIER_MODELS } from "./providers/groq.models.ts";
+import {
+	HUGGINGFACE_MODELS,
+	HUGGINGFACE_IMAGE_MODELS,
+	HUGGINGFACE_CLASSIFIER_MODELS,
+} from "./providers/huggingface.models.ts";
+import {
+	KIMI_CODING_MODELS,
+	KIMI_CODING_IMAGE_MODELS,
+	KIMI_CODING_CLASSIFIER_MODELS,
+} from "./providers/kimi-coding.models.ts";
+import { META_MODELS, META_IMAGE_MODELS, META_CLASSIFIER_MODELS } from "./providers/meta.models.ts";
+import { MINIMAX_MODELS, MINIMAX_IMAGE_MODELS, MINIMAX_CLASSIFIER_MODELS } from "./providers/minimax.models.ts";
+import {
+	MINIMAX_CN_MODELS,
+	MINIMAX_CN_IMAGE_MODELS,
+	MINIMAX_CN_CLASSIFIER_MODELS,
+} from "./providers/minimax-cn.models.ts";
+import { MISTRAL_MODELS, MISTRAL_IMAGE_MODELS, MISTRAL_CLASSIFIER_MODELS } from "./providers/mistral.models.ts";
+import {
+	MOONSHOTAI_MODELS,
+	MOONSHOTAI_IMAGE_MODELS,
+	MOONSHOTAI_CLASSIFIER_MODELS,
+} from "./providers/moonshotai.models.ts";
+import {
+	MOONSHOTAI_CN_MODELS,
+	MOONSHOTAI_CN_IMAGE_MODELS,
+	MOONSHOTAI_CN_CLASSIFIER_MODELS,
+} from "./providers/moonshotai-cn.models.ts";
+import { NVIDIA_MODELS, NVIDIA_IMAGE_MODELS, NVIDIA_CLASSIFIER_MODELS } from "./providers/nvidia.models.ts";
+import { OPENAI_MODELS, OPENAI_IMAGE_MODELS, OPENAI_CLASSIFIER_MODELS } from "./providers/openai.models.ts";
+import {
+	OPENAI_CODEX_MODELS,
+	OPENAI_CODEX_IMAGE_MODELS,
+	OPENAI_CODEX_CLASSIFIER_MODELS,
+} from "./providers/openai-codex.models.ts";
+import { OPENCODE_MODELS, OPENCODE_IMAGE_MODELS, OPENCODE_CLASSIFIER_MODELS } from "./providers/opencode.models.ts";
+import {
+	OPENCODE_GO_MODELS,
+	OPENCODE_GO_IMAGE_MODELS,
+	OPENCODE_GO_CLASSIFIER_MODELS,
+} from "./providers/opencode-go.models.ts";
+import {
+	OPENROUTER_MODELS,
+	OPENROUTER_IMAGE_MODELS,
+	OPENROUTER_CLASSIFIER_MODELS,
+} from "./providers/openrouter.models.ts";
+import {
+	QWEN_TOKEN_PLAN_MODELS,
+	QWEN_TOKEN_PLAN_IMAGE_MODELS,
+	QWEN_TOKEN_PLAN_CLASSIFIER_MODELS,
+} from "./providers/qwen-token-plan.models.ts";
+import {
+	QWEN_TOKEN_PLAN_CN_MODELS,
+	QWEN_TOKEN_PLAN_CN_IMAGE_MODELS,
+	QWEN_TOKEN_PLAN_CN_CLASSIFIER_MODELS,
+} from "./providers/qwen-token-plan-cn.models.ts";
+import {
+	QWEN_TOKEN_PLAN_INDIVIDUAL_MODELS,
+	QWEN_TOKEN_PLAN_INDIVIDUAL_IMAGE_MODELS,
+	QWEN_TOKEN_PLAN_INDIVIDUAL_CLASSIFIER_MODELS,
+} from "./providers/qwen-token-plan-individual.models.ts";
+import { TOGETHER_MODELS, TOGETHER_IMAGE_MODELS, TOGETHER_CLASSIFIER_MODELS } from "./providers/together.models.ts";
+import { TYPESAFE_MODELS, TYPESAFE_IMAGE_MODELS, TYPESAFE_CLASSIFIER_MODELS } from "./providers/typesafe.models.ts";
+import {
+	VERCEL_AI_GATEWAY_MODELS,
+	VERCEL_AI_GATEWAY_IMAGE_MODELS,
+	VERCEL_AI_GATEWAY_CLASSIFIER_MODELS,
+} from "./providers/vercel-ai-gateway.models.ts";
+import { XAI_MODELS, XAI_IMAGE_MODELS, XAI_CLASSIFIER_MODELS } from "./providers/xai.models.ts";
+import { XIAOMI_MODELS, XIAOMI_IMAGE_MODELS, XIAOMI_CLASSIFIER_MODELS } from "./providers/xiaomi.models.ts";
+import {
+	XIAOMI_TOKEN_PLAN_AMS_MODELS,
+	XIAOMI_TOKEN_PLAN_AMS_IMAGE_MODELS,
+	XIAOMI_TOKEN_PLAN_AMS_CLASSIFIER_MODELS,
+} from "./providers/xiaomi-token-plan-ams.models.ts";
+import {
+	XIAOMI_TOKEN_PLAN_CN_MODELS,
+	XIAOMI_TOKEN_PLAN_CN_IMAGE_MODELS,
+	XIAOMI_TOKEN_PLAN_CN_CLASSIFIER_MODELS,
+} from "./providers/xiaomi-token-plan-cn.models.ts";
+import {
+	XIAOMI_TOKEN_PLAN_SGP_MODELS,
+	XIAOMI_TOKEN_PLAN_SGP_IMAGE_MODELS,
+	XIAOMI_TOKEN_PLAN_SGP_CLASSIFIER_MODELS,
+} from "./providers/xiaomi-token-plan-sgp.models.ts";
+import { ZAI_MODELS, ZAI_IMAGE_MODELS, ZAI_CLASSIFIER_MODELS } from "./providers/zai.models.ts";
+import {
+	ZAI_CODING_CN_MODELS,
+	ZAI_CODING_CN_IMAGE_MODELS,
+	ZAI_CODING_CN_CLASSIFIER_MODELS,
+} from "./providers/zai-coding-cn.models.ts";
+
+export const MODELS = {
+	"amazon-bedrock": AMAZON_BEDROCK_MODELS,
+	"ant-ling": ANT_LING_MODELS,
+	anthropic: ANTHROPIC_MODELS,
+	azure: AZURE_MODELS,
+	baseten: BASETEN_MODELS,
+	cerebras: CEREBRAS_MODELS,
+	"cloudflare-ai-gateway": CLOUDFLARE_AI_GATEWAY_MODELS,
+	"cloudflare-workers-ai": CLOUDFLARE_WORKERS_AI_MODELS,
+	deepseek: DEEPSEEK_MODELS,
+	fireworks: FIREWORKS_MODELS,
+	"github-copilot": GITHUB_COPILOT_MODELS,
+	google: GOOGLE_MODELS,
+	"google-vertex": GOOGLE_VERTEX_MODELS,
+	groq: GROQ_MODELS,
+	huggingface: HUGGINGFACE_MODELS,
+	"kimi-coding": KIMI_CODING_MODELS,
+	meta: META_MODELS,
+	minimax: MINIMAX_MODELS,
+	"minimax-cn": MINIMAX_CN_MODELS,
+	mistral: MISTRAL_MODELS,
+	moonshotai: MOONSHOTAI_MODELS,
+	"moonshotai-cn": MOONSHOTAI_CN_MODELS,
+	nvidia: NVIDIA_MODELS,
+	openai: OPENAI_MODELS,
+	"openai-codex": OPENAI_CODEX_MODELS,
+	opencode: OPENCODE_MODELS,
+	"opencode-go": OPENCODE_GO_MODELS,
+	openrouter: OPENROUTER_MODELS,
+	"qwen-token-plan": QWEN_TOKEN_PLAN_MODELS,
+	"qwen-token-plan-cn": QWEN_TOKEN_PLAN_CN_MODELS,
+	"qwen-token-plan-individual": QWEN_TOKEN_PLAN_INDIVIDUAL_MODELS,
+	together: TOGETHER_MODELS,
+	typesafe: TYPESAFE_MODELS,
+	"vercel-ai-gateway": VERCEL_AI_GATEWAY_MODELS,
+	xai: XAI_MODELS,
+	xiaomi: XIAOMI_MODELS,
+	"xiaomi-token-plan-ams": XIAOMI_TOKEN_PLAN_AMS_MODELS,
+	"xiaomi-token-plan-cn": XIAOMI_TOKEN_PLAN_CN_MODELS,
+	"xiaomi-token-plan-sgp": XIAOMI_TOKEN_PLAN_SGP_MODELS,
+	zai: ZAI_MODELS,
+	"zai-coding-cn": ZAI_CODING_CN_MODELS,
+} as const;
+
+export const IMAGE_MODELS = {
+	"amazon-bedrock": AMAZON_BEDROCK_IMAGE_MODELS,
+	"ant-ling": ANT_LING_IMAGE_MODELS,
+	anthropic: ANTHROPIC_IMAGE_MODELS,
+	azure: AZURE_IMAGE_MODELS,
+	baseten: BASETEN_IMAGE_MODELS,
+	cerebras: CEREBRAS_IMAGE_MODELS,
+	"cloudflare-ai-gateway": CLOUDFLARE_AI_GATEWAY_IMAGE_MODELS,
+	"cloudflare-workers-ai": CLOUDFLARE_WORKERS_AI_IMAGE_MODELS,
+	deepseek: DEEPSEEK_IMAGE_MODELS,
+	fireworks: FIREWORKS_IMAGE_MODELS,
+	"github-copilot": GITHUB_COPILOT_IMAGE_MODELS,
+	google: GOOGLE_IMAGE_MODELS,
+	"google-vertex": GOOGLE_VERTEX_IMAGE_MODELS,
+	groq: GROQ_IMAGE_MODELS,
+	huggingface: HUGGINGFACE_IMAGE_MODELS,
+	"kimi-coding": KIMI_CODING_IMAGE_MODELS,
+	meta: META_IMAGE_MODELS,
+	minimax: MINIMAX_IMAGE_MODELS,
+	"minimax-cn": MINIMAX_CN_IMAGE_MODELS,
+	mistral: MISTRAL_IMAGE_MODELS,
+	moonshotai: MOONSHOTAI_IMAGE_MODELS,
+	"moonshotai-cn": MOONSHOTAI_CN_IMAGE_MODELS,
+	nvidia: NVIDIA_IMAGE_MODELS,
+	openai: OPENAI_IMAGE_MODELS,
+	"openai-codex": OPENAI_CODEX_IMAGE_MODELS,
+	opencode: OPENCODE_IMAGE_MODELS,
+	"opencode-go": OPENCODE_GO_IMAGE_MODELS,
+	openrouter: OPENROUTER_IMAGE_MODELS,
+	"qwen-token-plan": QWEN_TOKEN_PLAN_IMAGE_MODELS,
+	"qwen-token-plan-cn": QWEN_TOKEN_PLAN_CN_IMAGE_MODELS,
+	"qwen-token-plan-individual": QWEN_TOKEN_PLAN_INDIVIDUAL_IMAGE_MODELS,
+	together: TOGETHER_IMAGE_MODELS,
+	typesafe: TYPESAFE_IMAGE_MODELS,
+	"vercel-ai-gateway": VERCEL_AI_GATEWAY_IMAGE_MODELS,
+	xai: XAI_IMAGE_MODELS,
+	xiaomi: XIAOMI_IMAGE_MODELS,
+	"xiaomi-token-plan-ams": XIAOMI_TOKEN_PLAN_AMS_IMAGE_MODELS,
+	"xiaomi-token-plan-cn": XIAOMI_TOKEN_PLAN_CN_IMAGE_MODELS,
+	"xiaomi-token-plan-sgp": XIAOMI_TOKEN_PLAN_SGP_IMAGE_MODELS,
+	zai: ZAI_IMAGE_MODELS,
+	"zai-coding-cn": ZAI_CODING_CN_IMAGE_MODELS,
+} as const;
+
+export const CLASSIFIER_MODELS = {
+	"amazon-bedrock": AMAZON_BEDROCK_CLASSIFIER_MODELS,
+	"ant-ling": ANT_LING_CLASSIFIER_MODELS,
+	anthropic: ANTHROPIC_CLASSIFIER_MODELS,
+	azure: AZURE_CLASSIFIER_MODELS,
+	baseten: BASETEN_CLASSIFIER_MODELS,
+	cerebras: CEREBRAS_CLASSIFIER_MODELS,
+	"cloudflare-ai-gateway": CLOUDFLARE_AI_GATEWAY_CLASSIFIER_MODELS,
+	"cloudflare-workers-ai": CLOUDFLARE_WORKERS_AI_CLASSIFIER_MODELS,
+	deepseek: DEEPSEEK_CLASSIFIER_MODELS,
+	fireworks: FIREWORKS_CLASSIFIER_MODELS,
+	"github-copilot": GITHUB_COPILOT_CLASSIFIER_MODELS,
+	google: GOOGLE_CLASSIFIER_MODELS,
+	"google-vertex": GOOGLE_VERTEX_CLASSIFIER_MODELS,
+	groq: GROQ_CLASSIFIER_MODELS,
+	huggingface: HUGGINGFACE_CLASSIFIER_MODELS,
+	"kimi-coding": KIMI_CODING_CLASSIFIER_MODELS,
+	meta: META_CLASSIFIER_MODELS,
+	minimax: MINIMAX_CLASSIFIER_MODELS,
+	"minimax-cn": MINIMAX_CN_CLASSIFIER_MODELS,
+	mistral: MISTRAL_CLASSIFIER_MODELS,
+	moonshotai: MOONSHOTAI_CLASSIFIER_MODELS,
+	"moonshotai-cn": MOONSHOTAI_CN_CLASSIFIER_MODELS,
+	nvidia: NVIDIA_CLASSIFIER_MODELS,
+	openai: OPENAI_CLASSIFIER_MODELS,
+	"openai-codex": OPENAI_CODEX_CLASSIFIER_MODELS,
+	opencode: OPENCODE_CLASSIFIER_MODELS,
+	"opencode-go": OPENCODE_GO_CLASSIFIER_MODELS,
+	openrouter: OPENROUTER_CLASSIFIER_MODELS,
+	"qwen-token-plan": QWEN_TOKEN_PLAN_CLASSIFIER_MODELS,
+	"qwen-token-plan-cn": QWEN_TOKEN_PLAN_CN_CLASSIFIER_MODELS,
+	"qwen-token-plan-individual": QWEN_TOKEN_PLAN_INDIVIDUAL_CLASSIFIER_MODELS,
+	together: TOGETHER_CLASSIFIER_MODELS,
+	typesafe: TYPESAFE_CLASSIFIER_MODELS,
+	"vercel-ai-gateway": VERCEL_AI_GATEWAY_CLASSIFIER_MODELS,
+	xai: XAI_CLASSIFIER_MODELS,
+	xiaomi: XIAOMI_CLASSIFIER_MODELS,
+	"xiaomi-token-plan-ams": XIAOMI_TOKEN_PLAN_AMS_CLASSIFIER_MODELS,
+	"xiaomi-token-plan-cn": XIAOMI_TOKEN_PLAN_CN_CLASSIFIER_MODELS,
+	"xiaomi-token-plan-sgp": XIAOMI_TOKEN_PLAN_SGP_CLASSIFIER_MODELS,
+	zai: ZAI_CLASSIFIER_MODELS,
+	"zai-coding-cn": ZAI_CODING_CN_CLASSIFIER_MODELS,
+} as const;

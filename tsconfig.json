@@ -1,0 +1,10 @@
+{
+	"extends": "./packages/chord/tsconfig.json",
+	"compilerOptions": {
+		"rootDir": ".",
+		"noEmit": true,
+		"resolveJsonModule": true,
+		"allowImportingTsExtensions": true
+	},
+	"include": ["packages/*/src/**/*.ts", "packages/*/test/**/*.ts", "packages/ai/scripts/**/*.ts"]
+}
