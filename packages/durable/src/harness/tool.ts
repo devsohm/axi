@@ -67,6 +67,7 @@ export type NestedCallState = {
 	result?: JsonRepresentation<NestedToolExecutionResult>;
 };
 export const NestedCallDoc = defineDocFamily<NestedCallState, null>({
+	checkpointWhen: () => false,
 	kind: "axi.tool.nested-call",
 	version: 1,
 	scope: "task",

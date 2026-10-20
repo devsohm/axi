@@ -75,7 +75,7 @@ export type AnyDocDefinition = DocumentSemantics & {
 	readonly family?: true;
 	initial(seed?: JsonValue): JsonObject;
 	migrate?(value: JsonObject, fromVersion: number): JsonObject;
-	checkpointWhen?(value: Readonly<JsonObject>, ops: readonly Op[], info: CheckpointInfo): boolean;
+	checkpointWhen(value: Readonly<JsonObject>, ops: readonly Op[], info: CheckpointInfo): boolean;
 };
 export type AnyDocToken = { readonly definition: AnyDocDefinition };
 export type ResolvedAddress = { readonly address: DocumentAddress; readonly id: string; readonly nextArgument: number };

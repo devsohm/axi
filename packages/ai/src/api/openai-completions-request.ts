@@ -77,7 +77,9 @@ export function completionsRequest({
 	const messages = convertMessages(model, context, compat, { grammarToolInputProperties: grammar });
 	const declared = resolveTranscriptTools(
 		context.messages,
-		compat.supportsMidConvoSystemMessages === true && compat.supportsMidConvoToolAdditions === true,
+		compat.supportsMidConvoSystemMessages === true && compat.supportsMidConvoToolAdditions === true
+			? "additions"
+			: "none",
 	).requestTools;
 	const body: OpenAI.Chat.Completions.ChatCompletionCreateParamsStreaming = {
 		model: model.id,

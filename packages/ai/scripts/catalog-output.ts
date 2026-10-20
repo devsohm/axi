@@ -10,7 +10,7 @@ import {
 } from "node:fs";
 import { join } from "node:path";
 import type { assembleCatalog } from "./catalog-generation.ts";
-import { generateCatalog } from "./generate-catalog.ts";
+import { writeCatalogTypes } from "./generate-catalog.ts";
 import {
 	createModelDataManifest,
 	groupProviderModelData,
@@ -47,18 +47,10 @@ export function writeCatalog(
 		const providers = join(root, "src/providers");
 		const current = join(providers, "data"),
 			aggregator = join(root, "src/models.generated.ts");
-		const backup = new Map(
-			readdirSync(providers)
-				.filter((name) => name.endsWith(".models.ts"))
-				.map((name) => [name, readFileSync(join(providers, name), "utf8")]),
-		);
-		const previousTypes = readFileSync(aggregator, "utf8");
 		const stage = mkdtempSync(join(providers, ".catalog-output-")),
 			next = join(stage, "data"),
 			previous = join(stage, "previous");
-		let swapped = false,
-			backedUp = false,
-			preserve = false;
+		let restoreTypes: (() => void) | undefined;
 		try {
 			mkdirSync(next);
 			for (const [name, content] of Object.entries(files)) writeFileSync(join(next, name), content);
@@ -67,32 +59,36 @@ export function writeCatalog(
 				encode(createModelDataManifest(structure, files, new Date().toISOString())),
 			);
 			validateModelDataDirectory(structure, next);
-			if (existsSync(current)) {
-				renameSync(current, previous);
-				backedUp = true;
+			if (!options.dataOnly) {
+				const backup = new Map(
+					readdirSync(providers)
+						.filter((name) => name.endsWith(".models.ts"))
+						.map((name) => [name, readFileSync(join(providers, name), "utf8")]),
+				);
+				const previousTypes = readFileSync(aggregator, "utf8");
+				restoreTypes = () => {
+					for (const name of readdirSync(providers)) if (name.endsWith(".models.ts")) rmSync(join(providers, name));
+					for (const [name, content] of backup) writeFileSync(join(providers, name), content);
+					writeFileSync(aggregator, previousTypes);
+				};
+				writeCatalogTypes(root, ids);
 			}
-			renameSync(next, current);
-			swapped = true;
-			if (!options.dataOnly) generateCatalog(root);
-			validateGeneratedModelData(root);
+			const hadPrevious = existsSync(current);
+			if (hadPrevious) renameSync(current, previous);
+			try {
+				renameSync(next, current);
+				validateGeneratedModelData(root);
+			} catch (error) {
+				rmSync(current, { recursive: true, force: true });
+				if (hadPrevious && existsSync(previous)) renameSync(previous, current);
+				throw error;
+			}
+			restoreTypes = undefined;
 		} catch (error) {
-			if (swapped || backedUp) {
-				try {
-					if (swapped) rmSync(current, { recursive: true, force: true });
-					if (backedUp) renameSync(previous, current);
-					if (!options.dataOnly) {
-						for (const name of readdirSync(providers)) if (name.endsWith(".models.ts")) rmSync(join(providers, name));
-						for (const [name, content] of backup) writeFileSync(join(providers, name), content);
-						writeFileSync(aggregator, previousTypes);
-					}
-				} catch (rollback) {
-					preserve = true;
-					throw new AggregateError([error, rollback], `Catalog recovery files remain at ${stage}`);
-				}
-			}
+			restoreTypes?.();
 			throw error;
 		} finally {
-			if (!preserve) rmSync(stage, { recursive: true, force: true });
+			rmSync(stage, { recursive: true, force: true });
 		}
 	}
 	if (options.jsonOutputDir) {

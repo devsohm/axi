@@ -5,6 +5,36 @@ import { MemoryStorage } from "../src/storage/memory.ts";
 import { createExpectAssertions, createStorageConformance } from "../src/testing/index.ts";
 import type { DocumentId, JsonObject, Seq, StoredDocument } from "../src/types.ts";
 
+it("rejects a driver that retains old row fields after a root replacement", async () => {
+	const storage = new MemoryStorage();
+	const read = storage.document.bind(storage);
+	vi.spyOn(storage, "document").mockImplementation(async (...args) => {
+		const value = await read(...args);
+		if (value === undefined || Number(value.value.revision) < 100 || !Array.isArray(value.value.rows)) return value;
+		return {
+			...value,
+			value: {
+				...value.value,
+				rows: value.value.rows.map((row, index) => {
+					if (row === null || typeof row !== "object" || Array.isArray(row)) throw new Error("Expected a stored row");
+					return { ...row, stable: String(index) };
+				}),
+			},
+		};
+	});
+	try {
+		const check = createStorageConformance({
+			assertions: createExpectAssertions(expect),
+			withStorage: (use) => use(storage),
+		}).find((check) => check.name === "streams long document tails across root replacement deltas");
+		if (check === undefined) throw new Error("Missing root replacement check");
+		await expect(check.run()).rejects.toThrow();
+	} finally {
+		vi.restoreAllMocks();
+		await storage.close(context);
+	}
+});
+
 it.each([
 	"checkpoint attempt",
 	"structured task result",

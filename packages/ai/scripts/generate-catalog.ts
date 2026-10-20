@@ -9,10 +9,16 @@ export function generateCatalog(root = fileURLToPath(new URL("..", import.meta.u
 		.filter((file) => file.endsWith(".json") && !file.startsWith("."))
 		.map((file) => file.slice(0, -5))
 		.sort();
+	writeCatalogTypes(root, providers);
+	validateGeneratedModelData(root);
+	process.stdout.write(`${providers.length} catalogs validated\n`);
+}
+export function writeCatalogTypes(root: string, providers: readonly string[]): void {
+	const directory = join(root, "src/providers");
 	for (const file of readdirSync(directory)) {
 		if (file.endsWith(".models.ts") && !providers.includes(file.slice(0, -10))) rmSync(join(directory, file));
 	}
-	const constant = (id: string) => id.toUpperCase().replaceAll("-", "_");
+	const constant = (id: string) => id.toUpperCase().replace(/[^A-Z0-9]+/g, "_");
 	const kinds = ["", "IMAGE_", "CLASSIFIER_"];
 	const functions = ["Chat", "Image", "Classifier"];
 	const imports: string[] = [];
@@ -34,7 +40,6 @@ export function generateCatalog(root = fileURLToPath(new URL("..", import.meta.u
 		return `export const ${name} = {\n${providers.map((id) => `\t${JSON.stringify(id)}: ${constant(id)}_${name},`).join("\n")}\n} as const;`;
 	});
 	writeFileSync(join(root, "src/models.generated.ts"), `${imports.join("\n")}\n\n${tables.join("\n\n")}\n`);
-	validateGeneratedModelData(root);
-	process.stdout.write(`${providers.length} catalogs validated\n`);
 }
+
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) generateCatalog();

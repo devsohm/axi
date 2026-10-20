@@ -67,6 +67,16 @@ try {
 					`${pkg.name}/${file}`,
 				);
 		}
+		if (pkg.files.includes("native")) {
+			for (const file of readdirSync(path.join(root, workspace, "native"), { recursive: true })) {
+				if (/\.(?:c|m|h|mjs|md|node)$/.test(file))
+					assert.deepEqual(
+						readFileSync(path.join(installed, "native", file)),
+						readFileSync(path.join(root, workspace, "native", file)),
+						`${pkg.name}/native/${file}`,
+					);
+			}
+		}
 		if (pkg.files.includes("docs")) {
 			for (const file of readdirSync(path.join(root, workspace, "docs"), { recursive: true })) {
 				if (file.endsWith(".md"))
@@ -115,8 +125,9 @@ import * as durable from "@axi/durable";
 import * as env from "@axi/env";
 import * as mcp from "@axi/mcp";
 import * as telemetry from "@axi/telemetry";
+import * as tui from "@axi/tui";
 import type { SummaryRequest, BlockedReason } from "@axi/durable";
-export const packages = [ai, chord, codemode, durable, env, mcp, telemetry];
+export const packages = [ai, chord, codemode, durable, env, mcp, telemetry, tui];
 export const reasons = ["missing_task", "task_too_old", "migration_failed", "restart_limit"] satisfies BlockedReason[];
 export const summaryModel = (request: SummaryRequest) => request.model.modelId;
 `,

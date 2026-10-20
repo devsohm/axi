@@ -118,25 +118,34 @@ export function hasToolRedefinitions(messages: TranscriptMessages): boolean {
 	return false;
 }
 export function hasNonAdditiveToolChanges(messages: TranscriptMessages): boolean {
+	return lastToolReplacement(messages.filter(isSystemMessage)) >= 0;
+}
+function lastToolReplacement(messages: readonly SystemMessage[]): number {
 	const names = new Set<string>();
-	for (const message of messages) {
-		if (!isSystemMessage(message)) continue;
-		if (message.toolsRemoved?.length) return true;
+	let last = -1;
+	for (const [index, message] of messages.entries()) {
+		if (message.toolsRemoved?.length) last = index;
 		for (const tool of message.toolsAdded ?? []) {
-			if (names.has(tool.name)) return true;
+			if (names.has(tool.name)) last = index;
 			names.add(tool.name);
 		}
 	}
-	return false;
+	return last;
 }
+export type TranscriptToolSupport = "none" | "additions" | "changes";
 export interface TranscriptTools {
 	requestTools: Tool[];
-	anchorsAdditions: boolean;
+	foldedSystemMessages: number;
 }
-export function resolveTranscriptTools(messages: TranscriptMessages, supportsToolAdditions: boolean): TranscriptTools {
-	const anchorsAdditions = supportsToolAdditions && !hasNonAdditiveToolChanges(messages);
+export function resolveTranscriptTools(messages: TranscriptMessages, support: TranscriptToolSupport): TranscriptTools {
+	const updates = messages.filter(isSystemMessage);
+	if (support === "changes") return { requestTools: [], foldedSystemMessages: 0 };
+	const foldedSystemMessages =
+		support === "none"
+			? updates.length
+			: Math.max(getInitialSystemMessage(messages) ? 1 : 0, lastToolReplacement(updates) + 1);
 	return {
-		requestTools: anchorsAdditions ? (getInitialSystemMessage(messages)?.toolsAdded ?? []) : getCurrentTools(messages),
-		anchorsAdditions,
+		requestTools: getCurrentTools(updates.slice(0, foldedSystemMessages)),
+		foldedSystemMessages,
 	};
 }

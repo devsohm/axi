@@ -7,7 +7,7 @@ import { getUserAgent } from "../utils/user-agent.ts";
 import { resolveAzureConfig, resolveDeploymentName } from "./azure-openai-config.ts";
 import { createGrammarToolInputProperties } from "./constrained-sampling.ts";
 import { clampOpenAIPromptCacheKey } from "./openai-prompt-cache.ts";
-import { convertResponsesMessages, convertResponsesTools } from "./openai-responses-shared.ts";
+import { getResponsesToolSupport, convertResponsesMessages, convertResponsesTools } from "./openai-responses-shared.ts";
 import type { AzureOpenAIResponsesOptions } from "./options.ts";
 import { createResponsesRequest } from "./responses-request.ts";
 import { buildBaseOptions, resolveSamplingParams } from "./simple-options.ts";
@@ -43,7 +43,14 @@ function request(
 	};
 	if (options.maxTokens) body.max_output_tokens = Math.max(16, options.maxTokens);
 	if (options.temperature !== undefined) body.temperature = options.temperature;
-	const tools = resolveTranscriptTools(transcript.messages, additions || search).requestTools;
+	const tools = resolveTranscriptTools(
+		transcript.messages,
+		getResponsesToolSupport({
+			supportsMidConvoSystemMessages: model.compat?.supportsMidConvoSystemMessages ?? false,
+			supportsAdditionalTools: additions,
+			supportsToolSearch: search,
+		}),
+	).requestTools;
 	if (tools.length) body.tools = convertResponsesTools(tools, toolOptions);
 	if (options.toolChoice !== undefined) body.tool_choice = options.toolChoice;
 	const level = options.reasoningEffort ?? (options.reasoningSummary ? "medium" : undefined);

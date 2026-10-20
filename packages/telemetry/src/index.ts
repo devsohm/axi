@@ -19,6 +19,57 @@ export interface SpanOptions {
 	links?: readonly SpanLink[];
 }
 export type SpanStatus = { status: "ok" } | { status: "error"; error?: { name: string; message: string } };
+export interface StoredSpan {
+	readonly id: string;
+	readonly traceId: string;
+	readonly parentId?: string;
+	readonly name: string;
+	readonly startedMs: number;
+	readonly endedMs: number;
+	readonly attributes: SpanAttributes;
+	readonly events: readonly { readonly name: string; readonly timeMs: number; readonly attributes: SpanAttributes }[];
+	readonly links: readonly {
+		readonly traceId: string;
+		readonly spanId: string;
+		readonly attributes?: SpanAttributes;
+	}[];
+	readonly status: SpanStatus;
+}
+export interface StoredTrace {
+	readonly traceId: string;
+	readonly spans: readonly StoredSpan[];
+}
+export interface TraceQuery {
+	readonly name?: string;
+	readonly attributes?: Readonly<Record<string, string | number | boolean>>;
+	readonly errors?: true;
+	readonly startMin?: number;
+	readonly startMax?: number;
+	readonly limit?: number;
+	readonly cursor?: string;
+}
+export interface MetricQuery {
+	readonly name: string;
+	readonly startMin?: number;
+	readonly startMax?: number;
+	readonly attributes?: Readonly<Record<string, string | number | boolean>>;
+}
+export interface StoredMetric {
+	readonly intervalMs: number;
+	readonly name: string;
+	readonly kind: "counter" | "upDownCounter" | "histogram";
+	readonly unit?: string;
+	readonly attributes: SpanAttributes;
+	readonly count: number;
+	readonly sum: number;
+	readonly min: number;
+	readonly max: number;
+}
+export interface TelemetryStore {
+	findTraces(query?: TraceQuery): Promise<{ traces: readonly StoredTrace[]; cursor?: string }>;
+	getTrace(traceId: string): Promise<StoredTrace | undefined>;
+	findMetrics(query: MetricQuery): Promise<readonly StoredMetric[]>;
+}
 export interface TelemetryContext {
 	readonly metrics?: TelemetryMetrics;
 	readonly propagation?: TelemetryPropagation;

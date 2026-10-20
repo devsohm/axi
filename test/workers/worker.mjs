@@ -8,7 +8,13 @@ import { openDurableObjectSqliteStorage } from "@axi/durable/storage/sqlite/clou
 import { createInlineCodemodeSandbox, CodemodeSandboxDurableObject } from "@axi/codemode/cloudflare";
 import { RemoteCodemodeSandbox } from "@axi/codemode/portable";
 export class Sandbox extends CodemodeSandboxDurableObject {}
-const Counter = defineDoc({ kind: "runtime.counter", scope: "session", version: 1, initial: () => ({ count: 0 }) });
+const Counter = defineDoc({
+	checkpointWhen: () => false,
+	kind: "runtime.counter",
+	scope: "session",
+	version: 1,
+	initial: () => ({ count: 0 }),
+});
 export class State extends DurableObject {
 	async fetch() {
 		const db = new DurableObjectSqliteDatabase(this.ctx.storage);

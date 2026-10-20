@@ -578,31 +578,26 @@ export class SessionImpl implements T.Session {
 			throw error;
 		}
 		let version = loaded.valueVersion;
-		try {
-			offCommit = this.observeCommits((publication, context) => {
-				for (const change of publication.changes) {
-					if (change.type !== "document" || change.record.id !== loaded.record.id) continue;
-					let ops: readonly Op[];
-					if (change.value === null) ops = RETIREMENT_OPERATIONS;
-					else if (version === change.version) ops = change.ops;
-					else {
-						version = change.version!;
-						ops = [["r", change.value]];
-					}
-					if (!ops.length) continue;
-					if (change.value === null) unpin();
-					observer.advance(
-						change.value,
-						ops,
-						observer instanceof CommittedStateSource ? withoutAbortSignal(context) : context,
-					);
+		offCommit = this.observeCommits((publication, context) => {
+			for (const change of publication.changes) {
+				if (change.type !== "document" || change.record.id !== loaded.record.id) continue;
+				let ops: readonly Op[];
+				if (change.value === null) ops = RETIREMENT_OPERATIONS;
+				else if (version === change.version) ops = change.ops;
+				else {
+					version = change.version!;
+					ops = [["r", change.value]];
 				}
-			});
-			offClose = this.subscribeClose(() => observer.closeSession(this.#failure));
-		} catch (error) {
-			detach();
-			throw error;
-		}
+				if (!ops.length) continue;
+				if (change.value === null) unpin();
+				observer.advance(
+					change.value,
+					ops,
+					observer instanceof CommittedStateSource ? withoutAbortSignal(context) : context,
+				);
+			}
+		});
+		offClose = this.subscribeClose(() => observer.closeSession(this.#failure));
 		return { observer, detach };
 	}
 	#pin(identity: string, incarnation: T.DocumentId): () => void {

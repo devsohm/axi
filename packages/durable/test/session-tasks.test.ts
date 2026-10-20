@@ -10,13 +10,66 @@ const Work = defineTask<null, { phase: "start" }, null>({
 	phases: { start: async () => {} },
 	abort: async () => {},
 });
-const Progress = defineDoc({ kind: "progress", version: 1, scope: "task", initial: () => ({ count: 0 }) });
+const Progress = defineDoc({
+	checkpointWhen: () => false,
+	kind: "progress",
+	version: 1,
+	scope: "task",
+	initial: () => ({ count: 0 }),
+});
 
 describe("task creation transactions", () => {
+	it("captures conversation ownership before minting its identity", async () => {
+		const session = new SessionImpl(new MemoryStorage());
+		try {
+			let reads = 0;
+			await session.commit(async (tx) => {
+				const pending = tx.createConversation({
+					ownership: {
+						get kind() {
+							reads++;
+							return "ownerless" as const;
+						},
+					},
+				});
+				expect(reads).toBe(1);
+				expect(await pending).not.toHaveProperty("owner");
+				expect(reads).toBe(1);
+			}, context);
+		} finally {
+			await session.close(context);
+		}
+	});
+	it("reads a child task's ownership option once", async () => {
+		const storage = new MemoryStorage();
+		const session = new SessionImpl(storage);
+		try {
+			let reads = 0;
+			const { parent, child } = await session.commit(async (tx) => {
+				const conversation = await tx.createConversation({ ownership: { kind: "ownerless" } });
+				const parent = await tx.createTask(Work, null, {
+					ownership: { kind: "conversation" },
+					conversationId: conversation.id,
+				});
+				const child = await tx.createTask(Work, null, {
+					get ownership() {
+						if (++reads > 1) throw new Error("Ownership was reread");
+						return { kind: "task" as const, taskId: parent };
+					},
+				});
+				return { parent, child };
+			}, context);
+			expect(reads).toBe(1);
+			expect((await storage.task(child, context))?.owner).toBe(parent);
+		} finally {
+			await session.close(context);
+		}
+	});
 	it("retires all documents of multiple settled tasks without retiring live work", async () => {
 		const storage = new MemoryStorage();
 		const session = new SessionImpl(storage);
 		const Parts = defineDocFamily({
+			checkpointWhen: () => false,
 			kind: "parts",
 			version: 1,
 			scope: "task",

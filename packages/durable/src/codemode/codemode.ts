@@ -60,18 +60,21 @@ type Delivery = {
 };
 type Journal = { entries: Delivery[]; firstIssued?: number };
 export const CodemodeRunDoc = defineDoc<RunState>({
+	checkpointWhen: () => false,
 	kind: "axi.codemode.run",
 	version: 1,
 	scope: "task",
 	initial: () => ({}),
 });
 export const CodemodeJournalDoc = defineDoc<Journal>({
+	checkpointWhen: () => false,
 	kind: "axi.codemode.journal",
 	version: 1,
 	scope: "task",
 	initial: () => ({ entries: [] }),
 });
 export const CodemodeStoreDoc = defineDoc<{ values: Record<string, JsonValue> }>({
+	checkpointWhen: (_value, _ops, { deltasSinceBase }) => deltasSinceBase >= 64,
 	kind: "axi.codemode.store",
 	version: 1,
 	scope: "conversation",

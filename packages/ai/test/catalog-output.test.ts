@@ -75,6 +75,21 @@ it("rejects invalid replacements before changing the existing files", () => {
 	expect(snapshot(root)).toEqual(previous);
 	expect(readdirSync(join(root, "src/providers")).some((name) => name.startsWith(".catalog-output-"))).toBe(false);
 });
+
+it("validates staged values before reading the previous generated source", () => {
+	const root = fixture();
+	rmSync(join(root, "src/models.generated.ts"));
+	expect(() => writeCatalog(root, { test: [{ ...model("invalid"), maxTokens: 0 }] }, options)).toThrow(
+		"invalid maxTokens",
+	);
+});
+
+it("emits valid identifiers for provider names containing punctuation", async () => {
+	const root = fixture();
+	writeCatalog(root, { "test.custom": [{ ...model("first"), provider: "test.custom" }] }, options);
+	const loaded = await import(pathToFileURL(join(root, "src/models.generated.ts")).href);
+	expect(loaded.MODELS["test.custom"].first).toMatchObject({ id: "first", provider: "test.custom" });
+});
 it("reports invalid manifest and model fields in a stable order", () => {
 	const root = fixture();
 	writeCatalog(root, { test: [model("first")] }, options);
@@ -131,15 +146,11 @@ it("restores the previous catalog when activating a replacement fails", () => {
 	expect(() => writeCatalog(root, { test: [model("second")] }, options)).toThrow("Fixture rename failure");
 	expect(snapshot(root)).toEqual(previous);
 });
-it("keeps recoverable values if activation and restoration both fail", () => {
+it("reports restoration failure and removes staging if activation and restoration both fail", () => {
 	const root = fixture();
 	writeCatalog(root, { test: [model("first")] }, options);
 	renameFailure.destination = join(root, "src/providers/data");
 	renameFailure.remaining = 2;
-	expect(() => writeCatalog(root, { test: [model("second")] }, options)).toThrow(AggregateError);
-	const recovery = readdirSync(join(root, "src/providers")).find((name) => name.startsWith(".catalog-output-"));
-	expect(recovery).toEqual(expect.any(String));
-	if (!recovery) throw new Error("Missing recovery directory");
-	const values = JSON.parse(readFileSync(join(root, "src/providers", recovery, "previous/test.json"), "utf8"));
-	expect(values.fixture["chat:first"].id).toBe("first");
+	expect(() => writeCatalog(root, { test: [model("second")] }, options)).toThrow("Fixture rename failure");
+	expect(readdirSync(join(root, "src/providers")).some((name) => name.startsWith(".catalog-output-"))).toBe(false);
 });

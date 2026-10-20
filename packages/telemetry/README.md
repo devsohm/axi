@@ -79,3 +79,20 @@ The testing subpath uses Node assertions. The root runtime uses no Node-specific
 ## Adapter capabilities
 
 A context can expose optional `metrics` and `propagation` objects. The memory adapter exposes itself for both. Child spans, extracted parents and inactive descendants retain the same objects. Disabled spans expose disabled metrics and propagation. Applications retain the root adapter and pass callback spans to lower-level invocations. A span can therefore keep its adapter alive after settlement; releasing the span remains the caller's responsibility.
+
+## Stored telemetry
+
+`TelemetryStore` reads settled traces and metric intervals. `getTrace(traceId)`
+returns one trace. `findTraces()` returns up to 20 traces, newest first, with an
+opaque continuation cursor. Keep filters unchanged when continuing a page.
+Attribute filters must match one span. Start-time and name filters use the earliest
+stored span. `findMetrics()` selects a metric name, optional time bounds, and exact
+scalar attributes.
+
+`InMemoryTelemetryContext` implements this contract and returns detached data.
+Its metric results contain one row per measurement. The SQLite recorder aggregates
+measurements within ten-second intervals. Import `renderTrace` from
+`@axi/telemetry/render`. `renderTrace(spans)` formats a stored
+trace as text, including nested spans, events, links, durations, and errors.
+
+Adapters accept trusted typed inputs. Behavior for malformed inputs is unspecified.

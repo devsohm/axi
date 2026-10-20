@@ -39,7 +39,12 @@ import {
 	websocketFallbackActive,
 } from "./openai-codex-websocket.ts";
 import { clampOpenAIPromptCacheKey } from "./openai-prompt-cache.ts";
-import { convertResponsesMessages, convertResponsesTools, processResponsesStream } from "./openai-responses-shared.ts";
+import {
+	getResponsesToolSupport,
+	convertResponsesMessages,
+	convertResponsesTools,
+	processResponsesStream,
+} from "./openai-responses-shared.ts";
 import type { OpenAICodexResponsesOptions } from "./options.ts";
 import { buildBaseOptions } from "./simple-options.ts";
 
@@ -89,7 +94,14 @@ function request(
 	};
 	if (options.temperature !== undefined) body.temperature = options.temperature;
 	if (options.serviceTier !== undefined) body.service_tier = options.serviceTier;
-	const tools = resolveTranscriptTools(context.messages, additions || search).requestTools;
+	const tools = resolveTranscriptTools(
+		context.messages,
+		getResponsesToolSupport({
+			supportsMidConvoSystemMessages: compat?.supportsMidConvoSystemMessages ?? false,
+			supportsAdditionalTools: additions,
+			supportsToolSearch: search,
+		}),
+	).requestTools;
 	if (tools.length) body.tools = convertResponsesTools(tools, toolOptions);
 	if (options.reasoningEffort !== undefined) {
 		const effort =

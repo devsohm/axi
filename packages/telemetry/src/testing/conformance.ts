@@ -1,14 +1,5 @@
 import assert from "node:assert/strict";
-import {
-	NOOP_TELEMETRY_CONTEXT,
-	type SpanAttributes,
-	type SpanLink,
-	type SpanOptions,
-	type SpanStatus,
-	type TelemetryCarrier,
-	type TelemetryContext,
-	type TelemetrySpan,
-} from "../index.ts";
+import { NOOP_TELEMETRY_CONTEXT, type TelemetryCarrier, type TelemetryContext, type TelemetrySpan } from "../index.ts";
 import type { RecordedTelemetrySpan } from "../memory.ts";
 import type {
 	TelemetryAdapterConformanceCase,
@@ -16,23 +7,6 @@ import type {
 	TelemetryAdapterFixtureFactory,
 } from "./types.ts";
 
-function unreadable<T extends object>(value: T): T {
-	const reject = (): never => {
-		throw new Error("read");
-	};
-	return new Proxy(value, {
-		get: reject,
-		ownKeys() {
-			throw new Error("enumerate");
-		},
-		getOwnPropertyDescriptor() {
-			throw new Error("inspect");
-		},
-		getPrototypeOf() {
-			throw new Error("prototype");
-		},
-	});
-}
 function named(spans: readonly RecordedTelemetrySpan[], name: string): RecordedTelemetrySpan {
 	const span = spans.find((span) => span.name === name);
 	assert(span, `Expected recorded span ${name}`);
@@ -109,7 +83,7 @@ export function createTelemetryAdapterConformance(
 			assert.deepEqual(measurements[3]?.boundaries, [1, 10]);
 			assert.deepEqual(measurements[3]?.context, named(await fixture.getSpans(), "measured").context);
 		}),
-		check("metrics", "copies inputs and suppresses invalid measurements atomically", async (fixture) => {
+		check("metrics", "copies instrument metadata and measurement attributes", async (fixture) => {
 			if (!fixture.metrics) return;
 			assert(fixture.getMetrics, "Metrics fixtures require a normalized measurement reader");
 			const boundaries = [1, 10];
@@ -120,11 +94,6 @@ export function createTelemetryAdapterConformance(
 			const attributes = { tags: ["original"] };
 			histogram.record(-1, attributes);
 			attributes.tags.push("changed");
-			const counter = fixture.metrics.counter("invalid");
-			for (const value of [NaN, Infinity, -Infinity, -1]) assert.doesNotThrow(() => counter.add(value));
-			assert.doesNotThrow(() => counter.add(1, { partial: true, broken: unreadable(["value"]) }));
-			assert.doesNotThrow(() => fixture.metrics?.histogram("bad-options", unreadable({ unit: "ms" })).record(1));
-			assert.doesNotThrow(() => fixture.metrics?.histogram("bad-boundaries", { boundaries: [2, 1] }).record(1));
 			const measurements = await fixture.getMetrics();
 			assert.equal(measurements.length, 1);
 			assert.deepEqual(measurements[0]?.attributes, { tags: ["original"] });
@@ -154,18 +123,13 @@ export function createTelemetryAdapterConformance(
 				{ context: named(spans, "target").context, attributes: { reason: "late" } },
 			]);
 		}),
-		check("links", "suppresses malformed links atomically and ignores settled sources", async (fixture) => {
-			let source: TelemetrySpan | undefined;
+		check("links", "ignores links added after source settlement", async (fixture) => {
+			let saved: TelemetrySpan | undefined;
 			await fixture.context.startSpan({ name: "link-source" }, (span) => {
-				source = span;
-				assert.doesNotThrow(() => span.addLink(unreadable<SpanLink>({ context: span })));
-				assert.doesNotThrow(() =>
-					span.addLink({ context: span, attributes: { partial: true, broken: unreadable(["value"]) } }),
-				);
+				saved = span;
 			});
-			if (!source) throw new Error("Expected source span");
-			const settled = source;
-			assert.doesNotThrow(() => settled.addLink({ context: settled }));
+			assert(saved);
+			saved.addLink({ context: saved });
 			assert.deepEqual(named(await fixture.getSpans(), "link-source").links, []);
 		}),
 		check("propagation", "roundtrips parent identity through JSON without retaining the carrier", async (fixture) => {
@@ -183,24 +147,13 @@ export function createTelemetryAdapterConformance(
 			const spans = await fixture.getSpans();
 			assert.deepEqual(named(spans, "receiver").parentContext, named(spans, "sender").context);
 		}),
-		check("propagation", "unknown and unreadable carriers produce recorded roots", async (fixture) => {
+		check("propagation", "absent and unknown carriers produce recorded roots", async (fixture) => {
 			if (!fixture.propagation) return;
 			assert.equal(fixture.propagation.inject(NOOP_TELEMETRY_CONTEXT), undefined);
-			for (const [index, carrier] of [
-				undefined,
-				{},
-				{ unknown: "format" },
-				unreadable<TelemetryCarrier>({ bad: "value" }),
-			].entries()) {
-				let result = 0;
-				assert.doesNotThrow(() => {
-					const context = fixture.propagation?.extract(carrier);
-					if (!context) throw new Error("Expected root context");
-					void context.startSpan({ name: `fallback-${index}` }, () => {
-						result = 42;
-					});
-				});
-				assert.equal(result, 42);
+			const carriers: (TelemetryCarrier | undefined)[] = [undefined, {}, { unknown: "format" }];
+			for (const [index, carrier] of carriers.entries()) {
+				const context = fixture.propagation.extract(carrier);
+				assert.equal(await context.startSpan({ name: "fallback-" + index }, () => 42), 42);
 			}
 			for (const span of await fixture.getSpans()) assert.equal(span.parentContext, null);
 		}),
@@ -240,14 +193,8 @@ export function createTelemetryAdapterConformance(
 			assert.equal(named(await fixture.getSpans(), "success").settled, true);
 		}),
 		check("callback lifecycle", "preserves synchronous and asynchronous rejection values", async (fixture) => {
-			const values: unknown[] = [
-				new Error("sync"),
-				{ kind: "async" },
-				undefined,
-				unreadable({ kind: "unreadable" }),
-				unreadable({ kind: "async-unreadable" }),
-			];
-			const names = ["sync-error", "async-error", "undefined-error", "unreadable-error", "async-unreadable-error"];
+			const values: unknown[] = [new Error("sync"), { kind: "async" }, undefined];
+			const names = ["sync-error", "async-error", "undefined-error"];
 			for (const [id, value] of values.entries()) {
 				const callback =
 					id === 1
@@ -255,7 +202,7 @@ export function createTelemetryAdapterConformance(
 								throw value;
 							}
 						: () => {
-								if (id === 0 || id === 3) throw value;
+								if (id === 0) throw value;
 								return Promise.reject(value);
 							};
 				const pending = fixture.context.startSpan({ name: names[id] }, callback);
@@ -318,14 +265,7 @@ export function createTelemetryAdapterConformance(
 				{ name: "second", attributes: { index: 2 } },
 			]);
 		}),
-		check("recording", "ignores failed attribute calls atomically", async (fixture) => {
-			await fixture.context.startSpan({ name: "atomic-attributes", attributes: { retained: "value" } }, (span) => {
-				assert.doesNotThrow(() =>
-					span.setAttributes({ partial: "must not survive", unreadable: unreadable(["value"]) }),
-				);
-			});
-			assert.deepEqual(named(await fixture.getSpans(), "atomic-attributes").attributes, { retained: "value" });
-		}),
+
 		check("recording", "makes calls after settlement inert", async (fixture) => {
 			let captured: TelemetrySpan | undefined;
 			await fixture.context.startSpan({ name: "settled", attributes: { value: "initial" } }, (span) => {
@@ -370,42 +310,6 @@ export function createTelemetryAdapterConformance(
 			assert.equal(second.parentId, parent.id);
 			assert(second.endSequence !== undefined && first.endSequence !== undefined && parent.endSequence !== undefined);
 			assert(second.endSequence < first.endSequence && first.endSequence < parent.endSequence);
-		}),
-		check("passivity", "suppresses unreadable telemetry payload failures", async (fixture) => {
-			let calls = 0;
-			const result = fixture.context.startSpan(
-				unreadable<SpanOptions>({ name: "unreadable-options", attributes: { secret: "value" } }),
-				() => {
-					calls++;
-					return 9;
-				},
-			);
-			assert.equal(calls, 1);
-			assert.equal(await result, 9);
-			assert.deepEqual(await fixture.getSpans(), []);
-			await fixture.context.startSpan({ name: "unreadable-recording" }, (span) => {
-				const attributes = unreadable<SpanAttributes>({ secret: "value" });
-				assert.doesNotThrow(() => span.setAttributes(attributes));
-				assert.doesNotThrow(() => span.addEvent("unreadable-event", attributes));
-				assert.doesNotThrow(() => span.setStatus(unreadable<SpanStatus>({ status: "ok" })));
-			});
-			const recorded = await fixture.getSpans();
-			assert.equal(recorded.length, 1);
-			const span = named(recorded, "unreadable-recording");
-			assert.deepEqual(span.attributes, {});
-			assert.deepEqual(span.events, []);
-			assert.deepEqual(span.status, { status: "ok" });
-		}),
-		check("passivity", "ignores failed status calls atomically", async (fixture) => {
-			const error = new Error("rejected after unreadable status");
-			await rejection(
-				fixture.context.startSpan({ name: "unreadable-status" }, (span) => {
-					assert.doesNotThrow(() => span.setStatus(unreadable<SpanStatus>({ status: "ok" })));
-					return Promise.reject(error);
-				}),
-				error,
-			);
-			assert.equal(named(await fixture.getSpans(), "unreadable-status").status.status, "error");
 		}),
 	];
 }

@@ -28,7 +28,7 @@ import { shortHash } from "../utils/hash.ts";
 import { parseStreamingJson, parseToolCallArguments } from "../utils/json-parse.ts";
 import { sanitizeSurrogates } from "../utils/sanitize-unicode.ts";
 import { getSystemMessageText, renderSystemMessageUpdate } from "../utils/text.ts";
-import { resolveTranscript, resolveTranscriptTools } from "../utils/transcript.ts";
+import { resolveTranscript, resolveTranscriptTools, type TranscriptToolSupport } from "../utils/transcript.ts";
 import {
 	appendGrammarToolInputJsonDelta,
 	type GrammarToolInputJsonBuffer,
@@ -129,6 +129,14 @@ export function convertResponsesTools(
 		return converted as ResponseTool;
 	});
 }
+export function getResponsesToolSupport(options: {
+	supportsMidConvoSystemMessages?: boolean;
+	supportsAdditionalTools?: boolean;
+	supportsToolSearch?: boolean;
+}): TranscriptToolSupport {
+	if (options.supportsMidConvoSystemMessages && options.supportsAdditionalTools) return "changes";
+	return options.supportsToolSearch ? "additions" : "none";
+}
 export function convertResponsesMessages<A extends Api>(
 	model: Model<A>,
 	context: TranscriptContext,
@@ -149,10 +157,11 @@ export function convertResponsesMessages<A extends Api>(
 		if (!replayId.startsWith("fc_")) replayId = bounded(`fc_${replayId}`);
 		return `${bounded(call)}|${replayId}`;
 	});
-	const tools = resolveTranscriptTools(
-		transcript.messages,
-		Boolean(options.supportsAdditionalTools || options.supportsToolSearch),
-	);
+	const support = getResponsesToolSupport(options);
+	const tools = resolveTranscriptTools(transcript.messages, support);
+	const unavailable = new Set<string>();
+	let declared = false,
+		systemIndex = 0;
 	const result: ResponseInput = [];
 	const configuration = (effort: string) =>
 		result.push({
@@ -169,14 +178,24 @@ export function convertResponsesMessages<A extends Api>(
 		const leading = sourceIndex === 0 && message.role === "system";
 		switch (message.role) {
 			case "system": {
-				const additions = !leading && tools.anchorsAdditions ? (message.toolsAdded ?? []) : [];
-				if (additions.length && options.supportsAdditionalTools)
+				const anchored = systemIndex++ >= tools.foldedSystemMessages;
+				const additions = anchored ? (message.toolsAdded ?? []) : [];
+				for (const tool of additions) unavailable.delete(tool.name);
+				if (additions.length && support === "changes") {
+					if (declared)
+						result.push({
+							role,
+							content:
+								"This is an incremental tools update. Previously declared tools remain available unless explicitly marked unavailable. A tool declared again here is available again, and its latest definition replaces the earlier one." +
+								(unavailable.size ? `\nStill unavailable: ${[...unavailable].join(", ")}.` : ""),
+						});
+					declared = true;
 					result.push({
 						type: "additional_tools",
 						role: "developer",
 						tools: convertResponsesTools(additions, options.toolOptions),
 					});
-				else if (additions.length && options.supportsToolSearch) {
+				} else if (additions.length && support === "additions") {
 					const names = additions.map((tool) => tool.name);
 					const call_id = `axi_tool_load_${shortHash(`system:${ordinal}:${names.join(",")}`)}`;
 					result.push(
@@ -197,7 +216,17 @@ export function convertResponsesMessages<A extends Api>(
 					);
 				}
 				if (!leading || options.includeSystemPrompt !== false) {
-					const text = leading ? getSystemMessageText(message) : renderSystemMessageUpdate(message);
+					const parts = [leading ? getSystemMessageText(message) : renderSystemMessageUpdate(message)];
+					if (anchored) {
+						const names = new Set(additions.map((tool) => tool.name));
+						const removed = (message.toolsRemoved ?? []).map((tool) => tool.name).filter((name) => !names.has(name));
+						if (removed.length)
+							parts.push(
+								`The following tools are no longer available. Do not call them:\n${removed.map((name) => `- ${name}`).join("\n")}`,
+							);
+						for (const name of removed) unavailable.add(name);
+					}
+					const text = parts.filter((part) => part.length).join("\n\n");
 					if (text.length) result.push({ role, content: sanitizeSurrogates(text) });
 				}
 				break;

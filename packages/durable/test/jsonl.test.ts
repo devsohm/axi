@@ -69,6 +69,7 @@ describe("JSONL storage", () => {
 	it("restores Session document revisions and forks after a checkpoint and reopening", async () => {
 		const directory = await mkdtemp(join(tmpdir(), "axi-jsonl-"));
 		const State = defineDoc({
+			checkpointWhen: () => false,
 			kind: "settings",
 			scope: "conversation",
 			history: "rewindable",

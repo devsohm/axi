@@ -33,9 +33,10 @@ export function mistralToolId(id: string, attempt = 0): string {
 }
 function cleanSymbols(value: unknown): unknown {
 	if (Array.isArray(value)) return value.map(cleanSymbols);
-	return value !== null && typeof value === "object"
-		? Object.fromEntries(Object.entries(value).map(([key, value]) => [key, cleanSymbols(value)]))
-		: value;
+	if (value === null || typeof value !== "object") return value;
+	const result: Record<string, unknown> = {};
+	for (const [key, nested] of Object.entries(value)) result[key] = cleanSymbols(nested);
+	return result;
 }
 function chatMessages(messages: Message[], images: boolean): ChatMessage[] {
 	const output: ChatMessage[] = [];

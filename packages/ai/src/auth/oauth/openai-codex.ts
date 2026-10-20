@@ -9,11 +9,6 @@ import { generatePKCE } from "./pkce.ts";
 const clientId = "app_EMoamEEZ73f0CkXaXp7hrann";
 const origin = "https://auth.openai.com";
 const redirect = "http://localhost:1455/auth/callback";
-const tokenSchema = Type.Object({
-	access_token: Type.String({ minLength: 1 }),
-	refresh_token: Type.String({ minLength: 1 }),
-	expires_in: Type.Number(),
-});
 const deviceSchema = Type.Object({
 	device_auth_id: Type.String({ minLength: 1 }),
 	user_code: Type.String({ minLength: 1 }),
@@ -38,8 +33,8 @@ async function tokenResponse(response: Response, operation: "exchange" | "refres
 		const body = await response.text().catch(() => "");
 		throw new Error(`OpenAI Codex token ${operation} failed (${response.status}): ${body || response.statusText}`);
 	}
-	const json: unknown = await response.json();
-	if (!Value.Check(tokenSchema, json))
+	const json = await response.json();
+	if (!json?.access_token || !json.refresh_token || typeof json.expires_in !== "number")
 		throw new Error(`OpenAI Codex token ${operation} response missing fields: ${JSON.stringify(json)}`);
 	return { access: json.access_token, refresh: json.refresh_token, expires: Date.now() + json.expires_in * 1000 };
 }

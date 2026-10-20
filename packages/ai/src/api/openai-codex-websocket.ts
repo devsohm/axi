@@ -39,7 +39,7 @@ export interface OpenAICodexWebSocketDebugStats {
 	websocketFallbackActive?: boolean;
 	lastWebSocketError?: string;
 }
-const sessions = new Map<string, Map<string, Entry>>();
+const sessions = new Map<string, Map<unknown, Entry>>();
 const statistics = new Map<string, OpenAICodexWebSocketDebugStats>();
 const fallback = new Set<string>();
 function stats(session: string): OpenAICodexWebSocketDebugStats {
@@ -224,7 +224,7 @@ async function connect(
 		if (signal?.aborted) aborted();
 	});
 }
-function removeEntry(session: string, account: string, entry: Entry): void {
+function removeEntry(session: string, account: unknown, entry: Entry): void {
 	if (entry.timer) clearTimeout(entry.timer);
 	const accounts = sessions.get(session);
 	if (accounts?.get(account) === entry) accounts.delete(account);
@@ -240,7 +240,7 @@ async function acquire(
 	url: string,
 	headers: Headers,
 	session: string | undefined,
-	account: string,
+	account: unknown,
 	signal: AbortSignal | undefined,
 	timeout: number | undefined,
 ): Promise<Lease> {
@@ -421,7 +421,7 @@ export async function runCodexWebSocket({
 	url: string;
 	headers: Headers;
 	session: string | undefined;
-	account: string;
+	account: unknown;
 	signal: AbortSignal | undefined;
 	connectTimeout: number | undefined;
 	idleTimeout: number | undefined;

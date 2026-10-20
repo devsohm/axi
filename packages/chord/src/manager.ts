@@ -140,7 +140,6 @@ export function forkDriver(options: ForkDriverOptions): Driver {
 					});
 			const pid = child.pid ?? -1;
 			const killGroup = (): boolean => {
-				if (pid <= 0) return false;
 				try {
 					process.kill(-pid, "SIGKILL");
 					return true;

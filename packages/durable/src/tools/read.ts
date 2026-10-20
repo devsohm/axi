@@ -198,8 +198,9 @@ export function createReadTool(options: ReadToolOptions = {}) {
 		description: `Read the contents of a file. Supports text files and images (${formats}). Images are sent as attachments. For text files, output is truncated to ${DEFAULT_MAX_LINES} lines or ${DEFAULT_MAX_BYTES / 1024}KB (whichever is hit first). Use offset/limit for large files. When you need the full file, continue with offset until complete.`,
 		parameters,
 		async execute(args, api, context) {
+			const { path: requestedPath, offset, limit } = args;
 			const env = requireEnv(api);
-			const path = await resolveReadToolPath(env, args.path, context);
+			const path = await resolveReadToolPath(env, requestedPath, context);
 			const reader = getOrThrow(await env.openBinaryReader(path, undefined, context));
 			try {
 				for (let attempt = 0; ; attempt++) {
@@ -210,15 +211,15 @@ export function createReadTool(options: ReadToolOptions = {}) {
 					});
 					const result =
 						mimeType === undefined
-							? await readText(reader, args, context)
-							: await readImage(reader, before, args.path, mimeType, options.images, api, context);
+							? await readText(reader, { path: requestedPath, offset, limit }, context)
+							: await readImage(reader, before, requestedPath, mimeType, options.images, api, context);
 					const after = getOrThrow(await reader.info(context));
 					if (
 						(before.size === after.size && before.mtimeMs === after.mtimeMs) ||
 						(mimeType === undefined && after.size > before.size)
 					)
 						return result;
-					if (attempt === 1) throw new Error(`${args.path} changed while it was read`);
+					if (attempt === 1) throw new Error(`${requestedPath} changed while it was read`);
 				}
 			} finally {
 				await reader.close(context);

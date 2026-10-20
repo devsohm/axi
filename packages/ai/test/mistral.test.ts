@@ -26,6 +26,39 @@ function response(chunks: object[]): Response {
 }
 const stop = { choices: [{ finish_reason: "stop", delta: {} }] };
 describe("Mistral transport", () => {
+	it("copies schema fields with ordinary assignment before sending the request", async () => {
+		const parameters = Type.Object(
+			Object.fromEntries([
+				["__proto__", Type.String()],
+				["normal", Type.Number()],
+			]),
+		);
+		let body: Record<string, unknown> | undefined;
+		const result = await stream(
+			model,
+			normalizeContext({ ...context, tools: [{ name: "inspect", description: "Inspect input", parameters }] }),
+			{
+				apiKey: "offline",
+				fetch: async (_url, init) => {
+					body = JSON.parse(String(init?.body));
+					return response([stop]);
+				},
+			},
+		).result();
+		expect(result.stopReason).toBe("stop");
+		expect(body?.tools).toEqual([
+			{
+				type: "function",
+				function: {
+					name: "inspect",
+					description: "Inspect input",
+					parameters: { type: "object", properties: { normal: { type: "number" } }, required: ["__proto__", "normal"] },
+					strict: false,
+				},
+			},
+		]);
+		expect(Object.hasOwn(parameters.properties, "__proto__")).toBe(true);
+	});
 	it("publishes partial tool arguments until the tool finishes", async () => {
 		const chunks = [
 			{

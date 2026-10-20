@@ -42,6 +42,8 @@ The built-in catalog contains 41 providers. Chat, image and classifier entries s
 
 Transcripts carry system messages and tool changes. The helpers replay the current prompt and tools, or retain updates in place for transports that support them. Event streams expose text, thinking and tool-call updates and return the completed assistant message.
 
+Supported Responses models keep tool declarations in the input history, so removals and later loads preserve the existing request prefix. Addition-only transports fold changes through the last removal or redeclaration, then retain later additions in place. See [transcripts and tools](docs/spec.md#transcripts-and-tools) for the transport rules.
+
 OpenAI Chat Completions and OpenAI/Azure Responses adapters use the OpenAI SDK. They support request and response callbacks, streaming tool arguments, grammar tools, retries and cache controls. Anthropic Messages uses the Anthropic SDK, with signed thinking replay, inline tool changes, strict-tool fallback and workload identity federation. You can use an adapter directly:
 
 ```ts

@@ -64,9 +64,15 @@ Final chat reasons are `stop`, `length`, `toolUse`, `error`, `aborted`, and `def
 
 `normalizeContext()` converts the initial prompt and declarations into a `TranscriptContext`. Later system messages can add text, replace named sections, and add or remove tool declarations. A transport preserves those updates in place when its model capabilities permit them. Other transports replay the current combined prompt and tool set.
 
+`resolveTranscriptTools(messages, support)` separates top-level declarations from changes kept in the transcript. `"none"` sends the current tools at the top level. `"additions"` folds changes through the last removal or repeated name, then keeps later additions in place. `"changes"` leaves the top-level list empty and declares every tool in place, including the initial tools. `foldedSystemMessages` counts the system messages already represented by the top-level list.
+
+Responses transports that support system updates and `additional_tools` use `"changes"`. Later declarations replace earlier definitions. Removal notices tell the model which tools it must stop calling, because the wire format cannot remove declarations. Later updates repeat the names still unavailable. Restoring a tool removes its name from that notice. Synthetic tool search and supported Chat Completions tool messages use `"additions"`, so later loads preserve the cached prefix after a removal.
+
 A `Tool` contains `name`, `description`, and a TypeBox `parameters` schema. The AI package describes calls. The application executes tools and appends their results. `validateToolArguments()` checks and coerces arguments against the declaration.
 
 Constrained sampling accepts JSON-schema preferences or grammar variants. JSON-schema strictness is `prefer` or `require`. Grammar formats are `openai_lark` and `openai_regex`. Support depends on the transport and model metadata.
+
+Google's optional legacy `parameters` conversion removes schema meta-declarations recursively. It copies fields by ordinary JavaScript assignment, so `__proto__` changes the copied object's prototype instead of becoming an own property. Mistral's schema copy uses the same assignment rule. Google's default `parametersJsonSchema` conversion preserves the original schema.
 
 ## Request options
 

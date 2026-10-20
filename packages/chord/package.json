@@ -49,6 +49,11 @@
 			"source": "./src/sqlite/cloudflare.ts",
 			"types": "./dist/sqlite/cloudflare.d.ts",
 			"import": "./dist/sqlite/cloudflare.js"
+		},
+		"./telemetry-sqlite": {
+			"source": "./src/telemetry-sqlite/index.ts",
+			"types": "./dist/telemetry-sqlite/index.d.ts",
+			"import": "./dist/telemetry-sqlite/index.js"
 		}
 	},
 	"files": [

@@ -10,6 +10,8 @@ Use Node.js 26.10 and Rust 1.98.1 for the release checks. Run these commands fro
 npm ci
 npm run build
 npm run build:daemon --workspace @axi/env
+npm run build:native --workspace @axi/tui
+npm run test:native --workspace @axi/tui
 npm run check
 npm test
 cargo test --locked --manifest-path packages/env/daemon/Cargo.toml
@@ -19,7 +21,7 @@ npm ci --prefix test/workers --ignore-scripts
 npm run test:workers
 ```
 
-The output directory must be empty. Packing validates package versions, internal dependency versions, compiled files, native binary presence, package contents, and license files. It writes seven tarballs, a local-file dependency manifest, installation instructions, and `SHA256SUMS`.
+The output directory must be empty. Packing validates package versions, internal dependency versions, compiled files, native binary presence, package contents, and license files. It writes eight tarballs, a local-file dependency manifest, installation instructions, and `SHA256SUMS`.
 
 The verification command installs the actual archives in a temporary application. It compares installed files with the build and runs a durable conversation with SQLite, native file tools, Code Mode, an explicit MCP bridge, committed views, and image processing. The temporary application is removed afterward.
 
@@ -29,7 +31,7 @@ The Workers test has isolated development dependencies. It runs the compiled pac
 
 The GitHub workflow runs the desktop builds on Linux, macOS, and Windows hosts for both architectures. It checks the installed archives on each host. Separate jobs cross-compile the two Android targets with the Android NDK. These jobs do not provide Android device acceptance.
 
-The archive job waits for every target. It collects all eight binaries into the Env package, checks the combined archives on Linux, and uploads `axi-toolkit-VERSION.tar.gz` with its checksum.
+The archive job waits for every target. It collects eight environment binaries and six terminal helpers into their packages, checks the combined archives on Linux, and uploads `axi-toolkit-VERSION.tar.gz` with its checksum.
 
 For a manual cross-build, install the required Rust target and linker. Set `CARGO_BUILD_TARGET` to its Rust target triple before running `npm run build:daemon --workspace @axi/env`. Android requires an NDK linker selected through Cargo's target-specific linker variable.
 

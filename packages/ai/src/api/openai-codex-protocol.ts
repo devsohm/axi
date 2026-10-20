@@ -153,15 +153,13 @@ export async function* codexSSE(response: Response, signal?: AbortSignal): Async
 		} catch {}
 	}
 }
-const accountSchema = Type.Object({
-	"https://api.openai.com/auth": Type.Object({ chatgpt_account_id: Type.String({ minLength: 1 }) }),
-});
-export function codexAccount(token: string): string {
+export function codexAccount(token: string): unknown {
 	try {
 		const parts = token.split(".");
 		if (parts.length !== 3) throw new Error("Invalid token");
-		const payload: unknown = JSON.parse(atob(parts[1] ?? ""));
-		if (Value.Check(accountSchema, payload)) return payload["https://api.openai.com/auth"].chatgpt_account_id;
+		const payload = record(JSON.parse(atob(parts[1] ?? "")));
+		const account = record(payload?.["https://api.openai.com/auth"])?.chatgpt_account_id;
+		if (account) return account;
 	} catch {}
 	throw new Error("Failed to extract accountId from token");
 }
@@ -176,7 +174,7 @@ export function codexUrl(base: string): string {
 export function codexHeaders(
 	model: Record<string, string> | undefined,
 	overrides: ProviderHeaders | undefined,
-	account: string,
+	account: unknown,
 	token: string,
 	transport: "sse" | "websocket",
 	session?: string,
@@ -187,7 +185,7 @@ export function codexHeaders(
 		if (value === null) headers.delete(name);
 		else headers.set(name, value);
 	headers.set("Authorization", `Bearer ${token}`);
-	headers.set("chatgpt-account-id", account);
+	headers.set("chatgpt-account-id", String(account));
 	headers.set("OpenAI-Beta", transport === "sse" ? "responses=experimental" : "responses_websockets=2026-02-06");
 	if (transport === "sse") {
 		headers.set("accept", "text/event-stream");

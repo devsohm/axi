@@ -834,7 +834,7 @@ export function createStorageConformance(options: StorageConformanceOptions): re
 		}
 		const replacement = {
 			revision: 100,
-			rows: initial.rows.map((row, index) => ({ value: 10000 + index, stable: row.stable })),
+			rows: initial.rows.map((_row, index) => ({ value: 10000 + index, stable: `replacement-${index}` })),
 		};
 		const expected = structuredClone(replacement);
 		const replaced = await storage.commit(
@@ -869,7 +869,7 @@ export function createStorageConformance(options: StorageConformanceOptions): re
 		a.deepEqual((await storage.document(id, replaced, context))?.value, {
 			...initial,
 			revision: 100,
-			rows: initial.rows.map((row, index) => ({ value: 10000 + index, stable: row.stable })),
+			rows: initial.rows.map((_row, index) => ({ value: 10000 + index, stable: `replacement-${index}` })),
 		});
 		a.deepEqual((await storage.document(id, "current", context))?.value, expected);
 		const read = await storage.document(id, "current", context);

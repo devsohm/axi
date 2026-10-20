@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { BACKGROUND_CONTEXT as context, traceIn, withTelemetry } from "@axi/chord/context";
 import { InMemoryTelemetryContext } from "@axi/telemetry";
+import { renderTrace } from "@axi/telemetry/render";
 import {
 	Harness,
 	createRegistry,
@@ -26,7 +27,58 @@ import { CodemodeSandbox } from "@axi/codemode";
 import { McpClient, LATEST_PROTOCOL_VERSION } from "@axi/mcp";
 import { createInMemoryTransportPair } from "@axi/mcp/testing";
 
+const tui = await import("@axi/tui");
+const plain = (text) => text;
+const markdownTheme = Object.fromEntries(
+	[
+		"heading",
+		"link",
+		"linkUrl",
+		"code",
+		"codeBlock",
+		"codeBlockBorder",
+		"quote",
+		"quoteBorder",
+		"hr",
+		"listBullet",
+		"bold",
+		"italic",
+		"strikethrough",
+		"underline",
+	].map((name) => [name, plain]),
+);
+const markdown = new tui.Markdown("# Installed\n\nHello **world**", 0, 0, markdownTheme);
+assert.deepEqual(markdown.render(40).map(tui.stripTerminalSequences), [
+	"Installed".padEnd(40),
+	" ".repeat(40),
+	"Hello world".padEnd(40),
+]);
+assert.equal(tui.renderLatex("x^2"), "x²");
+assert.equal(tui.colorToHex(tui.rgbColor(255, 128, 0)), "#ff8000");
+const stack = new tui.VStack([new tui.Text("one", 0, 0), new tui.Text("two", 0, 0)]);
+assert.deepEqual(
+	stack.render(8).map((line) => tui.stripTerminalSequences(line).trimEnd()),
+	["one", "two"],
+);
+assert.equal(tui.oklabToOkhslLightness(0), 0);
+
 const telemetry = new InMemoryTelemetryContext();
+assert.equal(
+	renderTrace([
+		{
+			id: "installed",
+			traceId: "installed",
+			name: "archive",
+			startedMs: 10,
+			endedMs: 13,
+			attributes: {},
+			events: [],
+			links: [],
+			status: { status: "ok" },
+		},
+	]),
+	"archive (3ms)",
+);
 const receiver = new InMemoryTelemetryContext();
 await traceIn(withTelemetry(telemetry, context), { name: "installed" }, async (child) => {
 	telemetry.counter("requests").add(1, { mode: "installed" }, child.telemetry);
@@ -59,7 +111,13 @@ for (const subpath of ["api/anthropic-request", "api/bedrock-client", "providers
 	assert.throws(() => import.meta.resolve(`@axi/ai/${subpath}`), { code: "ERR_PACKAGE_PATH_NOT_EXPORTED" });
 const cwd = await mkdtemp(join(tmpdir(), "axi-public-"));
 const envConnection = new Connection({ command: [localDaemon()] });
-const Counter = defineDoc({ kind: "counter", scope: "session", version: 1, initial: () => ({ count: 0 }) });
+const Counter = defineDoc({
+	checkpointWhen: () => false,
+	kind: "counter",
+	scope: "session",
+	version: 1,
+	initial: () => ({ count: 0 }),
+});
 const models = createModels(),
 	faux = fauxProvider(),
 	registry = createRegistry(),

@@ -19,10 +19,10 @@ export const CATALOG_GLOBALS = [
 export const MAX_CONCURRENT_MODEL_CALLS = 4;
 export const MODELS_DESCRIPTION = [
 	"`models` (all functions return promises):",
-	'- `models.getModelsOfType(type, provider?)`, `models.getAvailableOfType(type, provider?)` and `models.getModelOfType(type, provider, id)` read the catalog. Types are "chat", "image" and "classifier". Available models require configured authentication.',
-	'- `models.classify(model, { state: { ... }, images?: [image blocks], questions: { id: { type: "choice" | "score" | "bool", instructions, criteria } } })` returns `{ answers, stopReason, errorMessage?, usage? }`. Choice criteria map labels to meanings. Score criteria list levels from lowest to highest. Boolean criteria have `true` and `false` meanings.',
-	'- `models.generateImages(model, { input: [{ type: "text", text: <prompt> }, ...image blocks] })` returns `{ output, stopReason, errorMessage?, usage? }`. Display returned images with `image(block)`.',
-	"At most 4 classify/generateImages calls run at once; more wait.",
+	'- `models.getModelsOfType(type, provider?)`, `models.getAvailableOfType(type, provider?)` (configured auth only), `models.getModelOfType(type, provider, id)`: the catalog; `type` is "chat", "image", or "classifier".',
+	'- `models.classify(model, { state: { ... }, images?: [{ type: "image", data, mimeType }], questions: { <id>: { type: "choice", instructions, criteria: { <label>: <meaning> } } | { type: "score", instructions, criteria: [<lowest level>, ..., <highest level>] } | { type: "bool", instructions, criteria: { true: <meaning>, false: <meaning> } } } })` resolves to `{ answers: { <id>: ... }, stopReason, errorMessage?, usage? }`.',
+	'- `models.generateImages(model, { input: [{ type: "text", text: <prompt> }, ...optional { type: "image", data, mimeType }] })` resolves to `{ output: [image blocks], stopReason, errorMessage?, usage? }`; show each image with `image(block)`.',
+	`At most ${MAX_CONCURRENT_MODEL_CALLS} classify/generateImages calls run at once; more wait.`,
 ].join("\n");
 
 function record(value: unknown): value is Record<string, unknown> {

@@ -5,3 +5,4 @@ coverage/
 target/
 release/
 packages/env/bin/
+packages/tui/native/*/prebuilds/

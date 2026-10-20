@@ -34,7 +34,7 @@ Entries are immutable. Context edits omit or replace an earlier entry's model co
 
 ## Document definitions
 
-`defineDoc()` describes one document at an address. `defineDocFamily()` adds a string key and a seed for each family member. A definition has a kind, positive integer version, initial value factory, and scope.
+`defineDoc()` describes one document at an address. `defineDocFamily()` adds a string key and a seed for each family member. A definition has a kind, positive integer version, initial value factory, scope, and required `checkpointWhen()` policy.
 
 | Scope | History and fork behavior |
 |---|---|
@@ -49,7 +49,7 @@ Retiring an incarnation ends its observations. Recreating the same address creat
 
 `tx.doc()` creates or opens a mutable draft. Document reads within that transaction observe its changes. Assigned containers are copied by value and must contain strict JSON. Held draft handles cannot mutate state after the transaction ends.
 
-`checkpointWhen()` selects complete bases instead of further deltas. A version converter reads older content through `migrate(value, fromVersion)`. Reading a newer version through an older definition fails.
+`checkpointWhen()` selects complete bases instead of further deltas. Return `false` when no periodic checkpoint is needed. Task-scoped built-in documents use this policy because they retire with their task. The Code Mode store writes a new base when the previous base already has 64 deltas. A version converter reads older content through `migrate(value, fromVersion)`. Reading a newer version through an older definition fails.
 
 `snapshot()` returns the current committed value. `snapshotAsOf()` accepts rewindable conversation documents and a historical entry. Reads do not expose storage-owned mutable objects.
 

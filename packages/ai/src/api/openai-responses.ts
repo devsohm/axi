@@ -16,7 +16,7 @@ import { getUserAgent } from "../utils/user-agent.ts";
 import { createGrammarToolInputProperties } from "./constrained-sampling.ts";
 import { buildCopilotDynamicHeaders, hasCopilotVisionInput } from "./github-copilot-headers.ts";
 import { clampOpenAIPromptCacheKey } from "./openai-prompt-cache.ts";
-import { convertResponsesMessages, convertResponsesTools } from "./openai-responses-shared.ts";
+import { getResponsesToolSupport, convertResponsesMessages, convertResponsesTools } from "./openai-responses-shared.ts";
 import type { OpenAIResponsesOptions } from "./options.ts";
 import { createResponsesRequest } from "./responses-request.ts";
 import { buildBaseOptions, resolveSamplingParams } from "./simple-options.ts";
@@ -105,10 +105,7 @@ function request(
 	if (options.maxTokens && compat.supportsMaxOutputTokens) params.max_output_tokens = Math.max(16, options.maxTokens);
 	if (options.temperature !== undefined) params.temperature = options.temperature;
 	if (options.serviceTier !== undefined) params.service_tier = options.serviceTier;
-	const tools = resolveTranscriptTools(
-		transcript.messages,
-		compat.supportsAdditionalTools || compat.supportsToolSearch,
-	).requestTools;
+	const tools = resolveTranscriptTools(transcript.messages, getResponsesToolSupport(compat)).requestTools;
 	if (tools.length) params.tools = convertResponsesTools(tools, toolOptions);
 	if (options.toolChoice !== undefined) params.tool_choice = options.toolChoice;
 	const level = options.reasoningEffort ?? (options.reasoningSummary ? "medium" : undefined);

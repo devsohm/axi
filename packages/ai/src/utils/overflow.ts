@@ -25,6 +25,7 @@ const patterns = [
 	/context[_ ]length[_ ]exceeded/i,
 	/too many tokens/i,
 	/token limit exceeded/i,
+	/^(?:[\w -]+ API error \(413\):|413(?:\s|:|$))/i,
 ];
 export function getOverflowPatterns(): RegExp[] {
 	return [...patterns];

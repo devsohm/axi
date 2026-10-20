@@ -77,7 +77,7 @@ describe("telemetry propagation and measurements", () => {
 		metrics.counter("turns").add(-1, { result: "error" });
 		await context.startSpan({ name: "turn" }, (span) => metrics.histogram("duration").record(12, undefined, span));
 		const result = context.getMetrics();
-		expect(result).toHaveLength(2);
+		expect(result).toHaveLength(3);
 		expect(result[0]).toEqual({
 			kind: "counter",
 			name: "turns",
@@ -87,6 +87,14 @@ describe("telemetry propagation and measurements", () => {
 			context: null,
 		});
 		expect(result[1]).toEqual({
+			kind: "counter",
+			name: "turns",
+			description: "Completed turns",
+			value: -1,
+			attributes: { result: "error" },
+			context: null,
+		});
+		expect(result[2]).toEqual({
 			kind: "histogram",
 			name: "duration",
 			description: "Elapsed time",
@@ -96,9 +104,9 @@ describe("telemetry propagation and measurements", () => {
 			attributes: {},
 			context: context.getSpans()[0].context,
 		});
-		if (!result[1].context) throw new Error("Missing exemplar");
-		for (const key of Object.keys(result[1].context)) Reflect.set(result[1].context, key, "changed");
-		expect(context.getMetrics()[1].context).toEqual(context.getSpans()[0].context);
+		if (!result[2].context) throw new Error("Missing exemplar");
+		for (const key of Object.keys(result[2].context)) Reflect.set(result[2].context, key, "changed");
+		expect(context.getMetrics()[2].context).toEqual(context.getSpans()[0].context);
 		const checkTypes = () => {
 			// @ts-expect-error A histogram name cannot select a counter.
 			metrics.counter("duration");

@@ -1,0 +1,327 @@
+{
+	"description": "Behavior areas linked to owned tests. A passing area means its listed tests passed, not that every possible case is covered.",
+	"packages": [
+		{
+			"name": "@axi/telemetry",
+			"directory": "packages/telemetry",
+			"areas": [
+				{
+					"behavior": "span lifecycle, typed schemas and disabled instrumentation",
+					"tests": [
+						"packages/telemetry/test/telemetry.test.ts",
+						"packages/telemetry/test/schema-context.test.ts",
+						"packages/telemetry/test/passive-failures.test.ts",
+						"packages/telemetry/test/attribute-keys.test.ts"
+					]
+				},
+				{
+					"behavior": "metrics and cross-process propagation",
+					"tests": ["packages/telemetry/test/metrics.test.ts"]
+				},
+				{
+					"behavior": "memory and SQLite read-store contracts",
+					"tests": ["packages/telemetry/test/store.test.ts", "packages/telemetry/test/store-backends.test.ts"]
+				}
+			]
+		},
+		{
+			"name": "@axi/chord",
+			"directory": "packages/chord",
+			"areas": [
+				{
+					"behavior": "declarations, contracts, state and delta replay",
+					"tests": [
+						"packages/chord/test/contract.test.ts",
+						"packages/chord/test/cell.test.ts",
+						"packages/chord/test/state.test.ts",
+						"packages/chord/test/delta.test.ts",
+						"packages/chord/test/replay-model.test.ts",
+						"packages/chord/test/state-delivery.test.ts"
+					]
+				},
+				{
+					"behavior": "object routing, links and host lifecycle",
+					"tests": [
+						"packages/chord/test/runtime.test.ts",
+						"packages/chord/test/link.test.ts",
+						"packages/chord/test/remote-lifecycle.test.ts",
+						"packages/chord/test/routed-hosts.test.ts",
+						"packages/chord/test/object-lifecycle.test.ts"
+					]
+				},
+				{
+					"behavior": "cluster reload, retirement and rollback",
+					"tests": ["packages/chord/test/cluster-lifecycle.test.ts"]
+				},
+				{
+					"behavior": "processes, cancellation, output and SQLite",
+					"tests": [
+						"packages/chord/test/manager.test.ts",
+						"packages/chord/test/context.test.ts",
+						"packages/chord/test/output.test.ts",
+						"packages/chord/test/sqlite.test.ts",
+						"packages/chord/test/telemetry-store.test.ts"
+					]
+				}
+			]
+		},
+		{
+			"name": "@axi/ai",
+			"directory": "packages/ai",
+			"areas": [
+				{
+					"behavior": "catalogs, registration, authentication and refresh races",
+					"tests": [
+						"packages/ai/test/models.test.ts",
+						"packages/ai/test/model-lifecycle.test.ts",
+						"packages/ai/test/registration.test.ts",
+						"packages/ai/test/catalog.test.ts",
+						"packages/ai/test/codex-login.test.ts",
+						"packages/ai/test/oauth-flows.test.ts"
+					]
+				},
+				{
+					"behavior": "provider request and stream contracts",
+					"tests": [
+						"packages/ai/test/anthropic.test.ts",
+						"packages/ai/test/responses.test.ts",
+						"packages/ai/test/completions.test.ts",
+						"packages/ai/test/codex.test.ts",
+						"packages/ai/test/google.test.ts",
+						"packages/ai/test/google-response.test.ts",
+						"packages/ai/test/bedrock.test.ts",
+						"packages/ai/test/azure-responses.test.ts",
+						"packages/ai/test/mistral.test.ts",
+						"packages/ai/test/wire.test.ts",
+						"packages/ai/test/tool-history.test.ts"
+					]
+				},
+				{
+					"behavior": "retry, overflow, validation and accounting",
+					"tests": [
+						"packages/ai/test/provider-retry.test.ts",
+						"packages/ai/test/retry.test.ts",
+						"packages/ai/test/request-overflow.test.ts",
+						"packages/ai/test/tool-validation.test.ts",
+						"packages/ai/test/request-telemetry.test.ts",
+						"packages/ai/test/sampling-options.test.ts",
+						"packages/ai/test/provider-boundaries.test.ts"
+					]
+				},
+				{
+					"behavior": "image, classifier and deferred model paths",
+					"tests": [
+						"packages/ai/test/images.test.ts",
+						"packages/ai/test/classifiers.test.ts",
+						"packages/ai/test/faux.test.ts",
+						"packages/ai/test/lazy.test.ts"
+					]
+				}
+			]
+		},
+		{
+			"name": "@axi/codemode",
+			"directory": "packages/codemode",
+			"areas": [
+				{
+					"behavior": "source parsing and schema declarations",
+					"tests": ["packages/codemode/test/source-declarations.test.ts"]
+				},
+				{
+					"behavior": "VM execution, tools, replay, cancellation and lifetime",
+					"tests": [
+						"packages/codemode/test/sandbox.test.ts",
+						"packages/codemode/test/invocation-lifecycle.test.ts",
+						"packages/codemode/test/execution-contract.test.ts"
+					]
+				},
+				{
+					"behavior": "inline and remote execution boundaries",
+					"tests": ["packages/codemode/test/portable-contract.test.ts"]
+				}
+			]
+		},
+		{
+			"name": "@axi/mcp",
+			"directory": "packages/mcp",
+			"areas": [
+				{
+					"behavior": "requests, pagination, cancellation and callback ownership",
+					"tests": [
+						"packages/mcp/test/client.test.ts",
+						"packages/mcp/test/client-order.test.ts",
+						"packages/mcp/test/request-boundaries.test.ts"
+					]
+				},
+				{
+					"behavior": "stdio and HTTP sessions, framing and cleanup",
+					"tests": [
+						"packages/mcp/test/stdio-session.test.ts",
+						"packages/mcp/test/http-session.test.ts",
+						"packages/mcp/test/transport.test.ts",
+						"packages/mcp/test/stream-recovery.test.ts"
+					]
+				},
+				{
+					"behavior": "authorization, discovery, callbacks and content conversion",
+					"tests": [
+						"packages/mcp/test/oauth.test.ts",
+						"packages/mcp/test/oauth-callback.test.ts",
+						"packages/mcp/test/content-discovery.test.ts",
+						"packages/mcp/test/oauth-lifecycle.test.ts"
+					]
+				}
+			]
+		},
+		{
+			"name": "@axi/durable",
+			"directory": "packages/durable",
+			"areas": [
+				{
+					"behavior": "records, documents, forks, transactions and backend recovery",
+					"tests": [
+						"packages/durable/test/session.test.ts",
+						"packages/durable/test/session-tasks.test.ts",
+						"packages/durable/test/storage.test.ts",
+						"packages/durable/test/testing.test.ts",
+						"packages/durable/test/document-checkpoints.test.ts",
+						"packages/durable/test/jsonl.test.ts",
+						"packages/durable/test/sqlite-session.test.ts"
+					]
+				},
+				{
+					"behavior": "tasks, scheduling, ownership and timers",
+					"tests": [
+						"packages/durable/test/scheduler.test.ts",
+						"packages/durable/test/timers.test.ts",
+						"packages/durable/test/tool-task.test.ts"
+					]
+				},
+				{
+					"behavior": "agent events, configuration and compaction",
+					"tests": [
+						"packages/durable/test/harness-events.test.ts",
+						"packages/durable/test/harness-state.test.ts",
+						"packages/durable/test/recovery-settings.test.ts",
+						"packages/durable/test/compaction-lifecycle.test.ts",
+						"packages/durable/test/generation-lifecycle.test.ts"
+					]
+				},
+				{
+					"behavior": "tools, environments, watches and Code Mode integration",
+					"tests": [
+						"packages/durable/test/bash.test.ts",
+						"packages/durable/test/environment.test.ts",
+						"packages/durable/test/node-environment.test.ts",
+						"packages/durable/test/search.test.ts",
+						"packages/durable/test/images.test.ts",
+						"packages/durable/test/codemode.test.ts",
+						"packages/durable/test/watch-context.test.ts",
+						"packages/durable/test/watch-rescan.test.ts",
+						"packages/durable/test/file-tools.test.ts",
+						"packages/durable/test/edit-replacements.test.ts",
+						"packages/durable/test/script-services.test.ts",
+						"packages/durable/test/script-recovery.test.ts"
+					]
+				}
+			]
+		},
+		{
+			"name": "@axi/env",
+			"directory": "packages/env",
+			"areas": [
+				{
+					"behavior": "connection framing, retry, process loss and stale handles",
+					"tests": ["packages/env/test/connection.test.ts"]
+				},
+				{
+					"behavior": "filesystem and shell conformance, transfers and error mapping",
+					"tests": [
+						"packages/env/test/environment.test.ts",
+						"packages/env/test/transfers.test.ts",
+						"packages/env/test/errors.test.ts",
+						"packages/env/test/filesystem-boundaries.test.ts"
+					]
+				},
+				{
+					"behavior": "terminal lifecycle and watcher recovery",
+					"tests": ["packages/env/test/terminal.test.ts", "packages/env/test/watch-recovery.test.ts"]
+				},
+				{
+					"behavior": "SSH host identity and bootstrap behavior",
+					"tests": ["packages/env/test/host-keys.test.ts"]
+				}
+			]
+		},
+		{
+			"name": "@axi/tui",
+			"directory": "packages/tui",
+			"areas": [
+				{
+					"behavior": "keyboard protocols, input framing, history and editing",
+					"tests": [
+						"packages/tui/test/keyboard.test.ts",
+						"packages/tui/test/input-protocol.test.ts",
+						"packages/tui/test/history.test.ts",
+						"packages/tui/test/editor.test.ts",
+						"packages/tui/test/input-interactions.test.ts",
+						"packages/tui/test/editor-screen.test.ts"
+					]
+				},
+				{
+					"behavior": "completion, selectors and settings",
+					"tests": [
+						"packages/tui/test/autocomplete.test.ts",
+						"packages/tui/test/selectors.test.ts",
+						"packages/tui/test/components.test.ts"
+					]
+				},
+				{
+					"behavior": "layout, overlays, scrolling, mouse and search",
+					"tests": [
+						"packages/tui/test/layout-and-search.test.ts",
+						"packages/tui/test/rendering.test.ts",
+						"packages/tui/test/fullscreen-interactions.test.ts"
+					]
+				},
+				{
+					"behavior": "Markdown, math, ANSI, colors and images",
+					"tests": [
+						"packages/tui/test/formatting.test.ts",
+						"packages/tui/test/image-protocol.test.ts",
+						"packages/tui/test/math-layout.test.ts"
+					]
+				},
+				{
+					"behavior": "real terminal negotiation and cleanup",
+					"tests": ["packages/tui/test/process-terminal.test.ts"]
+				}
+			]
+		}
+	],
+	"separateChecks": [
+		{
+			"name": "Rust daemon",
+			"command": "cargo test --locked --manifest-path packages/env/daemon/Cargo.toml"
+		},
+		{
+			"name": "Native terminal helpers",
+			"command": "npm run test:native --workspace @axi/tui"
+		},
+		{
+			"name": "Durable Object runtime",
+			"command": "npm run test:workers"
+		},
+		{
+			"name": "Installed archives",
+			"command": "npm run verify"
+		}
+	],
+	"unverified": [
+		"Live provider/model operation and interactive OAuth acceptance require credentials and explicit runs.",
+		"macOS, Windows and ARM64 native execution require those platform runners.",
+		"SSH acceptance against an external server requires a configured host.",
+		"Visual acceptance requires real terminal applications.",
+		"Public declaration checks run through npm run check; V8 does not measure type-only contracts or child-process internals."
+	]
+}

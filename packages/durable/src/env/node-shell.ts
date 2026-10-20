@@ -2,7 +2,7 @@ import { spawn, type ChildProcess, type ChildProcessByStdio } from "node:child_p
 import { createWriteStream, type WriteStream } from "node:fs";
 import { access, stat } from "node:fs/promises";
 import { constants } from "node:os";
-import { join } from "node:path";
+import { join, win32 } from "node:path";
 import type { Readable, Writable } from "node:stream";
 import type { Context } from "@axi/chord";
 import { StreamDecoder } from "./decode.ts";
@@ -30,7 +30,7 @@ export function terminate(child: ChildProcess): void {
 	if (process.platform === "win32") {
 		try {
 			const killer = spawn(
-				join(process.env.SystemRoot ?? "C:\\Windows", "System32", "taskkill.exe"),
+				join(process.env.SystemRoot || "C:\\Windows", "System32", "taskkill.exe"),
 				["/F", "/T", "/PID", String(child.pid)],
 				{ stdio: "ignore", detached: true, windowsHide: true },
 			);
@@ -52,6 +52,17 @@ async function available(path: string): Promise<boolean> {
 	} catch {
 		return false;
 	}
+}
+
+export function isLegacyWslBashPath(path: string): boolean {
+	const candidate = win32.normalize(path).toLowerCase();
+	const root = process.env.SystemRoot;
+	if (!root) return /^[a-z]:\\windows\\(?:system32|sysnative)\\bash\.exe$/.test(candidate);
+	if (!/^[a-z]:[\\/]/i.test(root)) return false;
+	for (const directory of ["System32", "Sysnative"]) {
+		if (candidate === win32.join(root, directory, "bash.exe").toLowerCase()) return true;
+	}
+	return false;
 }
 
 async function locateShell(override: string | undefined): Promise<Result<string, ExecutionError>> {
@@ -127,7 +138,7 @@ export async function runCommand(
 		const shell = await locateShell(host.shellPath);
 		if (!shell.ok) return shell;
 		executable = shell.value;
-		if (/^[a-z]:\\windows\\(?:system32|sysnative)\\bash\.exe$/i.test(shell.value.replace(/\//g, "\\"))) {
+		if (isLegacyWslBashPath(shell.value)) {
 			args = ["-s"];
 			stdinCommand = command;
 		} else args = ["-c", command];

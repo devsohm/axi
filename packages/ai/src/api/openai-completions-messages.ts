@@ -109,18 +109,21 @@ export function convertMessages(
 	const transcript = resolveTranscript(context, compat.supportsMidConvoSystemMessages);
 	const tools = resolveTranscriptTools(
 		transcript.messages,
-		compat.supportsMidConvoSystemMessages === true && compat.supportsMidConvoToolAdditions === true,
+		compat.supportsMidConvoSystemMessages === true && compat.supportsMidConvoToolAdditions === true
+			? "additions"
+			: "none",
 	);
 	const input = transformMessages(transcript.messages, model, (id) => toolId(id, model.provider));
 	const output: ChatCompletionMessageParam[] = [];
 	let previous = "";
+	let systemIndex = 0;
 	const bridge = () => output.push({ role: "assistant", content: "I have processed the tool results." });
 	for (let index = 0; index < input.length; index++) {
 		const message = input[index];
 		if (compat.requiresAssistantAfterToolResult && previous === "toolResult" && message.role === "user") bridge();
 		switch (message.role) {
 			case "system": {
-				if (index > 0 && tools.anchorsAdditions && message.toolsAdded?.length)
+				if (systemIndex++ >= tools.foldedSystemMessages && message.toolsAdded?.length)
 					output.push({
 						role: "system",
 						tools: completionsTools(message.toolsAdded, compat),

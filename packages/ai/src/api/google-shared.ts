@@ -145,11 +145,9 @@ const schemaMetadata = new Set([
 ]);
 function openApiSchema(value: unknown): unknown {
 	if (value === null || typeof value !== "object" || Array.isArray(value)) return value;
-	return Object.fromEntries(
-		Object.entries(value)
-			.filter(([key]) => !schemaMetadata.has(key))
-			.map(([key, nested]) => [key, openApiSchema(nested)]),
-	);
+	const result: Record<string, unknown> = {};
+	for (const [key, nested] of Object.entries(value)) if (!schemaMetadata.has(key)) result[key] = openApiSchema(nested);
+	return result;
 }
 export function convertTools(
 	tools: Tool[],

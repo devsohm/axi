@@ -8,7 +8,7 @@
 
 `TelemetryContext.startSpan(options, callback)` returns a promise and invokes the callback synchronously, exactly once. The callback receives a `TelemetrySpan`, which also starts child spans. `SpanOptions` contains `name`, optional `attributes`, and optional `links`.
 
-A normal return or fulfilled promise produces an `ok` status unless an explicit status was set. A synchronous throw becomes a rejected promise with the same rejection value. Asynchronous rejection preserves that value too. Error recording must not replace the business error.
+A normal return or fulfilled promise produces an `ok` status unless an explicit status was set. With valid instrumentation data, a synchronous throw or asynchronous rejection preserves the callback's rejection value.
 
 | Span method | Behavior |
 | --- | --- |
@@ -18,7 +18,9 @@ A normal return or fulfilled promise produces an `ok` status unless an explicit 
 | `setStatus(status)` | Sets the explicit status. The last successful call wins. |
 | `addLink(link)` | Appends a relationship without changing the parent. |
 
-Recording methods are synchronous and non-throwing. A failed recording call leaves no partial update. After settlement, recording calls have no effect. A settled span's `startSpan()` still executes the child callback and preserves its result, but records no child.
+Recording methods are synchronous. Callers supply trusted typed inputs; behavior for malformed inputs is unspecified. After settlement, recording calls have no effect. A settled span's `startSpan()` still executes the child callback and preserves its result, but records no child.
+
+The memory adapter reports getter failures while reading attributes, links, status, or propagation data. Its metric recorder retains supplied numeric values and histogram boundaries without filtering. Validate data before passing it to the adapter when it comes from an untrusted source.
 
 `SpanStatus` is `{ status: "ok" }` or `{ status: "error", error?: { name, message } }`. Explicit status survives a later callback rejection. A returned error result is ordinary data until the caller sets an error status.
 
@@ -30,9 +32,9 @@ Contexts expose optional `metrics` and `propagation` capabilities. Child spans a
 
 ## Propagation and links
 
-`TelemetryPropagation` is an optional adapter capability. `inject(context)` returns a detached `TelemetryCarrier` or `undefined` for an unknown context. `extract(carrier)` returns a receiver-owned parent context. Missing, malformed, unreadable, and unknown carriers fall back to the receiver's root.
+`TelemetryPropagation` is an optional adapter capability. `inject(context)` returns a detached `TelemetryCarrier` or `undefined` for an unknown context. `extract(carrier)` returns a receiver-owned parent context. Missing or unknown carriers fall back to the receiver's root. Recognized identity fields are opaque strings.
 
-`TelemetryCarrier` is `Record<string, string>`. Its encoding belongs to the adapter. Transport code serializes carriers, not contexts or spans. Injection and extraction are synchronous, passive, and non-throwing. Transport owners enforce carrier size limits. Correlation data grants no identity, permissions, or ownership.
+`TelemetryCarrier` is `Record<string, string>`. Its encoding belongs to the adapter. Transport code serializes carriers, not contexts or spans. Injection and extraction are synchronous. Transport owners enforce carrier size limits. Correlation data grants no identity, permissions, or ownership.
 
 `SpanLink` contains a target `context` and optional `attributes`. Links append in order and copy their attributes. Known settled targets remain injectable and linkable. Unknown targets are ignored. A settled source accepts no additional links.
 
@@ -50,7 +52,7 @@ Contexts expose optional `metrics` and `propagation` capabilities. Child spans a
 
 The optional histogram context identifies an exemplar span. An absent or unknown context produces a null exemplar in the memory adapter. Counter methods have no typed context argument.
 
-Factories and recording methods are synchronous and non-throwing. Invalid metadata, unreadable attributes, nonfinite values, negative counter values, and invalid boundaries suppress the affected call. A malformed call produces no partial measurement.
+Factories and recording methods are synchronous. Callers supply finite values, nonnegative counter increments, and valid instrument metadata. Malformed input behavior is unspecified.
 
 Metric attributes use bounded, low-cardinality values. The low-level API does not inspect application meaning or filter sensitive values automatically.
 
@@ -64,11 +66,11 @@ Metric attributes use bounded, low-cardinality values. The low-level API does no
 
 ## Memory adapter
 
-`InMemoryTelemetryContext` implements `TelemetryContext`, `TelemetryPropagation`, and `TelemetryMetrics`. Each instance creates a UUID scope with `crypto.randomUUID()`. Span IDs start at one and increase within that scope.
+`InMemoryTelemetryContext` implements `TelemetryContext`, `TelemetryPropagation`, `TelemetryMetrics`, and `TelemetryStore`. Each instance creates a UUID scope with `crypto.randomUUID()`. Span IDs start at one and increase within that scope.
 
-The adapter's carrier uses `axi-memory-scope` and `axi-memory-span`. These keys belong to this codec. Other adapters may use another encoding. Extraction accepts own fields, string values, a lowercase UUID scope, and a positive safe-integer span string. Extra string fields are ignored.
+The adapter's carrier uses `axi-memory-scope`, `axi-memory-span`, and `axi-memory-trace`. These keys belong to this codec. Other adapters may use another encoding. Extraction requires strings for all three fields and does not impose a UUID or numeric format on external identities.
 
-A known same-scope span produces a local parent ID. A different scope or unknown ID retains the parent carrier with a null local parent ID. Extracted contexts remain valid after the original span settles. They can record continuation under the saved identity. Calling `startSpan()` on the settled span object itself remains inert for recording.
+A same-scope carrier produces a numeric local parent ID. A different scope retains the parent carrier with a null local parent ID. Extracted contexts remain valid after the original span settles. They can record continuation under the saved identity. Calling `startSpan()` on the settled span object itself remains inert for recording.
 
 `getSpans()` returns detached `RecordedTelemetrySpan` records in start order:
 
@@ -82,7 +84,7 @@ Roots have null parent fields. Remote children have a null `parentId` and non-nu
 
 `getMetrics()` returns detached `RecordedTelemetryMeasurement` records in call order. Each record contains `kind`, `name`, optional instrument metadata, `value`, copied `attributes`, and a nullable exemplar `context`. The adapter keeps a measurement log, not aggregated counters or histogram buckets.
 
-The memory adapter records no timestamps, has no storage bound, and provides no exporter or flush operation. Applications own the recording scope's lifetime.
+Stored snapshots include wall-clock start and end times. Event times are relative to span start and use a monotonic clock. Normalized `getSpans()` results omit these timing fields. The memory adapter has no storage bound or flush operation. Applications own the recording scope's lifetime.
 
 ## Schemas
 
@@ -135,4 +137,14 @@ Attribute helpers are `InferStartAttributes`, `InferOptionalAttributes`, `InferE
 
 Optional `propagation` enables JSON, fallback, and multi-hop checks. Optional `metrics` requires `getMetrics()` and enables ordered measurement, exemplar, and input-copy checks. All fixtures check links and span lifecycle behavior.
 
-The suite checks result preservation, rejection identity, status precedence, atomic recording, post-settlement behavior, parent relationships, links, and unreadable inputs. `TelemetryAdapterFixtureFactory` and `TelemetryAdapterConformanceCase` describe factories and cases. Snapshot readers may flush their backend before returning.
+The suite checks result preservation, rejection identity, status precedence, recording order, post-settlement behavior, parent relationships, and links. `TelemetryAdapterFixtureFactory` and `TelemetryAdapterConformanceCase` describe factories and cases. Snapshot readers may flush their backend before returning.
+
+## Stored queries
+
+`getTrace(traceId)` returns settled spans ordered by start time, then span ID. `findTraces(query?)` groups settled spans by trace ID. Supply a positive page size; the default is 20. Traces are ordered by earliest start time descending, then trace ID ascending. A continuation cursor preserves that order. Keep query filters unchanged across pages.
+
+Name and inclusive start-time filters use the earliest span. `errors: true` matches an error anywhere in the trace. Attribute equalities must all match the same span and distinguish booleans from numbers. Returned data is detached from the recorder.
+
+`findMetrics(query)` selects a metric name, inclusive interval bounds and optional scalar attribute equalities. The memory adapter returns count-one rows, with each measurement assigned to a ten-second interval. Other adapters can aggregate count, sum, minimum and maximum.
+
+`renderTrace(spans)` renders a chronological forest. Missing parents become roots. Duplicate global span IDs are merged. Events and cross-trace links appear beneath their span; links are printed without following them.

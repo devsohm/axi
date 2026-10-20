@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { Type } from "typebox";
 import type { AssistantMessage, Model } from "../src/types.ts";
 import { normalizeContext } from "../src/utils/transcript.ts";
 const sdk = vi.hoisted(() => ({
@@ -30,7 +31,7 @@ vi.mock("@google/genai", async (importOriginal) => {
 import * as google from "../src/api/google-generative-ai.ts";
 import * as vertex from "../src/api/google-vertex.ts";
 import { googleGenerativeAIApi } from "../src/api/google-generative-ai.lazy.ts";
-import { convertMessages } from "../src/api/google-shared.ts";
+import { convertMessages, convertTools } from "../src/api/google-shared.ts";
 import { getUserAgent } from "../src/utils/user-agent.ts";
 const model: Model<"google-generative-ai"> = {
 	api: "google-generative-ai",
@@ -87,6 +88,23 @@ beforeEach(() => {
 });
 afterEach(() => vi.useRealTimers());
 describe("Google adapters", () => {
+	it("uses ordinary property assignment for legacy schemas without changing JSON-schema declarations", () => {
+		const parameters = Type.Object(
+			Object.fromEntries([
+				["__proto__", Type.String()],
+				["normal", Type.Number()],
+			]),
+		);
+		const tool = { name: "inspect", description: "Inspect input", parameters };
+		const legacy = convertTools([tool], true)?.[0]?.functionDeclarations[0]?.parameters;
+		expect(JSON.parse(JSON.stringify(legacy))).toEqual({
+			type: "object",
+			properties: { normal: { type: "number" } },
+			required: ["__proto__", "normal"],
+		});
+		expect(Object.hasOwn(parameters.properties, "__proto__")).toBe(true);
+		expect(convertTools([tool])?.[0]?.functionDeclarations[0]?.parametersJsonSchema).toBe(parameters);
+	});
 	it("streams signed thinking and text through the lazy adapter with billed usage", async () => {
 		const events: string[] = [],
 			raw: unknown[] = [];

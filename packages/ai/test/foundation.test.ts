@@ -142,7 +142,10 @@ describe("AI foundations", () => {
 		});
 		expect(getCurrentSystemPrompt(context.messages)).toBe("Base\n\nUpdate\n\nNew");
 		expect(getCurrentTools(context.messages)).toEqual([write]);
-		expect(resolveTranscriptTools(context.messages, true)).toEqual({ anchorsAdditions: false, requestTools: [write] });
+		expect(resolveTranscriptTools(context.messages, "additions")).toEqual({
+			foldedSystemMessages: 2,
+			requestTools: [write],
+		});
 		expect(getToolStateChanges([read], [write])).toEqual({ toolsAdded: [write], toolsRemoved: [{ name: "read" }] });
 		expect(context.messages[0]).toMatchObject({ content: "Base", sections: { rules: "Old", help: "Help" } });
 	});

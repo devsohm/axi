@@ -1,3 +1,5 @@
+import { openNodeJsonlStorage } from "../src/storage/jsonl/node.ts";
+import { openNodeSqliteStorage } from "../src/storage/sqlite/node.ts";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -169,11 +171,20 @@ it.each([
 });
 
 registerStorageConformance({ describe, expect, it }, "storage driver checks", async (use) => {
-	const storage = new MemoryStorage();
-	try {
-		await use(storage);
-	} finally {
-		await storage.close(context);
+	for (const driver of ["memory", "jsonl", "sqlite"] as const) {
+		const directory = await mkdtemp(join(tmpdir(), `axi-${driver}-`));
+		const storage =
+			driver === "memory"
+				? new MemoryStorage()
+				: driver === "jsonl"
+					? await openNodeJsonlStorage(directory, context)
+					: await openNodeSqliteStorage(join(directory, "session.sqlite"));
+		try {
+			await use(storage);
+		} finally {
+			await storage.close(context);
+			await rm(directory, { recursive: true, force: true });
+		}
 	}
 });
 registerEnvConformance({ describe, expect, it }, "environment driver checks", async (use) => {

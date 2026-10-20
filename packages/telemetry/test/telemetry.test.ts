@@ -98,7 +98,7 @@ describe("telemetry capture", () => {
 		expect(await parent?.startSpan({ name: "late" }, () => 42)).toBe(42);
 		expect(context.getSpans().map((span) => span.name)).toEqual(["parent"]);
 	});
-	it("preserves hostile rejection identity with recording enabled or disabled", async () => {
+	it("surfaces rejection inspection failures when recording and preserves the original when disabled", async () => {
 		const error = new Proxy(
 			{},
 			{
@@ -114,7 +114,8 @@ describe("telemetry capture", () => {
 				.catch((value) => {
 					actual = value;
 				});
-			expect(actual === error).toBe(true);
+			if (context === NOOP_TELEMETRY_CONTEXT) expect(actual).toBe(error);
+			else expect(actual).toMatchObject({ message: "cannot inspect" });
 		}
 	});
 });

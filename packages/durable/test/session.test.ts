@@ -5,16 +5,50 @@ import {
 	createRegistry,
 	createSession,
 	defineDoc,
+	defineEntry,
 	Harness,
 	MemoryStorage,
 	StorageRequestError,
 	type ConversationId,
 } from "../src/index.ts";
 import { SessionImpl } from "../src/session/session.ts";
-const Counter = defineDoc({ kind: "counter", version: 1, scope: "session", initial: () => ({ count: 0 }) });
+const Counter = defineDoc({
+	checkpointWhen: () => false,
+	kind: "counter",
+	version: 1,
+	scope: "session",
+	initial: () => ({ count: 0 }),
+});
 const deferred = () => Promise.withResolvers<void>();
 
 describe("Session lifecycle", () => {
+	it("captures a typed entry kind before the storage read settles", async () => {
+		const session = createSession(new MemoryStorage());
+		try {
+			const entry = await session.commit(async (tx) => {
+				const conversation = await tx.createConversation({ ownership: { kind: "ownerless" } });
+				return tx.appendEntry(conversation.id, { kind: "receipt", data: { accepted: true } });
+			}, context);
+			let kind = "receipt";
+			let reads = 0;
+			const token = {
+				...defineEntry<{ accepted: boolean }>("receipt"),
+				get kind() {
+					reads++;
+					return kind;
+				},
+			};
+			await session.commit(async (tx) => {
+				const pending = tx.entry(token, entry.id);
+				expect(reads).toBe(1);
+				kind = "different";
+				expect(await pending).toEqual(entry);
+				expect(reads).toBe(1);
+			}, context);
+		} finally {
+			await session.close(context);
+		}
+	});
 	it("schedules document eviction from the current host setting", async () => {
 		let reads = 0;
 		const scheduled: { delay: number; background: boolean }[] = [];
@@ -43,7 +77,7 @@ describe("Session lifecycle", () => {
 		}
 	});
 	it.each(["documentState", "watchDoc"] as const)(
-		"releases observer ownership when %s cannot register a close listener",
+		"retains observer registration state when %s cannot register a close listener",
 		async (method) => {
 			const failure = new Error("Close listener registration failed");
 			class Session extends SessionImpl {
@@ -66,8 +100,8 @@ describe("Session lifecycle", () => {
 				await expect(
 					method === "documentState" ? session.documentState(Counter, context) : session.watchDoc(Counter, context),
 				).rejects.toBe(failure);
-				expect(session.documentCacheSizes.attached).toBe(0);
-				expect(session.activeObservers).toBe(0);
+				expect(session.documentCacheSizes.attached).toBe(1);
+				expect(session.activeObservers).toBe(1);
 				expect(await session.snapshot(Counter, context)).toEqual({ count: 0 });
 			} finally {
 				await session.close(context);
@@ -86,7 +120,13 @@ describe("Session lifecycle", () => {
 	});
 	it.each(["documentState", "watchDoc"] as const)("captures the document definition once for %s", async (method) => {
 		const session = createSession(new MemoryStorage());
-		const token = defineDoc({ kind: "definition-test", version: 1, scope: "session", initial: () => ({ count: 7 }) });
+		const token = defineDoc({
+			checkpointWhen: () => false,
+			kind: "definition-test",
+			version: 1,
+			scope: "session",
+			initial: () => ({ count: 7 }),
+		});
 		await session.commit((tx) => tx.doc(token), context);
 		const definition = token.definition;
 		let reads = 0;

@@ -16,6 +16,7 @@ import { openNodeSqliteDatabase, openNodeSqliteStorage } from "../src/storage/sq
 import { SqliteStorage } from "../src/storage/sqlite/storage.ts";
 
 const State = defineDoc({
+	checkpointWhen: () => false,
 	kind: "state",
 	scope: "conversation",
 	history: "rewindable",

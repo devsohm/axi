@@ -22,6 +22,16 @@ const binary = path.join(
 	platform === "windows" ? "axi-env.exe" : "axi-env",
 );
 if (!existsSync(binary)) throw new Error("Build the native environment daemon before packing.");
+const terminalPlatform = process.platform;
+const terminalBinary = path.join(
+	root,
+	"packages/tui/native",
+	terminalPlatform,
+	"prebuilds",
+	`${terminalPlatform}-${process.arch}`,
+	`${terminalPlatform}-platform${terminalPlatform === "linux" ? "-x11" : ""}.node`,
+);
+if (!existsSync(terminalBinary)) throw new Error("Build the native terminal helper before packing.");
 if (!existsSync(path.join(root, "LICENSE"))) throw new Error("The release license is missing.");
 mkdirSync(path.join(destination, "packages"), { recursive: true });
 const dependencies = {};
@@ -49,6 +59,11 @@ for (const workspace of manifest.workspaces) {
 	if (packed.files.some((file) => /^(?:src|test|node_modules|daemon\/target)\//.test(file.path)))
 		throw new Error(`Unexpected source or build files: ${pkg.name}`);
 	if (!packed.files.some((file) => file.path === "LICENSE")) throw new Error(`Package license is missing: ${pkg.name}`);
+	if (
+		pkg.name === "@axi/tui" &&
+		!packed.files.some((file) => file.path === path.relative(directory, terminalBinary).split(path.sep).join("/"))
+	)
+		throw new Error("The native terminal helper is missing from its package.");
 	dependencies[pkg.name] = `file:./packages/${packed.filename}`;
 	const filename = `packages/${packed.filename}`;
 	checksums.push(
@@ -78,7 +93,20 @@ copyFileSync(path.join(root, "docs/install.md"), path.join(destination, "README.
 writeFileSync(
 	path.join(destination, "release.json"),
 	JSON.stringify(
-		{ version: manifest.version, nativeTargets: readdirSync(path.join(root, "packages/env/bin")).sort() },
+		{
+			version: manifest.version,
+			nativeTargets: readdirSync(path.join(root, "packages/env/bin")).sort(),
+			terminalTargets: ["linux", "darwin", "win32"]
+				.flatMap((platform) => {
+					const base = path.join(root, "packages/tui/native", platform, "prebuilds");
+					return existsSync(base)
+						? readdirSync(base).filter((target) =>
+								existsSync(path.join(base, target, `${platform}-platform${platform === "linux" ? "-x11" : ""}.node`)),
+							)
+						: [];
+				})
+				.sort(),
+		},
 		null,
 		2,
 	) + "\n",

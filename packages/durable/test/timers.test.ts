@@ -68,7 +68,13 @@ describe("host timers", () => {
 				timer.cancelled = true;
 			};
 		};
-		const State = defineDoc({ kind: "state", scope: "session", version: 1, initial: () => ({ count: 0 }) });
+		const State = defineDoc({
+			checkpointWhen: () => false,
+			kind: "state",
+			scope: "session",
+			version: 1,
+			initial: () => ({ count: 0 }),
+		});
 		const session = new SessionImpl(
 			new MemoryStorage(),
 			() => now,

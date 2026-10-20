@@ -111,9 +111,11 @@ export class Transaction implements T.Tx {
 	entry(id: T.EntryId): Promise<T.EntryRecord | undefined>;
 	entry<Value extends JsonValue>(token: T.Entry<Value>, id: T.EntryId): Promise<T.TypedEntry<Value> | undefined>;
 	entry(first: T.EntryId | { readonly kind: string }, second?: T.EntryId): Promise<T.EntryRecord | undefined> {
+		const kind = typeof first === "number" ? undefined : first.kind;
+		const id = typeof first === "number" ? first : second!;
 		return this.#read("entry", async () => {
-			const row = await this.#host.storage.entry(typeof first === "number" ? first : second!, this.#context);
-			return typeof first === "number" || row?.entry.kind === first.kind ? row?.entry : undefined;
+			const row = await this.#host.storage.entry(id, this.#context);
+			return kind === undefined || row?.entry.kind === kind ? row?.entry : undefined;
 		});
 	}
 	task(id: T.TaskId) {
@@ -161,14 +163,15 @@ export class Transaction implements T.Tx {
 		ownership: T.ConversationOwnership,
 		reserved?: T.ConversationId,
 	): Promise<T.ConversationRecord> {
+		const ownerId = ownership.kind === "task" ? ownership.taskId : undefined;
 		const id = reserved ?? (await this.#host.storage.mintId<T.ConversationId>());
 		this.#open();
 		let owner: T.ConversationRecord["owner"];
-		if (ownership.kind === "task") {
-			const task = await this.#currentTask(ownership.taskId);
+		if (ownerId !== undefined) {
+			const task = await this.#currentTask(ownerId);
 			this.#open();
-			if (!task) throw new Error(`Conversation owner task ${ownership.taskId} does not exist`);
-			owner = { conversationId: task.conversationId, taskId: ownership.taskId };
+			if (!task) throw new Error(`Conversation owner task ${ownerId} does not exist`);
+			owner = { conversationId: task.conversationId, taskId: ownerId };
 		}
 		const record = { id, ...(parent ? { parent } : {}), ...(owner ? { owner } : {}) };
 		if (parent) {
@@ -246,9 +249,10 @@ export class Transaction implements T.Tx {
 				}
 				options = { ...options, trace, links };
 			}
+			const ownership = options.ownership;
 			let owner: TaskRecord | undefined;
-			if (options.ownership.kind === "task") {
-				const ownerId = options.ownership.taskId;
+			if (ownership.kind === "task") {
+				const ownerId = ownership.taskId;
 				owner = await this.#currentTask(ownerId);
 				this.#open();
 				if (!owner) throw new Error(`Task owner ${ownerId} does not exist`);
@@ -628,7 +632,7 @@ export class Transaction implements T.Tx {
 			const change = plan.change;
 			if (plan.content?.type === "document.change" && plan.content.content.kind === "delta" && change?.loaded) {
 				if (
-					change.definition?.checkpointWhen?.(change.prepared.value, change.prepared.ops, {
+					change.definition?.checkpointWhen(change.prepared.value, change.prepared.ops, {
 						deltasSinceBase: change.loaded.deltasSinceBase,
 					})
 				)

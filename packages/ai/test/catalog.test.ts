@@ -2,7 +2,7 @@ import { expect, expectTypeOf, it } from "vitest";
 import { buildModelsDevCatalog, parseModelsDev } from "../scripts/models-dev-catalog.ts";
 import { assembleCatalog } from "../scripts/catalog-generation.ts";
 import { streamSimple } from "../src/api/anthropic-messages.ts";
-import { hasApi } from "../src/models.ts";
+import { getSupportedThinkingLevels, hasApi } from "../src/models.ts";
 import { flattenChatModelCatalog, flattenImageModelCatalog } from "../src/model-catalog.ts";
 import { CLASSIFIER_MODELS, IMAGE_MODELS, MODELS } from "../src/models.generated.ts";
 import { normalizeContext } from "../src/utils/transcript.ts";
@@ -104,10 +104,16 @@ it("keeps separate typed model identities across all included providers", () => 
 	for (const table of [MODELS, IMAGE_MODELS, CLASSIFIER_MODELS]) {
 		for (const models of Object.values(table)) count += Object.keys(models).length;
 	}
-	expect(count).toBe(1687);
+	expect(count).toBe(1703);
 	expectTypeOf(MODELS.xai["grok-4.5"].api).toEqualTypeOf<"openai-responses">();
 	expectTypeOf(MODELS.xai["grok-4.5"].provider).toEqualTypeOf<"xai">();
 	expectTypeOf(MODELS.xai["grok-4.5"].id).toEqualTypeOf<"grok-4.5">();
+});
+it.each([
+	["grok-4.3", ["off", "low", "medium", "high", "xhigh"]],
+	["grok-4.5", ["low", "medium", "high", "xhigh"]],
+] as const)("exposes the supported reasoning choices for %s", (id, levels) => {
+	expect(getSupportedThinkingLevels(MODELS.xai[id])).toEqual(levels);
 });
 it("uses the last matching entry without cloning or splitting colon-containing IDs", () => {
 	const first = { type: "chat", id: "account:model", value: 1 };

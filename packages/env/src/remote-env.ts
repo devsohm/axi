@@ -411,7 +411,7 @@ export class RemoteExecutionEnv implements ExecutionEnv {
 	}
 	async exists(path: string, context: Context): Promise<Result<boolean, FileError>> {
 		const result = await this.fileInfo(path, context);
-		return result.ok ? ok(true) : result.error.code === "not_found" ? ok(false) : result;
+		return result.ok ? ok(true) : result.error.code === "not_found" ? ok(false) : err(result.error);
 	}
 	createDir(
 		path: string,

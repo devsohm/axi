@@ -304,7 +304,13 @@ describe("task scheduler", () => {
 	it("holds the owner's result until its child ends and keeps documents until finalization", async () => {
 		const gate = Promise.withResolvers<void>();
 		let child: TaskId | undefined;
-		const Document = defineDoc({ kind: "held", version: 1, scope: "task", initial: () => ({ value: 7 }) });
+		const Document = defineDoc({
+			checkpointWhen: () => false,
+			kind: "held",
+			version: 1,
+			scope: "task",
+			initial: () => ({ value: 7 }),
+		});
 		const Child = defineTask<null, { phase: "wait" }, null>({
 			name: "child",
 			version: 1,
@@ -503,7 +509,13 @@ describe("task scheduler", () => {
 	});
 	it("expires runtime controls and watches when its invocation ends", async () => {
 		let runtimeAfter: TaskRuntime<null, { phase: "start" }, null, object> | undefined;
-		const Document = defineDoc({ kind: "observed", version: 1, scope: "session", initial: () => ({ count: 0 }) });
+		const Document = defineDoc({
+			checkpointWhen: () => false,
+			kind: "observed",
+			version: 1,
+			scope: "session",
+			initial: () => ({ count: 0 }),
+		});
 		let watch: Awaited<ReturnType<SessionImpl["watchDoc"]>>;
 		const Once = defineTask<null, { phase: "start" }, null>({
 			name: "once",

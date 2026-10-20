@@ -1,5 +1,10 @@
 import type {
-	AttributeValue,
+	MetricQuery,
+	TraceQuery,
+	StoredMetric,
+	StoredSpan,
+	StoredTrace,
+	TelemetryStore,
 	SpanAttributes,
 	SpanLink,
 	SpanOptions,
@@ -51,6 +56,9 @@ export interface RecordedTelemetrySpan {
 	readonly endSequence?: number;
 }
 type Recording = {
+	startedMs: number;
+	clock: number;
+	endedMs: number;
 	id: number;
 	parentId: number | null;
 	context: TelemetryCarrier;
@@ -58,7 +66,7 @@ type Recording = {
 	links: RecordedTelemetryLink[];
 	name: string;
 	attributes: SpanAttributes;
-	events: RecordedTelemetryEvent[];
+	events: (RecordedTelemetryEvent & { timeMs: number })[];
 	status: SpanStatus;
 	explicit: boolean;
 	settled: boolean;
@@ -69,34 +77,25 @@ type State = {
 	propagation: TelemetryPropagation;
 	scope: string;
 	spans: Recording[];
-	measurements: RecordedTelemetryMeasurement[];
+	measurements: (RecordedTelemetryMeasurement & { intervalMs: number })[];
 	nextSpanId: number;
 	nextEndSequence: number;
 };
 type Parent = { context: TelemetryCarrier; id: number | null; record?: Recording };
 const scopeKey = "axi-memory-scope";
 const spanKey = "axi-memory-span";
+const traceKey = "axi-memory-trace";
 const carriers = new WeakMap<TelemetryContext, TelemetryCarrier>();
 function linkSnapshot(link: SpanLink): RecordedTelemetryLink | undefined {
-	try {
-		const carrier = carriers.get(link.context);
-		return carrier ? { context: { ...carrier }, attributes: attributes(link.attributes) } : undefined;
-	} catch {
-		return undefined;
-	}
+	const carrier = carriers.get(link.context);
+	return carrier ? { context: { ...carrier }, attributes: attributes(link.attributes) } : undefined;
 }
 function attributes(source?: SpanAttributes): SpanAttributes {
-	const result: SpanAttributes = {};
-	if (source)
-		for (const [name, value] of Object.entries(source))
-			if (value !== undefined) result[name] = Array.isArray(value) ? ([...value] as AttributeValue) : value;
-	return result;
-}
-function merged(current: SpanAttributes, supplied: SpanAttributes): SpanAttributes {
-	const result = attributes(current);
-	for (const [name, value] of Object.entries(supplied))
-		if (value !== undefined) result[name] = Array.isArray(value) ? ([...value] as AttributeValue) : value;
-	return result;
+	return Object.fromEntries(
+		Object.entries(source ?? {}).flatMap(([name, value]) =>
+			value === undefined ? [] : [[name, Array.isArray(value) ? [...value] : value]],
+		),
+	);
 }
 function status(value: SpanStatus): SpanStatus {
 	if (value.status === "ok") return { status: "ok" };
@@ -105,11 +104,7 @@ function status(value: SpanStatus): SpanStatus {
 		: { status: "error" };
 }
 function failure(error: unknown): SpanStatus {
-	try {
-		if (error instanceof Error) return { status: "error", error: { name: error.name, message: error.message } };
-	} catch {
-		/* Error inspection must not replace the operation's result. */
-	}
+	if (error instanceof Error) return { status: "error", error: { name: error.name, message: error.message } };
 	return { status: "error" };
 }
 function startInert<T>(
@@ -126,44 +121,42 @@ function startInert<T>(
 		}),
 	);
 }
-function start<T>(
+async function start<T>(
 	state: State,
 	parent: Parent | undefined,
 	options: SpanOptions,
 	callback: (span: TelemetrySpan) => T | Promise<T>,
 ): Promise<T> {
 	if (parent?.record?.settled) return startInert(state, options, callback);
-	let recording: Recording;
-	try {
-		const name = options.name,
-			start = attributes(options.attributes);
-		const links: RecordedTelemetryLink[] = [];
-		try {
-			for (const link of options.links ?? []) {
-				const snapshot = linkSnapshot(link);
-				if (snapshot) links.push(snapshot);
-			}
-		} catch {
-			/* Link collection failures do not suppress the span. */
-		}
-		const id = state.nextSpanId++;
-		recording = {
-			id,
-			parentId: parent?.id ?? null,
-			context: { [scopeKey]: state.scope, [spanKey]: String(id) },
-			parentContext: parent ? { ...parent.context } : null,
-			links,
-			name,
-			attributes: start,
-			events: [],
-			status: { status: "ok" },
-			explicit: false,
-			settled: false,
-		};
-		state.spans.push(recording);
-	} catch {
-		return startInert(state, options, callback);
+	const name = options.name,
+		initialAttributes = attributes(options.attributes);
+	const links: RecordedTelemetryLink[] = [];
+	for (const link of options.links ?? []) {
+		const snapshot = linkSnapshot(link);
+		if (snapshot) links.push(snapshot);
 	}
+	const id = state.nextSpanId++;
+	const recording: Recording = {
+		startedMs: Date.now(),
+		clock: performance.now(),
+		endedMs: 0,
+		id,
+		parentId: parent?.id ?? null,
+		context: {
+			[scopeKey]: state.scope,
+			[spanKey]: String(id),
+			[traceKey]: parent?.context[traceKey] ?? `${state.scope}:${id}`,
+		},
+		parentContext: parent ? { ...parent.context } : null,
+		links,
+		name,
+		attributes: initialAttributes,
+		events: [],
+		status: { status: "ok" },
+		explicit: false,
+		settled: false,
+	};
+	state.spans.push(recording);
 	const span: TelemetrySpan = {
 		metrics: state.metrics,
 		propagation: state.propagation,
@@ -176,54 +169,29 @@ function start<T>(
 		},
 		addEvent(name, values) {
 			if (recording.settled) return;
-			try {
-				recording.events.push({ name, attributes: attributes(values) });
-			} catch {
-				/* Telemetry writes are passive. */
-			}
+			recording.events.push({ name, timeMs: performance.now() - recording.clock, attributes: attributes(values) });
 		},
 		setAttributes(values) {
 			if (recording.settled) return;
-			try {
-				recording.attributes = merged(recording.attributes, values);
-			} catch {
-				/* Telemetry writes are passive. */
-			}
+			recording.attributes = { ...recording.attributes, ...attributes(values) };
 		},
 		setStatus(value) {
 			if (recording.settled) return;
-			try {
-				recording.status = status(value);
-				recording.explicit = true;
-			} catch {
-				/* Telemetry writes are passive. */
-			}
+			recording.status = status(value);
+			recording.explicit = true;
 		},
 	};
 	carriers.set(span, recording.context);
-	let result: T | Promise<T>;
 	try {
-		result = callback(span);
+		return await callback(span);
 	} catch (error) {
-		settle(state, recording, true, error);
-		return Promise.reject(error);
+		if (!recording.explicit) recording.status = failure(error);
+		throw error;
+	} finally {
+		recording.settled = true;
+		recording.endedMs = recording.startedMs + performance.now() - recording.clock;
+		recording.endSequence = state.nextEndSequence++;
 	}
-	return Promise.resolve(result).then(
-		(value) => {
-			settle(state, recording, false);
-			return value;
-		},
-		(error) => {
-			settle(state, recording, true, error);
-			throw error;
-		},
-	);
-}
-function settle(state: State, recording: Recording, failed: boolean, error?: unknown): void {
-	if (recording.settled) return;
-	if (failed && !recording.explicit) recording.status = failure(error);
-	recording.settled = true;
-	recording.endSequence = state.nextEndSequence++;
 }
 function recorder(
 	state: State,
@@ -231,45 +199,32 @@ function recorder(
 	name: string,
 	options?: HistogramOptions,
 ): (value: number, values?: SpanAttributes, context?: TelemetryContext) => void {
-	try {
-		const description = options?.description;
-		const unit = options?.unit;
-		const boundaries = kind === "histogram" && options?.boundaries !== undefined ? [...options.boundaries] : undefined;
-		if (
-			typeof name !== "string" ||
-			(description !== undefined && typeof description !== "string") ||
-			(unit !== undefined && typeof unit !== "string") ||
-			boundaries?.some((value, index) => !Number.isFinite(value) || (index > 0 && value <= boundaries[index - 1]!))
-		)
-			return () => {};
-		const metadata = {
-			kind,
-			name,
-			...(description === undefined ? {} : { description }),
-			...(unit === undefined ? {} : { unit }),
-			...(boundaries === undefined ? {} : { boundaries }),
-		};
-		return (value, values, context) => {
-			if (!Number.isFinite(value) || (kind === "counter" && value < 0)) return;
-			try {
-				const carrier = context === undefined ? undefined : carriers.get(context);
-				state.measurements.push({
-					...metadata,
-					value,
-					attributes: attributes(values),
-					context: carrier ? { ...carrier } : null,
-				});
-			} catch {
-				/* Discard the whole unreadable measurement. */
-			}
-		};
-	} catch {
-		return () => {};
-	}
+	const description = options?.description;
+	const unit = options?.unit;
+	const boundaries = kind === "histogram" && options?.boundaries !== undefined ? [...options.boundaries] : undefined;
+	const metadata = {
+		kind,
+		name,
+		...(description === undefined ? {} : { description }),
+		...(unit === undefined ? {} : { unit }),
+		...(boundaries === undefined ? {} : { boundaries }),
+	};
+	return (value, values, context) => {
+		const carrier = context === undefined ? undefined : carriers.get(context);
+		state.measurements.push({
+			intervalMs: Math.floor(Date.now() / 10000) * 10000,
+			...metadata,
+			value,
+			attributes: attributes(values),
+			context: carrier ? { ...carrier } : null,
+		});
+	};
 }
-export class InMemoryTelemetryContext implements TelemetryContext, TelemetryPropagation, TelemetryMetrics {
-	readonly metrics = this;
-	readonly propagation = this;
+export class InMemoryTelemetryContext
+	implements TelemetryContext, TelemetryPropagation, TelemetryMetrics, TelemetryStore
+{
+	readonly metrics: TelemetryMetrics = this;
+	readonly propagation: TelemetryPropagation = this;
 	private readonly state: State = {
 		metrics: this,
 		propagation: this,
@@ -287,30 +242,19 @@ export class InMemoryTelemetryContext implements TelemetryContext, TelemetryProp
 		return carrier ? { ...carrier } : undefined;
 	}
 	extract(carrier: TelemetryCarrier | undefined): TelemetryContext {
-		try {
-			if (!carrier || typeof carrier !== "object" || Array.isArray(carrier)) return this;
-			if (!Object.hasOwn(carrier, scopeKey) || !Object.hasOwn(carrier, spanKey)) return this;
-			if (Object.values(carrier).some((value) => typeof value !== "string")) return this;
-			const scope = carrier[scopeKey];
-			const span = carrier[spanKey];
-			if (typeof scope !== "string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(scope))
-				return this;
-			if (typeof span !== "string" || !/^[1-9][0-9]*$/.test(span) || !Number.isSafeInteger(Number(span))) return this;
-			const context = { [scopeKey]: scope, [spanKey]: span };
-			const id =
-				scope === this.state.scope && this.state.spans.some((recording) => recording.id === Number(span))
-					? Number(span)
-					: null;
-			const parent: TelemetryContext = {
-				metrics: this,
-				propagation: this,
-				startSpan: (options, callback) => start(this.state, { context, id }, options, callback),
-			};
-			carriers.set(parent, context);
-			return parent;
-		} catch {
-			return this;
-		}
+		const scope = carrier?.[scopeKey],
+			span = carrier?.[spanKey],
+			trace = carrier?.[traceKey];
+		if (typeof scope !== "string" || typeof span !== "string" || typeof trace !== "string") return this;
+		const context = { [scopeKey]: scope, [spanKey]: span, [traceKey]: trace };
+		const id = scope === this.state.scope ? Number(span) : null;
+		const parent: TelemetryContext = {
+			metrics: this,
+			propagation: this,
+			startSpan: (options, callback) => start(this.state, { context, id }, options, callback),
+		};
+		carriers.set(parent, context);
+		return parent;
 	}
 	counter(name: string, options?: InstrumentOptions): TelemetryCounter {
 		return { add: recorder(this.state, "counter", name, options) };
@@ -321,8 +265,93 @@ export class InMemoryTelemetryContext implements TelemetryContext, TelemetryProp
 	histogram(name: string, options?: HistogramOptions): TelemetryHistogram {
 		return { record: recorder(this.state, "histogram", name, options) };
 	}
+	private storedSpans(): StoredSpan[] {
+		const identity = (carrier: Readonly<TelemetryCarrier>) => `${carrier[scopeKey]}:${carrier[spanKey]}`;
+		return this.state.spans
+			.filter((item) => item.settled)
+			.map(
+				(item): StoredSpan => ({
+					id: identity(item.context),
+					traceId: item.context[traceKey]!,
+					...(item.parentContext ? { parentId: identity(item.parentContext) } : {}),
+					name: item.name,
+					startedMs: item.startedMs,
+					endedMs: item.endedMs,
+					attributes: attributes(item.attributes),
+					status: status(item.status),
+					events: item.events.map((event) => ({
+						name: event.name,
+						timeMs: event.timeMs,
+						attributes: attributes(event.attributes),
+					})),
+					links: item.links.map((link) => ({
+						traceId: link.context[traceKey]!,
+						spanId: identity(link.context),
+						attributes: attributes(link.attributes),
+					})),
+				}),
+			)
+			.sort((a, b) => a.startedMs - b.startedMs || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+	}
+	async getTrace(traceId: string): Promise<StoredTrace | undefined> {
+		const spans = this.storedSpans().filter((span) => span.traceId === traceId);
+		return spans.length ? { traceId, spans } : undefined;
+	}
+	async findTraces(query: TraceQuery = {}): Promise<{ traces: readonly StoredTrace[]; cursor?: string }> {
+		const grouped = new Map<string, StoredSpan[]>();
+		for (const span of this.storedSpans()) {
+			const group = grouped.get(span.traceId);
+			if (group) group.push(span);
+			else grouped.set(span.traceId, [span]);
+		}
+		const after = query.cursor === undefined ? undefined : JSON.parse(query.cursor);
+		const matches = [...grouped]
+			.filter(([id, spans]) => {
+				const first = spans[0]!;
+				return (
+					(query.name === undefined || first.name === query.name) &&
+					(query.startMin === undefined || first.startedMs >= query.startMin) &&
+					(query.startMax === undefined || first.startedMs <= query.startMax) &&
+					(!after || first.startedMs < after[0] || (first.startedMs === after[0] && id > after[1])) &&
+					(!query.errors || spans.some((span) => span.status.status === "error")) &&
+					(!query.attributes ||
+						spans.some((span) =>
+							Object.entries(query.attributes!).every(([key, value]) => span.attributes[key] === value),
+						))
+				);
+			})
+			.sort(([aid, a], [bid, b]) => b[0]!.startedMs - a[0]!.startedMs || (aid < bid ? -1 : aid > bid ? 1 : 0));
+		const limit = query.limit ?? 20;
+		const traces = matches.slice(0, limit).map(([traceId, spans]) => ({ traceId, spans }));
+		const last = traces.at(-1)!;
+		return {
+			traces,
+			...(matches.length > limit ? { cursor: JSON.stringify([last.spans[0]!.startedMs, last.traceId]) } : {}),
+		};
+	}
+	async findMetrics(query: MetricQuery): Promise<readonly StoredMetric[]> {
+		return this.state.measurements
+			.filter(
+				(row) =>
+					row.name === query.name &&
+					(query.startMin === undefined || row.intervalMs >= query.startMin) &&
+					(query.startMax === undefined || row.intervalMs <= query.startMax) &&
+					Object.entries(query.attributes ?? {}).every(([key, value]) => row.attributes[key] === value),
+			)
+			.map((row) => ({
+				intervalMs: row.intervalMs,
+				name: row.name,
+				kind: row.kind,
+				...(row.unit === undefined ? {} : { unit: row.unit }),
+				attributes: attributes(row.attributes),
+				count: 1,
+				sum: row.value,
+				min: row.value,
+				max: row.value,
+			}));
+	}
 	getMetrics(): readonly RecordedTelemetryMeasurement[] {
-		return this.state.measurements.map((item) => ({
+		return this.state.measurements.map(({ intervalMs: _interval, ...item }) => ({
 			...item,
 			...(item.boundaries === undefined ? {} : { boundaries: [...item.boundaries] }),
 			attributes: attributes(item.attributes),

@@ -83,6 +83,22 @@ afterEach(() => {
 	resetOpenAICodexWebSocketDebugStats();
 });
 describe("legacy Codex requests", () => {
+	it("serializes truthy account claims into the request header", async () => {
+		for (const account of [42, true, ["account"], { id: "account" }]) {
+			let captured: string | null = null;
+			const apiKey = `a.${btoa(JSON.stringify({ "https://api.openai.com/auth": { chatgpt_account_id: account } }))}.b`;
+			const result = await stream(model, context, {
+				apiKey,
+				transport: "sse",
+				fetch: async (_url, init) => {
+					captured = new Headers(init?.headers).get("chatgpt-account-id");
+					return sse();
+				},
+			}).result();
+			expect(result.stopReason).toBe("stop");
+			expect(captured).toBe(String(account));
+		}
+	});
 	it("retains a completed retry callback on the caller's abort signal", async () => {
 		const controller = new AbortController();
 		let calls = 0;
@@ -483,6 +499,154 @@ describe("legacy Codex requests", () => {
 				sseFallbacks: 2,
 				websocketFallbackActive: true,
 			});
+		});
+	});
+});
+
+describe("Codex WebSocket recovery", () => {
+	for (const failures of [1, 2])
+		it(`reconnects once for a connection limit and ${failures === 1 ? "completes" : "falls back after another limit"}`, async () => {
+			await serverTest(async (url, server) => {
+				let connections = 0,
+					http = 0;
+				server.on("connection", (socket) => {
+					const connection = ++connections;
+					socket.on("message", () => {
+						const events =
+							connection <= failures
+								? [
+										{
+											type: "error",
+											error: { code: "websocket_connection_limit_reached", message: "Rotate connection" },
+										},
+									]
+								: responseEvents();
+						for (const event of events) socket.send(JSON.stringify(event));
+					});
+				});
+				const result = await stream({ ...model, baseUrl: url }, context, {
+					apiKey: token(),
+					transport: "auto",
+					fetch: async () => {
+						http++;
+						return sse();
+					},
+				}).result();
+				expect(result.stopReason).toBe("stop");
+				expect(result.content).toEqual([{ type: "text", text: "accepted", textSignature: expect.any(String) }]);
+				expect({ connections, http }).toEqual({ connections: 2, http: failures === 1 ? 0 : 1 });
+			});
+		});
+
+	it("rebuilds the complete request after a cached response id is no longer available", async () => {
+		await serverTest(async (url, server) => {
+			const requests: { previous_response_id?: string; input: unknown[] }[] = [];
+			server.on("connection", (socket) =>
+				socket.on("message", (data) => {
+					const request = JSON.parse(data.toString());
+					requests.push(request);
+					if (request.previous_response_id) {
+						socket.send(
+							JSON.stringify({
+								type: "error",
+								error: {
+									code: "previous_response_not_found",
+									message: "Cached response expired",
+									param: "previous_response_id",
+								},
+							}),
+						);
+						return;
+					}
+					for (const event of responseEvents(`recovered-${requests.length}`)) socket.send(JSON.stringify(event));
+				}),
+			);
+			const selected = { ...model, baseUrl: url },
+				options = { apiKey: token(), sessionId: "expired-response", transport: "websocket-cached" as const };
+			const first = await stream(selected, context, options).result();
+			const continued = normalizeContext({
+				messages: [...context.messages, first, { role: "user", content: "Continue", timestamp: 2 }],
+			});
+			const result = await stream(selected, continued, options).result();
+			expect(result.stopReason).toBe("stop");
+			expect(result.content).toContainEqual({ type: "text", text: "accepted", textSignature: expect.any(String) });
+			expect(
+				requests.map((request) => ({ previous: request.previous_response_id ?? null, count: request.input.length })),
+			).toEqual([
+				{ previous: null, count: 1 },
+				{ previous: "recovered-1", count: 1 },
+				{ previous: null, count: 3 },
+			]);
+		});
+	});
+
+	for (const started of [false, true])
+		it(`handles an idle socket ${started ? "after" : "before"} output without duplicating the response`, async () => {
+			await serverTest(async (url, server) => {
+				server.on("connection", (socket) =>
+					socket.on("message", () => {
+						if (started)
+							socket.send(
+								JSON.stringify({
+									type: "response.output_item.added",
+									output_index: 0,
+									item: { type: "message", id: "partial", role: "assistant", status: "in_progress", content: [] },
+								}),
+							);
+					}),
+				);
+				let http = 0;
+				const result = await stream({ ...model, baseUrl: url }, context, {
+					apiKey: token(),
+					sessionId: `idle-${started}`,
+					transport: "auto",
+					timeoutMs: 100,
+					fetch: async () => {
+						http++;
+						return sse();
+					},
+				}).result();
+				expect(result.stopReason).toBe(started ? "error" : "stop");
+				expect(http).toBe(started ? 0 : 1);
+				if (started) expect(result.errorMessage).toContain("WebSocket idle timeout");
+				else
+					expect(result.content).toContainEqual({ type: "text", text: "accepted", textSignature: expect.any(String) });
+			});
+		});
+
+	it("aborting an active socket cancels its request and allows a fresh call in the same session", async () => {
+		await serverTest(async (url, server) => {
+			const received = Promise.withResolvers<void>();
+			let requests = 0,
+				http = 0;
+			server.on("connection", (socket) =>
+				socket.on("message", () => {
+					requests++;
+					if (requests === 1) {
+						received.resolve();
+						return;
+					}
+					for (const event of responseEvents()) socket.send(JSON.stringify(event));
+				}),
+			);
+			const controller = new AbortController();
+			const options = {
+				apiKey: token(),
+				sessionId: "abort-and-resume",
+				transport: "auto" as const,
+				fetch: async () => {
+					http++;
+					return sse();
+				},
+			};
+			const pending = stream({ ...model, baseUrl: url }, context, { ...options, signal: controller.signal }).result();
+			await received.promise;
+			controller.abort(new Error("Cancelled by application"));
+			expect((await pending).stopReason).toBe("aborted");
+			const next = await stream({ ...model, baseUrl: url }, context, options).result();
+			expect(next.stopReason).toBe("stop");
+			expect(next.content).toContainEqual({ type: "text", text: "accepted", textSignature: expect.any(String) });
+			expect({ requests, http }).toEqual({ requests: 2, http: 0 });
 		});
 	});
 });

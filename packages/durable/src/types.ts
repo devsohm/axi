@@ -47,7 +47,7 @@ export type CommonDocDefinition<Value extends JsonObject> = {
 	readonly version: number;
 	initial(): Value;
 	migrate?(value: JsonObject, fromVersion: number): Value;
-	checkpointWhen?(value: Readonly<Value>, ops: readonly Op[], info: CheckpointInfo): boolean;
+	checkpointWhen(value: Readonly<Value>, ops: readonly Op[], info: CheckpointInfo): boolean;
 };
 export type DocDefinition<Value extends JsonObject> = CommonDocDefinition<Value> & DocumentSemantics;
 export type DocFamilyDefinition<Value extends JsonObject, Seed extends JsonValue> = Omit<

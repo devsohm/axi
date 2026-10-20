@@ -26,8 +26,12 @@ The package exports its root, `context`, `delta`, `node`, `output`, `sqlite`, `s
 
 `@axi/env` connects Durable to local and SSH environments through a native daemon. It provides file operations, file listing, watches, command execution, pseudo-terminals, host-key management and verified daemon deployment. Connections restart after loss; open handles remain tied to their original connection session.
 
-The independent TUI library is not implemented yet.
+`@axi/tui` provides scrollback and fullscreen renderers, layout, overlays, mouse selection, a multiline editor, completion, Markdown, mathematical notation, images and color utilities. It is independent of Durable. Applications connect runtime subscriptions and commands to their own message and tool components. Native helpers build locally on Linux, macOS and Windows. Cross-platform runtime verification remains outstanding.
 
 ## Install and release
 
 GitHub releases contain local package archives. See [installation](docs/install.md) and [release builds](docs/releases.md). No npm publication is required.
+
+## Test the packages
+
+Run `npm run verify` for builds, local tests, native checks, worker checks and installed-package verification. See [testing](docs/testing.md) for prerequisites, focused commands and coverage limits.

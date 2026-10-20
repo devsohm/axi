@@ -97,3 +97,21 @@ These helpers preserve cancellation and typed values. They do not automatically 
 Read the [tutorial](docs/tutorial.md) for connected examples, the [guide](docs/guide.md) for API usage, and the [specification](docs/spec.md) for contracts and limits.
 
 Facets are trusted application code. The Node loader retains old module generations. Object cells survive compatible reloads, but disposal or process restart loses them unless the application explicitly persists them.
+
+### SQLite telemetry
+
+Import `createSqliteTelemetry` from `@axi/chord/telemetry-sqlite` and pass an open
+SQLite database. Recording is synchronous and performs no SQL. A background flush
+stores settled spans and completed ten-second metric intervals once per second.
+Each flush captures one cutoff for completed intervals.
+`close()` also stores partial intervals and leaves the database open.
+
+The default queue holds 10,000 spans and 10,000 pending metric series/interval
+pairs. In-flight writes count toward these bounds. Overflow increments
+`droppedSpans` or `droppedMeasurements`. A write failure stops recording permanently;
+`flush()` and `close()` reject with that failure. Stored data expires after seven
+days by default. Configure these limits with `maxQueuedSpans` and `retentionMs`.
+
+Use `getTrace()`, `findTraces()`, and `findMetrics()` to read committed data.
+Flush before reading newly settled spans. Trace filters include the earliest span's
+name and start time, errors anywhere in a trace, and attributes matching one span.

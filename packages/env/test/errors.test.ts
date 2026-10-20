@@ -1,8 +1,30 @@
 import { expect, it } from "vitest";
 import { BACKGROUND_CONTEXT, type Context } from "@axi/chord/context";
+import { err, FileError, type FileInfo, type Result } from "@axi/durable/env";
 import { Connection, RemoteError, type RemoteInfo } from "../src/connection.ts";
 import { toFileError } from "../src/errors.ts";
 import { RemoteExecutionEnv } from "../src/remote-env.ts";
+
+it("existence checks retain the file error without reusing a metadata result wrapper", async () => {
+	const failure = new FileError("permission_denied", "Cannot inspect file", "/work/item");
+	const metadata: Result<FileInfo, FileError> = err(failure);
+	class DeniedEnvironment extends RemoteExecutionEnv {
+		override async fileInfo(): Promise<Result<FileInfo, FileError>> {
+			return metadata;
+		}
+	}
+	const connection = new Connection({ command: [] });
+	const env = new DeniedEnvironment({ connection, id: "existence", cwd: "/work" });
+	try {
+		const result = await env.exists("item", BACKGROUND_CONTEXT);
+		expect(result).toEqual({ ok: false, error: failure });
+		expect(result).not.toBe(metadata);
+		if (result.ok) throw new Error("Permission failure was reported as success");
+		expect(result.error).toBe(failure);
+	} finally {
+		connection.close();
+	}
+});
 
 it("captures the remote path before reading its code once", () => {
 	const reads: string[] = [];

@@ -82,6 +82,36 @@ function assistant(content: AssistantMessage["content"]): AssistantMessage {
 }
 
 describe("Anthropic messages", () => {
+	it("reads CR and LF event lines when UTF-8 bytes arrive separately", async () => {
+		const events = [
+			start,
+			{ type: "content_block_start", index: 0, content_block: { type: "text", text: "héllo 🌍" } },
+			{ type: "content_block_stop", index: 0 },
+			stop,
+			end,
+		];
+		const text = await response(events).text();
+		for (const newline of ["\r", "\n"]) {
+			const bytes = new TextEncoder().encode(text.replaceAll("\n", newline));
+			const result = await stream(model, context, {
+				apiKey: "fixture",
+				fetch: async () =>
+					new Response(
+						new ReadableStream({
+							start(controller) {
+								for (const byte of bytes) controller.enqueue(Uint8Array.of(byte));
+								controller.close();
+							},
+						}),
+						{ headers: { "content-type": "text/event-stream" } },
+					),
+			}).result();
+			expect(result.stopReason, JSON.stringify(newline)).toBe("stop");
+			expect(result.content).toEqual([{ type: "text", text: "héllo 🌍" }]);
+			expect(result.usage.input).toBe(100);
+		}
+	});
+
 	it("reuses the deferred tool placeholder across requests", async () => {
 		const descriptions: string[] = [];
 		let retained: Record<"description", unknown> | undefined;
