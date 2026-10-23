@@ -1,5 +1,12 @@
 import type { ConversationId } from "./types.ts";
 
+export class ReadOnlySession extends Error {
+	constructor(operation: string) {
+		super(`Read-only Harness: ${operation} refused`);
+		this.name = "ReadOnlySession";
+	}
+}
+
 export class ConversationBusy extends Error {
 	readonly conversationId: ConversationId;
 	constructor(conversationId: ConversationId) {

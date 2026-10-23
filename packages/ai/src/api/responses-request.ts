@@ -19,6 +19,7 @@ export function createResponsesRequest<A extends Api>({
 	errorPrefix,
 	prepare,
 	providerThinkingLevel,
+	formatError,
 }: {
 	model: Model<A>;
 	options: StreamOptions;
@@ -26,6 +27,7 @@ export function createResponsesRequest<A extends Api>({
 	errorPrefix: string;
 	prepare: () => PreparedRequest;
 	providerThinkingLevel?: string;
+	formatError?: (message: string) => string;
 }): AssistantMessageEventStream {
 	const events = new AssistantMessageEventStream();
 	const output: AssistantMessage = {
@@ -75,7 +77,8 @@ export function createResponsesRequest<A extends Api>({
 			for (const block of output.content)
 				for (const field of ["index", "partialJson", "customInput"]) Reflect.deleteProperty(block, field);
 			output.stopReason = options.signal?.aborted ? "aborted" : "error";
-			output.errorMessage = formatProviderError(normalizeProviderError(error), errorPrefix);
+			const message = formatProviderError(normalizeProviderError(error), errorPrefix);
+			output.errorMessage = formatError ? formatError(message) : message;
 			events.push({ type: "error", reason: output.stopReason, error: output });
 		} finally {
 			events.end();

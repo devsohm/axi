@@ -104,7 +104,7 @@ it("keeps separate typed model identities across all included providers", () => 
 	for (const table of [MODELS, IMAGE_MODELS, CLASSIFIER_MODELS]) {
 		for (const models of Object.values(table)) count += Object.keys(models).length;
 	}
-	expect(count).toBe(1703);
+	expect(count).toBe(1678);
 	expectTypeOf(MODELS.xai["grok-4.5"].api).toEqualTypeOf<"openai-responses">();
 	expectTypeOf(MODELS.xai["grok-4.5"].provider).toEqualTypeOf<"xai">();
 	expectTypeOf(MODELS.xai["grok-4.5"].id).toEqualTypeOf<"grok-4.5">();

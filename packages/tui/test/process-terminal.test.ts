@@ -68,3 +68,37 @@ test("a fresh keyboard report is negotiated after an incomplete unrelated escape
 		vi.useRealTimers();
 	}
 });
+
+test("stopping clears progress before program status and restores keyboard modes", async () => {
+	vi.useFakeTimers();
+	vi.stubEnv("AXI_PROGRAM_STATUS", "1");
+	const write = vi.spyOn(process.stdout, "write").mockReturnValue(true);
+	vi.spyOn(process, "kill").mockReturnValue(true);
+	vi.spyOn(process.stdin, "resume").mockReturnValue(process.stdin);
+	vi.spyOn(process.stdin, "pause").mockReturnValue(process.stdin);
+	vi.spyOn(process.stdin, "setEncoding").mockReturnValue(process.stdin);
+	const { ProcessTerminal } = await import("../src/terminal.ts");
+	const terminal = new ProcessTerminal();
+	try {
+		terminal.start(
+			() => {},
+			() => {},
+		);
+		terminal.setProgress(true);
+		terminal.setProgramStatus({ state: "working" });
+		write.mockClear();
+		terminal.stop();
+		expect(write.mock.calls.map(([data]) => data)).toEqual([
+			"\x1b]9;4;0\x07",
+			"\x1b]7501;state=clear\x1b\\",
+			"\x1b[?2004l",
+			"\x1b[<u",
+		]);
+		expect(vi.getTimerCount()).toBe(0);
+	} finally {
+		terminal.stop();
+		vi.restoreAllMocks();
+		vi.unstubAllEnvs();
+		vi.useRealTimers();
+	}
+});

@@ -51,7 +51,7 @@ test("terminal capabilities honor terminal families, multiplexers and explicit o
 		[{ TERM_PROGRAM: "iterm.app" }, { images: "iterm2", trueColor: true, hyperlinks: true }],
 		[{ TERM_PROGRAM: "vscode" }, { images: null, trueColor: true, hyperlinks: true }],
 		[{ TERM_PROGRAM: "herdr" }, { images: "kitty", trueColor: false, hyperlinks: true }],
-		[{ TERM_PROGRAM: "rex" }, { images: null, trueColor: true, hyperlinks: true }],
+		[{ TERM_PROGRAM: "rex" }, { images: "kitty", trueColor: true, hyperlinks: true }],
 		[
 			{ TERM: "screen", TERM_PROGRAM: "kitty", COLORTERM: "truecolor" },
 			{ images: null, trueColor: true, hyperlinks: false },
@@ -196,4 +196,16 @@ test("PNG dimensions require literal signature bytes rather than their seven-bit
 		corrupted[index] |= 0x80;
 		expect(getImageDimensions(corrupted.toString("base64"), "image/png")).toBeNull();
 	}
+});
+
+test("image metadata lookup returns only placement dimensions and identity", () => {
+	const registration = { imageId: 75001, columns: 3, rows: 2, widthPx: 30, heightPx: 40, privateLabel: "source" };
+	registerKittyImageMetadata(registration);
+	expect(getKittyImageMetadata(encodeKitty("AQ==", { imageId: 75001 }))).toEqual({
+		imageId: 75001,
+		columns: 3,
+		rows: 2,
+		widthPx: 30,
+		heightPx: 40,
+	});
 });

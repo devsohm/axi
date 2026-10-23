@@ -1,3 +1,4 @@
+import type { ClientIdentity } from "./utils/identity.ts";
 import type { TelemetrySpan } from "@axi/telemetry";
 import type { TSchema } from "typebox";
 import type {
@@ -18,6 +19,7 @@ import type {
 	MistralConversationsCompat,
 	OpenAICompletionsCompat,
 	OpenAIResponsesCompat,
+	SystemOneCompat,
 } from "./providers/compat-schema.ts";
 import type {
 	CacheRetention,
@@ -42,6 +44,7 @@ export type {
 	OpenRouterRouting,
 	SessionAffinityFormat,
 	ThinkingTokenBudgetField,
+	SystemOneCompat,
 	VercelGatewayRouting,
 } from "./providers/compat-schema.ts";
 export type {
@@ -141,6 +144,7 @@ export interface ProviderResponse {
 	headers: Record<string, string>;
 }
 export interface ProviderRequestOptions<TModel = Model<Api>> {
+	identity?: ClientIdentity;
 	signal?: AbortSignal;
 	telemetry?: TelemetrySpan;
 	apiKey?: string;
@@ -278,7 +282,14 @@ export interface Usage {
 	cacheWrite1h?: number;
 	reasoning?: number;
 	totalTokens: number;
-	cost: { input: number; output: number; cacheRead: number; cacheWrite: number; total: number };
+	cost: {
+		input: number;
+		output: number;
+		cacheRead: number;
+		cacheWrite: number;
+		total: number;
+		totalFromProvider?: boolean;
+	};
 }
 export type StopReason = "pending" | "stop" | "length" | "toolUse" | "error" | "aborted" | "deferred";
 export type JsonValue = null | boolean | number | string | readonly JsonValue[] | JsonObject;
@@ -533,6 +544,7 @@ export interface ImageModel<A extends ImageApi> extends BaseModel<A> {
 export interface ClassifierModel<A extends ClassifierApi> extends BaseModel<A> {
 	type: "classifier";
 	contextWindow: number;
+	compat?: A extends "typesafe-system-one" | "cloudflare-workers-ai-system-one" ? SystemOneCompat : never;
 }
 export interface ModelTypeMap {
 	chat: Model<Api>;

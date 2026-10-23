@@ -13,7 +13,7 @@ it.each(["conversation", "graph", "events"] as const)(
 		);
 		try {
 			const conversation = await harness.root(context);
-			const hold = kind === "graph" ? await harness.taskGraph(context) : await conversation.viewState(context);
+			const hold = kind === "graph" ? await harness.watchTaskGraph(context) : await conversation.watch(context);
 			const controller = new AbortController();
 			let reads = 0;
 			const expectedReads = 2;
@@ -37,7 +37,7 @@ it.each(["conversation", "graph", "events"] as const)(
 				await expect(watch.closed).resolves.toEqual({ reason: "cancelled" });
 			} finally {
 				await watch.stop();
-				hold.dispose();
+				await hold.stop();
 			}
 		} finally {
 			await harness.close(context);

@@ -39,6 +39,7 @@ it("uses one restart limit for all tasks recovered during opening", async () => 
 				},
 			})),
 		],
+		() => {},
 		context,
 	);
 	const registry = createRegistry();
@@ -118,6 +119,7 @@ it("recovers a fail-fast wait without reading members after a known failure", as
 				},
 			},
 		],
+		() => {},
 		context,
 	);
 	const harness = await Harness.open(storage, { models: createModels(), registry: createRegistry() }, context);

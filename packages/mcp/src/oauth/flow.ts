@@ -15,6 +15,7 @@ import {
 } from "./errors.ts";
 import {
 	type AuthorizationServerMetadata,
+	isHttpUrl,
 	type OAuthClientInformationFull,
 	type OAuthClientInformationMixed,
 	type OAuthClientMetadata,
@@ -117,6 +118,7 @@ export async function startAuthorization(
 	if (metadata?.code_challenge_methods_supported && !metadata.code_challenge_methods_supported.includes("S256"))
 		throw new Error("Authorization server does not support PKCE S256");
 	const authorizationUrl = new URL(metadata?.authorization_endpoint ?? new URL("/authorize", authorizationServerUrl));
+	if (!isHttpUrl(authorizationUrl)) throw new Error(`Invalid authorization endpoint ${authorizationUrl.href}`);
 	const codeVerifier = Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString("base64url");
 	const challenge = Buffer.from(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(codeVerifier))).toString(
 		"base64url",

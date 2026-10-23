@@ -13,11 +13,12 @@ import type {
 import { formatProviderError, normalizeProviderError } from "../utils/error-body.ts";
 import { AssistantMessageEventStream } from "../utils/event-stream.ts";
 import { headersToRecord } from "../utils/headers.ts";
+import { applyOpenRouterReportedCost, isOpenRouterModel } from "../utils/openrouter-cost.ts";
 import { parseStreamingJson, parseToolCallArguments } from "../utils/json-parse.ts";
 import { getProviderEnvValue } from "../utils/provider-env.ts";
 import { retryProviderRequest } from "../utils/provider-retry.ts";
 import { getDeclaredTools, resolveTranscript } from "../utils/transcript.ts";
-import { getUserAgent } from "../utils/user-agent.ts";
+import { getIdentityHeaders } from "../utils/identity.ts";
 import {
 	appendGrammarToolInputJsonDelta,
 	createGrammarToolInputProperties,
@@ -68,6 +69,7 @@ function readUsage(raw: RawUsage, model: Model<"openai-completions">): Assistant
 		cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
 	};
 	calculateCost(model, usage);
+	if (isOpenRouterModel(model)) applyOpenRouterReportedCost(usage, raw);
 	return usage;
 }
 function mergeDetail(details: ReasoningDetail[], incoming: ReasoningDetail): void {
@@ -125,7 +127,7 @@ export const stream: StreamFunction<"openai-completions", OpenAICompletionsOptio
 			const retention =
 				options.cacheRetention ??
 				(getProviderEnvValue("AXI_CACHE_RETENTION", options.env) === "long" ? "long" : "short");
-			const headers: ProviderHeaders = { "User-Agent": getUserAgent(), ...model.headers };
+			const headers: ProviderHeaders = { ...getIdentityHeaders(model, options.identity), ...model.headers };
 			if (model.provider === "github-copilot")
 				Object.assign(
 					headers,

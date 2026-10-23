@@ -1,3 +1,4 @@
+import { getIdentityHeaders } from "../utils/identity.ts";
 import type {
 	AssistantMessage,
 	AssistantMessageEvent,
@@ -40,6 +41,7 @@ export type AxiMessagesEvent =
 			reason: "stop" | "length" | "toolUse";
 			usage: AssistantMessage["usage"];
 			responseId?: string;
+			responseModel?: string;
 			providerThinkingLevel?: string;
 			rewrite?: AxiMessagesRewriteImpact;
 	  }
@@ -49,6 +51,7 @@ export type AxiMessagesEvent =
 			usage: AssistantMessage["usage"];
 			errorMessage?: string;
 			responseId?: string;
+			responseModel?: string;
 			providerThinkingLevel?: string;
 			rewrite?: AxiMessagesRewriteImpact;
 	  };
@@ -111,6 +114,7 @@ function converter(model: Model<"axi-messages">): (event: AxiMessagesEvent) => A
 			case "done":
 			case "error": {
 				Object.assign(partial, { stopReason: event.reason, usage: event.usage, responseId: event.responseId });
+				if (event.responseModel !== undefined) partial.responseModel = event.responseModel;
 				if (event.type === "error") partial.errorMessage = event.errorMessage;
 				if (event.providerThinkingLevel !== undefined) partial.providerThinkingLevel = event.providerThinkingLevel;
 				if (event.rewrite)
@@ -229,12 +233,15 @@ export const stream: StreamFunction<"axi-messages", AxiMessagesOptions> = (model
 			if (replacement !== undefined) payload = replacement;
 			const response = await (options.fetch ?? globalThis.fetch)(url, {
 				method: "POST",
-				headers: {
-					authorization: `Bearer ${apiKey}`,
-					accept: "text/event-stream",
-					"content-type": "application/json",
-					...providerHeadersToRecord(options.headers),
-				},
+				headers: providerHeadersToRecord(
+					getIdentityHeaders(model, options.identity),
+					{
+						authorization: `Bearer ${apiKey}`,
+						accept: "text/event-stream",
+						"content-type": "application/json",
+					},
+					options.headers,
+				),
 				body: JSON.stringify(payload),
 				signal: options.signal,
 			});

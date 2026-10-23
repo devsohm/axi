@@ -1,3 +1,4 @@
+import { getIdentityHeaders } from "../utils/identity.ts";
 import OpenAI from "openai";
 import type {
 	ChatCompletionContentPart,
@@ -26,7 +27,11 @@ export const generateImages: ImagesFunction<ImagesOptions> = async (model, conte
 			baseURL: model.baseUrl,
 			dangerouslyAllowBrowser: true,
 			fetch: options.fetch,
-			defaultHeaders: providerHeadersToRecord({ ...model.headers, ...options.headers }),
+			defaultHeaders: providerHeadersToRecord(
+				getIdentityHeaders(model, options.identity),
+				model.headers,
+				options.headers,
+			),
 		});
 		const content: ChatCompletionContentPart[] = context.input.map((block) =>
 			block.type === "text"
@@ -75,6 +80,7 @@ export const generateImages: ImagesFunction<ImagesOptions> = async (model, conte
 					cacheRead: (model.cost.cacheRead / 1_000_000) * cacheRead,
 					cacheWrite: (model.cost.cacheWrite / 1_000_000) * cacheWrite,
 					total: 0,
+					totalFromProvider: false,
 				},
 			};
 			usage.cost.total = usage.cost.input + usage.cost.output + usage.cost.cacheRead + usage.cost.cacheWrite;

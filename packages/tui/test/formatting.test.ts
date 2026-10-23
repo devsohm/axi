@@ -183,3 +183,16 @@ test("an ellipsis filling the available width discards zero-width source charact
 test("Markdown rounds fractional vertical padding up to a whole display row", () => {
 	expect(new Markdown("ready", 0, 0.5, theme).render(5)).toEqual(["     ", "ready", "     "]);
 });
+
+test("deep quotes stop adding borders when the remaining width is too narrow", () => {
+	const markdown = new Markdown(">".repeat(12) + "x", 0, 0, theme);
+	const lines = markdown.render(5).map(stripTerminalSequences);
+	expect(lines).toHaveLength(1);
+	expect(lines[0]?.trimEnd()).toBe("│ │ x");
+});
+
+test("truncation measures graphemes independently across styling boundaries", () => {
+	expect(truncateToWidth("🇦\x1b[31m🇦", 2, "")).toBe("🇦\x1b[0m");
+	expect(truncateToWidth("x🇦\x1b[31m🇦", 3, "")).toBe("x🇦\x1b[0m");
+	expect(truncateToWidth("🇦\x1b[31m🇦", 4, "")).toBe("🇦\x1b[31m🇦");
+});

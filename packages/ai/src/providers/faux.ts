@@ -299,9 +299,9 @@ export function createFauxCore(options: RegisterFauxProviderOptions) {
 			if (old !== undefined) {
 				const prefix = cachedPromptChars(old, prompt);
 				cacheRead = Math.ceil(prefix / 4);
-				cacheWrite = Math.ceil((length - prefix) / 4);
-				input = Math.max(0, input - cacheRead);
+				cacheWrite = Math.max(0, input - cacheRead);
 			} else cacheWrite = input;
+			input = 0;
 			cache.set(options.sessionId, prompt);
 		}
 		const output = tokens(outputText(message.content));

@@ -1,3 +1,4 @@
+import { getIdentityHeaders } from "../utils/identity.ts";
 import type { ClassifierApi, ClassifierModel, ClassifierOptions } from "../types.ts";
 import { headersToRecord, providerHeadersToRecord } from "../utils/headers.ts";
 import { retryProviderRequest } from "../utils/provider-retry.ts";
@@ -27,6 +28,7 @@ export async function classifierJson({
 	const key = apiKey ?? options?.apiKey;
 	const requestHeaders = () =>
 		providerHeadersToRecord(
+			getIdentityHeaders(model, options?.identity),
 			{ "content-type": "application/json", ...(key ? { authorization: `Bearer ${key}` } : {}) },
 			model.headers,
 			options?.headers,

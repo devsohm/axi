@@ -1,3 +1,4 @@
+import { getClientVersion } from "../utils/identity.ts";
 import type { BedrockRuntimeClientConfig } from "@aws-sdk/client-bedrock-runtime";
 import { BedrockRuntimeClient } from "@aws-sdk/client-bedrock-runtime";
 import { NodeHttpHandler } from "@smithy/node-http-handler";
@@ -28,6 +29,12 @@ function configuration(model: Model<"bedrock-converse-stream">, options: Bedrock
 		explicitEndpoint = !fromEndpoint || (!configuredRegion && !ambientProfile);
 	const config: BedrockRuntimeClientConfig = {
 		profile: explicitProfile || env("AWS_PROFILE"),
+		customUserAgent:
+			typeof options.identity?.userAgent === "object"
+				? options.identity.userAgent.custom
+				: options.identity?.userAgent === "short"
+					? [["axi"]]
+					: [["axi", getClientVersion(options.identity)]],
 		...(explicitEndpoint ? { endpoint: model.baseUrl } : {}),
 	};
 	const skipAuth = env("AWS_BEDROCK_SKIP_AUTH") === "1",

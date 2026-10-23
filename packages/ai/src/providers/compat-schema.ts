@@ -311,6 +311,17 @@ export const MistralConversationsCompatSchema = Type.Object(
 	},
 	{ description: "Compatibility overrides for Mistral conversation models.", additionalProperties: true },
 );
+export const SystemOneCompatSchema = Type.Object(
+	{
+		imageInput: Type.Optional(
+			Type.Union([Type.Literal("assets"), Type.Literal("images"), Type.Literal("state-image-urls")], {
+				description: "Classifier image encoding. Omitted values are detected from the endpoint and model.",
+			}),
+		),
+		sendImageOptInHeader: bool("Send the TypeSafe image opt-in header for requests containing images."),
+	},
+	{ description: "System One classifier compatibility settings.", additionalProperties: true },
+);
 export const CompatSchemasByApi = {
 	"openai-completions": OpenAICompletionsCompatSchema,
 	"openai-responses": OpenAIResponsesCompatSchema,
@@ -319,6 +330,8 @@ export const CompatSchemasByApi = {
 	"anthropic-messages": AnthropicMessagesCompatSchema,
 	"bedrock-converse-stream": BedrockCompatSchema,
 	"mistral-conversations": MistralConversationsCompatSchema,
+	"typesafe-system-one": SystemOneCompatSchema,
+	"cloudflare-workers-ai-system-one": SystemOneCompatSchema,
 } as const;
 export const ProviderCompatSchema = Type.Object(
 	{
@@ -327,6 +340,7 @@ export const ProviderCompatSchema = Type.Object(
 		...AnthropicMessagesCompatSchema.properties,
 		...BedrockCompatSchema.properties,
 		...MistralConversationsCompatSchema.properties,
+		...SystemOneCompatSchema.properties,
 		supportsDeveloperRole: bool(
 			"Accept developer-role messages instead of system-role messages; defaults depend on the API.",
 		),
@@ -361,3 +375,4 @@ export interface OpenAIResponsesCompat extends Static<typeof OpenAIResponsesComp
 export interface AnthropicMessagesCompat extends Static<typeof AnthropicMessagesCompatSchema> {}
 export interface BedrockCompat extends Static<typeof BedrockCompatSchema> {}
 export interface MistralConversationsCompat extends Static<typeof MistralConversationsCompatSchema> {}
+export interface SystemOneCompat extends Static<typeof SystemOneCompatSchema> {}

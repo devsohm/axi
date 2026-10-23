@@ -1,6 +1,6 @@
 import { isNativeModifierPressed } from "./native-modifiers.ts";
 import { getNativePlatformHelper } from "./native-platform.ts";
-import { appendFileSync, statSync } from "node:fs";
+import { appendFileSync, statSync, writeSync } from "node:fs";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { setKittyProtocolActive } from "./keys.ts";
@@ -15,6 +15,7 @@ import {
 export interface Terminal {
 	start(onInput: (data: string) => void, onResize: () => void): void;
 	stop(): void;
+	restoreOnExit?(before: string, after: string): void;
 	drainInput(maxMs?: number, idleMs?: number): Promise<void>;
 	write(data: string): void;
 	readonly columns: number;
@@ -248,14 +249,14 @@ export class ProcessTerminal implements Terminal {
 		}
 	}
 	stop(): void {
-		if (this.#statusSupported && this.#status) process.stdout.write(formatProgramStatus({ state: "clear" }));
-		this.#statusSupported = false;
-		this.#statusPending = false;
 		if (this.#progress) {
 			clearInterval(this.#progress);
 			this.#progress = undefined;
 			process.stdout.write("\x1b]9;4;0\x07");
 		}
+		if (this.#statusSupported && this.#status) process.stdout.write(formatProgramStatus({ state: "clear" }));
+		this.#statusSupported = false;
+		this.#statusPending = false;
 		process.stdout.write("\x1b[?2004l");
 		this.#disableKeyboard();
 		this.#buffer?.destroy();
@@ -267,6 +268,18 @@ export class ProcessTerminal implements Terminal {
 		this.inputHandler = undefined;
 		process.stdin.pause();
 		process.stdin.setRawMode?.(this.#wasRaw);
+	}
+	restoreOnExit(before: string, after: string): void {
+		const sequence =
+			before +
+			(this.#progress ? "\x1b]9;4;0\x07" : "") +
+			"\x1b[?2004l" +
+			(this.#pushed || this.#kitty ? "\x1b[<u" : "") +
+			(this.#otherKeys ? "\x1b[>4;0m" : "") +
+			after;
+		try {
+			writeSync(process.stdout.fd, sequence);
+		} catch {}
 	}
 	write(data: string): void {
 		process.stdout.write(data);

@@ -244,7 +244,7 @@ describe("legacy Codex requests", () => {
 		}).result();
 		expect(requested).toBe("https://provider.invalid/codex/responses");
 		expect(headers?.get("originator")).toBe("axi");
-		expect(headers?.get("user-agent")).toMatch(/^axi \(/);
+		expect(headers?.get("user-agent")).toMatch(/^axi\//);
 		expect(headers?.get("authorization")).toBe(`Bearer ${token()}`);
 		expect(headers?.get("chatgpt-account-id")).toBe("test-account");
 		expect(headers?.get("content-encoding")).toBe("zstd");

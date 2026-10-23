@@ -1,7 +1,6 @@
-import type { Context, JsonValue } from "@axi/chord";
+import { type Context, type JsonValue, Watch } from "@axi/chord";
 import type { Op, Path } from "@axi/chord/delta";
 import type { AssistantMessage, Message, Usage } from "@axi/ai";
-import { CommittedWatch } from "../session/observation.ts";
 import type {
 	CommitPublication,
 	ConversationId,
@@ -141,7 +140,7 @@ export async function watchEvents(harness: Harness, id: ConversationId, context:
 			);
 			let current = initial;
 			const initialSnapshot = snapshot(initial),
-				watch = new CommittedWatch<readonly AgentEvent[]>(
+				watch = new Watch<readonly AgentEvent[]>(
 					[],
 					release,
 					(error) => views.report(error),
@@ -161,7 +160,7 @@ export async function watchEvents(harness: Harness, id: ConversationId, context:
 					const events = translate(id, before, after, ops, publication, held);
 					if (events.length) watch.advance(events, [], context);
 				},
-				closeSession: (failure: { readonly error: unknown } | undefined) => watch.closeSession(failure),
+				end: (failure: { readonly error: unknown } | undefined) => watch.end(failure),
 			};
 		},
 		context,

@@ -121,6 +121,12 @@ it("horizontal and vertical composition clips text and updates reserved spacing"
 	expect(body.render(10).map(stripTerminalSequences)).toEqual(["go   lo...", "tail      "]);
 });
 
+it("renders a large horizontal stack without exceeding the function argument limit", () => {
+	const child = { render: () => [], invalidate() {} };
+	const row = new HStack(Array.from({ length: 150_000 }, () => child));
+	expect(row.render(80)).toEqual([]);
+});
+
 it("paints every box row in display order without reusing a padding callback result", () => {
 	const calls: string[] = [];
 	const box = new Box(1, 1, (text) => {

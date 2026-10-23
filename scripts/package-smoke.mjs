@@ -80,12 +80,12 @@ assert.equal(
 	"archive (3ms)",
 );
 const receiver = new InMemoryTelemetryContext();
-await traceIn(withTelemetry(telemetry, context), { name: "installed" }, async (child) => {
+await traceIn({ name: "installed" }, async (child) => {
 	telemetry.counter("requests").add(1, { mode: "installed" }, child.telemetry);
 	const carrier = telemetry.inject(child.telemetry);
 	assert.ok(carrier);
 	await receiver.extract(JSON.parse(JSON.stringify(carrier))).startSpan({ name: "received" }, () => 42);
-});
+}, withTelemetry(telemetry, context));
 assert.deepEqual(
 	telemetry.getSpans().map((span) => [span.name, span.settled]),
 	[["installed", true]],

@@ -156,3 +156,16 @@ test("programmatic insertion preserves newlines and disabled submission retains 
 test("a single grapheme wider than its line capacity reports a range error", () => {
 	expect(() => wordWrapLine("界", 1)).toThrowError(new RangeError("Maximum call stack size exceeded"));
 });
+
+test("forward deletion keeps the preferred column for the next wrapped-line move", () => {
+	const input = editor();
+	input.setText("xy\nabcd");
+	input.render(29);
+	input.handleInput("\x1b[A");
+	expect(input.getCursor()).toEqual({ line: 0, col: 2 });
+	input.handleInput("\x1bd");
+	expect(input.getText()).toBe("xyabcd");
+	input.render(4);
+	input.handleInput("\x1b[B");
+	expect(input.getCursor()).toEqual({ line: 0, col: 6 });
+});

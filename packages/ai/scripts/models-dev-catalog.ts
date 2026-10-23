@@ -399,11 +399,10 @@ export function buildModelsDevCatalog(data: SourceCatalog, nvidiaIds: readonly s
 		if (!source.tool_call || source.status === "deprecated") continue;
 		const model = chat(source, "together", id, "openai-completions", "https://api.together.ai/v1");
 		const effort = ["openai/gpt-oss-20b", "openai/gpt-oss-120b"].includes(id),
-			both = id === "deepseek-ai/DeepSeek-V4-Pro-0813",
-			fixed = ["deepseek-ai/DeepSeek-R1", "MiniMaxAI/MiniMax-M2.7"].includes(id);
+			both = id === "deepseek-ai/DeepSeek-V4-Pro-0813";
 		model.compat = {
 			...togetherBase,
-			...(model.reasoning && !fixed
+			...(model.reasoning
 				? {
 						thinkingFormat: effort ? "openai" : "together",
 						...(effort || both ? { supportsReasoningEffort: true } : {}),
@@ -415,9 +414,7 @@ export function buildModelsDevCatalog(data: SourceCatalog, nvidiaIds: readonly s
 				? { off: null, minimal: null }
 				: both
 					? { minimal: null, low: null, medium: null, high: "high", xhigh: null }
-					: fixed
-						? { off: null, minimal: null, low: null, medium: null }
-						: { minimal: null, low: null, medium: null };
+					: { minimal: null, low: null, medium: null };
 		emit(model, source);
 	}
 	for (const [id, source] of Object.entries(data["kimi-code-plan-global"]?.models ?? {})) {

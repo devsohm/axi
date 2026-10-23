@@ -6,7 +6,7 @@ The terminal library does not import Durable. An application imports both librar
 
 The application loads settings and authentication, selects a session and acquires its lock. It opens SQLite storage and creates a registry of tools and extensions. It then opens the harness with its model runtime and execution environment.
 
-The runtime adapter selects a conversation and attaches to `conversation.viewState(context)`. The application reads the attached value for its initial display and subscribes to subsequent changes. It can also attach to `harness.taskGraph(context)` for a task panel.
+The runtime adapter selects a conversation and attaches to `conversation.watch(context)`. The application reads the attached value for its initial display and calls `start(async value => ...)` to receive subsequent changes. It can also attach to `harness.watchTaskGraph(context)` for a task panel.
 
 ## Display updates
 

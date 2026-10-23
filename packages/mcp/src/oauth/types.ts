@@ -93,9 +93,11 @@ function strings(value: unknown, name: string): string[] | undefined {
 }
 function url(value: unknown, name: string): string {
 	const text = string(value, name);
-	if (!URL.canParse(text) || ["javascript:", "data:", "vbscript:"].includes(new URL(text).protocol))
-		throw new Error(`Invalid ${name}`);
+	if (!URL.canParse(text) || !isHttpUrl(new URL(text))) throw new Error(`Invalid ${name}`);
 	return text;
+}
+export function isHttpUrl(value: URL): boolean {
+	return value.protocol === "http:" || value.protocol === "https:";
 }
 function optionalUrl(value: unknown, name: string): string | undefined {
 	return absent(value) ? undefined : url(value, name);

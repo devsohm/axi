@@ -1,7 +1,7 @@
 import Anthropic, { type ClientOptions } from "@anthropic-ai/sdk";
 import type { CacheRetention, Model, ProviderEnv, ProviderHeaders, TranscriptContext } from "../types.ts";
 import { getProviderEnvValue } from "../utils/provider-env.ts";
-import { getUserAgent } from "../utils/user-agent.ts";
+import { getIdentityHeaders } from "../utils/identity.ts";
 import { buildCopilotDynamicHeaders, hasCopilotVisionInput } from "./github-copilot-headers.ts";
 import type { AnthropicOptions } from "./options.ts";
 
@@ -77,8 +77,9 @@ export function anthropicClient(
 	const copilot = model.provider === "github-copilot";
 	const oauth = !copilot && !!options.apiKey?.includes("sk-ant-oat");
 	const headers: ProviderHeaders = {
-		"User-Agent": getUserAgent(),
+		...(oauth ? {} : getIdentityHeaders(model, options.identity)),
 		accept: "application/json",
+		"anthropic-version": "2023-06-01",
 		"anthropic-dangerous-direct-browser-access": "true",
 	};
 	if (copilot)

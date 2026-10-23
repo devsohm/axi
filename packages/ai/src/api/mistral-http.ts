@@ -1,7 +1,7 @@
 import type { Model, ProviderHeaders } from "../types.ts";
 import { combineAbortSignals } from "../utils/abort-signals.ts";
 import { headersToRecord } from "../utils/headers.ts";
-import { getUserAgent } from "../utils/user-agent.ts";
+import { getIdentityHeaders } from "../utils/identity.ts";
 import type { MistralOptions } from "./options.ts";
 import { type MistralPayload, mistralWirePayload } from "./mistral-request.ts";
 export interface MistralChunk {
@@ -56,7 +56,7 @@ export async function mistralHttp(
 	const base = new URL(model.baseUrl);
 	base.pathname = base.pathname.replace(/\/+$/u, "") + "/";
 	const headers = new Headers({
-		"User-Agent": getUserAgent(),
+		...getIdentityHeaders(model, options.identity),
 		accept: "text/event-stream",
 		authorization: `Bearer ${apiKey}`,
 		"content-type": "application/json",

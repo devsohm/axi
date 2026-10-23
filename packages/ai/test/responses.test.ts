@@ -185,7 +185,14 @@ describe("Responses requests", () => {
 				]),
 		};
 		const result = await stream(model, context, options).result();
-		expect(result.usage.cost).toEqual({ input: 0.0005, output: 0.001, cacheRead: 0, cacheWrite: 0, total: 0.0015 });
+		expect(result.usage.cost).toEqual({
+			input: 0.0005,
+			output: 0.001,
+			cacheRead: 0,
+			cacheWrite: 0,
+			total: 0.0015,
+			totalFromProvider: false,
+		});
 	});
 	it("retains the selected request timeout across retries", async () => {
 		let reads = 0,

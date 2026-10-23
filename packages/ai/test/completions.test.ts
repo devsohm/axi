@@ -312,7 +312,7 @@ describe("Chat Completions", () => {
 		expect(result.content).toEqual([{ type: "text", text: "answer" }]);
 		expect(headers.get("authorization")).toBe("Bearer custom");
 		expect(headers.get("x-session-id")).toBe("request");
-		expect(headers.get("user-agent")).toMatch(/^axi \(/);
+		expect(headers.get("user-agent")).toMatch(/^axi\//);
 	});
 	it("returns asynchronous errors in stream and throws missing auth before simple-stream setup", async () => {
 		const failed = await stream(model, context).result();
@@ -391,4 +391,27 @@ describe("Chat Completions", () => {
 			await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
 		}
 	});
+});
+
+it("reads billed totals from OpenRouter streams without applying them to other providers", async () => {
+	for (const provider of ["openrouter", "local"]) {
+		const result = await stream({ ...model, provider }, context, {
+			apiKey: "offline",
+			fetch: async () =>
+				response([
+					{
+						...chunk({ content: "ok" }, "stop"),
+						usage: {
+							prompt_tokens: 12,
+							completion_tokens: 3,
+							cost: 0.42,
+							is_byok: false,
+						},
+					},
+				]),
+		}).result();
+		expect(result.stopReason).toBe("stop");
+		expect(result.usage.cost.totalFromProvider).toBe(provider === "openrouter");
+		expect(result.usage.cost.total).toBeCloseTo(provider === "openrouter" ? 0.42 : 0.000048);
+	}
 });

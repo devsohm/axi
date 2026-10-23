@@ -1,6 +1,6 @@
-import type { AttachedReplicatedState, Context, JsonValue } from "@axi/chord";
+import type { Context, JsonValue } from "@axi/chord";
 import { withAbortSignal, withoutAbortSignal } from "@axi/chord/context";
-import type { Models } from "@axi/ai";
+import { AXI_ATTRIBUTION, mergeClientIdentity, withClientIdentity, type Models, type ClientIdentity } from "@axi/ai";
 import {
 	createTypedMetrics,
 	NOOP_TELEMETRY_CONTEXT,
@@ -39,7 +39,7 @@ import { ProviderDoc } from "./provider.ts";
 import { BUILTIN_TASKS } from "./registry.ts";
 import { type InvocationBinding, TaskScheduler } from "./scheduler.ts";
 import { Submissions } from "./submissions.ts";
-import { type TaskGraph, TaskGraphView, type TaskGraphWatch } from "./task-graph.ts";
+import { TaskGraphView, type TaskGraphWatch } from "./task-graph.ts";
 import { DURABLE_TELEMETRY_SCHEMA } from "./telemetry.ts";
 import type {
 	Agent,
@@ -65,7 +65,7 @@ import type {
 } from "./types.ts";
 import { addUsageState, UsageDoc, type UsageState } from "./usage.ts";
 import { scanAll } from "./util.ts";
-import { type ConversationView, ConversationViews } from "./view.ts";
+import { ConversationViews } from "./view.ts";
 
 type CreateTarget =
 	| { kind: "root" }
@@ -99,7 +99,7 @@ class ConversationImpl<T extends ToolRegistration> implements Conversation {
 	submit(draft: SubmissionDraft, context: Context): Promise<Submission> {
 		return this.#host.submissions.submit(this.id, draft, context);
 	}
-	compact(instructions: string | undefined, context: Context): Promise<TaskId<CompactionResult>> {
+	async compact(instructions: string | undefined, context: Context): Promise<TaskId<CompactionResult>> {
 		this.#host.tasks.resume();
 		return this.#host.harness.commitWith(
 			(tx) =>
@@ -146,24 +146,25 @@ class ConversationImpl<T extends ToolRegistration> implements Conversation {
 	fork(at: EntryId, options: ConversationCreateOptions, context: Context): Promise<Conversation> {
 		return this.#host.create({ kind: "fork", parentId: this.id, at, ownership: options.ownership }, options, context);
 	}
-	abort(context: Context, options?: ConversationAbortOptions): Promise<void> {
+	async abort(context: Context, options?: ConversationAbortOptions): Promise<void> {
 		this.#host.tasks.resume();
 		return this.#host.tasks.abortConversation(this.id, options?.background === true, context);
 	}
-	waitForIdle(context: Context): Promise<void> {
+	async waitForIdle(context: Context): Promise<void> {
 		this.#host.tasks.resume();
 		return this.#host.tasks.waitForIdle(this.id, context);
-	}
-	viewState(context: Context): Promise<AttachedReplicatedState<ConversationView>> {
-		return this.#host.views.state(this.id, context);
 	}
 	watch(context: Context): Promise<ConversationWatch> {
 		return this.#host.views.watch(this.id, context);
 	}
 }
 
-function modelsGetter(models: HarnessOptions["models"]): () => Models {
-	return typeof models === "function" ? models : () => models;
+export const DEFAULT_HARNESS_IDENTITY: ClientIdentity = { attribution: AXI_ATTRIBUTION };
+function modelsGetter(models: HarnessOptions["models"], identity?: ClientIdentity): () => Models {
+	const resolved = mergeClientIdentity(DEFAULT_HARNESS_IDENTITY, identity) ?? DEFAULT_HARNESS_IDENTITY;
+	if (typeof models === "function") return () => withClientIdentity(models(), resolved);
+	const wrapped = withClientIdentity(models, resolved);
+	return () => wrapped;
 }
 function settingsGetter(settings: HarnessOptions["settings"]): () => HarnessSettings | undefined {
 	return typeof settings === "function" ? settings : () => settings;
@@ -180,18 +181,19 @@ class HarnessImpl<T extends ToolRegistration> extends SessionImpl implements Har
 		const report = safeReport(options.onReport, options.telemetry ?? NOOP_TELEMETRY_CONTEXT),
 			now = safeNow(options.now, report),
 			hostSettings = settingsGetter(options.settings);
-		super(raw, now, () => hostSettings()?.documentRetentionMs, options.setTimer);
+		super(raw, now, () => hostSettings()?.documentRetentionMs, options.setTimer, options.readOnly);
 		const storage = this.storage,
 			settings = () => resolveSettings(hostSettings());
 		this.#options = options;
 		this.#settings = hostSettings;
 		this.#report = report;
 		this.#tasks = new TaskScheduler({
+			readOnly: options.readOnly,
 			telemetry: options.telemetry,
 			session: this,
 			storage,
 			registry: options.registry,
-			models: modelsGetter(options.models),
+			models: modelsGetter(options.models, options.identity),
 			agent: (id, snapshot, context) => this.resolveAgent(id, snapshot as RegistrySnapshot<T>, context),
 			settings,
 			env: (id, context) => this.buildEnv(id, context),
@@ -287,11 +289,11 @@ class HarnessImpl<T extends ToolRegistration> extends SessionImpl implements Har
 		this.assertUsable();
 		return this.#tasks.retry(id, context);
 	}
-	waitForTask<R>(id: TaskId<R>, context: Context): Promise<SettledTask<R>> {
+	async waitForTask<R>(id: TaskId<R>, context: Context): Promise<SettledTask<R>> {
 		this.#tasks.resume();
 		return this.#tasks.waitForTask(id, context) as Promise<SettledTask<R>>;
 	}
-	waitForIdle(context: Context): Promise<void> {
+	async waitForIdle(context: Context): Promise<void> {
 		this.#tasks.resume();
 		return this.#tasks.waitForIdle(undefined, context);
 	}
@@ -305,9 +307,6 @@ class HarnessImpl<T extends ToolRegistration> extends SessionImpl implements Har
 			if (state !== undefined) addUsageState(total, state);
 		}
 		return total;
-	}
-	taskGraph(context: Context): Promise<AttachedReplicatedState<TaskGraph>> {
-		return this.#graph.state(context);
 	}
 	watchTaskGraph(context: Context): Promise<TaskGraphWatch> {
 		return this.#graph.watch(context);

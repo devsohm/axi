@@ -58,6 +58,8 @@ Closing aborts streams and attempts a session DELETE with a one-second timeout. 
 
 Discovery checks protected-resource metadata, then authorization-server or OpenID metadata candidates. Discovery misses may fall through; network failures propagate. Issuers are validated by default. An explicitly configured authorization-server metadata URL is trusted as configured and bypasses the discovery cache. Its URL and token endpoints require HTTPS except on loopback.
 
+Server metadata URL fields accept only HTTP or HTTPS. `startAuthorization()` checks the authorization endpoint even when the caller supplies metadata directly. Native application redirect URIs may use a custom scheme; they are not server endpoints.
+
 Protected-resource metadata must match the MCP server's origin and path. Scope selection considers the requested scope, resource-supported scopes and client metadata. Empty scopes fall through. Optional null or empty token fields are treated as absent.
 
 Authorization uses PKCE S256, a saved verifier, optional state, redirect URI and resource indicator. It requires authorization-code support when metadata is available. `offline_access` requests consent. Client identification may use configured credentials, dynamic registration or a client metadata document. Registration derives native/web application type from redirect URIs unless explicitly set.

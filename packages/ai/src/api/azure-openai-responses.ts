@@ -3,7 +3,7 @@ import type { ResponseCreateParamsStreaming } from "openai/resources/responses/r
 import { clampThinkingLevel } from "../models.ts";
 import type { Model, SimpleStreamOptions, StreamFunction, TranscriptContext } from "../types.ts";
 import { getDeclaredTools, resolveTranscript, resolveTranscriptTools } from "../utils/transcript.ts";
-import { getUserAgent } from "../utils/user-agent.ts";
+import { getIdentityHeaders } from "../utils/identity.ts";
 import { resolveAzureConfig, resolveDeploymentName } from "./azure-openai-config.ts";
 import { createGrammarToolInputProperties } from "./constrained-sampling.ts";
 import { clampOpenAIPromptCacheKey } from "./openai-prompt-cache.ts";
@@ -89,7 +89,7 @@ export const stream: StreamFunction<"azure-openai-responses", AzureOpenAIRespons
 			const deployment = resolveDeploymentName(model, options);
 			const apiKey = options.apiKey;
 			if (!apiKey) throw new Error(`No API key for provider: ${model.provider}`);
-			const headers = { "User-Agent": getUserAgent(), ...model.headers };
+			const headers = { ...getIdentityHeaders(model, options.identity), ...model.headers };
 			if (options.headers) Object.assign(headers, options.headers);
 			const config = resolveAzureConfig(model, options);
 			const client = new AzureOpenAI({

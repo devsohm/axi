@@ -328,6 +328,18 @@ export abstract class TuiBase extends Container implements TUI {
 	protected afterTerminalStart(): void {}
 	protected beforeTerminalStop(_options: TuiStopOptions): void {}
 	protected afterTerminalStop(_options: TuiStopOptions): void {}
+	protected getExitRestorePrefix(): string {
+		return (this.#notifications ? "\x1b[?2031l" : "") + "\x1b[?25h";
+	}
+	protected getExitRestoreSuffix(): string {
+		return "";
+	}
+	readonly #exitRestore = () => {
+		if (this.stopped) return;
+		try {
+			this.terminal.restoreOnExit?.(this.getExitRestorePrefix(), this.getExitRestoreSuffix());
+		} catch {}
+	};
 	protected getMountedRoots(): readonly Component[] {
 		return this.children;
 	}
@@ -534,6 +546,8 @@ export abstract class TuiBase extends Container implements TUI {
 	}
 	start(): void {
 		this.stopped = false;
+		process.off("exit", this.#exitRestore);
+		process.on("exit", this.#exitRestore);
 		this.beforeTerminalStart();
 		this.terminal.start(
 			(data) => this.#input(data),
@@ -547,6 +561,7 @@ export abstract class TuiBase extends Container implements TUI {
 	}
 	stop(options: TuiStopOptions = {}): void {
 		this.stopped = true;
+		process.off("exit", this.#exitRestore);
 		this.#cancelTimer();
 		if (this.#notifications) this.terminal.write("\x1b[?2031l");
 		this.beforeTerminalStop(options);

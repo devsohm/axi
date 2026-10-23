@@ -11,6 +11,10 @@ export interface OAuthAuthInfo {
 export interface OAuthDeviceCodeInfo {
 	userCode: string;
 	verificationUri: string;
+	/** Offer to open the browser after confirmation; enabled by default. */
+	openBrowserOnConfirm?: boolean;
+	/** Offer to replace the clipboard with the code after confirmation; enabled by default. */
+	copyCodeOnConfirm?: boolean;
 	intervalSeconds?: number;
 	expiresInSeconds?: number;
 }

@@ -74,6 +74,7 @@ export function buildOpenRouterCatalog(
 			input: input.length ? input : ["text"],
 			cost: openRouterCost(model.pricing ?? undefined),
 			contextWindow: model.top_provider?.context_length || model.context_length || 4096,
+			compat: { imageInput: "state-image-urls", sendImageOptInHeader: false },
 		});
 	}
 	return catalog;

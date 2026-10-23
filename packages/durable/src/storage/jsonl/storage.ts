@@ -85,7 +85,7 @@ export class JsonlStorage implements Storage {
 		if (!result.ok) throw fileError("path join", result.error);
 		return result.value;
 	}
-	async commit(writes: readonly StorageWrite[], context: Context): Promise<Seq> {
+	async commit(writes: readonly StorageWrite[], adopt: (seq: Seq) => void, context: Context): Promise<Seq> {
 		const pending = this.#view.prepareCommit(writes);
 		const encoded = this.#encode(pending);
 		const replacements = this.#replacements(pending.writes, encoded);
@@ -112,6 +112,7 @@ export class JsonlStorage implements Storage {
 				else this.#liveTasks.add(write.value.id);
 			}
 		}
+		adopt(seq);
 		await this.#reclaim(replacements, context);
 		return seq;
 	}

@@ -123,6 +123,7 @@ describe("Bedrock adapter", () => {
 		await stream(model, context, { profile: "explicit", apiKey: "bearer", region: "eu-west-1" }).result();
 		expect(sdk.configs[0]).toEqual({
 			profile: "explicit",
+			customUserAgent: [["axi", "0.1.0-rc.1"]],
 			region: "eu-west-1",
 			token: { token: "bearer" },
 			authSchemePreference: ["httpBearerAuth"],
@@ -136,7 +137,12 @@ describe("Bedrock adapter", () => {
 			context,
 			{ env: { AWS_PROFILE: "scoped" }, region: "eu-west-1" },
 		).result();
-		expect(sdk.configs[1]).toEqual({ profile: "scoped", endpoint: "https://proxy.invalid", region: "us-gov-west-1" });
+		expect(sdk.configs[1]).toEqual({
+			customUserAgent: [["axi", "0.1.0-rc.1"]],
+			profile: "scoped",
+			endpoint: "https://proxy.invalid",
+			region: "us-gov-west-1",
+		});
 	});
 	it("selects adaptive and budget reasoning while respecting GovCloud restrictions", async () => {
 		expect((await payload(model, { reasoning: "xhigh" })).additionalModelRequestFields).toEqual({

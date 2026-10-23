@@ -3,14 +3,11 @@ export interface FuzzyMatch {
 	score: number;
 }
 
-function scoreQuery(query: string, text: string): FuzzyMatch {
-	if (!query) return { matches: true, score: 0 };
+function scorePositions(text: string, positions: readonly number[]): number {
 	let previous = -1;
 	let streak = 0;
 	let score = 0;
-	for (let index = 0; index < query.length; index++) {
-		const position = text.indexOf(query[index], previous + 1);
-		if (position < 0) return { matches: false, score: 0 };
+	for (const position of positions) {
 		if (position === previous + 1) score -= ++streak * 5;
 		else {
 			streak = 0;
@@ -19,6 +16,25 @@ function scoreQuery(query: string, text: string): FuzzyMatch {
 		if (position === 0 || /[\s\-_./:]/.test(text[position - 1])) score -= 10;
 		score += position * 0.1;
 		previous = position;
+	}
+	return score;
+}
+
+function scoreQuery(query: string, text: string): FuzzyMatch {
+	if (!query) return { matches: true, score: 0 };
+	const positions: number[] = [];
+	let previous = -1;
+	for (let index = 0; index < query.length; index++) {
+		previous = text.indexOf(query[index], previous + 1);
+		if (previous < 0) return { matches: false, score: 0 };
+		positions.push(previous);
+	}
+	let score = scorePositions(text, positions);
+	let start = text.indexOf(query);
+	while (start >= 0) {
+		for (let index = 0; index < positions.length; index++) positions[index] = start + index;
+		score = Math.min(score, scorePositions(text, positions));
+		start = text.indexOf(query, start + 1);
 	}
 	return { matches: true, score: score - (query === text ? 100 : 0) };
 }

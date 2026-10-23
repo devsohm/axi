@@ -55,13 +55,13 @@ Retiring an incarnation ends its observations. Recreating the same address creat
 
 ## Observation
 
-`documentState()` returns an attached Chord state for one incarnation. `watchDoc()` returns a watch with an initial value, a `start()` method, a `stop()` method, and a `closed` promise. Neither method creates a missing document.
+`watchDoc()` observes one document incarnation. It returns an initial value, `start(listener)`, `stop()`, and a `closed` promise. It does not create a missing document. Retirement delivers a final null value and ends the watch with reason `retired`. Closing the session ends it with `ended`; a failed session ends it with `failed`.
 
 A watch reports committed values and operations. Its terminal reason distinguishes explicit stop, cancellation, Session close, retirement, listener failure, and Session failure.
 
-`Conversation.viewState()` exposes committed conversation state through Chord. `Conversation.watch()` supplies asynchronous view delivery. `watchEvents()` converts committed view changes into agent events. Partial output reaches these views through committed live documents.
+`Conversation.watch()` supplies committed conversation state through asynchronous delivery. `watchEvents()` converts committed view changes into agent events. Partial output reaches these views through committed live documents.
 
-`taskGraph()` and `watchTaskGraph()` expose task ownership, waits, running state, and blockers. Inspection describes persisted work without starting its phases.
+`watchTaskGraph()` exposes task ownership, waits, running state, and blockers. Inspection describes persisted work without starting its phases.
 
 ## Durable tasks
 
@@ -142,7 +142,7 @@ Tool search and descriptions use the script's captured tool declarations. Option
 
 ## Storage contract
 
-`Storage.commit(writes, context)` atomically applies one mixed batch and returns its sequence. Writes cover conversations, entries, tasks, submissions, document creation, document copy, document change, and document retirement.
+`Storage.commit(writes, adopt, context)` atomically applies one mixed batch and returns its sequence. Writes cover conversations, entries, tasks, submissions, document creation, document copy, document change, and document retirement.
 
 Exact lookups are keyed. Ordered scans use an opaque cursor and a requested page limit. Entry scans default to descending ID order. Conversation, task, and submission scans default to ascending order. Returned records and documents are detached from storage-owned mutable values.
 
@@ -188,3 +188,19 @@ Committed entry and settlement events are emitted after storage succeeds, includ
 `@axi/durable/testing` exposes storage and environment conformance cases, assertion adapters, registration helpers, and deterministic benchmark datasets. These functions operate through the same public contracts that an application supplies.
 
 The package does not supply a terminal UI, a command-line product, credential storage policy, or an OS sandbox. Applications compose those capabilities around the Harness.
+
+## IndexedDB
+
+The IndexedDB backend implements the same storage interface as memory, SQLite and JSONL. A transaction publishes its sequence counter and mixed record writes together. An aborted transaction publishes neither. IDs survive reopening. Fork scans respect ancestor cutoffs, and document reads reconstruct a base plus subsequent changes. Closing rejects new operations, waits for admitted operations and closes the database connection. Database deletion requires other connections to be closed.
+
+## Client identity
+
+The harness adds default application attribution to its models. Harness identity overrides those defaults field by field, and request identity overrides the harness identity. This applies to models returned by a factory and to model calls made through tool or task context. A null attribution disables attribution without removing the user agent.
+
+The browser database uses schema version 1. Its stores are `meta`, `record_ids`, `conversations`, `entries`, `tasks`, `submissions`, `documents`, and `document_revisions`. Records carry indexed columns beside their `record` value. Entry rows also carry `commitSeq`. Document revision keys are `[documentId, seq]`. Version-change events do not automatically close the owner's connection; the owner must close it before another connection upgrades or deletes the database.
+
+## Read-only access
+
+Open a Harness with `readOnly: true` to inspect existing records without recovering tasks or scheduling work. Writes reject with `ReadOnlySession`. A transaction that writes nothing still succeeds. `resume()` refuses scheduling and `wake()` returns `{ active: false }`. The storage backend can still create its schema while opening; this option does not open the database driver in a physical read-only mode.
+
+The storage commit calls `adopt(seq)` synchronously after the batch becomes durable and before resolving. The callback updates the session's in-memory state. A failed write before durability never calls it. Custom storage backends must implement this callback; it must not throw.

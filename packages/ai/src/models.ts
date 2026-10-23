@@ -1,3 +1,4 @@
+import { type ClientIdentity, mergeClientIdentity, getOpenCodeSessionHeaders } from "./utils/identity.ts";
 import { lazyStream } from "./api/lazy.ts";
 import { observeModelRequest } from "./telemetry.ts";
 export { AI_TELEMETRY_SCHEMA } from "./telemetry.ts";
@@ -198,6 +199,7 @@ export interface MutableModels extends Models {
 	clearProviders(): void;
 }
 export interface CreateModelsOptions {
+	identity?: ClientIdentity;
 	credentials?: CredentialStore;
 	modelsStore?: ModelsStore;
 	authContext?: AuthContext;
@@ -224,6 +226,7 @@ class Collection implements MutableModels {
 	readonly #credentials: CredentialStore;
 	readonly #store: ModelsStore;
 	readonly #auth: AuthContext;
+	readonly #identity: ClientIdentity | undefined;
 	readonly #generations = new Map<string, number>();
 	readonly #controllers = new Map<string, AbortController>();
 	readonly #publications = new Map<string, Promise<unknown>>();
@@ -231,6 +234,7 @@ class Collection implements MutableModels {
 		this.#credentials = options?.credentials ?? new InMemoryCredentialStore();
 		this.#store = options?.modelsStore ?? new InMemoryModelsStore();
 		this.#auth = options?.authContext ?? defaultProviderAuthContext();
+		this.#identity = options?.identity;
 	}
 	#supersede(id: string): number {
 		const generation = (this.#generations.get(id) ?? 0) + 1;
@@ -579,13 +583,25 @@ class Collection implements MutableModels {
 		const resolved = await this.getAuth(model, { apiKey: options?.apiKey, env: options?.env, signal: options?.signal });
 		if (!resolved) throw new ModelsError("auth", `Provider is not configured: ${model.provider}`);
 		const apiKey = options?.apiKey ?? resolved.auth.apiKey;
-		let headers = mergeHeaders(resolved.auth.headers, options?.headers);
+		const requestModel: M = resolved.auth.baseUrl ? { ...model, baseUrl: resolved.auth.baseUrl } : model;
+		const sessionId =
+			options && "sessionId" in options && typeof options.sessionId === "string" ? options.sessionId : undefined;
+		let headers = mergeHeaders(
+			mergeHeaders(getOpenCodeSessionHeaders(requestModel, sessionId), resolved.auth.headers),
+			options?.headers,
+		);
 		if (options?.transformHeaders) headers = await options.transformHeaders(headers ?? {});
 		const env = resolved.env || options?.env ? { ...resolved.env, ...options?.env } : undefined;
 		const { transformHeaders: _transform, ...rest } = options ?? {};
 		return {
-			requestModel: resolved.auth.baseUrl ? { ...model, baseUrl: resolved.auth.baseUrl } : model,
-			requestOptions: { ...rest, apiKey, headers, env } as Omit<O, "transformHeaders"> & ProviderRequestOptions<M>,
+			requestModel,
+			requestOptions: {
+				...rest,
+				apiKey,
+				headers,
+				env,
+				identity: mergeClientIdentity(this.#identity, options?.identity),
+			} as Omit<O, "transformHeaders"> & ProviderRequestOptions<M>,
 		};
 	}
 	stream<A extends Api>(
@@ -857,6 +873,7 @@ export function calculateCost(model: AnyModel, usage: Usage): Usage["cost"] {
 	const long = usage.cacheWrite1h ?? 0;
 	usage.cost.cacheWrite = (rates.cacheWrite * (usage.cacheWrite - long) + rates.input * 2 * long) / 1_000_000;
 	usage.cost.total = usage.cost.input + usage.cost.output + usage.cost.cacheRead + usage.cost.cacheWrite;
+	usage.cost.totalFromProvider = false;
 	return usage.cost;
 }
 const levels: ModelThinkingLevel[] = ["off", "minimal", "low", "medium", "high", "xhigh", "max"];

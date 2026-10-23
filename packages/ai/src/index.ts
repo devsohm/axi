@@ -46,3 +46,6 @@ export * from "./utils/transcript.ts";
 export * from "./utils/typebox-helpers.ts";
 export * from "./utils/validation.ts";
 export { uuidv7 } from "./utils/uuid.ts";
+
+export * from "./utils/identity.ts";
+export { AXI_AI_VERSION } from "./utils/version.ts";

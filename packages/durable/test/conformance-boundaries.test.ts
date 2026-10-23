@@ -5,6 +5,34 @@ import { MemoryStorage } from "../src/storage/memory.ts";
 import { createExpectAssertions, createStorageConformance } from "../src/testing/index.ts";
 import type { DocumentId, JsonObject, Seq, StoredDocument } from "../src/types.ts";
 
+it.each(["never", "twice"] as const)("rejects a storage driver that adopts %s", async (defect) => {
+	const storage = new MemoryStorage();
+	const commit = storage.commit.bind(storage);
+	vi.spyOn(storage, "commit").mockImplementation((writes, adopt, ctx) =>
+		commit(
+			writes,
+			(seq) => {
+				if (defect === "twice") {
+					adopt(seq);
+					adopt(seq);
+				}
+			},
+			ctx,
+		),
+	);
+	try {
+		const [check] = createStorageConformance({
+			assertions: createExpectAssertions(expect),
+			withStorage: (use) => use(storage),
+		});
+		if (check === undefined) throw new Error("Missing storage checks");
+		await expect(check.run()).rejects.toThrow();
+	} finally {
+		vi.restoreAllMocks();
+		await storage.close(context);
+	}
+});
+
 it("rejects a driver that retains old row fields after a root replacement", async () => {
 	const storage = new MemoryStorage();
 	const read = storage.document.bind(storage);

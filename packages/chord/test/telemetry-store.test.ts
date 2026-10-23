@@ -2,6 +2,23 @@ import { expect, test, vi } from "vitest";
 import { openNodeSqliteDatabase } from "../src/sqlite/node.ts";
 import { createSqliteTelemetry } from "../src/telemetry-sqlite/index.ts";
 
+test("recorder options are captured before asynchronous schema setup", async () => {
+	const db = await openNodeSqliteDatabase(":memory:");
+	const options = { retentionMs: 60_000, maxQueuedSpans: 1 };
+	const pending = createSqliteTelemetry(db, options);
+	options.maxQueuedSpans = 10;
+	const recorder = await pending;
+	try {
+		for (let index = 0; index < 3; index++) await recorder.startSpan({ name: "operation" }, () => {});
+		await recorder.flush();
+		expect(recorder.droppedSpans).toBe(2);
+		expect(await db.all("SELECT name FROM telemetry_spans")).toEqual([{ name: "operation" }]);
+	} finally {
+		await recorder.close();
+		await db.close();
+	}
+});
+
 test("SQLite propagation surfaces carrier errors and delegates cursor values to SQL", async () => {
 	const db = await openNodeSqliteDatabase(":memory:");
 	const recorder = await createSqliteTelemetry(db);

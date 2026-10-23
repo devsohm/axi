@@ -29,3 +29,5 @@ ui.start();
 ```
 
 Use `TuiAltScreen` instead for a fullscreen viewport. See [contracts](docs/spec.md) for input, components and rendering, and [Durable integration](docs/durable-connection.md) for application ownership.
+
+[API reference](docs/api.md)

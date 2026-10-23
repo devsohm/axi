@@ -4,6 +4,11 @@ import { classifySystemOne, type SystemOneTransport } from "./system-one-shared.
 const transport: SystemOneTransport = {
 	api: "typesafe-system-one",
 	label: "System One API",
+	detectCompat: (model) => ({
+		imageInput:
+			model.provider === "openrouter" || model.baseUrl.includes("openrouter.ai") ? "state-image-urls" : "assets",
+		sendImageOptInHeader: model.provider !== "openrouter" && !model.baseUrl.includes("openrouter.ai"),
+	}),
 	url: (model) => new URL("systemone", `${model.baseUrl.replace(/\/+$/u, "")}/`),
 	payload: (model, request) => ({ model: model.id, ...request }),
 	output: (value) => {

@@ -194,3 +194,23 @@ describe("Remote message protocol", () => {
 		expect(aborted).toMatchObject({ stopReason: "aborted", errorMessage: expect.stringMatching(/abort/i) });
 	});
 });
+
+it("preserves a reported response model on both terminal event kinds", async () => {
+	for (const terminal of [
+		{ type: "done", reason: "stop", usage },
+		{ type: "error", reason: "error", usage, errorMessage: "stopped" },
+	] satisfies AxiMessagesEvent[]) {
+		const event = { ...terminal, responseModel: "served-model" };
+		const result = await stream(model, context, {
+			apiKey: "local",
+			fetch: async () => response([event]),
+		}).result();
+		expect(result.model).toBe("test");
+		expect(result.responseModel).toBe("served-model");
+		const absent = await stream(model, context, {
+			apiKey: "local",
+			fetch: async () => response([terminal]),
+		}).result();
+		expect(absent).not.toHaveProperty("responseModel");
+	}
+});

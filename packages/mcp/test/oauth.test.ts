@@ -217,3 +217,28 @@ it("preserves the discovery state's serialized field order when reusing metadata
 		'{"authorizationServerUrl":"https://issuer.example.test","authorizationServerMetadata":{"issuer":"https://issuer.example.test","authorization_endpoint":"https://issuer.example.test/authorize","token_endpoint":"https://issuer.example.test/token","response_types_supported":["code"]},"resourceMetadata":{"resource":"https://resource.example.test/mcp"}}',
 	);
 });
+
+it("rejects non-HTTP server endpoints without restricting native client redirects", async () => {
+	for (const authorization_endpoint of ["file:///tmp/launch", "arc-helper:launch", "ftp://issuer.example/authorize"]) {
+		const metadata = {
+			issuer: "https://issuer.example",
+			authorization_endpoint,
+			token_endpoint: "https://issuer.example/token",
+			response_types_supported: ["code"],
+		};
+		expect(() => parseAuthorizationServerMetadata(metadata)).toThrow("Invalid authorization endpoint");
+		await expect(
+			startAuthorization(metadata.issuer, {
+				metadata,
+				clientInformation: { client_id: "local" },
+				redirectUrl: "axi-client:callback",
+			}),
+		).rejects.toThrow("Invalid authorization endpoint");
+	}
+	const result = await startAuthorization("https://issuer.example", {
+		clientInformation: { client_id: "local" },
+		redirectUrl: "axi-client:callback",
+	});
+	expect(result.authorizationUrl.protocol).toBe("https:");
+	expect(result.authorizationUrl.searchParams.get("redirect_uri")).toBe("axi-client:callback");
+});

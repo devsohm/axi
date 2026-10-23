@@ -94,3 +94,5 @@ try {
 `start()` fixes time, randomness, timezone and result order. Store the `onStarted` fingerprint with a recording and reject incompatible fingerprints before replay. The application persists calls and decides how to recover external actions.
 
 See the [specification](docs/spec.md) for the full contract, limits, source directives and declaration helpers.
+
+[API reference](docs/api.md)

@@ -78,7 +78,7 @@ export function detectCapabilities(tmuxForwardsHyperlink: () => boolean = tmuxLi
 	if (env.TMUX || term.startsWith("tmux")) result.hyperlinks = links ?? tmuxForwardsHyperlink();
 	else if (!term.startsWith("screen")) {
 		if (program === "herdr") result = { images: "kitty", trueColor: hint, hyperlinks: true };
-		else if (program === "rex") result = { images: null, trueColor: true, hyperlinks: true };
+		else if (program === "rex") result = { images: "kitty", trueColor: true, hyperlinks: true };
 		else if (
 			env.KITTY_WINDOW_ID ||
 			program === "kitty" ||
@@ -181,7 +181,12 @@ export function encodeITerm2(
 
 const images = new Map<number, KittyImageMetadata & { transmissionGeneration: number }>();
 let generation = 0;
+let maxImageRows = 0;
+export function getMaxKittyImageRows(): number {
+	return maxImageRows;
+}
 export function registerKittyImageMetadata(metadata: KittyImageMetadata): void {
+	maxImageRows = Math.max(maxImageRows, metadata.rows);
 	images.delete(metadata.imageId);
 	images.set(metadata.imageId, { ...metadata, transmissionGeneration: ++generation });
 	const oldest = images.keys().next().value;
@@ -199,8 +204,8 @@ export function getKittyImageMetadata(line: string): KittyImageMetadata | undefi
 	const controls = /\x1b_G([^;]*);/.exec(line)?.[1];
 	const entry = controls === undefined ? undefined : metadataFor(controls);
 	if (!entry) return undefined;
-	const { transmissionGeneration: _generation, ...metadata } = entry;
-	return metadata;
+	const { imageId, columns, rows, widthPx, heightPx } = entry;
+	return { imageId, columns, rows, widthPx, heightPx };
 }
 export function getKittyImagePlacementRows(line: string): number | undefined {
 	const controls = /\x1b_G([^;]*);/.exec(line)?.[1];

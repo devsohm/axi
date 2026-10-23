@@ -77,3 +77,11 @@ Pass a callback span as the request option `telemetry`. Keep the root adapter in
 Events record first-event delivery and completed block metadata: kind, index, UTF-16 character count and tool name. Attributes record provider, API, model, scalar reasoning level, stop reason, token usage, cost and response ID. Prompt text, generated text, thinking, tool arguments and deferred handles are not recorded. Error statuses use `provider_error` and at most 500 message characters; aborted requests remain successful telemetry operations.
 
 Optional adapter metrics record request duration, time to first event, tokens and cost. Unfinished deferred polls do not increment token or cost counters. Request observation forwards the same stream events and result objects through one source iterator. Direct provider calls only forward the supplied span; automatic request instrumentation belongs to the model registry.
+
+## Request identity
+
+`createModels({ identity })` sets a default request identity. `withClientIdentity(models, identity)` adds a default to an existing collection. Each request can override individual fields. Set `attribution: null` to disable application attribution.
+
+`userAgent` accepts `"short"`, `"detailed"`, or `{ custom: "my-app/1" }`. Detailed identity includes the package version, operating system, Node version and architecture. Attribution supplies a name, URL and optional categories for providers that support these headers. Explicit model and request headers take precedence.
+
+[API reference](docs/api.md)

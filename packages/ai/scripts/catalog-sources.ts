@@ -73,10 +73,6 @@ export async function fetchCatalog(raw: unknown, strict: boolean) {
 				value = record(body) ? body["typesafe/jev-latest"] : undefined;
 			if (!record(value) || value.type !== "decision" || typeof value.name !== "string")
 				throw new Error("Missing classifier metadata: typesafe/jev-latest");
-			const input: ("text" | "image")[] =
-				record(value.modalities) && Array.isArray(value.modalities.input) && value.modalities.input.includes("image")
-					? ["text", "image"]
-					: ["text"];
 			const contextWindow =
 				record(value.limit) && typeof value.limit.context === "number" ? value.limit.context || 64000 : 64000;
 			return [
@@ -87,7 +83,8 @@ export async function fetchCatalog(raw: unknown, strict: boolean) {
 					api: "typesafe-system-one",
 					provider: "typesafe",
 					baseUrl: "https://api.typesafe.ai/v1/",
-					input,
+					input: ["text", "image"],
+					compat: { imageInput: "assets", sendImageOptInHeader: true },
 					cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
 					contextWindow,
 				},

@@ -61,3 +61,11 @@ Invocation contexts carry cancellation and explicit telemetry spans. `HarnessOpt
 `@axi/durable/codemode` provides a script tool and its prompt section. Scripts call nested tools through recorded task keys. A delivery journal restores result order after restart and rejects changed execution paths. Successful scripts commit their conversation store with their result. Model catalog, classifier and image calls are optional. Code Mode does not install MCP.
 
 `@axi/durable/testing` provides runner-independent storage and environment checks, a Vitest/Jest assertion adapter, registration helpers and deterministic storage benchmark datasets. Custom storage and environment implementations can run the same checks through their public interfaces.
+
+## Browser storage
+
+`@axi/durable/storage/indexeddb` exports `IndexedDbStorage`. Call `IndexedDbStorage.open(name)` in a browser, then pass the result to `createSession` or `Harness.open`. Each commit uses one IndexedDB transaction for records, document revisions and allocation counters. Close storage before deleting its database with `IndexedDbStorage.delete(name)`. Use one application owner per database.
+
+Harness requests use Axi attribution by default. `Harness.open` accepts an `identity` option; request-level identity fields take precedence. The model collection can be supplied directly or through a factory.
+
+[API reference](docs/api.md)

@@ -68,9 +68,9 @@ import { InMemoryTelemetryContext } from "@axi/telemetry";
 const telemetry = new InMemoryTelemetryContext();
 await telemetry.startSpan({ name: "request" }, span => {
   const context = withTelemetry(span, BACKGROUND_CONTEXT);
-  return traceIn(context, { name: "load" }, child => {
+  return traceIn({ name: "load" }, child => {
     child.telemetry.addEvent("loaded");
-  });
+  }, context);
 });
 console.log(telemetry.getSpans().length);
 ```
@@ -115,3 +115,5 @@ days by default. Configure these limits with `maxQueuedSpans` and `retentionMs`.
 Use `getTrace()`, `findTraces()`, and `findMetrics()` to read committed data.
 Flush before reading newly settled spans. Trace filters include the earliest span's
 name and start time, errors anywhere in a trace, and attributes matching one span.
+
+[API reference](docs/api.md)

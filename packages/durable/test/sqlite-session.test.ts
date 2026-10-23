@@ -62,7 +62,7 @@ describe("SQLite-backed Session", () => {
 			}
 			const leaf = idFromNumber<ConversationId>(42);
 			writes.push({ type: "entry", value: { id: idFromNumber<EntryId>(44), conversationId: leaf, kind: "note" } });
-			await storage.commit(writes, context);
+			await storage.commit(writes, () => {}, context);
 			const reads = vi.spyOn(database, "get");
 			const page = await storage.scanEntries({ conversationId: leaf }, 1, undefined, context);
 			expect(page.items.map((item) => item.id)).toEqual([44]);
@@ -127,6 +127,7 @@ describe("SQLite-backed Session", () => {
 						{ type: "entry", value: { id, conversationId: ROOT_CONVERSATION_ID, kind: "a" } },
 						{ type: "entry", value: { id, conversationId: ROOT_CONVERSATION_ID, kind: "b" } },
 					],
+					() => {},
 					context,
 				),
 			).rejects.toThrow("written more than once");
@@ -134,6 +135,7 @@ describe("SQLite-backed Session", () => {
 			expect(
 				await storage.commit(
 					[{ type: "entry", value: { id, conversationId: ROOT_CONVERSATION_ID, kind: "kept" } }],
+					() => {},
 					context,
 				),
 			).toBe(1);

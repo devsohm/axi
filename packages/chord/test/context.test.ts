@@ -25,14 +25,22 @@ describe("invocation contexts", () => {
 			expect(cancelled.telemetry).toBe(NOOP_TELEMETRY_CONTEXT);
 			expect(withoutAbortSignal(context).telemetry).toBe(span);
 			expect(
-				await traceIn(context, { name: "outer" }, async (child) => {
-					expect(child.value(key)).toBe("local");
-					expect(child.abortSignal?.reason).toBe("stop");
-					return traceIn(child, { name: "inner" }, (nested) => {
-						nested.telemetry.addLink({ context: child.telemetry });
-						return 42;
-					});
-				}),
+				await traceIn(
+					{ name: "outer" },
+					async (child) => {
+						expect(child.value(key)).toBe("local");
+						expect(child.abortSignal?.reason).toBe("stop");
+						return traceIn(
+							{ name: "inner" },
+							(nested) => {
+								nested.telemetry.addLink({ context: child.telemetry });
+								return 42;
+							},
+							child,
+						);
+					},
+					context,
+				),
 			).toBe(42);
 			const [caller, outer, inner] = recorder.getSpans();
 			expect(outer.parentId).toBe(caller.id);

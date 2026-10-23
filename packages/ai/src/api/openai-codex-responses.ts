@@ -1,3 +1,4 @@
+import { getIdentityHeaders } from "../utils/identity.ts";
 import type { ResponseStreamEvent } from "openai/resources/responses/responses.js";
 import { clampThinkingLevel } from "../models.ts";
 import type { AssistantMessage, Model, SimpleStreamOptions, StreamFunction, TranscriptContext } from "../types.ts";
@@ -235,8 +236,24 @@ export const stream: StreamFunction<"openai-codex-responses", OpenAICodexRespons
 			const replacement = await options.onPayload?.(body, model);
 			if (replacement !== undefined) body = replacement as CodexRequest;
 			const wsRequestId = requestId || uuidv7();
-			const sseHeaders = codexHeaders(model.headers, options.headers, account, apiKey, "sse", requestId);
-			const wsHeaders = codexHeaders(model.headers, options.headers, account, apiKey, "websocket", wsRequestId);
+			const sseHeaders = codexHeaders(
+				{ originator: "axi", ...getIdentityHeaders(model, options.identity) },
+				model.headers,
+				options.headers,
+				account,
+				apiKey,
+				"sse",
+				requestId,
+			);
+			const wsHeaders = codexHeaders(
+				{ originator: "axi", ...getIdentityHeaders(model, options.identity) },
+				model.headers,
+				options.headers,
+				account,
+				apiKey,
+				"websocket",
+				wsRequestId,
+			);
 			const json = JSON.stringify(body),
 				timeout = codexTimeout(options.timeoutMs),
 				connectTimeout = codexTimeout(options.websocketConnectTimeoutMs);

@@ -31,8 +31,8 @@ vi.mock("@google/genai", async (importOriginal) => {
 import * as google from "../src/api/google-generative-ai.ts";
 import * as vertex from "../src/api/google-vertex.ts";
 import { googleGenerativeAIApi } from "../src/api/google-generative-ai.lazy.ts";
-import { convertMessages, convertTools } from "../src/api/google-shared.ts";
-import { getUserAgent } from "../src/utils/user-agent.ts";
+import { convertMessages, convertTools, mapStopReasonString } from "../src/api/google-shared.ts";
+import { formatUserAgent } from "../src/utils/identity.ts";
 const model: Model<"google-generative-ai"> = {
 	api: "google-generative-ai",
 	id: "gemini-3-flash-preview",
@@ -88,6 +88,17 @@ beforeEach(() => {
 });
 afterEach(() => vi.useRealTimers());
 describe("Google adapters", () => {
+	it("rejects an unsupported continuation finish reason while retaining partial output", async () => {
+		sdk.chunks = [{ candidates: [{ content: { parts: [{ text: "partial answer" }] }, finishReason: "CONTINUATION" }] }];
+		const result = await google.stream(model, context, { apiKey: "test" }).result();
+		expect(result).toMatchObject({
+			stopReason: "error",
+			rawStopReason: "CONTINUATION",
+			content: [{ type: "text", text: "partial answer" }],
+			errorMessage: "Unhandled stop reason: CONTINUATION",
+		});
+		expect(mapStopReasonString("CONTINUATION")).toBe("error");
+	});
 	it("uses ordinary property assignment for legacy schemas without changing JSON-schema declarations", () => {
 		const parameters = Type.Object(
 			Object.fromEntries([
@@ -103,7 +114,7 @@ describe("Google adapters", () => {
 			required: ["__proto__", "normal"],
 		});
 		expect(Object.hasOwn(parameters.properties, "__proto__")).toBe(true);
-		expect(convertTools([tool])?.[0]?.functionDeclarations[0]?.parametersJsonSchema).toBe(parameters);
+		expect(convertTools([tool])?.[0]?.functionDeclarations[0]?.parametersJsonSchema).toEqual(parameters);
 	});
 	it("streams signed thinking and text through the lazy adapter with billed usage", async () => {
 		const events: string[] = [],
@@ -148,7 +159,7 @@ describe("Google adapters", () => {
 		expect(raw).toEqual(sdk.chunks);
 		expect(raw[0]).toBe(sdk.chunks[0]);
 		expect(sdk.clients[0]).toMatchObject({
-			httpOptions: { baseUrl: model.baseUrl, apiVersion: "", headers: { "User-Agent": getUserAgent() } },
+			httpOptions: { baseUrl: model.baseUrl, apiVersion: "", headers: { "User-Agent": formatUserAgent() } },
 		});
 	});
 	it("keeps tool signatures, repairs duplicate IDs and emits complete arguments once", async () => {
@@ -263,7 +274,7 @@ describe("Google adapters", () => {
 				location: "global",
 				apiVersion: "v1",
 				googleAuthOptions: { keyFilename: "/test/key.json" },
-				httpOptions: { headers: { "User-Agent": getUserAgent() } },
+				httpOptions: { headers: { "User-Agent": formatUserAgent() } },
 			},
 		]);
 	});
@@ -371,4 +382,37 @@ describe("Google adapters", () => {
 		expect((await result).stopReason).toBe("stop");
 		expect(sdk.requests).toHaveLength(2);
 	});
+});
+
+it("adapts schema constants without rewriting literal objects or property names", () => {
+	const literal = { const: "keep", properties: { item: { const: 9 } } };
+	const parameters = {
+		type: "object",
+		properties: {
+			tag: { const: "ready" },
+			count: { const: 5 },
+			flag: { const: false },
+			choice: { const: "ready", enum: ["ready", "waiting"] },
+			data: { type: "object", default: literal, examples: [literal], "x-info": literal },
+			["__proto__"]: { const: "own" },
+			const: { const: "named" },
+		},
+		allOf: [{ properties: { tag: { const: "ready" } } }],
+	};
+	const before = structuredClone(parameters);
+	const declarations = convertTools([{ name: "inspect", description: "Inspect", parameters }]);
+	expect(declarations?.[0]?.functionDeclarations[0]?.parametersJsonSchema).toEqual({
+		type: "object",
+		properties: {
+			tag: { enum: ["ready"] },
+			count: { enum: [5] },
+			flag: { const: false },
+			choice: { const: "ready", enum: ["ready", "waiting"] },
+			data: { type: "object", default: literal, examples: [literal], "x-info": literal },
+			["__proto__"]: { enum: ["own"] },
+			const: { enum: ["named"] },
+		},
+		allOf: [{ properties: { tag: { enum: ["ready"] } } }],
+	});
+	expect(parameters).toEqual(before);
 });

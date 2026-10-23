@@ -1,4 +1,4 @@
-import { type Context, type JsonValue, replicatedState } from "@axi/chord";
+import { type Context, type JsonValue, Watch } from "@axi/chord";
 import { awaitWithContext, BACKGROUND_CONTEXT, withoutAbortSignal } from "@axi/chord/context";
 import { type Op, track } from "@axi/chord/delta";
 import {
@@ -10,11 +10,10 @@ import {
 	type AnyDocDefinition,
 	type AnyDocToken,
 } from "../documents.ts";
-import { SessionFailed } from "../errors.ts";
+import { ReadOnlySession, SessionFailed } from "../errors.ts";
 import { idFromNumber } from "../ids.ts";
 import type * as T from "../types.ts";
 import { hostTimers, type Timers } from "../timers.ts";
-import { CommittedStateSource, CommittedWatch, RETIREMENT_OPERATIONS } from "./observation.ts";
 import { GuardedStorage } from "./storage.ts";
 import { Transaction, type LoadedDocument, type TransactionHost, type TransactionScope } from "./transaction.ts";
 let defaultRetention = 600_000;
@@ -34,6 +33,7 @@ export function createSession(
 type CommitListener = (publication: T.CommitPublication, context: Context) => void;
 export class SessionImpl implements T.Session {
 	readonly #backend: T.Storage;
+	readonly #readOnly: boolean;
 	readonly #documents = new Map<string, LoadedDocument>();
 	readonly #idle = new Map<string, number>();
 	readonly #pins = new Map<T.DocumentId, number>();
@@ -57,7 +57,9 @@ export class SessionImpl implements T.Session {
 		now: () => number = Date.now,
 		retention: () => number | undefined = () => undefined,
 		setTimer?: T.SetTimer,
+		readOnly = false,
 	) {
+		this.#readOnly = readOnly;
 		this.#failed.promise.catch(() => {});
 		this.#backend = new GuardedStorage(storage, this);
 		this.#timers = hostTimers(setTimer, (error) => this.report(error, { type: "host_error", callback: "setTimer" }));
@@ -128,7 +130,7 @@ export class SessionImpl implements T.Session {
 		return this.#enqueue(async () => {
 			if (this.#failure) return;
 			const batch = writes();
-			if (batch.length) await this.#backend.commit(batch, BACKGROUND_CONTEXT);
+			if (batch.length) await this.#backend.commit(batch, () => {}, BACKGROUND_CONTEXT);
 		});
 	}
 	protected conversationCreated(_tx: Transaction, _record: T.ConversationRecord): Promise<void> {
@@ -192,20 +194,36 @@ export class SessionImpl implements T.Session {
 			this.#evictExpired();
 			return value;
 		}
+		if (this.#readOnly) {
+			tx.discard();
+			this.#evictExpired();
+			throw new ReadOnlySession("a commit with writes");
+		}
+		let adopted: { documents: T.DocumentCommitChange[] } | { error: unknown } | undefined;
+		const adopt = (seq: T.Seq): void => {
+			try {
+				adopted = { documents: tx.adopt(seq) };
+			} catch (error) {
+				adopted = { error };
+			}
+		};
 		let seq: T.Seq;
 		try {
-			seq = await this.#backend.commit(writes, withoutAbortSignal(context));
+			seq = await this.#backend.commit(writes, adopt, withoutAbortSignal(context));
 		} catch (error) {
-			tx.discard();
+			if (adopted === undefined) tx.discard();
 			throw error;
 		}
-		let documents: T.DocumentCommitChange[];
-		try {
-			documents = tx.adopt(seq);
-		} catch (error) {
+		if (adopted === undefined) {
+			const error = new Error("Storage committed without adopting the batch");
 			this.fail(error);
 			throw error;
 		}
+		if ("error" in adopted) {
+			this.fail(adopted.error);
+			throw adopted.error;
+		}
+		const documents = adopted.documents;
 		for (const document of documents) this.#touch(addressId(document.record));
 		for (const write of writes) {
 			if (write.type === "entry")
@@ -323,63 +341,6 @@ export class SessionImpl implements T.Session {
 		checkRecordVersion(definition, loaded.record, loaded.storedVersion);
 		return loaded.tracker.value;
 	}
-	documentState<Value extends T.JsonObject>(
-		token: T.SessionDocToken<Value>,
-		context: Context,
-	): Promise<T.DocumentState<Value> | undefined>;
-	documentState<Value extends T.JsonObject, Seed extends JsonValue>(
-		token: T.SessionDocFamilyToken<Value, Seed>,
-		key: string,
-		context: Context,
-	): Promise<T.DocumentState<Value> | undefined>;
-	documentState<Value extends T.JsonObject>(
-		token: T.ConversationDocToken<Value>,
-		conversationId: T.ConversationId,
-		context: Context,
-	): Promise<T.DocumentState<Value> | undefined>;
-	documentState<Value extends T.JsonObject, Seed extends JsonValue>(
-		token: T.ConversationDocFamilyToken<Value, Seed>,
-		conversationId: T.ConversationId,
-		key: string,
-		context: Context,
-	): Promise<T.DocumentState<Value> | undefined>;
-	documentState<Value extends T.JsonObject>(
-		token: T.TaskDocToken<Value>,
-		taskId: T.TaskId,
-		context: Context,
-	): Promise<T.DocumentState<Value> | undefined>;
-	documentState<Value extends T.JsonObject, Seed extends JsonValue>(
-		token: T.TaskDocFamilyToken<Value, Seed>,
-		taskId: T.TaskId,
-		key: string,
-		context: Context,
-	): Promise<T.DocumentState<Value> | undefined>;
-	documentState(token: AnyDocToken, ...args: readonly unknown[]): Promise<T.DocumentState<T.JsonObject> | undefined> {
-		try {
-			this.assertUsable();
-			const definition = token.definition;
-			const resolved = resolveAddress(definition, args);
-			const context = args[resolved.nextArgument] as Context;
-			return this.#enqueue(async () => {
-				this.#healthy();
-				const loaded = await this.#load(definition, resolved.id, resolved.address, context);
-				if (!loaded) return undefined;
-				const source = this.#attach(
-					definition,
-					loaded,
-					(value, detach) => new CommittedStateSource<T.JsonObject | null>(value, detach),
-				);
-				try {
-					return replicatedState(source.observer, { onError: (error) => this.report(error) });
-				} catch (error) {
-					source.detach();
-					throw error;
-				}
-			});
-		} catch (error) {
-			return Promise.reject(error);
-		}
-	}
 	watchDoc<Value extends T.JsonObject>(
 		token: T.SessionDocToken<Value>,
 		context: Context,
@@ -432,7 +393,7 @@ export class SessionImpl implements T.Session {
 				return this.#attach(
 					definition,
 					loaded,
-					(value, detach) => new CommittedWatch<T.JsonObject | null>(value, detach, (error) => this.report(error)),
+					(value, detach) => new Watch<T.JsonObject | null>(value, detach, (error) => this.report(error)),
 				).observer;
 			});
 			if (!watch) return undefined;
@@ -555,7 +516,7 @@ export class SessionImpl implements T.Session {
 		this.#touch(identity);
 		return loaded;
 	}
-	#attach<Observer extends CommittedStateSource | CommittedWatch>(
+	#attach<Observer extends Watch<T.JsonObject | null>>(
 		definition: AnyDocDefinition,
 		loaded: LoadedDocument,
 		create: (value: T.JsonObject, detach: () => void) => Observer,
@@ -582,22 +543,21 @@ export class SessionImpl implements T.Session {
 			for (const change of publication.changes) {
 				if (change.type !== "document" || change.record.id !== loaded.record.id) continue;
 				let ops: readonly Op[];
-				if (change.value === null) ops = RETIREMENT_OPERATIONS;
-				else if (version === change.version) ops = change.ops;
+				if (change.value === null) {
+					unpin();
+					observer.retire(context);
+					continue;
+				}
+				if (version === change.version) ops = change.ops;
 				else {
 					version = change.version!;
 					ops = [["r", change.value]];
 				}
 				if (!ops.length) continue;
-				if (change.value === null) unpin();
-				observer.advance(
-					change.value,
-					ops,
-					observer instanceof CommittedStateSource ? withoutAbortSignal(context) : context,
-				);
+				observer.advance(change.value, ops, context);
 			}
 		});
-		offClose = this.subscribeClose(() => observer.closeSession(this.#failure));
+		offClose = this.subscribeClose(() => observer.end(this.#failure));
 		return { observer, detach };
 	}
 	#pin(identity: string, incarnation: T.DocumentId): () => void {

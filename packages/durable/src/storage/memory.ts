@@ -194,8 +194,10 @@ export class MemoryStorage implements Storage {
 		if (!Number.isSafeInteger(this.#nextId)) throw new Error("ID space is exhausted");
 		return idFromNumber<RecordId>(this.#nextId++);
 	}
-	async commit(writes: readonly StorageWrite[], _context: Context): Promise<Seq> {
-		return this.prepareCommit(writes).apply();
+	async commit(writes: readonly StorageWrite[], adopt: (seq: Seq) => void, _context: Context): Promise<Seq> {
+		const seq = this.prepareCommit(writes).apply();
+		adopt(seq);
+		return seq;
 	}
 	prepareCommit(writes: readonly StorageWrite[], seq = seqFromNumber(this.#nextSeq)): PreparedMemoryCommit {
 		this.#open();

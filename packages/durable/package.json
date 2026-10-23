@@ -102,6 +102,12 @@
 			"types": "./dist/testing/index.d.ts",
 			"import": "./dist/testing/index.js",
 			"default": "./dist/testing/index.js"
+		},
+		"./storage/indexeddb": {
+			"source": "./src/storage/indexeddb.ts",
+			"types": "./dist/storage/indexeddb.d.ts",
+			"import": "./dist/storage/indexeddb.js",
+			"default": "./dist/storage/indexeddb.js"
 		}
 	},
 	"files": [
@@ -118,8 +124,8 @@
 		"@axi/codemode": "0.1.0-rc.1",
 		"@axi/telemetry": "0.1.0-rc.1",
 		"@silvia-odwyer/photon": "0.3.3",
-		"diff": "8.0.4",
-		"typebox": "1.3.27"
+		"diff": "9.0.0",
+		"typebox": "1.4.3"
 	},
 	"engines": {
 		"node": ">=22.19.0"

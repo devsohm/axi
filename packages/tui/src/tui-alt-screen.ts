@@ -235,6 +235,14 @@ export class TuiAltScreen extends TuiBase implements ViewportTUI {
 		const mouse = "\x1b[?1000h\x1b[?1002h" + (multiplexer ? "" : "\x1b[?1003h") + "\x1b[?1004h\x1b[?1006h";
 		this.terminal.write(ENTER + NOWRAP + ((this.#options.mouse ?? true) ? mouse : "") + "\x1b[2J\x1b[H\x1b[?25l");
 	}
+	protected override getExitRestorePrefix(): string {
+		return (
+			(this.#active ? END + ((this.#options.mouse ?? true) ? MOUSE_OFF : "") + WRAP : "") + super.getExitRestorePrefix()
+		);
+	}
+	protected override getExitRestoreSuffix(): string {
+		return super.getExitRestoreSuffix() + (this.#active ? EXIT + "\x1b[?25h" : "");
+	}
 	protected override beforeTerminalStop(_options: TuiStopOptions): void {
 		this.closeSearch();
 		this.stopAutoScroll();
@@ -758,7 +766,7 @@ export class TuiAltScreen extends TuiBase implements ViewportTUI {
 		let col = 0;
 		for (const part of words.segment(stripTerminalSequences(this.source(point)))) {
 			const end = col + visibleWidth(part.segment),
-				joiner = part.segment === "/" || part.segment === "-";
+				joiner = ["/", "-", "+", "\\", "~", "_", "."].includes(part.segment);
 			segments.push({ start: col, end, selectable: part.isWordLike === true || joiner, joiner });
 			col = end;
 		}

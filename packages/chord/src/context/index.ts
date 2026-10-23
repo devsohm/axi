@@ -77,9 +77,9 @@ export function withTelemetry<T extends TelemetrySpan>(
 }
 
 export function traceIn<T>(
-	context: Context,
 	options: SpanOptions,
 	fn: (context: Context) => T | Promise<T>,
+	context: Context,
 ): Promise<T> {
 	return context.telemetry.startSpan(options, (span) => fn(withTelemetry(span, context)));
 }

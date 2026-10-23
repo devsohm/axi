@@ -96,11 +96,33 @@ export function stripTerminalSequences(text: string): string {
 	for (const unit of units(text)) if (unit.kind === "text") output += unit.text;
 	return output;
 }
+const widthCache = new Map<string, number>();
 export function visibleWidth(text: string): number {
-	if (/^[\x20-\x7e]*$/.test(text)) return text.length;
+	let asciiWidth = 0;
+	for (let offset = 0; offset < text.length; offset++) {
+		const code = text.charCodeAt(offset);
+		if (code >= 32 && code <= 126) asciiWidth++;
+		else if (code === 9) asciiWidth += 3;
+		else {
+			const control = code === 27 ? extractAnsiCode(text, offset) : null;
+			if (!control) {
+				asciiWidth = -1;
+				break;
+			}
+			offset += control.length - 1;
+		}
+	}
+	if (asciiWidth >= 0) return asciiWidth;
+	const cached = widthCache.get(text);
+	if (cached !== undefined) return cached;
 	let width = 0;
 	for (const { segment } of graphemes.segment(stripTerminalSequences(text).replace(/\t/g, "   ")))
 		width += cellWidth(segment);
+	if (widthCache.size >= 512) {
+		const oldest = widthCache.keys().next().value;
+		if (oldest !== undefined) widthCache.delete(oldest);
+	}
+	widthCache.set(text, width);
 	return width;
 }
 export function getGraphemeCellRange(text: string, column: number): { start: number; end: number } | undefined {
@@ -258,12 +280,38 @@ function prefix(text: string, width: number): { text: string; width: number } {
 }
 export function truncateToWidth(text: string, maxWidth: number, ellipsis = "...", pad = false): string {
 	if (maxWidth <= 0) return "";
-	const width = visibleWidth(text);
-	if (width <= maxWidth) return text + (pad ? " ".repeat(maxWidth - width) : "");
+	if (text.length === 0) return pad ? " ".repeat(maxWidth) : "";
 	const ellipsisWidth = visibleWidth(ellipsis);
-	const tail = ellipsisWidth < maxWidth ? { text: ellipsis, width: ellipsisWidth } : prefix(ellipsis, maxWidth);
-	if (visibleWidth(ellipsis) >= maxWidth && tail.width === 0) return pad ? " ".repeat(maxWidth) : "";
-	const head = ellipsisWidth >= maxWidth ? { text: "", width: 0 } : prefix(text, maxWidth - ellipsisWidth);
+	let head = { text: "", width: 0 };
+	let tail = { text: ellipsis, width: ellipsisWidth };
+	if (ellipsisWidth >= maxWidth) {
+		const width = visibleWidth(text);
+		if (width <= maxWidth) return text + (pad ? " ".repeat(maxWidth - width) : "");
+		tail = prefix(ellipsis, maxWidth);
+		if (tail.width === 0) return pad ? " ".repeat(maxWidth) : "";
+	} else if (/^[\x20-\x7e]*$/.test(text)) {
+		if (text.length <= maxWidth) return text + (pad ? " ".repeat(maxWidth - text.length) : "");
+		head = { text: text.slice(0, maxWidth - ellipsisWidth), width: maxWidth - ellipsisWidth };
+	} else {
+		const target = maxWidth - ellipsisWidth;
+		let width = 0,
+			pending = "",
+			keeping = true;
+		for (const unit of units(text)) {
+			if (unit.kind === "ansi") {
+				pending += unit.text;
+				continue;
+			}
+			if (keeping && head.width + unit.width <= target) {
+				head.text += pending + unit.text;
+				head.width += unit.width;
+			} else keeping = false;
+			pending = "";
+			width += unit.width;
+			if (width > maxWidth) break;
+		}
+		if (width <= maxWidth) return text + (pad ? " ".repeat(Math.max(0, maxWidth - width)) : "");
+	}
 	const style = new StyleState();
 	style.update(head.text);
 	const output = head.text + style.closeLink() + "\x1b[0m" + tail.text + (tail.text ? "\x1b[0m" : "");

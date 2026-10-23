@@ -5,7 +5,7 @@ import { MemoryStorage, ROOT_CONVERSATION_ID, type EntryId, type SubmissionId, t
 
 it("does not consume an explicit ID or sequence when another write rejects the batch", async () => {
 	const storage = new MemoryStorage();
-	await storage.commit([{ type: "conversation", value: { id: ROOT_CONVERSATION_ID } }], context);
+	await storage.commit([{ type: "conversation", value: { id: ROOT_CONVERSATION_ID } }], () => {}, context);
 	await expect(
 		storage.commit(
 			[
@@ -19,11 +19,12 @@ it("does not consume an explicit ID or sequence when another write rejects the b
 				},
 				{ type: "conversation", value: { id: ROOT_CONVERSATION_ID } },
 			],
+			() => {},
 			context,
 		),
 	).rejects.toThrow("already belongs");
 	expect(await storage.mintId<EntryId>()).toBe(2);
-	expect(await storage.commit([], context)).toBe(seqFromNumber(2));
+	expect(await storage.commit([], () => {}, context)).toBe(seqFromNumber(2));
 });
 
 it("preserves null-prototype data while detaching nested values", async () => {
@@ -33,6 +34,7 @@ it("preserves null-prototype data while detaching nested values", async () => {
 	const id = idFromNumber<EntryId>(2);
 	await storage.commit(
 		[{ type: "entry", value: { id, conversationId: ROOT_CONVERSATION_ID, kind: "note", data } }],
+		() => {},
 		context,
 	);
 	data.constructor.count = 99;
@@ -63,6 +65,7 @@ it("normalizes other prototypes and copies a property's children before reading 
 	const id = idFromNumber<EntryId>(2);
 	await storage.commit(
 		[{ type: "entry", value: { id, conversationId: ROOT_CONVERSATION_ID, kind: "note", data } }],
+		() => {},
 		context,
 	);
 	expect(reads).toEqual(["first", "nested", "second"]);
@@ -82,11 +85,13 @@ it("removes an old request index when the same record moves to another conversat
 				value: { id, conversationId: ROOT_CONVERSATION_ID, requestId: "old", type: "input", status: "queued" },
 			},
 		],
+		() => {},
 		context,
 	);
 	const other = await storage.mintId<import("../src/types.ts").ConversationId>();
 	await storage.commit(
 		[{ type: "submission", value: { id, conversationId: other, requestId: "new", type: "input", status: "queued" } }],
+		() => {},
 		context,
 	);
 	expect(await storage.submissionByRequest(ROOT_CONVERSATION_ID, "old", context)).toBeUndefined();
@@ -115,6 +120,7 @@ it("reports a repeated immutable record ID before classifying its earlier record
 				},
 				{ type: "entry", value: { id: idFromNumber<EntryId>(2), conversationId: ROOT_CONVERSATION_ID, kind: "note" } },
 			],
+			() => {},
 			context,
 		),
 	).rejects.toThrow("ID 2 is written more than once");
@@ -139,6 +145,7 @@ it("preserves the missing fork-source diagnostic and leaves the rejected ID avai
 					source: { id: idFromNumber<DocumentId>(99), at: seqFromNumber(1) },
 				},
 			],
+			() => {},
 			context,
 		),
 	).rejects.toMatchObject({
@@ -154,6 +161,7 @@ it("never returns more records than a fractional maximum page size", async () =>
 	const ids = [2, 3, 4].map((id) => idFromNumber<import("../src/types.ts").ConversationId>(id));
 	await storage.commit(
 		ids.map((id) => ({ type: "conversation", value: { id } })),
+		() => {},
 		context,
 	);
 	expect(await storage.scanConversations({}, 1.5, undefined, context)).toEqual({
@@ -179,6 +187,7 @@ it("reads each cursor field once before continuing an indexed scan", async () =>
 	const ids = [2, 3, 4].map((id) => idFromNumber<import("../src/types.ts").ConversationId>(id));
 	await storage.commit(
 		ids.map((id) => ({ type: "conversation", value: { id } })),
+		() => {},
 		context,
 	);
 	expect(await storage.scanConversations({}, 2, cursor, context)).toEqual({

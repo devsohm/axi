@@ -12,7 +12,7 @@ import type {
 } from "../types.ts";
 import { getProviderEnvValue } from "../utils/provider-env.ts";
 import { getDeclaredTools, resolveTranscript, resolveTranscriptTools } from "../utils/transcript.ts";
-import { getUserAgent } from "../utils/user-agent.ts";
+import { getIdentityHeaders } from "../utils/identity.ts";
 import { createGrammarToolInputProperties } from "./constrained-sampling.ts";
 import { buildCopilotDynamicHeaders, hasCopilotVisionInput } from "./github-copilot-headers.ts";
 import { clampOpenAIPromptCacheKey } from "./openai-prompt-cache.ts";
@@ -146,10 +146,16 @@ export const stream: StreamFunction<"openai-responses", OpenAIResponsesOptions> 
 		options,
 		label: "OpenAI",
 		providerThinkingLevel: effort,
+		formatError: (message) =>
+			message.includes("subscription_sharing_workplace_individual_usage_limit_exceeded")
+				? `${message}\nYour ChatGPT workspace usage limit has been reached. Ask its admin to raise the limit at admin.openai.com → Workspace → Usage limits.`
+				: message.includes("subscription_sharing_usage_limit_exceeded")
+					? `${message}\nCheck your ChatGPT usage: https://chatgpt.com/settings/usage`
+					: message,
 		errorPrefix: `${model.provider === "openai" ? "OpenAI" : model.provider} API error`,
 		prepare: () => {
 			const apiKey = clientKey(model.provider, options);
-			const headers: ProviderHeaders = { "User-Agent": getUserAgent(), ...model.headers };
+			const headers: ProviderHeaders = { ...getIdentityHeaders(model, options.identity), ...model.headers };
 			if (model.provider === "github-copilot")
 				Object.assign(
 					headers,

@@ -11,6 +11,7 @@ import {
 	type JsonObject,
 	type Page,
 	type ScanOrder,
+	type Seq,
 	type Storage,
 	type StorageWrite,
 	type SubmissionId,
@@ -55,7 +56,7 @@ function pending(
 		: { ...base, state, ...(memos === undefined ? {} : { memos }) };
 }
 async function root(storage: Storage): Promise<void> {
-	await storage.commit([{ type: "conversation", value: { id: ROOT } }], context);
+	await storage.commit([{ type: "conversation", value: { id: ROOT } }], () => {}, context);
 }
 async function all<T>(scan: (cursor: Cursor | undefined) => Promise<Page<T, Cursor>>): Promise<T[]> {
 	const values: T[] = [];
@@ -77,7 +78,46 @@ export function createStorageConformance(options: StorageConformanceOptions): re
 	const a = options.assertions;
 	const cases: StorageConformanceCase[] = [];
 	const add = (name: string, run: (storage: Storage) => Promise<void>) => {
-		cases.push({ name, run: () => options.withStorage(run) });
+		cases.push({
+			name,
+			run: () =>
+				options.withStorage((storage) =>
+					run(
+						new Proxy(storage, {
+							get(target, key) {
+								if (key !== "commit") {
+									const value: unknown = Reflect.get(target, key, target);
+									return typeof value === "function" ? value.bind(target) : value;
+								}
+								const commit: Storage["commit"] = async (writes, adopt, ctx) => {
+									const adopted: Seq[] = [];
+									let settled = false;
+									let seq: Seq;
+									try {
+										seq = await target.commit(
+											writes,
+											(value) => {
+												a.ok(!settled, "Commit adopted after settlement");
+												adopted.push(value);
+												adopt(value);
+											},
+											ctx,
+										);
+									} catch (error) {
+										settled = true;
+										a.deepEqual(adopted, []);
+										throw error;
+									}
+									settled = true;
+									a.deepEqual(adopted, [seq]);
+									return seq;
+								};
+								return commit;
+							},
+						}),
+					),
+				),
+		});
 	};
 	const seeded = (name: string, run: (storage: Storage) => Promise<void>) =>
 		add(name, async (storage) => {
@@ -89,9 +129,40 @@ export function createStorageConformance(options: StorageConformanceOptions): re
 		await root(storage);
 		a.deepEqual(await storage.conversation(ROOT, context), { id: ROOT });
 		await a.rejects(
-			storage.commit([{ type: "conversation", value: { id: ROOT } }], context),
+			storage.commit([{ type: "conversation", value: { id: ROOT } }], () => {}, context),
 			`ID ${ROOT} already belongs to conversation`,
 		);
+	});
+
+	seeded("adopts committed records before resolution and never adopts rejected writes", async (storage) => {
+		const id = await storage.mintId<EntryId>();
+		const events: string[] = [];
+		let read: ReturnType<Storage["entry"]> | undefined;
+		const seq = await storage.commit(
+			[{ type: "entry", value: entry(id) }],
+			(seq) => {
+				events.push(`adopt:${seq}`);
+				read = storage.entry(id, context);
+			},
+			context,
+		);
+		events.push(`resolved:${seq}`);
+		a.deepEqual(events, [`adopt:${seq}`, `resolved:${seq}`]);
+		a.strictEqual((await read)?.commitSeq, seq);
+		await a.rejects(
+			storage.commit(
+				[{ type: "conversation", value: { id: ROOT } }],
+				() => {
+					events.push("rejected-adoption");
+				},
+				context,
+			),
+			"already belongs",
+		);
+		a.deepEqual(events, [`adopt:${seq}`, `resolved:${seq}`]);
+		const next = await storage.commit([], (next) => events.push(`next:${next}`), context);
+		a.greaterThan(next, seq);
+		a.deepEqual(events, [`adopt:${seq}`, `resolved:${seq}`, `next:${next}`]);
 	});
 	seeded("commits mixed table writes atomically and rolls all of them back on failure", async (storage) => {
 		const eid = await storage.mintId<EntryId>(),
@@ -112,6 +183,7 @@ export function createStorageConformance(options: StorageConformanceOptions): re
 				{ type: "task", value: task },
 				{ type: "submission", value: submission },
 			],
+			() => {},
 			context,
 		);
 		a.deepEqual(await storage.entry(eid, context), {
@@ -129,6 +201,7 @@ export function createStorageConformance(options: StorageConformanceOptions): re
 					{ type: "submission", value: { ...submission, status: "done", answer: transient } },
 					{ type: "conversation", value: { id: ROOT } },
 				],
+				() => {},
 				context,
 			),
 			"already belongs to conversation",
@@ -137,7 +210,7 @@ export function createStorageConformance(options: StorageConformanceOptions): re
 		a.deepEqual(await storage.submission(sid, context), submission);
 		a.strictEqual(await storage.entry(transient, context), undefined);
 		a.greaterThan(
-			await storage.commit([{ type: "entry", value: entry(await storage.mintId<EntryId>()) }], context),
+			await storage.commit([{ type: "entry", value: entry(await storage.mintId<EntryId>()) }], () => {}, context),
 			seq,
 		);
 	});
@@ -157,6 +230,7 @@ export function createStorageConformance(options: StorageConformanceOptions): re
 					value: { id: sid, conversationId: ROOT, type: "input", status: "unanswered", reason: "failed", detail },
 				},
 			],
+			() => {},
 			context,
 		);
 		data.nested.count = checkpoint.nested.count = detail.nested.count = 99;
@@ -183,7 +257,7 @@ export function createStorageConformance(options: StorageConformanceOptions): re
 		const data: JsonObject = JSON.parse(
 			'{"__proto__":{"changed":false},"constructor":{"label":"saved"},"toString":"text"}',
 		);
-		await storage.commit([{ type: "entry", value: entry(id, ROOT, { data }) }], context);
+		await storage.commit([{ type: "entry", value: entry(id, ROOT, { data }) }], () => {}, context);
 		object(data.__proto__).changed = true;
 		object(Reflect.get(data, "constructor")).label = "changed";
 		for (let attempt = 0; attempt < 2; attempt++) {
@@ -201,6 +275,7 @@ export function createStorageConformance(options: StorageConformanceOptions): re
 		const ids = [30, 10, 20].map((value) => idFromNumber<EntryId>(value));
 		await storage.commit(
 			ids.map((id) => ({ type: "entry", value: entry(id, ROOT, id === ids[2] ? { head: ids[1] } : {}) })),
+			() => {},
 			context,
 		);
 		a.deepEqual(
@@ -213,6 +288,7 @@ export function createStorageConformance(options: StorageConformanceOptions): re
 		const ids = await Promise.all(Array.from({ length: 3 }, () => storage.mintId<EntryId>()));
 		await storage.commit(
 			ids.map((id) => ({ type: "entry", value: entry(id) })),
+			() => {},
 			context,
 		);
 		const first = await storage.scanEntries({ conversationId: ROOT }, 2, undefined, context);
@@ -220,7 +296,7 @@ export function createStorageConformance(options: StorageConformanceOptions): re
 			first.items.map((item) => item.id),
 			[ids[2], ids[1]],
 		);
-		await storage.commit([{ type: "entry", value: entry(await storage.mintId<EntryId>()) }], context);
+		await storage.commit([{ type: "entry", value: entry(await storage.mintId<EntryId>()) }], () => {}, context);
 		const second = await storage.scanEntries({ conversationId: ROOT }, 2, first.next, context);
 		a.deepEqual(
 			second.items.map((item) => item.id),
@@ -232,6 +308,7 @@ export function createStorageConformance(options: StorageConformanceOptions): re
 		const ids = await Promise.all([storage.mintId<ConversationId>(), storage.mintId<ConversationId>()]);
 		await storage.commit(
 			[...ids].reverse().map((id) => ({ type: "conversation", value: { id } })),
+			() => {},
 			context,
 		);
 		const first = await storage.scanConversations({}, 2, undefined, context);
@@ -262,6 +339,7 @@ export function createStorageConformance(options: StorageConformanceOptions): re
 					}),
 				),
 			],
+			() => {},
 			context,
 		);
 		const scan = async (query: { ownerConversationId?: ConversationId; ownerTaskId?: TaskId }) =>
@@ -293,11 +371,13 @@ export function createStorageConformance(options: StorageConformanceOptions): re
 				{ type: "entry", value: entry(r2, ROOT, { head: r1 }) },
 				{ type: "entry", value: entry(excluded) },
 			],
+			() => {},
 			context,
 		);
 		const child = await storage.mintId<ConversationId>();
 		await storage.commit(
 			[{ type: "conversation", value: { id: child, parent: { conversationId: ROOT, at: r2 } } }],
+			() => {},
 			context,
 		);
 		const c1 = await storage.mintId<EntryId>(),
@@ -307,13 +387,15 @@ export function createStorageConformance(options: StorageConformanceOptions): re
 				{ type: "entry", value: entry(c1, child) },
 				{ type: "entry", value: entry(c2, child) },
 			],
+			() => {},
 			context,
 		);
 		const grand = await storage.mintId<ConversationId>();
 		const laterRoot = await storage.mintId<EntryId>();
-		await storage.commit([{ type: "entry", value: entry(laterRoot) }], context);
+		await storage.commit([{ type: "entry", value: entry(laterRoot) }], () => {}, context);
 		await storage.commit(
 			[{ type: "conversation", value: { id: grand, parent: { conversationId: child, at: c1 } } }],
+			() => {},
 			context,
 		);
 		const g1 = await storage.mintId<EntryId>(),
@@ -323,10 +405,11 @@ export function createStorageConformance(options: StorageConformanceOptions): re
 				{ type: "entry", value: entry(g1, grand, { head: g1 }) },
 				{ type: "entry", value: entry(g2, grand) },
 			],
+			() => {},
 			context,
 		);
 		const laterChild = await storage.mintId<EntryId>();
-		await storage.commit([{ type: "entry", value: entry(laterChild, child) }], context);
+		await storage.commit([{ type: "entry", value: entry(laterChild, child) }], () => {}, context);
 		const firstDown = await storage.scanEntries({ conversationId: grand }, 2, undefined, context);
 		const secondDown = await storage.scanEntries({ conversationId: grand }, 2, firstDown.next, context);
 		const thirdDown = await storage.scanEntries({ conversationId: grand }, 2, secondDown.next, context);
@@ -448,6 +531,7 @@ export function createStorageConformance(options: StorageConformanceOptions): re
 					{ type: "task", value: pending(tid) },
 					{ type: "submission", value: { id: sid, conversationId: ROOT, type: "input", status: "queued" } },
 				],
+				() => {},
 				context,
 			);
 		}
@@ -490,6 +574,7 @@ export function createStorageConformance(options: StorageConformanceOptions): re
 		];
 		await storage.commit(
 			records.map((value) => ({ type: "task", value })),
+			() => {},
 			context,
 		);
 		const running: StoredTask = {
@@ -497,14 +582,14 @@ export function createStorageConformance(options: StorageConformanceOptions): re
 			abortRequested: true,
 			state: { status: "running", checkpoint: { phase: "effect", attempt: 1 } },
 		};
-		await storage.commit([{ type: "task", value: running }], context);
+		await storage.commit([{ type: "task", value: running }], () => {}, context);
 		a.deepEqual(await storage.task(ids[0]!, context), running);
 		const { memos: _memos, ...base } = running;
 		const terminal: StoredTask = {
 			...base,
 			state: { status: "terminal", outcome: { status: "completed", result: { entryId: 99 } } },
 		};
-		await storage.commit([{ type: "task", value: terminal }], context);
+		await storage.commit([{ type: "task", value: terminal }], () => {}, context);
 		a.deepEqual(await storage.task(ids[0]!, context), terminal);
 		const page = await storage.scanTasks({ status: "pending" }, 1, undefined, context);
 		a.deepEqual(
@@ -546,6 +631,7 @@ export function createStorageConformance(options: StorageConformanceOptions): re
 		];
 		await storage.commit(
 			records.map((value) => ({ type: "task", value })),
+			() => {},
 			context,
 		);
 		for (const value of records) {
@@ -562,6 +648,7 @@ export function createStorageConformance(options: StorageConformanceOptions): re
 					}),
 				},
 			],
+			() => {},
 			context,
 		);
 		a.deepEqual((await storage.scanTasks({ status: "completing" }, 10, undefined, context)).items, []);
@@ -578,17 +665,17 @@ export function createStorageConformance(options: StorageConformanceOptions): re
 			state: { status: "sleeping", checkpoint: { phase: "next" }, until: 61000 },
 			memos: { keep: true },
 		});
-		await storage.commit([{ type: "task", value: sleeping }], context);
+		await storage.commit([{ type: "task", value: sleeping }], () => {}, context);
 		a.deepEqual(await storage.task(id, context), sleeping);
 		a.deepEqual((await storage.scanTasks({ status: "sleeping" }, 10, undefined, context)).items, [sleeping]);
 		const running = pending(id, { state: { status: "running", checkpoint: { phase: "next" } } });
-		await storage.commit([{ type: "task", value: running }], context);
+		await storage.commit([{ type: "task", value: running }], () => {}, context);
 		a.deepEqual((await storage.scanTasks({ status: "sleeping" }, 10, undefined, context)).items, []);
 		a.deepEqual((await storage.scanTasks({ status: "running" }, 10, undefined, context)).items, [running]);
 	});
 	seeded("indexes request IDs per conversation and replaces complete submission records", async (storage) => {
 		const other = await storage.mintId<ConversationId>();
-		await storage.commit([{ type: "conversation", value: { id: other } }], context);
+		await storage.commit([{ type: "conversation", value: { id: other } }], () => {}, context);
 		const ids = await Promise.all(Array.from({ length: 3 }, () => storage.mintId<SubmissionId>()));
 		const records: SubmissionRecord[] = ids.map((id, index) => ({
 			id,
@@ -599,6 +686,7 @@ export function createStorageConformance(options: StorageConformanceOptions): re
 		}));
 		await storage.commit(
 			records.map((value) => ({ type: "submission", value })),
+			() => {},
 			context,
 		);
 		a.deepEqual(await storage.submissionByRequest(ROOT, "same", context), records[0]);
@@ -611,7 +699,7 @@ export function createStorageConformance(options: StorageConformanceOptions): re
 			status: "placed",
 			entry: await storage.mintId<EntryId>(),
 		};
-		await storage.commit([{ type: "submission", value: changed }], context);
+		await storage.commit([{ type: "submission", value: changed }], () => {}, context);
 		a.deepEqual(await storage.submission(ids[1]!, context), changed);
 		a.deepEqual(await storage.submissionByRequest(ROOT, "other", context), changed);
 		const scan = async (query: { conversationId?: ConversationId; status?: SubmissionRecord["status"] }) =>
@@ -645,6 +733,7 @@ export function createStorageConformance(options: StorageConformanceOptions): re
 		}));
 		await storage.commit(
 			queued.map((value) => ({ type: "submission", value })),
+			() => {},
 			context,
 		);
 		const finished: SubmissionRecord[] = [
@@ -668,6 +757,7 @@ export function createStorageConformance(options: StorageConformanceOptions): re
 		];
 		await storage.commit(
 			finished.map((value) => ({ type: "submission", value })),
+			() => {},
 			context,
 		);
 		for (const value of finished) {
@@ -695,6 +785,7 @@ export function createStorageConformance(options: StorageConformanceOptions): re
 					content: { kind: "base", version: 1, value: initial },
 				},
 			],
+			() => {},
 			context,
 		);
 		const changed = await storage.commit(
@@ -712,6 +803,7 @@ export function createStorageConformance(options: StorageConformanceOptions): re
 					},
 				},
 			],
+			() => {},
 			context,
 		);
 		initial.items.push("caller mutation");
@@ -732,10 +824,12 @@ export function createStorageConformance(options: StorageConformanceOptions): re
 		});
 		const checkpoint = await storage.commit(
 			[{ type: "document.change", id, content: { kind: "base", version: 2, value: { count: 3 } } }],
+			() => {},
 			context,
 		);
 		const replaced = await storage.commit(
 			[{ type: "document.change", id, content: { kind: "delta", version: 2, ops: [["r", { count: 4 }]] } }],
+			() => {},
 			context,
 		);
 		a.partialDeepEqual(await storage.document(id, created, context), {
@@ -768,6 +862,7 @@ export function createStorageConformance(options: StorageConformanceOptions): re
 				{ type: "document.retire", id },
 				{ type: "document.change", id, content: { kind: "delta", version: 2, ops: [["s", ["retiring"], true]] } },
 			],
+			() => {},
 			context,
 		);
 		a.strictEqual((await storage.findDocument({ kind: record.kind, scope: record.scope }, changed, context))?.id, id);
@@ -806,6 +901,7 @@ export function createStorageConformance(options: StorageConformanceOptions): re
 		};
 		const created = await storage.commit(
 			[{ type: "document.create", record, content: { kind: "base", version: 1, value: initial } }],
+			() => {},
 			context,
 		);
 		let at = created;
@@ -829,6 +925,7 @@ export function createStorageConformance(options: StorageConformanceOptions): re
 						},
 					},
 				],
+				() => {},
 				context,
 			);
 		}
@@ -839,6 +936,7 @@ export function createStorageConformance(options: StorageConformanceOptions): re
 		const expected = structuredClone(replacement);
 		const replaced = await storage.commit(
 			[{ type: "document.change", id, content: { kind: "delta", version: 1, ops: [["r", replacement]] } }],
+			() => {},
 			context,
 		);
 		replacement.rows[0]!.value = -999;
@@ -861,6 +959,7 @@ export function createStorageConformance(options: StorageConformanceOptions): re
 						},
 					},
 				],
+				() => {},
 				context,
 			);
 		}
@@ -885,6 +984,7 @@ export function createStorageConformance(options: StorageConformanceOptions): re
 				{ type: "conversation", value: { id: child } },
 				{ type: "conversation", value: { id: otherChild } },
 			],
+			() => {},
 			context,
 		);
 		const source = await storage.mintId<DocumentId>(),
@@ -906,6 +1006,7 @@ export function createStorageConformance(options: StorageConformanceOptions): re
 					content: { kind: "base", version: 2, value: { count: 1, rows: [{ value: "base" }] } },
 				},
 			],
+			() => {},
 			context,
 		);
 		await storage.commit(
@@ -923,6 +1024,7 @@ export function createStorageConformance(options: StorageConformanceOptions): re
 					},
 				},
 			],
+			() => {},
 			context,
 		);
 		await storage.commit(
@@ -944,6 +1046,7 @@ export function createStorageConformance(options: StorageConformanceOptions): re
 				},
 				{ type: "document.retire", id: retired },
 			],
+			() => {},
 			context,
 		);
 		a.partialDeepEqual(await storage.document(historical, "current", context), {
@@ -960,6 +1063,7 @@ export function createStorageConformance(options: StorageConformanceOptions): re
 				{ type: "document.change", id: source, content: { kind: "base", version: 2, value: { count: 99 } } },
 				{ type: "document.retire", id: source },
 			],
+			() => {},
 			context,
 		);
 		a.deepEqual((await storage.document(historical, "current", context))?.value, {
@@ -981,6 +1085,7 @@ export function createStorageConformance(options: StorageConformanceOptions): re
 					},
 					{ type: "document.retire", id: current },
 				],
+				() => {},
 				context,
 			)
 			.then(
@@ -1003,6 +1108,7 @@ export function createStorageConformance(options: StorageConformanceOptions): re
 						source: { id: current, at: "current" },
 					},
 				],
+				() => {},
 				context,
 			)
 			.then(
@@ -1028,6 +1134,7 @@ export function createStorageConformance(options: StorageConformanceOptions): re
 					content: { kind: "base", version: 4, value: { retained: "copy" } },
 				},
 			],
+			() => {},
 			context,
 		);
 		await storage.commit(
@@ -1038,6 +1145,7 @@ export function createStorageConformance(options: StorageConformanceOptions): re
 					source: { id: latest, at: "current" },
 				},
 			],
+			() => {},
 			context,
 		);
 		await storage.commit(
@@ -1045,6 +1153,7 @@ export function createStorageConformance(options: StorageConformanceOptions): re
 				{ type: "document.change", id: latest, content: { kind: "base", version: 4, value: { retained: "source" } } },
 				{ type: "document.retire", id: latest },
 			],
+			() => {},
 			context,
 		);
 		a.partialDeepEqual(await storage.document(copied, "current", context), { version: 4, value: { retained: "copy" } });
@@ -1061,30 +1170,37 @@ export function createStorageConformance(options: StorageConformanceOptions): re
 						content: { kind: "base", version: 1, value: { count: 1 } },
 					},
 				],
+				() => {},
 				context,
 			);
 			await storage.commit(
 				[{ type: "document.change", id, content: { kind: "delta", version: 1, ops: [["s", ["count"], 2]] } }],
+				() => {},
 				context,
 			);
 			const changed = await storage.commit(
 				[{ type: "document.change", id, content: { kind: "base", version: 2, value: { count: 3 } } }],
+				() => {},
 				context,
 			);
 			a.partialDeepEqual(await storage.document(id, "current", context), { version: 2, value: { count: 3 } });
 			await a.rejects(storage.document(id, changed, context), "does not retain historical content");
 			await a.rejects(
-				storage.commit([{ type: "document.change", id, content: { kind: "delta", version: 1, ops: [] } }], context),
+				storage.commit(
+					[{ type: "document.change", id, content: { kind: "delta", version: 1, ops: [] } }],
+					() => {},
+					context,
+				),
 				"version transition requires a base",
 			);
 			a.deepEqual((await storage.document(id, "current", context))?.value, { count: 3 });
-			await storage.commit([{ type: "document.retire", id }], context);
+			await storage.commit([{ type: "document.retire", id }], () => {}, context);
 			a.strictEqual(await storage.document(id, "current", context), undefined);
 		},
 	);
 	seeded("indexes logical addresses and exact-scope scans independently", async (storage) => {
 		const task = await storage.mintId<TaskId<JsonValue>>();
-		await storage.commit([{ type: "task", value: pending(task) }], context);
+		await storage.commit([{ type: "task", value: pending(task) }], () => {}, context);
 		const records: DocumentCreate[] = [];
 		for (const scope of [
 			{ kind: "session" },
@@ -1102,6 +1218,7 @@ export function createStorageConformance(options: StorageConformanceOptions): re
 				records.push(record);
 				const created = await storage.commit(
 					[{ type: "document.create", record, content: { kind: "base", version: 1, value: { owner: id } } }],
+					() => {},
 					context,
 				);
 				if (scope.kind === "task")
@@ -1116,6 +1233,7 @@ export function createStorageConformance(options: StorageConformanceOptions): re
 					content: { kind: "base", version: 1, value: {} },
 				},
 			],
+			() => {},
 			context,
 		);
 		for (const record of records)
@@ -1150,6 +1268,7 @@ export function createStorageConformance(options: StorageConformanceOptions): re
 		const record: DocumentCreate = { id, kind: "singleton", scope: { kind: "session" } };
 		await storage.commit(
 			[{ type: "document.create", record, content: { kind: "base", version: 1, value: { count: 1 } } }],
+			() => {},
 			context,
 		);
 		await a.rejects(
@@ -1162,6 +1281,7 @@ export function createStorageConformance(options: StorageConformanceOptions): re
 					},
 					{ type: "document.change", id, content: { kind: "delta", version: 1, ops: [] } },
 				],
+				() => {},
 				context,
 			),
 			"current incarnation",
@@ -1184,6 +1304,7 @@ export function createStorageConformance(options: StorageConformanceOptions): re
 				},
 				{ type: "document.retire", id: empty },
 			],
+			() => {},
 			context,
 		);
 		a.strictEqual(await storage.document(empty, at, context), undefined);
@@ -1212,6 +1333,7 @@ export function createStorageConformance(options: StorageConformanceOptions): re
 				{ type: "submission", value: submission },
 				{ type: "document.create", record, content: { kind: "base", version: 1, value: { count: 1 } } },
 			],
+			() => {},
 			context,
 		);
 		const eid = await storage.mintId<EntryId>(),
@@ -1228,6 +1350,7 @@ export function createStorageConformance(options: StorageConformanceOptions): re
 						content: { kind: "base", version: 1, value: {} },
 					},
 				],
+				() => {},
 				context,
 			),
 			"current incarnation",
@@ -1244,6 +1367,7 @@ export function createStorageConformance(options: StorageConformanceOptions): re
 		a.greaterThan(
 			await storage.commit(
 				[{ type: "document.change", id: did, content: { kind: "delta", version: 1, ops: [["s", ["count"], 3]] } }],
+				() => {},
 				context,
 			),
 			before,
@@ -1275,6 +1399,7 @@ export function createStorageConformance(options: StorageConformanceOptions): re
 						content: { kind: "base", version: 1, value: { index } },
 					},
 				],
+				() => {},
 				context,
 			);
 			saved.push({ key, tid, sid, kindId, keyId });
@@ -1305,20 +1430,27 @@ export function createStorageConformance(options: StorageConformanceOptions): re
 	});
 	seeded("keeps one global record ID namespace and rejects exhausted ID minting", async (storage) => {
 		const explicit = idFromNumber<EntryId>(100);
-		await storage.commit([{ type: "entry", value: entry(explicit) }], context);
+		await storage.commit([{ type: "entry", value: entry(explicit) }], () => {}, context);
 		a.strictEqual(await storage.mintId<EntryId>(), 101);
 		await a.rejects(
-			storage.commit([{ type: "task", value: pending(idFromNumber<TaskId<JsonValue>>(100)) }], context),
+			storage.commit([{ type: "task", value: pending(idFromNumber<TaskId<JsonValue>>(100)) }], () => {}, context),
 			"already belongs to entry",
 		);
-		await storage.commit([{ type: "entry", value: entry(idFromNumber<EntryId>(Number.MAX_SAFE_INTEGER)) }], context);
+		await storage.commit(
+			[{ type: "entry", value: entry(idFromNumber<EntryId>(Number.MAX_SAFE_INTEGER)) }],
+			() => {},
+			context,
+		);
 		await a.rejects(storage.mintId<EntryId>(), "ID space is exhausted");
 		await a.rejects(storage.mintId<EntryId>(), "ID space is exhausted");
 	});
 	seeded("rejects every operation after close", async (storage) => {
 		await storage.close(context);
 		await a.rejects(storage.conversation(ROOT, context), "closed");
-		await a.rejects(storage.commit([], context), "closed");
+		await a.rejects(
+			storage.commit([], () => {}, context),
+			"closed",
+		);
 		await a.rejects(storage.mintId<ConversationId>(), "closed");
 	});
 	return cases;

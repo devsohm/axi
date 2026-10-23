@@ -1,5 +1,6 @@
+import type { WatchHandle } from "@axi/chord";
 import type { TelemetryCarrier } from "@axi/telemetry";
-import type { AttachedReplicatedState, Context, Draft, JsonValue } from "@axi/chord";
+import type { Context, Draft, JsonValue } from "@axi/chord";
 import type { Op } from "@axi/chord/delta";
 import type { Message, Models } from "@axi/ai";
 import type { ExecutionEnv } from "./env/index.ts";
@@ -429,7 +430,8 @@ export type StorageWrite =
 	| { readonly type: "document.retire"; readonly id: DocumentId };
 
 export interface Storage {
-	commit(writes: readonly StorageWrite[], context: Context): Promise<Seq>;
+	/** Call adopt synchronously after durability and before the next commit. */
+	commit(writes: readonly StorageWrite[], adopt: (seq: Seq) => void, context: Context): Promise<Seq>;
 	mintId<RecordId extends Id<string>>(): Promise<RecordId>;
 	conversation(id: ConversationId, context: Context): Promise<ConversationRecord | undefined>;
 	scanConversations(
@@ -506,17 +508,7 @@ export type TableCommitChange = Extract<
 >;
 export type CommitChange = TableCommitChange | DocumentCommitChange;
 export type CommitPublication = { readonly seq: Seq; readonly changes: readonly CommitChange[] };
-export type DocumentState<Value extends JsonObject> = AttachedReplicatedState<Readonly<Value> | null>;
-export type WatchEnd =
-	| { readonly reason: "stopped" | "cancelled" | "session_closed" | "retired" }
-	| { readonly reason: "listener_error"; readonly error: Error }
-	| { readonly reason: "session_failed"; readonly error: unknown };
-export interface WatchHandle<Value> {
-	readonly value: Value;
-	readonly closed: Promise<WatchEnd>;
-	start(listener: (value: Value, ops: readonly Op[], context: Context) => Promise<void>): void;
-	stop(): Promise<WatchEnd>;
-}
+export type { WatchEnd, WatchHandle } from "@axi/chord";
 export type DocumentWatch<Value extends JsonObject> = WatchHandle<Readonly<Value> | null>;
 export type SessionEnd = { readonly reason: "closed" } | { readonly reason: "failed"; readonly error: unknown };
 export interface DocumentObserver {
@@ -589,37 +581,6 @@ export interface Session extends DocumentObserver {
 		key: string,
 		context: Context,
 	): Promise<Readonly<Value> | undefined>;
-	documentState<Value extends JsonObject>(
-		token: SessionDocToken<Value>,
-		context: Context,
-	): Promise<DocumentState<Value> | undefined>;
-	documentState<Value extends JsonObject, Seed extends JsonValue>(
-		token: SessionDocFamilyToken<Value, Seed>,
-		key: string,
-		context: Context,
-	): Promise<DocumentState<Value> | undefined>;
-	documentState<Value extends JsonObject>(
-		token: ConversationDocToken<Value>,
-		conversationId: ConversationId,
-		context: Context,
-	): Promise<DocumentState<Value> | undefined>;
-	documentState<Value extends JsonObject, Seed extends JsonValue>(
-		token: ConversationDocFamilyToken<Value, Seed>,
-		conversationId: ConversationId,
-		key: string,
-		context: Context,
-	): Promise<DocumentState<Value> | undefined>;
-	documentState<Value extends JsonObject>(
-		token: TaskDocToken<Value>,
-		taskId: TaskId,
-		context: Context,
-	): Promise<DocumentState<Value> | undefined>;
-	documentState<Value extends JsonObject, Seed extends JsonValue>(
-		token: TaskDocFamilyToken<Value, Seed>,
-		taskId: TaskId,
-		key: string,
-		context: Context,
-	): Promise<DocumentState<Value> | undefined>;
 	snapshotAsOf<Value extends JsonObject>(
 		token: RewindableConversationDocToken<Value>,
 		conversationId: ConversationId,

@@ -14,8 +14,9 @@ export class HStack extends Stack {
 			this.gap,
 		);
 		const rendered = entries.map((entry, index) => (widths[index] === 0 ? [] : entry.component.render(widths[index]!)));
-		const height = Math.max(...rendered.map((lines) => lines.length)),
-			result = Array<string>(height).fill("");
+		let height = 0;
+		for (const lines of rendered) height = Math.max(height, lines.length);
+		const result = Array<string>(height).fill("");
 		let x = 0;
 		for (let index = 0; index < entries.length; index++) {
 			const lines = rendered[index]!,

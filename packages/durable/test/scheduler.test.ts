@@ -142,14 +142,18 @@ describe("task scheduler", () => {
 			childEntered = Promise.withResolvers<void>();
 		class HeldMarks extends MemoryStorage {
 			target: TaskId | undefined;
-			override async commit(writes: readonly StorageWrite[], ctx: Context) {
+			override async commit(
+				writes: readonly StorageWrite[],
+				adopt: Parameters<MemoryStorage["commit"]>[1],
+				ctx: Context,
+			) {
 				if (
 					writes.some((write) => write.type === "task" && write.value.id === this.target && write.value.abortRequested)
 				) {
 					entered.resolve();
 					await release.promise;
 				}
-				return super.commit(writes, ctx);
+				return super.commit(writes, adopt, ctx);
 			}
 		}
 		let advanced = false;

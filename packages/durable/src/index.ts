@@ -1,5 +1,5 @@
 export { MemoryStorage } from "./storage/memory.ts";
-export { StorageRequestError } from "./errors.ts";
+export { ReadOnlySession, StorageRequestError } from "./errors.ts";
 export * from "./types.ts";
 export { defineDoc, defineDocFamily } from "./documents.ts";
 export {
@@ -17,7 +17,7 @@ export { defineTask } from "./tasks.ts";
 export { ConversationBusy } from "./errors.ts";
 export { createRegistry } from "./harness/registry.ts";
 export { DURABLE_TELEMETRY_SCHEMA } from "./harness/telemetry.ts";
-export { Harness } from "./harness/harness.ts";
+export { Harness, DEFAULT_HARNESS_IDENTITY } from "./harness/harness.ts";
 export {
 	watchEvents,
 	type AgentEvent,

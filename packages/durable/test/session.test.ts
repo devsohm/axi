@@ -76,9 +76,9 @@ describe("Session lifecycle", () => {
 			await harness.close(context);
 		}
 	});
-	it.each(["documentState", "watchDoc"] as const)(
+	it.each(["watchDoc"] as const)(
 		"retains observer registration state when %s cannot register a close listener",
-		async (method) => {
+		async (_method) => {
 			const failure = new Error("Close listener registration failed");
 			class Session extends SessionImpl {
 				activeObservers = 0;
@@ -97,9 +97,7 @@ describe("Session lifecycle", () => {
 			const session = new Session(new MemoryStorage());
 			try {
 				await session.commit((tx) => tx.doc(Counter), context);
-				await expect(
-					method === "documentState" ? session.documentState(Counter, context) : session.watchDoc(Counter, context),
-				).rejects.toBe(failure);
+				await expect(session.watchDoc(Counter, context)).rejects.toBe(failure);
 				expect(session.documentCacheSizes.attached).toBe(1);
 				expect(session.activeObservers).toBe(1);
 				expect(await session.snapshot(Counter, context)).toEqual({ count: 0 });
@@ -118,7 +116,7 @@ describe("Session lifecycle", () => {
 		await session.close(context);
 		expect(await session.closed).toEqual({ reason: "closed" });
 	});
-	it.each(["documentState", "watchDoc"] as const)("captures the document definition once for %s", async (method) => {
+	it.each(["watchDoc"] as const)("captures the document definition once for %s", async (_method) => {
 		const session = createSession(new MemoryStorage());
 		const token = defineDoc({
 			checkpointWhen: () => false,
@@ -138,14 +136,10 @@ describe("Session lifecycle", () => {
 			},
 		});
 		try {
-			const observer =
-				method === "documentState"
-					? await session.documentState(token, context)
-					: await session.watchDoc(token, context);
+			const observer = await session.watchDoc(token, context);
 			expect(observer?.value).toEqual({ count: 7 });
 			expect(reads).toBe(1);
-			if (observer && "dispose" in observer) observer.dispose();
-			else await observer?.stop();
+			await observer?.stop();
 		} finally {
 			await session.close(context);
 		}
@@ -179,11 +173,11 @@ describe("Session lifecycle", () => {
 		await session.commit(async (tx) => {
 			(await tx.doc(Counter)).count = 7;
 		}, context);
-		const state = (await session.documentState(Counter, context))!;
+		const state = (await session.watchDoc(Counter, context))!;
 		clock = 1000;
 		await session.commit(() => {}, context);
 		expect(session.documentCacheSizes).toMatchObject({ cached: 1, attached: 1 });
-		state.dispose();
+		await state.stop();
 		clock += 100;
 		await session.commit(() => {}, context);
 		expect(session.documentCacheSizes.cached).toBe(0);
@@ -210,7 +204,7 @@ describe("Session lifecycle", () => {
 		await session.commit((tx) => tx.doc(Counter), context);
 		await session.unloadDocuments();
 		storage.hold = true;
-		const state = session.documentState(Counter, context);
+		const state = session.watchDoc(Counter, context);
 		await arrived.promise;
 		const closed = session.close(context);
 		released.resolve();
@@ -256,7 +250,7 @@ describe("Session lifecycle", () => {
 		let signal: AbortSignal | undefined;
 		class Storage extends MemoryStorage {
 			override async commit(...args: Parameters<MemoryStorage["commit"]>) {
-				signal = args[1].abortSignal;
+				signal = args[2].abortSignal;
 				arrived.resolve();
 				await release.promise;
 				return super.commit(...args);

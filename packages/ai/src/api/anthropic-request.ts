@@ -3,6 +3,7 @@ import type {
 	BetaCacheControlEphemeral,
 	BetaContentBlockParam,
 	BetaMessageParam,
+	BetaSystemMessageParam,
 	MessageCreateParamsStreaming,
 } from "@anthropic-ai/sdk/resources/beta/messages/messages.js";
 import type { ImageContent, Message, Model, Tool, TranscriptContext } from "../types.ts";
@@ -15,6 +16,8 @@ import type { AnthropicEffort, AnthropicOptions } from "./options.ts";
 import { splitErrorToolResultImages, transformMessages } from "./transform-messages.ts";
 
 type Block = BetaContentBlockParam;
+type SystemBlock = Exclude<BetaSystemMessageParam["content"], string | undefined>[number];
+type RequestBody = MessageCreateParamsStreaming & { temperature?: number };
 type Cache = BetaCacheControlEphemeral;
 const names = new Map(
 	[
@@ -131,7 +134,7 @@ function conversation({
 		const message = messages[index];
 		switch (message.role) {
 			case "system": {
-				const blocks: Block[] = [],
+				const blocks: SystemBlock[] = [],
 					text = renderSystemMessageUpdate(message);
 				if (text) blocks.push({ type: "text", text: sanitizeSurrogates(text) });
 				if (convertTools) {
@@ -163,7 +166,6 @@ function conversation({
 				break;
 			}
 			case "assistant": {
-				flush();
 				const blocks: Block[] = [];
 				for (const block of message.content)
 					switch (block.type) {
@@ -194,6 +196,7 @@ function conversation({
 							break;
 					}
 				if (!blocks.length) continue;
+				flush();
 				if (
 					managedProvider !== undefined &&
 					message.api === "anthropic-messages" &&
@@ -286,7 +289,7 @@ export function anthropicRequest(
 	options: AnthropicOptions,
 	oauth: boolean,
 	downgrade: boolean,
-): { body: MessageCreateParamsStreaming; preferred: boolean; level?: AnthropicEffort } {
+): { body: RequestBody; preferred: boolean; level?: AnthropicEffort } {
 	const compat = anthropicCompat(model),
 		retention = anthropicRetention(options);
 	const cache: Cache | undefined =
@@ -340,7 +343,7 @@ export function anthropicRequest(
 	}
 	if (managed) messages.push({ role: "system", content: [], output_config: { effort: level } });
 	const features = betas(model, context, options, oauth, inline);
-	const body: MessageCreateParamsStreaming = {
+	const body: RequestBody = {
 		model: model.id,
 		messages,
 		stream: true,
@@ -379,7 +382,7 @@ export function anthropicRequest(
 			display: options.thinkingDisplay ?? "summarized",
 			block_binding: { prefix_mismatch_behavior: "drop_block" },
 		};
-		body.output_config = { effort: "high" };
+		body.output_config = { effort: "low" };
 	} else if (model.reasoning && options.thinkingEnabled) {
 		const display = options.thinkingDisplay ?? "summarized";
 		if (model.compat?.forceAdaptiveThinking) {

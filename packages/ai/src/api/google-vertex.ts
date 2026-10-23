@@ -3,7 +3,7 @@ import type { Model, SimpleStreamOptions, StreamFunction } from "../types.ts";
 import { providerHeadersToRecord } from "../utils/headers.ts";
 import { getProviderEnvValue } from "../utils/provider-env.ts";
 import { collapseSystemMessages } from "../utils/transcript.ts";
-import { getUserAgent } from "../utils/user-agent.ts";
+import { getIdentityHeaders } from "../utils/identity.ts";
 import { googleRequest, googleSimpleOptions } from "./google-request.ts";
 import { retryGoogleRequest } from "./google-shared.ts";
 import { googleStream } from "./google-stream.ts";
@@ -12,7 +12,7 @@ export type { GoogleVertexOptions } from "./options.ts";
 let toolId = 0;
 function clientFor(model: Model<"google-vertex">, options: GoogleVertexOptions): GoogleGenAI {
 	const httpOptions: HttpOptions = {
-		headers: providerHeadersToRecord({ "User-Agent": getUserAgent(), ...model.headers, ...options.headers }),
+		headers: providerHeadersToRecord(getIdentityHeaders(model, options.identity), model.headers, options.headers),
 	};
 	const baseUrl = model.baseUrl.trim();
 	if (baseUrl && !baseUrl.includes("{location}")) {

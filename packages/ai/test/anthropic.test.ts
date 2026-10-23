@@ -334,7 +334,7 @@ describe("Anthropic messages", () => {
 		).result();
 		expect(result.providerThinkingLevel).toBe("xhigh");
 		expect(JSON.parse(body)).toMatchObject({
-			output_config: { effort: "high" },
+			output_config: { effort: "low" },
 			thinking: { type: "adaptive", display: "summarized", block_binding: { prefix_mismatch_behavior: "drop_block" } },
 			messages: [
 				{ role: "user" },
@@ -572,4 +572,67 @@ describe("Anthropic messages", () => {
 			content: [{ type: "text", text: "partial" }],
 		});
 	});
+});
+
+it("keeps pending system changes after users when an empty assistant is dropped", async () => {
+	let body = "";
+	const result = await stream(
+		{ ...model, compat: { supportsMidConvoSystemMessages: true } },
+		normalizeContext({
+			messages: [
+				...context.messages,
+				{ role: "system", content: "updated rules", timestamp: 2 },
+				assistant([{ type: "text", text: "  " }]),
+				{ role: "user", content: "next question", timestamp: 3 },
+			],
+		}),
+		{
+			apiKey: "offline",
+			cacheRetention: "none",
+			fetch: async (_url, init) => {
+				body = String(init?.body);
+				return answer();
+			},
+		},
+	).result();
+	expect(result.stopReason).toBe("stop");
+	expect(JSON.parse(body).messages.map((message: { role: string }) => message.role)).toEqual([
+		"user",
+		"user",
+		"system",
+	]);
+});
+it("uses billed accounting on Anthropic-compatible OpenRouter streams", async () => {
+	const result = await stream({ ...model, provider: "openrouter" }, context, {
+		apiKey: "offline",
+		fetch: async () =>
+			response([
+				start,
+				{
+					...stop,
+					usage: { ...stop.usage, cost: 0.12, is_byok: true, cost_details: { upstream_inference_cost: 0.38 } },
+				},
+				end,
+			]),
+	}).result();
+	expect(result.stopReason).toBe("stop");
+	expect(result.usage.cost.total).toBe(0.5);
+	expect(result.usage.cost.totalFromProvider).toBe(true);
+});
+
+it("retains the existing Anthropic protocol and compatible temperature forwarding after SDK upgrades", async () => {
+	let headers: Headers | undefined;
+	let body: Record<string, unknown> = {};
+	const result = await stream(model, context, {
+		apiKey: "test",
+		temperature: 0.7,
+		fetch: async (_url, init) => {
+			headers = new Headers(init?.headers);
+			body = JSON.parse(String(init?.body));
+			return answer();
+		},
+	}).result();
+	expect(result.stopReason).toBe("stop");
+	expect(headers?.get("anthropic-version")).toBe("2023-06-01");
+	expect(body.temperature).toBe(0.7);
 });

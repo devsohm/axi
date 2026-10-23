@@ -1,7 +1,7 @@
 import type { ScrollView } from "./components/scroll-view.ts";
 import { allocateStackSizes, visibleStackEntries } from "./components/stack.ts";
 import { getLayoutNode } from "./layout-node.ts";
-import { cropKittyImageLine, getKittyImageMetadata, isImageLine } from "./terminal-image.ts";
+import { cropKittyImageLine, getKittyImageMetadata, getMaxKittyImageRows, isImageLine } from "./terminal-image.ts";
 import { type Component, CURSOR_MARKER, compositeTuiLine } from "./tui.ts";
 import {
 	extractAnsiCode,
@@ -265,16 +265,17 @@ function paint(box: LayoutBox, screen: string[], width: number): void {
 	for (const child of box.children) paint(child, screen, width);
 	const view = box.scrollView;
 	if (view && box.scrollContentLines && view.scrollTop > 0 && rect.height > 0) {
-		for (let row = view.scrollTop - 1; row >= 0; row--) {
-			const line = box.scrollContentLines[row] ?? "",
-				image = getKittyImageMetadata(line);
+		const first = Math.max(0, view.scrollTop - getMaxKittyImageRows());
+		for (let row = view.scrollTop - 1; row >= first; row--) {
+			const line = box.scrollContentLines[row] ?? "";
+			if (!isImageLine(line)) continue;
+			const image = getKittyImageMetadata(line);
 			if (image) {
 				const hidden = view.scrollTop - row;
 				if (hidden < image.rows && rect.x === 0 && rect.width >= width)
 					screen[rect.y] = cropKittyImageLine(line, hidden, Math.min(rect.height, image.rows - hidden));
 				break;
 			}
-			if (line !== "") break;
 		}
 	}
 	const bar = getScrollbarGeometry(box);
@@ -306,7 +307,7 @@ export function renderLayoutFrame(
 function contains(rect: LayoutRect, x: number, y: number): boolean {
 	return x >= rect.x && x < rect.x + rect.width && y >= rect.y && y < rect.y + rect.height;
 }
-export function getLayoutBoxesAt(frame: LayoutFrame, x: number, y: number): LayoutBox[] {
+function layoutHits(frame: LayoutFrame, x: number, y: number): { box: LayoutBox; depth: number }[] {
 	const found: { box: LayoutBox; depth: number }[] = [];
 	const walk = (box: LayoutBox, depth: number) => {
 		if (!contains(box.clip, x, y)) return;
@@ -314,7 +315,12 @@ export function getLayoutBoxesAt(frame: LayoutFrame, x: number, y: number): Layo
 		for (const child of box.children) walk(child, depth + 1);
 	};
 	walk(frame.root, 0);
-	return found.sort((a, b) => b.box.layer - a.box.layer || b.depth - a.depth).map((item) => item.box);
+	return found;
+}
+export function getLayoutBoxesAt(frame: LayoutFrame, x: number, y: number): LayoutBox[] {
+	return layoutHits(frame, x, y)
+		.sort((a, b) => b.box.layer - a.box.layer || b.depth - a.depth)
+		.map((item) => item.box);
 }
 export function getScrollViewBox(frame: LayoutFrame, view: ScrollView): LayoutBox | undefined {
 	const pending = [frame.root];
@@ -325,7 +331,8 @@ export function getScrollViewBox(frame: LayoutFrame, view: ScrollView): LayoutBo
 	return;
 }
 export function getScrollViewsAt(frame: LayoutFrame, x: number, y: number): ScrollView[] {
-	return getLayoutBoxesAt(frame, x, y)
-		.filter((box) => box.scrollView && contains(box.rect, x, y))
-		.map((box) => box.scrollView!);
+	return layoutHits(frame, x, y)
+		.filter(({ box }) => box.scrollView && contains(box.rect, x, y))
+		.sort((a, b) => b.depth - a.depth)
+		.map(({ box }) => box.scrollView!);
 }

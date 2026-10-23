@@ -40,8 +40,8 @@ it("accounts for cached prompt prefixes across edits and shorter histories", asy
 	expect(
 		usage.map(({ input, cacheRead, cacheWrite, totalTokens }) => ({ input, cacheRead, cacheWrite, totalTokens })),
 	).toEqual([
-		{ input: 4, cacheRead: 0, cacheWrite: 4, totalTokens: 8 },
-		{ input: 0, cacheRead: 4, cacheWrite: 1, totalTokens: 5 },
+		{ input: 0, cacheRead: 0, cacheWrite: 4, totalTokens: 4 },
+		{ input: 0, cacheRead: 4, cacheWrite: 0, totalTokens: 4 },
 		{ input: 0, cacheRead: 2, cacheWrite: 0, totalTokens: 2 },
 	]);
 });

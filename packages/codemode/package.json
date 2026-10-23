@@ -47,7 +47,7 @@
 		"build": "tsc -p tsconfig.json"
 	},
 	"dependencies": {
-		"quickjs-wasi": "3.6.2"
+		"quickjs-wasi": "3.6.3"
 	},
 	"engines": {
 		"node": ">=22.19.0"

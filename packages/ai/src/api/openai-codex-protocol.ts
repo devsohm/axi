@@ -8,7 +8,6 @@ import { Type } from "typebox";
 import { Value } from "typebox/value";
 import type { AssistantMessage, Model, ProviderHeaders, StreamOptions } from "../types.ts";
 import { formatThrownValue } from "../utils/diagnostics.ts";
-import { getUserAgent } from "../utils/user-agent.ts";
 import type { OpenAICodexResponsesOptions } from "./options.ts";
 
 export interface CodexRequest {
@@ -172,6 +171,7 @@ export function codexUrl(base: string): string {
 			: `${root}/codex/responses`;
 }
 export function codexHeaders(
+	defaults: Record<string, string>,
 	model: Record<string, string> | undefined,
 	overrides: ProviderHeaders | undefined,
 	account: unknown,
@@ -179,7 +179,7 @@ export function codexHeaders(
 	transport: "sse" | "websocket",
 	session?: string,
 ): Headers {
-	const headers = new Headers({ originator: "axi", "User-Agent": getUserAgent() });
+	const headers = new Headers(defaults);
 	for (const [name, value] of Object.entries(model ?? {})) headers.set(name, value);
 	for (const [name, value] of Object.entries(overrides ?? {}))
 		if (value === null) headers.delete(name);

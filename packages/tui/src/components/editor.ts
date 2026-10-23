@@ -444,14 +444,14 @@ export class Editor implements Component, Focusable {
 			this.state.cursorCol
 		);
 	}
-	private erase(start: number, end: number): void {
+	private erase(start: number, end: number, moveCursor = true): void {
 		const text = this.getText(),
 			before = text.slice(0, start),
 			after = text.slice(end),
 			lines = before.split("\n");
 		this.state.lines = (before + after).split("\n");
 		this.state.cursorLine = lines.length - 1;
-		this.setCol(lines.at(-1)!.length);
+		if (moveCursor) this.setCol(lines.at(-1)!.length);
 	}
 	private delete(direction: -1 | 1, unit: "char" | "word" | "line"): void {
 		this.exitHistory();
@@ -505,7 +505,7 @@ export class Editor implements Component, Focusable {
 					);
 				}
 			}
-			this.erase(start, end);
+			this.erase(start, end, direction < 0 || (unit === "word" && col < line.length));
 		}
 		this.changed();
 		if (unit === "char") this.refreshAutocomplete();

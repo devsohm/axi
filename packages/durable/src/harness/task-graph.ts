@@ -1,7 +1,6 @@
-import { type AttachedReplicatedState, type Context, type JsonValue, replicatedState } from "@axi/chord";
+import { type Context, type JsonValue, Watch } from "@axi/chord";
 import { BACKGROUND_CONTEXT, withoutAbortSignal } from "@axi/chord/context";
 import { applyImmutable, type Op } from "@axi/chord/delta";
-import { CommittedStateSource, CommittedWatch } from "../session/observation.ts";
 import { contained, type SessionImpl } from "../session/session.ts";
 import type {
 	CommitPublication,
@@ -40,7 +39,7 @@ export type TaskGraphBlocking = {
 	readonly subscribeBlocked: (listener: () => void) => () => void;
 };
 type StoredTask = TaskRecord<JsonValue, JsonValue, JsonValue>;
-type Observer = CommittedStateSource<TaskGraph> | CommittedWatch<TaskGraph>;
+type Observer = Watch<TaskGraph>;
 type Mount = { value: TaskGraph; observers: Set<Observer>; records: Map<string, BlockedSubject> };
 
 export class TaskGraphView {
@@ -61,27 +60,15 @@ export class TaskGraphView {
 			this.#closed = true;
 			for (const observer of [...(this.#mount?.observers ?? [])])
 				contained(
-					() => observer.closeSession(session.failure),
+					() => observer.end(session.failure),
 					(error) => session.report(error),
 				);
 			this.#mount = undefined;
 		});
 	}
-	async state(context: Context): Promise<AttachedReplicatedState<TaskGraph>> {
-		const { observer, detach } = await this.#attach(
-			(value, release) => new CommittedStateSource<TaskGraph>(value, release),
-			context,
-		);
-		try {
-			return replicatedState(observer, { onError: (error) => this.#session.report(error) });
-		} catch (error) {
-			detach();
-			throw error;
-		}
-	}
 	async watch(context: Context): Promise<TaskGraphWatch> {
 		const { observer } = await this.#attach(
-			(value, release) => new CommittedWatch<TaskGraph>(value, release, (error) => this.#session.report(error)),
+			(value, release) => new Watch<TaskGraph>(value, release, (error) => this.#session.report(error)),
 			context,
 		);
 		const signal = context.abortSignal;

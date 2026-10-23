@@ -104,7 +104,7 @@ A persistent `CredentialStore` implements `read`, `list`, `modify`, and `delete`
 
 `AuthContext` supplies asynchronous `env(name)` and `fileExists(path)` methods. The default context reads process environment values and checks local files. A browser or remote host can supply another context.
 
-`AuthInteraction` supplies `prompt` and `notify`, plus an optional cancellation signal. Prompts distinguish text, secrets, manual codes, and selections. Notifications distinguish information, authorization URLs, device codes, and progress. The host owns display and input.
+`AuthInteraction` supplies `prompt` and `notify`, plus an optional cancellation signal. Prompts distinguish text, secrets, manual codes, and selections. Notifications distinguish information, authorization URLs, device codes, and progress. The host owns display and input. Device-code events can set `openBrowserOnConfirm` and `copyCodeOnConfirm`. Both default to true: a host can offer to open the browser or copy the code after confirmation. These are UI hints; the host may ignore them. Copying replaces the current clipboard contents.
 
 `models.login()` uses the registered provider's login method. Expired OAuth credentials refresh through the credential store. Logout deletes the stored record. Login availability and model availability are separate checks.
 
@@ -128,6 +128,10 @@ A custom provider's `refreshModels()` receives the stored snapshot, resolved cre
 
 `ClassifierContext` contains JSON `state`, named `questions`, and optional images. Questions request a choice, a score, or a boolean probability. Answers retain those types. Classifier support and image input support depend on the selected model.
 
+System One classifiers select their image encoding through `compat.imageInput`. `assets` sends referenced PNG or JPEG assets. `images` sends up to four PNG, JPEG or WebP data URLs. `state-image-urls` places image URL parts before the state. Missing settings are detected from provider, endpoint and model ID. `compat.sendImageOptInHeader` controls the experimental TypeSafe image header; requests without images do not add it. Text-only models reject image input before sending a request.
+
+The catalog marks supported image input and the required encoding explicitly. This keeps the encoding stable when an endpoint is replaced with a proxy.
+
 ## Deferred work and session resources
 
 A deferred chat result carries a provider handle. Persist that handle in the application. Use `fetchDeferred()` or `streamDeferred()` to retrieve it. Use `cancelDeferred()` when the supporting provider permits cancellation. Ordinary streaming and deferred retrieval use separate operations.
@@ -145,3 +149,13 @@ The package root exposes isolated model collections, public types, authenticatio
 The `telemetry` option accepts a `TelemetrySpan`. The model registry emits one logical request span around authentication and dispatch, or one poll span around a deferred fetch. Spans settle when the forwarded source result is observed.
 
 `AI_TELEMETRY_SCHEMA` defines `axi.ai.request`, `axi.ai.poll`, first-chunk and block events, and request-duration, first-chunk-duration, token and cost metrics. Block events contain lengths and tool names without inspecting arguments. Histogram measurements carry the request span as an exemplar. Instruments are cached by metrics-adapter identity. Pending and deferred polls emit durations but no usage counters. Error diagnostics are capped at 500 characters; cancellation remains `ok`.
+
+## Reported billing totals
+
+`Usage.cost.totalFromProvider` is true when the response supplies complete valid billing data. Otherwise, the total uses catalog rates. OpenRouter BYOK responses include both the OpenRouter charge and the upstream inference charge. The input, output, cache-read, and cache-write fields remain catalog estimates, so their sum can differ from a provider-reported total. Calling `calculateCost()` resets `totalFromProvider` to false.
+
+## SDK protocol compatibility
+
+The Anthropic adapter pins `anthropic-version` to `2023-06-01` unless caller headers override it. Updating the SDK does not silently change the request protocol. Compatible endpoints can still receive `temperature` when enabled by model compatibility settings and not suppressed by thinking controls.
+
+Google's SDK mapper rejects unsupported finish reasons, including `CONTINUATION`. Streaming reports an error while retaining partial output and the raw stop reason. The raw string mapper classifies unknown reasons as `error`. Neither path automatically submits a continuation request.

@@ -72,6 +72,16 @@ Immutable replay shares unchanged containers and operation payloads. Mutable rep
 
 Object cell notifications install related values before observers run. Standalone state subscriptions serialize each subscriber's asynchronous callbacks independently. At most 100 deliveries wait per subscriber; overflow retains the newest value and any unstarted initial hydration. Unsubscribe drops waiting callbacks without cancelling the running one. Callback failures are reported and do not stop later deliveries.
 
+## Watch handles
+
+`Watchable<T>` exposes a current value and an asynchronous `watch(context)` acquisition. A watch begins with the value held at acquisition. Its single listener receives later frames in order and never runs inside `start()` or `advance()`. The handle's `value` changes before each callback. Sources must attach the watch and capture its initial value without losing intervening changes.
+
+`Watch<T>` delivers immutable JSON values, delta operations and the commit context. `NativeWatch<T>` delivers in-process values and contexts without delta operations. Both serialize asynchronous callbacks. When 100 frames are waiting, the next frame replaces the backlog. JSON watches deliver a root replacement using the configured replacement callback or the latest value. Native watches retain the latest value.
+
+`observeCancellation()` installs one acquisition signal. Delivered contexts retain their other fields but do not carry that signal. `stop()`, cancellation, source closure and listener failure end the watch once, detach it from its source and discard queued frames. They do not cancel a callback already running. `closed` reports the terminal reason, and the handle retains its last delivered value. Starting twice, starting after termination or installing cancellation twice is an error.
+
+`retire()` is available for JSON watches whose value includes `null`. It queues a final null replacement, rejects later advances and closes with `retired` after that callback completes. An ordinary frame containing null does not retire a watch. A listener failure is reported and ends that watch; unlike standalone state subscriptions, it does not continue with later callbacks.
+
 ## Reload
 
 A host serializes reloads and retains at most current and previous code versions. Preparation records new declarations, checks provider and consumer compatibility, opens nonexclusive candidate resources, checks registrations and stages listeners. Candidate tasks do not run before commit. Failed preparation discards candidates and preserves installed code.
@@ -98,7 +108,7 @@ Acknowledged frame sizes regulate state traffic. Defaults are a 256 KiB window, 
 
 ## Helpers and limits
 
-The Node host manager serializes start, stop and replacement, uses kernel-backed process locks and closes child process trees after a grace period. Applications supply restart and liveness policy. Missing child PIDs are never used as process-group signal targets.
+The Node host manager serializes start, stop and replacement, uses kernel-backed process locks and closes child process trees after a grace period. Applications supply restart and liveness policy. Process-group cleanup computes the target from the child PID. A missing PID uses the sentinel `-1`, so that exceptional path attempts a signal to PID 1; applications must not treat it as a safe missing-process guard.
 
 Output helpers bound head or tail windows without splitting UTF-8 characters, track skipped output and sanitize display controls. Progress writes are coalesced with one write in flight, paced by a minimum interval and 100 KiB per second. Stop joins the active write and returns pending waiters for final delivery.
 

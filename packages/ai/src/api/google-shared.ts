@@ -149,6 +149,47 @@ function openApiSchema(value: unknown): unknown {
 	for (const [key, nested] of Object.entries(value)) if (!schemaMetadata.has(key)) result[key] = openApiSchema(nested);
 	return result;
 }
+const schemaMaps = new Set([
+	"properties",
+	"patternProperties",
+	"$defs",
+	"definitions",
+	"dependentSchemas",
+	"dependencies",
+]);
+const schemaChildren = new Set([
+	"additionalProperties",
+	"unevaluatedProperties",
+	"propertyNames",
+	"items",
+	"prefixItems",
+	"additionalItems",
+	"unevaluatedItems",
+	"contains",
+	"allOf",
+	"anyOf",
+	"oneOf",
+	"not",
+	"if",
+	"then",
+	"else",
+	"contentSchema",
+]);
+function geminiSchema(value: unknown, names = false): unknown {
+	if (Array.isArray(value)) return value.map((item) => geminiSchema(item));
+	if (value === null || typeof value !== "object") return value;
+	const result = Object.fromEntries(
+		Object.entries(value).map(([key, child]) => [
+			key,
+			names || schemaChildren.has(key) ? geminiSchema(child) : schemaMaps.has(key) ? geminiSchema(child, true) : child,
+		]),
+	);
+	if (!names && result.enum === undefined && (typeof result.const === "string" || typeof result.const === "number")) {
+		result.enum = [result.const];
+		delete result.const;
+	}
+	return result;
+}
 export function convertTools(
 	tools: Tool[],
 	useParameters = false,
@@ -162,7 +203,9 @@ export function convertTools(
 				return {
 					name: tool.name,
 					description: tool.description,
-					...(useParameters ? { parameters: openApiSchema(parameters) } : { parametersJsonSchema: parameters }),
+					...(useParameters
+						? { parameters: openApiSchema(parameters) }
+						: { parametersJsonSchema: geminiSchema(parameters) }),
 				};
 			}),
 		},
@@ -215,6 +258,8 @@ export function mapStopReason(reason: FinishReason): StopReason {
 		case "TOO_MANY_TOOL_CALLS":
 		case "NO_IMAGE":
 			return "error";
+		case "CONTINUATION":
+			throw new Error(`Unhandled stop reason: ${reason}`);
 		default: {
 			const unhandled: never = reason;
 			throw new Error(`Unhandled stop reason: ${unhandled}`);

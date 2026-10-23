@@ -3,7 +3,7 @@ import { AltScreenSearchIndex, findAltScreenSearchMatches } from "../src/alt-scr
 import { ScrollView } from "../src/components/scroll-view.ts";
 import { Text } from "../src/components/text.ts";
 import { VStack } from "../src/components/v-stack.ts";
-import { renderLayoutFrame } from "../src/layout.ts";
+import { getLayoutBoxesAt, getScrollViewsAt, renderLayoutFrame } from "../src/layout.ts";
 import { stripTerminalSequences } from "../src/utils.ts";
 import { AltScreenFlashContainer } from "../src/components/alt-screen-flash.ts";
 
@@ -57,4 +57,26 @@ test("flash expiry removes only the expired message and disposal cancels timers"
 	vi.advanceTimersByTime(50);
 	expect(flashes.render(12)).toEqual([]);
 	expect(redraw).toHaveBeenCalledTimes(calls);
+});
+
+test("scroll targeting prefers the deepest view independently of paint layers", () => {
+	const inner = new ScrollView(new Text("content", 0, 0));
+	const outer = new ScrollView(inner);
+	const frame = renderLayoutFrame(outer, 12, 3, () => {});
+	frame.root.layer = 10;
+	expect(getLayoutBoxesAt(frame, 0, 0)[0]?.scrollView).toBe(outer);
+	expect(getScrollViewsAt(frame, 0, 0)).toEqual([inner, outer]);
+});
+
+test("a scrolled image remains visible through decorated placeholder lines", async () => {
+	const { encodeKitty, registerKittyImageMetadata } = await import("../src/terminal-image.ts");
+	const imageId = 984312;
+	registerKittyImageMetadata({ imageId, columns: 2, rows: 3, widthPx: 90, heightPx: 90 });
+	const image = encodeKitty("AAAA", { imageId, columns: 2, rows: 3, moveCursor: false });
+	const content = { render: () => ["heading", image, " | details", " | details", "tail", "end"], invalidate() {} };
+	const view = new ScrollView(content, { follow: "end", primary: true });
+	const frame = renderLayoutFrame(view, 20, 3, () => {});
+	expect(view.scrollTop).toBe(3);
+	expect(frame.lines[0]).toContain("i=984312");
+	expect(frame.lines[0]).toContain("y=60,h=30,r=1");
 });

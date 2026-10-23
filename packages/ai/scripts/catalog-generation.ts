@@ -47,16 +47,12 @@ function longContext(cost: ModelCost): ModelCost {
 }
 const extendedCopilot = new Set([
 	"claude-fable-5",
-	"claude-opus-4.6",
-	"claude-opus-4.7",
 	"claude-opus-4.8",
 	"claude-opus-5",
 	"claude-opus-5.5",
 	"claude-sonnet-4.6",
 	"claude-sonnet-5",
 	"gpt-5.3-codex",
-	"gpt-5.4",
-	"gpt-5.5",
 	"gpt-6-astra",
 	"gpt-6-luna",
 	"gpt-6-sol",
@@ -218,7 +214,11 @@ export function assembleCatalog(
 				requiresReasoningContentOnAssistantMessages: true,
 				...(["openrouter", "opencode"].includes(model.provider) ? {} : { thinkingFormat: "deepseek" }),
 			};
-	models.push(...Object.keys(MODELS["openai-codex"]).map((id) => chat("openai-codex", id)));
+	models.push(
+		...Object.keys(MODELS["openai-codex"])
+			.filter((id) => !["gpt-5.3-codex-spark", "gpt-5.5"].includes(id))
+			.map((id) => chat("openai-codex", id)),
+	);
 	if (!models.some((model) => model.provider === "mistral" && model.id === "mistral-medium-3.5"))
 		models.push({
 			...chat("mistral", "mistral-medium-3.5"),

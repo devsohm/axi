@@ -83,3 +83,13 @@ export {
 	type ReplicatedStateSourceOptions,
 	replicatedState,
 } from "./state.ts";
+
+export {
+	NativeWatch,
+	type NativeWatchHandle,
+	type NativeWatchable,
+	Watch,
+	type Watchable,
+	type WatchEnd,
+	type WatchHandle,
+} from "./watch.ts";

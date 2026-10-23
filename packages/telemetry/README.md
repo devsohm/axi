@@ -96,3 +96,5 @@ measurements within ten-second intervals. Import `renderTrace` from
 trace as text, including nested spans, events, links, durations, and errors.
 
 Adapters accept trusted typed inputs. Behavior for malformed inputs is unspecified.
+
+[API reference](docs/api.md)

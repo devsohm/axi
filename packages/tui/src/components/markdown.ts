@@ -63,18 +63,28 @@ function inlineMath(source: string): MathToken | undefined {
 	if (!value || value.includes("\n")) return;
 	return { type: "latex", raw: source.slice(0, end + close.length), text: value };
 }
+function hasTable(source: string): boolean {
+	const lines = source.split("\n");
+	return lines.some(
+		(line, index) =>
+			index > 0 &&
+			(line.includes("|") || lines[index - 1]!.includes("|")) &&
+			/^ {0,3}\|?[ \t]*:?-+:?[ \t]*(?:\|[ \t]*:?-+:?[ \t]*)*\|?[ \t]*$/.test(line),
+	);
+}
 function blockMath(source: string): MathToken | undefined {
 	for (const pattern of [
 		/^ {0,3}\$\$[ \t]*(?:\n)?([\s\S]*?)\$\$[ \t]*(?:\n|$)/,
 		/^ {0,3}\\\[[ \t]*(?:\n)?([\s\S]*?)\\\][ \t]*(?:\n|$)/,
 	]) {
 		const match = pattern.exec(source);
-		if (match?.[1]) return { type: "latexBlock", raw: match[0], text: match[1].trim() };
+		if (match?.[1] && !hasTable(match[1])) return { type: "latexBlock", raw: match[0], text: match[1].trim() };
 	}
 	const bracket = /^ {0,3}\\\[[ \t]*(?:\n)?([\s\S]*)$/.exec(source);
-	if (bracket) return { type: "latexBlock", raw: bracket[0], text: bracket[1]!, pending: true };
+	if (bracket?.[1] && !hasTable(bracket[1]))
+		return { type: "latexBlock", raw: bracket[0], text: bracket[1]!, pending: true };
 	const dollar = /^ {0,3}\$\$[ \t]*(?:\n)?([\s\S]*)$/.exec(source);
-	if (dollar?.[1] && pendingMath(dollar[1]))
+	if (dollar?.[1] && pendingMath(dollar[1]) && !hasTable(dollar[1]))
 		return { type: "latexBlock", raw: dollar[0], text: dollar[1], pending: true };
 	return;
 }
@@ -336,11 +346,13 @@ export class Markdown implements Component {
 			case "table":
 				return this.table(token as Tokens.Table, width, next, context);
 			case "blockquote": {
+				const tokens: Token[] = token.tokens ?? [];
+				if (width < 3)
+					return tokens.flatMap((child, index) => this.block(child, width, tokens[index + 1]?.type, context));
 				const style = (text: string) => theme.quote(theme.italic(text)),
 					start = prefix(style),
 					ctx = { applyText: (text: string) => text, stylePrefix: start },
-					innerWidth = Math.max(1, width - 2),
-					tokens: Token[] = token.tokens ?? [];
+					innerWidth = width - 2;
 				const lines = tokens.flatMap((child, index) => this.block(child, innerWidth, tokens[index + 1]?.type, ctx));
 				while (lines.at(-1) === "") lines.pop();
 				return [

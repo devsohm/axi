@@ -305,6 +305,8 @@ export async function createSqliteTelemetry(
 	db: SqliteDatabase,
 	options: SqliteTelemetryOptions = {},
 ): Promise<SqliteTelemetry> {
+	const retention = options.retentionMs ?? 604800000;
+	const capacity = options.maxQueuedSpans ?? 10000;
 	await applySqliteMigrations(
 		db,
 		[
@@ -321,5 +323,5 @@ export async function createSqliteTelemetry(
 		],
 		{ table: "telemetry_schema" },
 	);
-	return new SqliteRecorder(db, options.retentionMs ?? 604800000, options.maxQueuedSpans ?? 10000);
+	return new SqliteRecorder(db, retention, capacity);
 }

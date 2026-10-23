@@ -33,8 +33,8 @@ export class GuardedStorage implements T.Storage {
 		const failure = this.#owner.failure;
 		if (failure !== undefined) throw new SessionFailed(failure.error);
 	}
-	commit(writes: readonly T.StorageWrite[], context: Context) {
-		return this.#call(undefined, () => this.#backend.commit(writes, context));
+	commit(writes: readonly T.StorageWrite[], adopt: (seq: T.Seq) => void, context: Context) {
+		return this.#call(undefined, () => this.#backend.commit(writes, adopt, context));
 	}
 	mintId<RecordId extends T.Id<string>>(): Promise<RecordId> {
 		return this.#call(undefined, () => this.#backend.mintId<RecordId>());

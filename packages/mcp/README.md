@@ -78,3 +78,5 @@ local-code
 ```
 
 See the [specification](docs/spec.md) for lifecycle, transport limits, authentication and supported protocol methods.
+
+[API reference](docs/api.md)

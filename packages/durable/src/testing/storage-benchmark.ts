@@ -70,14 +70,14 @@ async function batches(
 	for (let start = 0; start < count; start += 100) {
 		const writes: StorageWrite[] = [];
 		for (let index = start; index < Math.min(start + 100, count); index++) writes.push(await create(index));
-		await storage.commit(writes, context);
+		await storage.commit(writes, () => {}, context);
 	}
 }
 export async function seedStorageBenchmark(
 	storage: Storage,
 	scale: StorageBenchmarkScale = TIMING_SCALE,
 ): Promise<StorageBenchmarkDataset> {
-	await storage.commit([{ type: "conversation", value: { id: ROOT } }], context);
+	await storage.commit([{ type: "conversation", value: { id: ROOT } }], () => {}, context);
 	let firstEntryId: EntryId | undefined;
 	await batches(scale.entryCount, storage, async (index) => {
 		const id = await storage.mintId<EntryId>();
@@ -121,6 +121,7 @@ export async function seedStorageBenchmark(
 			},
 			content: { kind: "base", version: 1, value: { count: 0, text: "x".repeat(64) } },
 		})),
+		() => {},
 		context,
 	);
 	for (let count = 1; count <= 1024; count++)
@@ -132,6 +133,7 @@ export async function seedStorageBenchmark(
 					id,
 					content: { kind: "delta", version: 1, ops: [["s", ["count"], count]] },
 				})),
+			() => {},
 			context,
 		);
 	const historicalDocumentId = await storage.mintId<DocumentId>();
@@ -144,6 +146,7 @@ export async function seedStorageBenchmark(
 	};
 	await storage.commit(
 		[{ type: "document.create", record, content: { kind: "base", version: 1, value: { count: 0 } } }],
+		() => {},
 		context,
 	);
 	let ancientAt: Seq | undefined;
@@ -156,6 +159,7 @@ export async function seedStorageBenchmark(
 					content: { kind: "delta", version: 1, ops: [["s", ["count"], count]] },
 				},
 			],
+			() => {},
 			context,
 		);
 	await storage.commit(
@@ -166,6 +170,7 @@ export async function seedStorageBenchmark(
 				content: { kind: "base", version: 1, value: { count: 128 } },
 			},
 		],
+		() => {},
 		context,
 	);
 	if (ancientAt === undefined) throw new Error("Benchmark history seed produced no commits");
@@ -179,6 +184,7 @@ export async function seedStorageBenchmark(
 					content: { kind: "delta", version: 1, ops: [["s", ["count"], count]] },
 				},
 			],
+			() => {},
 			context,
 		);
 	if (firstEntryId === undefined) throw new Error("Benchmark scale must create entries");
@@ -188,6 +194,7 @@ export async function seedStorageBenchmark(
 		const id = await storage.mintId<ConversationId>();
 		await storage.commit(
 			[{ type: "conversation", value: { id, parent: { conversationId: deepestConversationId, at } } }],
+			() => {},
 			context,
 		);
 		const ids = await Promise.all(Array.from({ length: 32 }, () => storage.mintId<EntryId>()));
@@ -196,6 +203,7 @@ export async function seedStorageBenchmark(
 				type: "entry",
 				value: { id: entry, conversationId: id, kind: "benchmark.fork", data: { depth, index } },
 			})),
+			() => {},
 			context,
 		);
 		deepestConversationId = id;
@@ -299,7 +307,7 @@ export type StorageWriteBenchmark = {
 	run(storage: Storage): Promise<number>;
 };
 export async function seedStorageWriteBenchmark(storage: Storage): Promise<void> {
-	await storage.commit([{ type: "conversation", value: { id: ROOT } }], context);
+	await storage.commit([{ type: "conversation", value: { id: ROOT } }], () => {}, context);
 	await storage.commit(
 		await Promise.all(
 			Array.from(
@@ -315,6 +323,7 @@ export async function seedStorageWriteBenchmark(storage: Storage): Promise<void>
 				}),
 			),
 		),
+		() => {},
 		context,
 	);
 }
@@ -331,6 +340,7 @@ export const STORAGE_WRITE_BENCHMARKS: readonly StorageWriteBenchmark[] = [
 						value: { id, conversationId: ROOT, kind: "benchmark.write", data: { text: "x".repeat(128) } },
 					},
 				],
+				() => {},
 				context,
 			);
 			return 1;
@@ -354,7 +364,7 @@ export const STORAGE_WRITE_BENCHMARKS: readonly StorageWriteBenchmark[] = [
 					}),
 				),
 			);
-			await storage.commit(writes, context);
+			await storage.commit(writes, () => {}, context);
 			return writes.length;
 		},
 	},
@@ -386,7 +396,7 @@ export const STORAGE_WRITE_BENCHMARKS: readonly StorageWriteBenchmark[] = [
 					content: { kind: "base", version: 1, value: { entryId, taskId } },
 				},
 			];
-			await storage.commit(writes, context);
+			await storage.commit(writes, () => {}, context);
 			return writes.length;
 		},
 	},

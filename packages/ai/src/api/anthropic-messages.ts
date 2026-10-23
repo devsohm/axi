@@ -17,6 +17,7 @@ import type {
 import { appendAssistantMessageDiagnostic } from "../utils/diagnostics.ts";
 import { AssistantMessageEventStream } from "../utils/event-stream.ts";
 import { headersToRecord } from "../utils/headers.ts";
+import { applyOpenRouterReportedCost, isOpenRouterModel } from "../utils/openrouter-cost.ts";
 import { parseStreamingJson, parseToolCallArguments } from "../utils/json-parse.ts";
 import { retryProviderRequest } from "../utils/provider-retry.ts";
 import { getCurrentTools, resolveTranscript } from "../utils/transcript.ts";
@@ -266,6 +267,7 @@ export const stream: StreamFunction<"anthropic-messages", AnthropicOptions> = (m
 						}
 						if (event.usage) updateUsage(output.usage, event.usage, false);
 						calculateCost(pricingModel, output.usage);
+						if (isOpenRouterModel(model)) applyOpenRouterReportedCost(output.usage, event.usage);
 						break;
 					}
 				}

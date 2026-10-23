@@ -1,6 +1,6 @@
 import type { AssistantMessage } from "../types.ts";
 const terminal =
-	/GoUsageLimitError|FreeUsageLimitError|Monthly usage limit reached|available balance|insufficient_quota|out of budget|quota exceeded|billing|subscription_sharing_usage_limit_exceeded/i;
+	/GoUsageLimitError|FreeUsageLimitError|Monthly usage limit reached|available balance|insufficient_quota|out of budget|quota exceeded|billing|subscription_sharing_usage_limit_exceeded|subscription_sharing_workplace_individual_usage_limit_exceeded/i;
 const transient = new RegExp(
 	[
 		"overloaded",
@@ -10,13 +10,7 @@ const transient = new RegExp(
 		"model is at capacity",
 		"rate.?limit",
 		"too many requests",
-		"429",
-		"500",
-		"502",
-		"503",
-		"504",
-		"520",
-		"524",
+		"(?<![a-z0-9])(?:429|500|502|503|504|520|524)(?![a-z0-9])",
 		"service.?(?:is.?)?(?:temporarily.?)?unavailable",
 		"server.?error",
 		"internal.?error",
@@ -26,6 +20,7 @@ const transient = new RegExp(
 		"upstream.?request.?failed",
 		"upstream_stream_read_error",
 		"stream was interrupted",
+		"stream disconnected before completion",
 		"http/?2 stream failed",
 		"network.?error",
 		"connection.?error",

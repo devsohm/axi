@@ -110,11 +110,6 @@ function completionsMetadata(model: Model<"openai-completions">): void {
 			url,
 		);
 	detected.supportsStrictMode = !unsupportedStrict;
-	if (
-		(model.provider === "together" || /api\.together\.(ai|xyz)/.test(url)) &&
-		["deepseek-ai/DeepSeek-R1", "MiniMaxAI/MiniMax-M2.7"].includes(model.id)
-	)
-		detected.thinkingFormat = "openai";
 	if (model.provider === "openrouter" && /^~?anthropic\//.test(model.id)) detected.cacheControlFormat = "anthropic";
 	const delta = Object.fromEntries(
 		Object.entries(detected).filter(([key, value]) => {
@@ -271,7 +266,7 @@ export function applyCatalogMetadata(model: Model<Api>, options?: ModelsDevReaso
 	if (provider === "ant-ling" && model.reasoning)
 		thinking(model, { off: null, minimal: null, low: null, medium: null, high: "high", xhigh: "xhigh" });
 	if (provider === "github-copilot") {
-		if (["claude-opus-4.7", "claude-opus-4.8", "claude-opus-5", "claude-sonnet-4.6"].includes(id))
+		if (["claude-opus-4.8", "claude-opus-5", "claude-sonnet-4.6"].includes(id))
 			thinking(model, { minimal: "low", ...(id === "claude-sonnet-4.6" ? { max: "max" } : {}) });
 	}
 	if (hasApi(model, "anthropic-messages") && provider === "anthropic")

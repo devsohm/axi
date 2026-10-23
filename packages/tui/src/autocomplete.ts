@@ -111,7 +111,7 @@ async function walk(base: string, fd: string, query: string, signal: AbortSignal
 		args.push(
 			normalized.includes("/") && trimmed
 				? trimmed.split("/").filter(Boolean).map(escape).join("[\\\\/]") + (normalized.endsWith("/") ? "[\\\\/]" : "")
-				: normalized,
+				: escape(normalized),
 		);
 	}
 	return new Promise((resolve) => {

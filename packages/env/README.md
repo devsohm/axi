@@ -59,3 +59,5 @@ Watchers restore coverage after a connection loss and report an overflow because
 The protocol carries JSON fields and binary payloads over stdin and stdout. Daemon diagnostics use stderr. Process output supports retained windows, skipped-byte counts and complete-output spill files.
 
 See the [specification](docs/spec.md) for ownership and failure contracts, the [wire protocol](docs/protocol.md) for operations and limits, and the [environment semantics](docs/semantics.md) for files, commands and cancellation.
+
+[API reference](docs/api.md)

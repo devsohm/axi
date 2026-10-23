@@ -5,6 +5,10 @@ const label = "Cloudflare Workers AI";
 const transport: SystemOneTransport = {
 	api: "cloudflare-workers-ai-system-one",
 	label,
+	detectCompat: (model) => ({
+		imageInput: model.id.startsWith("@cf/cloudflare/clef") ? "images" : "assets",
+		sendImageOptInHeader: false,
+	}),
 	url: (model) => new URL("run", `${model.baseUrl.replace(/\/+$/u, "")}/`),
 	payload: (model, request) => ({ model: model.id, input: request }),
 	output: (body) => {

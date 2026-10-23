@@ -2,7 +2,7 @@ import { type GenerateContentParameters, GoogleGenAI } from "@google/genai";
 import type { SimpleStreamOptions, StreamFunction } from "../types.ts";
 import { providerHeadersToRecord } from "../utils/headers.ts";
 import { collapseSystemMessages } from "../utils/transcript.ts";
-import { getUserAgent } from "../utils/user-agent.ts";
+import { getIdentityHeaders } from "../utils/identity.ts";
 import { googleRequest, googleSimpleOptions } from "./google-request.ts";
 import { retryGoogleRequest } from "./google-shared.ts";
 import { googleStream } from "./google-stream.ts";
@@ -22,7 +22,7 @@ export const stream: StreamFunction<"google-generative-ai", GoogleOptions> = (mo
 				apiKey: options.apiKey,
 				httpOptions: {
 					...(model.baseUrl ? { baseUrl: model.baseUrl, apiVersion: "" } : {}),
-					headers: providerHeadersToRecord({ "User-Agent": getUserAgent(), ...model.headers, ...options.headers }),
+					headers: providerHeadersToRecord(getIdentityHeaders(model, options.identity), model.headers, options.headers),
 				},
 			});
 			const params = googleRequest(model, transcript, options);
