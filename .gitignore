@@ -1,0 +1,8 @@
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo
+target/
+release/
+packages/env/bin/
+packages/tui/native/*/prebuilds/

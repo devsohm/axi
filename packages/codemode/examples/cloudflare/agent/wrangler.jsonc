@@ -1,0 +1,12 @@
+{
+	"name": "axi-codemode-session-example",
+	"main": "src/index.ts",
+	"compatibility_date": "2026-04-22",
+	"durable_objects": {
+		"bindings": [
+			{ "name": "SESSION", "class_name": "Session" },
+			{ "name": "SANDBOX", "class_name": "Sandbox", "script_name": "axi-codemode-sandbox" }
+		]
+	},
+	"migrations": [{ "tag": "v1", "new_sqlite_classes": ["Session"] }]
+}
