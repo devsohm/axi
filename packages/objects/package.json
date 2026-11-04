@@ -84,6 +84,26 @@
 			"source": "./src/node/plugins/runtime.ts",
 			"types": "./dist/node/plugins/runtime.d.ts",
 			"import": "./dist/node/plugins/runtime.js"
+		},
+		"./web": {
+			"source": "./src/web/index.ts",
+			"types": "./dist/web/index.d.ts",
+			"import": "./dist/web/index.js"
+		},
+		"./react": {
+			"source": "./src/react/index.ts",
+			"types": "./dist/react/index.d.ts",
+			"import": "./dist/react/index.js"
+		},
+		"./surfaces": {
+			"source": "./src/node/surfaces/index.ts",
+			"types": "./dist/node/surfaces/index.d.ts",
+			"import": "./dist/node/surfaces/index.js"
+		},
+		"./tui": {
+			"source": "./src/tui/index.ts",
+			"types": "./dist/tui/index.d.ts",
+			"import": "./dist/tui/index.js"
 		}
 	},
 	"files": [
@@ -96,13 +116,17 @@
 	},
 	"peerDependencies": {
 		"esbuild": "0.28.2",
-		"ws": "8.21.0"
+		"ws": "8.21.0",
+		"react": "19.3.1"
 	},
 	"peerDependenciesMeta": {
 		"esbuild": {
 			"optional": true
 		},
 		"ws": {
+			"optional": true
+		},
+		"react": {
 			"optional": true
 		}
 	},

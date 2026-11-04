@@ -13,21 +13,11 @@ export function packageName(specifier: string): string {
 }
 import type { Plugin } from "./discover.ts";
 import { registerScript } from "./stack.ts";
+import { interop } from "../../surfaces/registered.ts";
 
 export type HostPackages = Readonly<Record<string, unknown>>;
 export type EvaluateOptions = { readonly hostPackages: HostPackages; readonly plugin: Plugin };
 export type BuiltScript = Extract<BuiltFacet, { readonly kind: "script" }>;
-const namespaces = new WeakMap<object, object>();
-function asCommonJs(value: unknown): unknown {
-	if (value === null || typeof value !== "object" || Object.prototype.toString.call(value) !== "[object Module]")
-		return value;
-	let namespace = namespaces.get(value);
-	if (!namespace) {
-		namespace = { ...value, __esModule: true };
-		namespaces.set(value, namespace);
-	}
-	return namespace;
-}
 export function pluginFile(path: string): string {
 	throw new Error(`pluginFile("${path}"): only a plugin's facet script, evaluated by the plugins component, has one`);
 }
@@ -45,18 +35,23 @@ export function evaluateFacet<P extends Principal = Principal>(built: BuiltScrip
 	let version = built.api?.version;
 	const requireForScript = (specifier: string): unknown => {
 		if (built.api && specifier !== PLUGINS_SPECIFIER) {
-			if (packageName(specifier) === "@axi/objects") throw new Error(`${label}: "${specifier}": plugins import Objects through the app's API`);
+			if (packageName(specifier) === "@axi/objects")
+				throw new Error(`${label}: "${specifier}": plugins import Objects through the app's API`);
 			if (specifier === built.api.name || specifier.startsWith(`${built.api.name}/`)) {
 				const requested = specifier.slice(built.api.name.length + 1).split("/")[0];
-				if (version !== undefined && requested !== version) throw new Error(`${label}: "${specifier}": this script uses ${built.api.name}/${version}: one facet uses one version of the API`);
+				if (version !== undefined && requested !== version)
+					throw new Error(
+						`${label}: "${specifier}": this script uses ${built.api.name}/${version}: one facet uses one version of the API`,
+					);
 				version ??= requested;
 			}
 		}
-		if (Object.hasOwn(hostPackages, specifier)) return asCommonJs(hostPackages[specifier]);
+		if (Object.hasOwn(hostPackages, specifier)) return interop(hostPackages[specifier]);
 		if (specifier === PLUGINS_SPECIFIER)
 			return (helpers ??= {
 				pluginFile: (path) => {
-					if (plugin.layout === "file") throw new Error(`pluginFile("${path}"): single-file plugin "${plugin.name}" has no directory of its own`);
+					if (plugin.layout === "file")
+						throw new Error(`pluginFile("${path}"): single-file plugin "${plugin.name}" has no directory of its own`);
 					const file = resolve(plugin.dir, path),
 						remainder = relative(plugin.dir, file);
 					if (remainder.startsWith("..") || isAbsolute(remainder))
@@ -64,7 +59,8 @@ export function evaluateFacet<P extends Principal = Principal>(built: BuiltScrip
 					return file;
 				},
 			});
-		if (plugin.layout === "file") throw new Error(`${label}: "${specifier}": a single-file plugin requires only host packages`);
+		if (plugin.layout === "file")
+			throw new Error(`${label}: "${specifier}": a single-file plugin requires only host packages`);
 		if (isBuiltin(specifier) || plugin.external.includes(packageName(specifier))) {
 			nativeRequire ??= createRequire(join(plugin.dir, "package.json"));
 			return nativeRequire(specifier);

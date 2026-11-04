@@ -7,6 +7,7 @@ export * from "./jobs/index.ts";
 export * from "./link/index.ts";
 export * from "./host/index.ts";
 export * from "./store/index.ts";
+export * from "./surfaces/index.ts";
 export { OBJECTS_TELEMETRY_SCHEMA, type ObjectsSpanName } from "./telemetry.ts";
 export {
 	StoreOwnerTables,

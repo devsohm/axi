@@ -25,6 +25,10 @@ Persistent documents, tables and jobs use a shared SQLite Store. The Store commi
 | `@axi/objects/workers` | Node worker hosts and process locks |
 | `@axi/objects/plugins` | Plugin discovery, builds, installation, testing and rollout |
 | `@axi/objects/plugins/runtime` | Evaluation of prebuilt plugin scripts |
+| `@axi/objects/surfaces` | Browser and terminal bundle publication |
+| `@axi/objects/web` | Browser startup, connection and live plugin updates |
+| `@axi/objects/react` | Optional React hooks and host context |
+| `@axi/objects/tui` | Terminal scopes and sandbox bridge runtime |
 
 The Node helpers load only when imported. Plugin builds require the optional `esbuild` peer. WebSocket hosting requires the optional `ws` peer.
 
@@ -35,5 +39,6 @@ The Node helpers load only when imported. Plugin builds require the optional `es
 - [Specification](docs/spec.md): lifecycle, publication, failures and limits.
 - [API reference](docs/api.md): exported names and declarations.
 - [HTTP](docs/http.md), [workers](docs/workers.md) and [plugins](docs/plugins.md): Node integration.
+- [Clients](docs/clients.md): browser, React and terminal integration, messages and preferences.
 
 Facets run as trusted code. Reload replaces implementations in a running host. Durable task recovery is provided by `@axi/durable`, which can use this package's Store and registry adapters.
