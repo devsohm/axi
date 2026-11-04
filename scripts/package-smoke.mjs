@@ -43,12 +43,18 @@ import {
 import { openNodeSqliteDatabase } from "@axi/objects/sqlite/node";
 import { StoreStorage } from "@axi/durable/storage/store";
 import { openNodeSqliteStorage } from "@axi/durable/storage/sqlite/node";
-import { Connection, RemoteExecutionEnv, localDaemon } from "@axi/env";
+import { Connection, RemoteExecutionEnv, localDaemon, openProcess } from "@axi/env";
 import { CodingTools } from "@axi/durable/tools";
 import { createNodePhotonImages } from "@axi/durable/images/node";
 import { createCodemodeExtension, CodemodeStoreDoc } from "@axi/durable/codemode";
 import { CodemodeSandbox } from "@axi/codemode";
-import { McpClient, LATEST_PROTOCOL_VERSION } from "@axi/mcp";
+import {
+	McpClient,
+	LATEST_PROTOCOL_VERSION,
+	createMcpToolName,
+	normalizeMcpInputSchema,
+	validateMcpServerConfig,
+} from "@axi/mcp";
 import { createInMemoryTransportPair } from "@axi/mcp/testing";
 
 const tui = await import("@axi/tui");
@@ -232,6 +238,19 @@ const openHarness = async () =>
 		context,
 	);
 try {
+	assert.equal(createMcpToolName("installed-server", "read"), "mcp__installed_server__read");
+	assert.deepEqual(normalizeMcpInputSchema({}), { type: "object", properties: {} });
+	assert.equal(validateMcpServerConfig("installed", { command: process.execPath }).kind, "stdio");
+	const pipeOutput = [];
+	const program = await openProcess(envConnection, {
+		cwd,
+		argv: [process.execPath, "-e", "process.stdin.pipe(process.stdout)"],
+		onStdout: (bytes) => pipeOutput.push(bytes),
+	});
+	program.write(new Uint8Array([1, 255, 13, 10]));
+	program.closeStdin();
+	assert.equal(await program.exited, 0);
+	assert.deepEqual([...Buffer.concat(pipeOutput)], [1, 255, 13, 10]);
 	const sharedFile = join(cwd, "shared.sqlite");
 	let store = await openStore(sqliteBackend(await openNodeSqliteDatabase(sharedFile)), context);
 	let storage = await StoreStorage.open(store, "installed", context);
