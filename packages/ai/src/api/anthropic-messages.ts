@@ -21,9 +21,21 @@ import { applyOpenRouterReportedCost, isOpenRouterModel } from "../utils/openrou
 import { ToolCallArgumentsStream } from "../utils/streaming-json.ts";
 import { retryProviderRequest } from "../utils/provider-retry.ts";
 import { getCurrentTools, resolveTranscript } from "../utils/transcript.ts";
-import { anthropicClient, anthropicCompat, anthropicFederation, assertAnthropicAuth } from "./anthropic-client.ts";
+import {
+	anthropicClient,
+	anthropicCompat,
+	anthropicFederation,
+	anthropicRetention,
+	assertAnthropicAuth,
+} from "./anthropic-client.ts";
 import { anthropicRequest } from "./anthropic-request.ts";
 import { anthropicEvents } from "./anthropic-sse.ts";
+import {
+	prepareAnthropicThread,
+	recordAnthropicThread,
+	sendAnthropicThread,
+	type PendingThread,
+} from "./anthropic-threads.ts";
 import { isStrictToolLimitErrorMessage } from "./constrained-sampling.ts";
 import type { AnthropicEffort, AnthropicOptions } from "./options.ts";
 import { adjustMaxTokensForThinking, buildBaseOptions, clampMaxTokensToContext } from "./simple-options.ts";
@@ -84,6 +96,10 @@ export const stream: StreamFunction<"anthropic-messages", AnthropicOptions> = (m
 	void (async () => {
 		try {
 			const { client, oauth } = anthropicClient(model, transcript, options);
+			const threadSession =
+				anthropicCompat(model).supportsMessageThreads && anthropicRetention(options) !== "none"
+					? options.sessionId
+					: undefined;
 			const requestOptions = {
 				maxRetries: 0,
 				...(options.signal ? { signal: options.signal } : {}),
@@ -91,21 +107,33 @@ export const stream: StreamFunction<"anthropic-messages", AnthropicOptions> = (m
 			};
 			let downgraded = false,
 				response: Response;
+			let full: MessageCreateParamsStreaming;
+			let thread: PendingThread | undefined;
+			const send = (body: MessageCreateParamsStreaming) =>
+				retryProviderRequest(() => client.beta.messages.create(body, requestOptions).asResponse(), {
+					maxRetries: options.maxRetries,
+					maxRetryDelayMs: options.maxRetryDelayMs,
+					signal: options.signal,
+				});
 			for (;;) {
 				options.signal?.throwIfAborted();
-				const request = anthropicRequest(model, transcript, options, oauth, downgraded);
+				const request = anthropicRequest(model, transcript, options, oauth, downgraded, threadSession !== undefined);
 				if (request.level) output.providerThinkingLevel = request.level;
 				const replacement = await options.onPayload?.(request.body, model);
-				const body =
+				full =
 					replacement === undefined
 						? request.body
 						: { ...(replacement as MessageCreateParamsStreaming), stream: true as const };
+				const prepared =
+					threadSession !== undefined && options.disableContinuation !== true
+						? prepareAnthropicThread(threadSession, model, full)
+						: undefined;
 				try {
-					response = await retryProviderRequest(() => client.beta.messages.create(body, requestOptions).asResponse(), {
-						maxRetries: options.maxRetries,
-						maxRetryDelayMs: options.maxRetryDelayMs,
-						signal: options.signal,
-					});
+					const result = prepared
+						? await sendAnthropicThread(prepared, full, send, output, options.signal)
+						: { response: await send(full), thread: undefined };
+					response = result.response;
+					thread = result.thread;
 					break;
 				} catch (error) {
 					if (options.signal?.aborted || downgraded || !request.preferred || !mayDowngrade(error)) throw error;
@@ -120,7 +148,10 @@ export const stream: StreamFunction<"anthropic-messages", AnthropicOptions> = (m
 			}
 			await options.onResponse?.({ status: response.status, headers: headersToRecord(response.headers) }, model);
 			events.push({ type: "start", partial: output });
-			const open = new Map<number, { block: StreamingBlock; contentIndex: number; arguments?: ToolCallArgumentsStream }>();
+			const open = new Map<
+				number,
+				{ block: StreamingBlock; contentIndex: number; arguments?: ToolCallArgumentsStream }
+			>();
 			let pricingModel = model;
 			let transformations: BetaInputTransformation[] | undefined;
 			for await (const event of anthropicEvents(response, options.signal)) {
@@ -184,7 +215,11 @@ export const stream: StreamFunction<"anthropic-messages", AnthropicOptions> = (m
 								continue;
 						}
 						const position = output.content.length;
-						open.set(event.index, { block, contentIndex: position, arguments: block.type === "toolCall" ? new ToolCallArgumentsStream() : undefined });
+						open.set(event.index, {
+							block,
+							contentIndex: position,
+							arguments: block.type === "toolCall" ? new ToolCallArgumentsStream() : undefined,
+						});
 						output.content.push(block);
 						const type =
 							block.type === "toolCall"
@@ -198,7 +233,8 @@ export const stream: StreamFunction<"anthropic-messages", AnthropicOptions> = (m
 					case "content_block_delta": {
 						const slot = open.get(event.index);
 						const contentIndex = slot?.contentIndex ?? -1;
-						const block = slot?.block, delta = event.delta;
+						const block = slot?.block,
+							delta = event.delta;
 						if (!block) break;
 						if (delta.type === "text_delta" && block.type === "text") {
 							block.text += delta.text;
@@ -271,6 +307,7 @@ export const stream: StreamFunction<"anthropic-messages", AnthropicOptions> = (m
 			if (output.stopReason === "pending") throw new Error("Anthropic stream ended without a stop reason");
 			if (output.stopReason === "aborted" || output.stopReason === "error")
 				throw new Error(output.errorMessage || "An unknown error occurred");
+			if (thread) recordAnthropicThread(thread, model, full, output, oauth);
 			if (transformations?.length)
 				appendAssistantMessageDiagnostic(output, {
 					type: "anthropic_input_transformations",

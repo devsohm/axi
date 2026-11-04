@@ -265,6 +265,7 @@ export function assembleCatalog(
 		})),
 		...clone(Object.values(fixedClassifiers["cloudflare-workers-ai"])),
 		...clone(Object.values(fixedClassifiers.openai)),
+		...clone(Object.values(fixedClassifiers["github-copilot"])),
 	);
 	const providers = new Map<string, Map<string, CatalogModel>>();
 	for (const model of entries) {

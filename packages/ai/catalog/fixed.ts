@@ -411,6 +411,25 @@ export const fixedChats: Readonly<Record<string, Readonly<Record<string, Model<A
 };
 
 export const fixedClassifiers: Readonly<Record<string, Readonly<Record<string, ClassifierModel<ClassifierApi>>>>> = {
+	"github-copilot": {
+		"microsoft-decision-1": {
+			type: "classifier",
+			id: "microsoft-decision-1",
+			name: "Microsoft-Decision-1",
+			api: "typesafe-system-one",
+			provider: "github-copilot",
+			baseUrl: "https://api.individual.githubcopilot.com",
+			input: ["text"],
+			contextWindow: 32768,
+			cost: { input: 0.042, output: 0, cacheRead: 0, cacheWrite: 0 },
+			headers: {
+				"User-Agent": "GitHubCopilotChat/0.35.0",
+				"Editor-Version": "vscode/1.107.0",
+				"Editor-Plugin-Version": "copilot-chat/0.35.0",
+				"Copilot-Integration-Id": "vscode-chat",
+			},
+		},
+	},
 	opencode: {
 		"jev-1.13": {
 			type: "classifier",

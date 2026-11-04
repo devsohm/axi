@@ -90,6 +90,7 @@ Google's optional legacy `parameters` conversion removes schema meta-declaration
 | `temperature`, `samplingParams`, `maxTokens` | Configures generation. |
 | `transport`, `websocketConnectTimeoutMs` | Selects a supported stream transport and connection timeout. |
 | `cacheRetention`, `sessionId` | Controls supported cache and session-affinity behavior. |
+| `disableContinuation` | Sends a complete request without consuming or updating a session's continuation checkpoint. |
 | `telemetry`, `metadata` | Supplies a callback span and provider metadata. |
 
 Simple requests also accept `reasoning`, `toolChoice`, `thinkingBudgets`, and `deferred`. API-specific options expose provider controls without making them shared requirements. The API option types are exported from the package root.

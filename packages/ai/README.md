@@ -58,9 +58,13 @@ export function request(model: Model<"openai-responses">, apiKey: string) {
 }
 ```
 
+Anthropic requests with a `sessionId` use server-side message threads on the Anthropic endpoint. After a completed reply, unchanged history is sent as a continuation with only the new messages. Changed prompts, tools or fixed request settings start a new thread. Thread rejection triggers one full-request fallback. Set `cacheRetention: "none"` to avoid threads, or `disableContinuation: true` for a replay such as cache warming. Call `cleanupSessionResources(sessionId)` when the session ends. Gateways must opt in with `compat.supportsMessageThreads`.
+
 Login flows support legacy Codex, Anthropic, GitHub Copilot, OpenRouter, Kimi, Meta and xAI. The legacy Codex request adapter supports SSE, WebSockets, account-scoped connection reuse, continuation requests, and session cleanup. Newer ChatGPT sign-in and partner authentication are excluded. The `axi-ai list` command lists login providers. `axi-ai login <provider>` stores credentials in `auth.json` in the current directory.
 
 Image generation supports text and image input and returns text and embedded images. Classifiers support System One, Cloudflare System One, OpenAI Decisions and llama.cpp token-probability classification. Compose these adapters with `createProvider()` and custom model definitions.
+
+GitHub Copilot exposes `microsoft-decision-1` through classifier accessors. It uses the authenticated account endpoint with `/v1/systemone`; chat and classifier catalogs stay separate.
 
 The generic serialized message transport supports remote assistant events and diagnostic metadata. The optional `@axi/ai/compat` entry provides a global API registry and catalog access. Prefer a `Models` collection when separate applications or requests need independent configuration.
 

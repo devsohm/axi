@@ -7,10 +7,27 @@ import { classify as llama } from "../src/api/llama-cpp-classify.ts";
 import { envApiKeyAuth } from "../src/auth/helpers.ts";
 import { createModels, createProvider } from "../src/models.ts";
 import type { ClassifierApi, ClassifierContext, ClassifierModel, ClassifierOptions } from "../src/types.ts";
+import { builtinModels } from "../src/providers/all.ts";
 const context: ClassifierContext = {
 	state: { message: "approved" },
 	questions: { ok: { type: "bool", instructions: "Approved?", criteria: { true: "Approval", false: "No approval" } } },
 };
+
+it("routes the Copilot classifier through the account endpoint with its version prefix", async () => {
+	const models = builtinModels();
+	const selected = models.getModelOfType("classifier", "github-copilot", "microsoft-decision-1");
+	if (!selected) throw new Error("Missing classifier");
+	const urls: string[] = [];
+	const result = await models.classify({ ...selected, baseUrl: "https://account.invalid/" }, context, {
+		apiKey: "local-token",
+		fetch: async (input) => {
+			urls.push(String(input));
+			return Response.json({ answers: { ok: { type: "noul", noul: 0.9 } } });
+		},
+	});
+	expect(urls).toEqual(["https://account.invalid/v1/systemone"]);
+	expect(result.stopReason).toBe("stop");
+});
 function model<A extends ClassifierApi>(api: A): ClassifierModel<A> {
 	return {
 		type: "classifier",

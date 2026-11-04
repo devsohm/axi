@@ -6,7 +6,7 @@ import type {
 	BetaSystemMessageParam,
 	MessageCreateParamsStreaming,
 } from "@anthropic-ai/sdk/resources/beta/messages/messages.js";
-import type { ImageContent, Message, Model, Tool, TranscriptContext } from "../types.ts";
+import type { AssistantMessage, ImageContent, Message, Model, Tool, TranscriptContext } from "../types.ts";
 import { sanitizeSurrogates } from "../utils/sanitize-unicode.ts";
 import { getSystemMessageText, renderSystemMessageUpdate } from "../utils/text.ts";
 import { getCurrentTools, getInitialSystemMessage } from "../utils/transcript.ts";
@@ -250,6 +250,7 @@ function betas(
 	options: AnthropicOptions,
 	oauth: boolean,
 	inline: boolean,
+	threads: boolean,
 ): string[] {
 	let override: string | null | undefined;
 	for (const headers of [model.headers, options.headers])
@@ -281,6 +282,7 @@ function betas(
 	if (model.compat?.supportsMidConvoEffort)
 		output.push("mid-conversation-output-config-2026-07-01", "thinking-binding-controls-2026-08-01");
 	if (inline) output.push("inline-tools-2026-09-15");
+	if (threads) output.push("message-threads-2026-08-12");
 	return [...new Set(output)];
 }
 export function anthropicRequest(
@@ -289,6 +291,7 @@ export function anthropicRequest(
 	options: AnthropicOptions,
 	oauth: boolean,
 	downgrade: boolean,
+	threads = false,
 ): { body: RequestBody; preferred: boolean; level?: AnthropicEffort } {
 	const compat = anthropicCompat(model),
 		retention = anthropicRetention(options);
@@ -342,7 +345,7 @@ export function anthropicRequest(
 		messages.push(converted.messages[index]);
 	}
 	if (managed) messages.push({ role: "system", content: [], output_config: { effort: level } });
-	const features = betas(model, context, options, oauth, inline);
+	const features = betas(model, context, options, oauth, inline, threads);
 	const body: RequestBody = {
 		model: model.id,
 		messages,
@@ -396,4 +399,15 @@ export function anthropicRequest(
 	if (model.compat?.allowedFallbackModels?.length)
 		body.fallbacks = model.compat.allowedFallbackModels.map((fallback) => ({ model: fallback.model }));
 	return { body, preferred, level: managed ? level : undefined };
+}
+
+export function anthropicReply(
+	model: Model<"anthropic-messages">,
+	reply: AssistantMessage,
+	oauth: boolean,
+): BetaMessageParam[] {
+	const messages = transformMessages([reply], model, (id) => id.replace(/[^\w-]/g, "_").slice(0, 64));
+	return conversation({ messages, oauth, emptySignature: anthropicCompat(model).allowEmptySignature }).messages.filter(
+		(message) => message.role === "assistant",
+	);
 }

@@ -2,7 +2,8 @@ import Anthropic from "@anthropic-ai/sdk";
 import { Type } from "typebox";
 import { describe, expect, it, vi } from "vitest";
 import { type AnthropicOptions, stream, streamSimple } from "../src/api/anthropic-messages.ts";
-import type { AssistantMessage, Model, Tool } from "../src/types.ts";
+import type { AssistantMessage, Message, Model, Tool } from "../src/types.ts";
+import { cleanupSessionResources } from "../src/session-resources.ts";
 import { normalizeContext } from "../src/utils/transcript.ts";
 
 const model: Model<"anthropic-messages"> = {
@@ -61,6 +62,76 @@ function answer(): Response {
 		end,
 	]);
 }
+
+it("continues a session with new messages while cache warming preserves its checkpoint", async () => {
+	const selected: Model<"anthropic-messages"> = {
+		...model,
+		id: "served-model",
+		compat: { supportsMessageThreads: true },
+	};
+	const messages: Message[] = [{ role: "user", content: "first", timestamp: 1 }];
+	const bodies: unknown[] = [];
+	const options = {
+		apiKey: "test",
+		sessionId: "owned-thread",
+		fetch: async (_url: unknown, init?: RequestInit) => {
+			bodies.push(JSON.parse(String(init?.body)));
+			return answer();
+		},
+	};
+	try {
+		messages.push(await stream(selected, normalizeContext({ messages }), options).result());
+		await stream(selected, normalizeContext({ messages: messages.slice(0, 1) }), {
+			...options,
+			disableContinuation: true,
+			maxTokens: 1,
+		}).result();
+		messages.push({ role: "user", content: "next", timestamp: 2 });
+		await stream(selected, normalizeContext({ messages }), options).result();
+		expect(bodies[0]).toMatchObject({ thread: { type: "create" } });
+		expect(bodies[1]).not.toHaveProperty("thread");
+		expect(bodies[2]).toMatchObject({
+			thread: { type: "continue", previous_message_id: "response-1" },
+			messages: [{ role: "user" }],
+		});
+		expect(bodies[2]).not.toHaveProperty("system");
+		cleanupSessionResources(options.sessionId);
+		await stream(selected, normalizeContext({ messages }), options).result();
+		expect(bodies[3]).toMatchObject({ thread: { type: "create" } });
+	} finally {
+		cleanupSessionResources(options.sessionId);
+	}
+});
+
+it("retries an unsupported thread as a full request and disables continuation for that session", async () => {
+	const selected: Model<"anthropic-messages"> = {
+		...model,
+		id: "served-model",
+		compat: { supportsMessageThreads: true },
+	};
+	const bodies: unknown[] = [];
+	const options = {
+		apiKey: "test",
+		sessionId: "unsupported-thread",
+		fetch: async (_url: unknown, init?: RequestInit) => {
+			bodies.push(JSON.parse(String(init?.body)));
+			return bodies.length === 1
+				? Response.json({ error: { type: "invalid_request_error", message: "thread: unsupported" } }, { status: 400 })
+				: answer();
+		},
+	};
+	try {
+		const result = await stream(selected, context, options).result();
+		expect(result.stopReason).toBe("stop");
+		expect(result.diagnostics?.[0]?.type).toBe("anthropic_thread_fallback");
+		await stream(selected, context, options).result();
+		expect(bodies).toHaveLength(3);
+		expect(bodies[1]).not.toHaveProperty("thread");
+		expect(bodies[2]).not.toHaveProperty("thread");
+	} finally {
+		cleanupSessionResources(options.sessionId);
+	}
+});
 
 it("retains local definitions referenced by non-strict tools", async () => {
 	let payload: unknown;

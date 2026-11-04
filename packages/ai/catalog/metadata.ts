@@ -54,7 +54,7 @@ export function anthropicMetadata(provider: string, id: string) {
 		/^claude-(?:sonnet|haiku)-5[.-]5(?:-\d{8})?$/.test(canonical) ||
 		/^claude-(?:fable|mythos)-5[.-]1(?:-\d{8})?$/.test(canonical);
 	return {
-		...(["anthropic", "openrouter"].includes(provider) &&
+		...(["anthropic", "openrouter", "opencode", "opencode-go"].includes(provider) &&
 		effort &&
 		!(provider === "openrouter" && id === "anthropic/claude-opus-5")
 			? { supportsMidConvoEffort: true }
