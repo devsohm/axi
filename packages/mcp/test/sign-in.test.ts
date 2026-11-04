@@ -30,6 +30,34 @@ function initial(): McpOAuthState {
 	};
 }
 
+test.each([undefined, "", "extra"])(
+	"step-up scope %j uses advertised defaults or merges an explicit challenge",
+	async (scope) => {
+		const state = store();
+		await state.save({
+			...initial(),
+			discovery: {
+				...initial().discovery!,
+				resourceMetadata: { resource: initial().serverUrl, scopes_supported: ["advertised"] },
+			},
+			tokens: { access_token: "old", token_type: "Bearer", scope: "previous" },
+		});
+		vi.stubGlobal("fetch", () => {
+			throw new Error("Unexpected network request");
+		});
+		const result = await startMcpSignIn({
+			serverUrl: initial().serverUrl,
+			store: state,
+			clientName: "test",
+			settings: { clientId: "configured" },
+			redirectUrl: "http://localhost/login",
+			challenge: { error: "insufficient_scope", scope },
+		});
+		if (result.kind !== "redirect") throw new Error("Missing browser step");
+		expect(new URL(result.authorizationUrl).searchParams.get("scope")).toBe(scope ? "previous extra" : "advertised");
+	},
+);
+
 test("concurrent callers share an expiring credential refresh and persist its replacement", async () => {
 	const state = store();
 	await state.save({

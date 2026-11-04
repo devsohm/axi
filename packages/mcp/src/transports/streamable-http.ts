@@ -48,8 +48,7 @@ export async function consumeSseStream(stream: ReadableStream<Uint8Array>, optio
 		data = [];
 		size = 0;
 	};
-	const line = (raw: string): void => {
-		const text = raw.endsWith("\r") ? raw.slice(0, -1) : raw;
+	const line = (text: string): void => {
 		if (!text) {
 			flush();
 			return;
@@ -69,19 +68,33 @@ export async function consumeSseStream(stream: ReadableStream<Uint8Array>, optio
 			options.onId?.(value);
 		} else if (field === "retry" && /^\d+$/.test(value)) options.onRetry?.(Number(value));
 	};
+	let skipLf = false;
+	const consume = (text: string): void => {
+		if (!text) return;
+		if (skipLf && text.startsWith("\n")) text = text.slice(1);
+		skipLf = false;
+		buffer += text;
+		const endings = /[\r\n]/g;
+		let consumed = 0;
+		for (let match = endings.exec(buffer); match; match = endings.exec(buffer)) {
+			line(buffer.slice(consumed, match.index));
+			consumed = match.index + 1;
+			if (match[0] === "\r") {
+				if (consumed === buffer.length) skipLf = true;
+				else if (buffer[consumed] === "\n") consumed++;
+			}
+			endings.lastIndex = consumed;
+		}
+		buffer = buffer.slice(consumed);
+		if (Buffer.byteLength(buffer) > limit) throw new Error(`MCP SSE event exceeds ${limit} bytes`);
+	};
 	try {
 		for (;;) {
 			const read = await reader.read();
 			if (read.done) break;
-			buffer += decoder.decode(read.value, { stream: true });
-			let at: number;
-			while ((at = buffer.indexOf("\n")) >= 0) {
-				line(buffer.slice(0, at));
-				buffer = buffer.slice(at + 1);
-			}
-			if (Buffer.byteLength(buffer) > limit) throw new Error(`MCP SSE event exceeds ${limit} bytes`);
+			consume(decoder.decode(read.value, { stream: true }));
 		}
-		buffer += decoder.decode();
+		consume(decoder.decode());
 		if (buffer) line(buffer);
 		flush();
 	} catch (error) {

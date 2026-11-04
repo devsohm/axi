@@ -8,7 +8,7 @@ import {
 	type McpOAuthClientOptions,
 } from "./client-settings.ts";
 import { McpRefreshLockBusyError } from "./errors.ts";
-import { authorizeMcp, type OAuthFlowOptions } from "./flow.ts";
+import { authorizeMcp, stepUpScope, type OAuthFlowOptions } from "./flow.ts";
 import type { OAuthChallenge } from "./types.ts";
 
 export interface McpSignInOptions extends McpOAuthClientOptions {
@@ -105,7 +105,7 @@ export async function startMcpSignIn(options: McpSignInOptions): Promise<McpSign
 		const provider = createOAuthClientProvider(options, options.redirectUrl, (url) => {
 			redirect = url;
 		});
-		const scopes = [settings.scope, ...(stepUp ? [stored?.tokens?.scope, challenge?.scope] : [challenge?.scope])];
+		const scopes = [settings.scope, stepUp ? stepUpScope(stored?.tokens?.scope, challenge?.scope) : challenge?.scope];
 		const scope =
 			[...new Set(scopes.flatMap((value) => value?.split(/\s+/).filter(Boolean) ?? []))].join(" ") || undefined;
 		await authorizeMcp(provider, { ...flowOptions(options), scope, skipRefresh: true });
