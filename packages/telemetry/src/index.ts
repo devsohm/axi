@@ -264,4 +264,4 @@ export type {
 	RecordedTelemetryMeasurement,
 	RecordedTelemetrySpan,
 } from "./memory.ts";
-export { InMemoryTelemetryContext } from "./memory.ts";
+export { InMemoryTelemetryContext, telemetryNow } from "./memory.ts";

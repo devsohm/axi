@@ -86,6 +86,14 @@ const scopeKey = "axi-memory-scope";
 const spanKey = "axi-memory-span";
 const traceKey = "axi-memory-trace";
 const carriers = new WeakMap<TelemetryContext, TelemetryCarrier>();
+let wallOffset = performance.timeOrigin;
+
+export function telemetryNow(): number {
+	const elapsed = performance.now();
+	const wall = Date.now();
+	if (Math.abs(wall - elapsed - wallOffset) > 10) wallOffset = wall - elapsed;
+	return Math.round((wallOffset + elapsed) * 1000) / 1000;
+}
 function linkSnapshot(link: SpanLink): RecordedTelemetryLink | undefined {
 	const carrier = carriers.get(link.context);
 	return carrier ? { context: { ...carrier }, attributes: attributes(link.attributes) } : undefined;
@@ -137,7 +145,7 @@ async function start<T>(
 	}
 	const id = state.nextSpanId++;
 	const recording: Recording = {
-		startedMs: Date.now(),
+		startedMs: telemetryNow(),
 		clock: performance.now(),
 		endedMs: 0,
 		id,
@@ -169,7 +177,11 @@ async function start<T>(
 		},
 		addEvent(name, values) {
 			if (recording.settled) return;
-			recording.events.push({ name, timeMs: performance.now() - recording.clock, attributes: attributes(values) });
+			recording.events.push({
+				name,
+				timeMs: Math.round((performance.now() - recording.clock) * 1000) / 1000,
+				attributes: attributes(values),
+			});
 		},
 		setAttributes(values) {
 			if (recording.settled) return;
@@ -189,7 +201,7 @@ async function start<T>(
 		throw error;
 	} finally {
 		recording.settled = true;
-		recording.endedMs = recording.startedMs + performance.now() - recording.clock;
+		recording.endedMs = Math.round((recording.startedMs + performance.now() - recording.clock) * 1000) / 1000;
 		recording.endSequence = state.nextEndSequence++;
 	}
 }

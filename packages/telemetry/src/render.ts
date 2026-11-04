@@ -1,8 +1,19 @@
 import type { SpanAttributes, StoredSpan } from "./index.ts";
 
+function text(value: string): string {
+	return value.replace(
+		/[\u0000-\u001f\u007f-\u009f]/g,
+		(control) => `\\u${control.charCodeAt(0).toString(16).padStart(4, "0")}`,
+	);
+}
+
+function milliseconds(value: number): number {
+	return Math.round(value * 1000) / 1000;
+}
+
 function fields(values: Readonly<SpanAttributes> = {}): string {
 	return Object.entries(values)
-		.map(([key, value]) => ` ${key}=${JSON.stringify(value)}`)
+		.map(([key, value]) => ` ${text(key)}=${JSON.stringify(value)}`)
 		.join("");
 }
 
@@ -23,13 +34,15 @@ export function renderTrace(spans: readonly StoredSpan[]): string {
 		const indent = "  ".repeat(depth);
 		const failure =
 			span.status.status === "error"
-				? ` error${span.status.error ? ` ${span.status.error.name}: ${span.status.error.message}` : ""}`
+				? ` error${span.status.error ? ` ${text(span.status.error.name)}: ${text(span.status.error.message)}` : ""}`
 				: "";
-		output.push(`${indent}${span.name}${fields(span.attributes)} (${span.endedMs - span.startedMs}ms)${failure}`);
+		output.push(
+			`${indent}${text(span.name)}${fields(span.attributes)} (${milliseconds(span.endedMs - span.startedMs)}ms)${failure}`,
+		);
 		for (const event of span.events)
-			output.push(`${indent}  · ${event.name}${fields(event.attributes)} (+${event.timeMs}ms)`);
+			output.push(`${indent}  · ${text(event.name)}${fields(event.attributes)} (+${milliseconds(event.timeMs)}ms)`);
 		for (const link of span.links)
-			output.push(`${indent}  → link trace ${link.traceId} span ${link.spanId}${fields(link.attributes)}`);
+			output.push(`${indent}  → link trace ${text(link.traceId)} span ${text(link.spanId)}${fields(link.attributes)}`);
 		const children = groups.get(span.id) ?? [];
 		for (let index = children.length - 1; index >= 0; index--)
 			pending.push({ span: children[index]!, depth: depth + 1 });
