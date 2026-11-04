@@ -156,7 +156,7 @@ export class RemoteObject implements Target {
 		const parent = context.telemetry;
 		if (untraced(parent)) return this.#connection!.side.call(this.#connection!.id, snapshot.names.methods.indexOf(name), method, args, context);
 		return parent.startSpan({ name: "objects.call", attributes: {
-			"objects.host": this.#host.spanHost, type: this.contract.name, object: this.label.slice(0, 256), member: name,
+			"objects.host": this.#host.spanHost, type: this.contract.name, member: name, object: this.label.slice(0, 256),
 			"address.kind": this.request.address.kind, ...this.#host.principalAttributes(this.caller.principal, context),
 		} }, async (span) => {
 		try {

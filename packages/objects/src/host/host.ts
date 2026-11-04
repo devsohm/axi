@@ -12,7 +12,7 @@ import type { Watchable } from "../watch.ts";
 import type { Address, Contract, HostKind, ParamsOf } from "../contracts/index.ts";
 import { contractData, type Params } from "../contracts/internal.ts";
 import { ObjectsError, type FailureCause, type Principal, type PrincipalKeyFunction } from "../data/index.ts";
-import { OpenSpan, countingOnly, ended, untraced } from "../telemetry.ts";
+import { OpenSpan, countingOnly, ended, parentOf, untraced } from "../telemetry.ts";
 import {
 	asObjectsError,
 	binds,
@@ -522,7 +522,7 @@ export class ObjectsHost<P extends Principal = Principal, R extends JsonValue = 
 			error = this.#destinations.misplaced(served!.contract, checked.params);
 		if (error) return { kind: "waiting", cause: { kind: "waiting", error } };
 		const chain = request.chain ?? [],
-			object = this.#object(served!, checked, principal, context, chain),
+			object = this.#object(served!, checked, principal, context, chain, undefined, parentOf(request.trace, this.telemetry)),
 			id = object.activationId;
 		if (id !== undefined && chain.includes(id)) throw this.cycle(chain, id, [object.label]);
 		return { kind: "object", object };
@@ -651,6 +651,7 @@ export class ObjectsHost<P extends Principal = Principal, R extends JsonValue = 
 		context: Context,
 		chain: readonly string[] = [],
 		dependent?: LocalTarget,
+		trigger: TelemetryContext = context.telemetry,
 	): ObjectsObject {
 		const identity =
 			served.kind === "local"
@@ -668,6 +669,7 @@ export class ObjectsHost<P extends Principal = Principal, R extends JsonValue = 
 				identity,
 				withoutAbortSignal(context),
 				ancestry,
+				trigger,
 			);
 			this.#objects.set(identity, object);
 			if (!this.backoff.waiting(identity)) object.attempt();

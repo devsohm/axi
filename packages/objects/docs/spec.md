@@ -54,7 +54,7 @@ Plugin roots may be required or optional. Discovery reports collisions and inval
 
 HTTP routes deny anonymous callers unless explicitly public. Cross-site routes are public and anonymous. Authentication, host, origin, header and response-body checks run at the request boundary. Resource and root scopes last through response completion or cancellation.
 
-Worker starts serialize per address and hold process locks. Stale file locks are cleared only when no process is listening. A missing child PID is never a signal target. Worker failure requires retry or rollout rather than an automatic restart loop.
+Worker starts serialize per address and hold process locks. Stale file locks are cleared only when no process is listening. A missing child PID is never a signal target. A running worker's lost link permits one recovery per minute for its address. Another loss within that window, a crash or a failed start requires retry or rollout.
 
 ## App host and clients
 

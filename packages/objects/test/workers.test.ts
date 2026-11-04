@@ -112,6 +112,36 @@ it("keeps a crash failed until an explicit retry creates a new process", async (
 	ref.release();
 });
 
+it("recovers a running worker's lost link once and blocks another loss within a minute", async () => {
+	await using f = await setup();
+	const ref = await f.host.get(Control, { id: "lost-link" }, context);
+	try {
+		await ref.loseLink(context);
+		await vi.waitFor(
+			() => {
+				expect(f.starts()).toBe(2);
+				expect(ref.state.value.kind).toBe("live");
+			},
+			{ timeout: 9000 },
+		);
+		expect(f.errors.map(({ kind }) => kind)).toEqual(["worker_link_lost"]);
+		expect(await ref.echo("reconnected", context)).toBe("reconnected");
+		await ref.loseLink(context);
+		await vi.waitFor(
+			() =>
+				expect(f.workers.state.value["runner|lost-link"]).toMatchObject({
+					status: "failed",
+					error: { message: "worker lost its link" },
+				}),
+			{ timeout: 9000 },
+		);
+		expect(f.starts()).toBe(2);
+		expect(f.errors.map(({ kind }) => kind)).toEqual(["worker_link_lost", "worker_exited", "worker_failed"]);
+	} finally {
+		ref.release();
+	}
+}, 25000);
+
 it("reports a fixed public start error and retains the full error only in the host callback", async () => {
 	await using f = await setup();
 	f.fail(true);

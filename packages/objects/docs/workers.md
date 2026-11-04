@@ -24,7 +24,7 @@ The child's `hostPackages` contains its own module instances. Plugins use the se
 
 Idle workers stop after `idleMs()`, which defaults to five minutes and is checked every second. `stop(address, context)` suspends that address while holders remain and requests shutdown. `retry` clears failure and suspension and starts held work again.
 
-A crash, failed start or lost link stays failed until retry or a worker rollout. There is no automatic restart loop. Public start errors use fixed messages. A child's fatal message uses its `redact` callback.
+A crash or failed start stays failed until retry or a worker rollout. A running worker whose link is lost gets five seconds to exit, then its process group is killed. Held references can start a replacement. This recovery is allowed once per minute for an address; another loss within that minute fails the address with `worker lost its link`. `onError` reports the recovered loss as `worker_link_lost`. There is no unrestricted restart loop. Public start errors use fixed messages. A child's fatal message uses its `redact` callback.
 
 `workers.step(name)` joins a plugin rollout. It retries earlier failed addresses and ships the current script set to running workers. Results identify each host's report, clean stop or error. Cancelling a rollout wait does not cancel its outstanding child reload.
 

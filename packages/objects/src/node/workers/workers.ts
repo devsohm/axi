@@ -30,6 +30,7 @@ export type WorkerState =
 	| { readonly status: "failed"; readonly error: CrossedError; readonly at: number };
 export type WorkersError =
 	| { readonly kind: "worker_failed"; readonly address: string; readonly error: unknown; readonly stderrTail?: string }
+	| { readonly kind: "worker_link_lost"; readonly address: string; readonly error: unknown }
 	| { readonly kind: "authorize_failed"; readonly address: string; readonly error: unknown }
 	| {
 			readonly kind: "worker_exited";
@@ -54,7 +55,7 @@ export function createWorkers<P extends Principal, N extends string, Q extends P
 	return new WorkerPool(options, context, (route) => host.route(kind, route, context));
 }
 type Failure = { error: CrossedError; at: number };
-type Cause = { error: unknown; public?: CrossedError; killed?: true };
+type Cause = { error: unknown; public?: CrossedError; killed?: true; lost?: true };
 type Ended = { kind: "stopped" } | { kind: "failed"; error: unknown };
 type ReloadReply = Extract<FromWorker, { kind: "reloaded" }>;
 type Child = {
@@ -71,6 +72,7 @@ type Child = {
 	reply: ((message: ReloadReply) => void) | undefined;
 	ended: Ended | undefined;
 	grace: ReturnType<typeof setTimeout> | undefined;
+	lock: string | undefined;
 };
 type Slot<K extends KindShape> = {
 	address: Address<K>;
@@ -79,8 +81,13 @@ type Slot<K extends KindShape> = {
 	child: Child | undefined;
 	failure: Failure | undefined;
 	starting: Promise<unknown> | undefined;
+	recovered: number | undefined;
 };
 const startFailed: CrossedError = { message: "worker failed to start", code: "unavailable" };
+function lostLink(child: Child): Cause {
+	const error = new Error("worker: link lost");
+	return child.status === "running" ? { error, public: { message: "worker lost its link", code: "unavailable" }, lost: true } : { error };
+}
 const closed = (): ObjectsError => new ObjectsError({ code: "released", reason: "closed", message: "workers: closed" });
 const scriptKey = (scripts: readonly PluginScript[]): string =>
 	scripts
@@ -134,6 +141,7 @@ class WorkerPool<P extends Principal, K extends KindShape> implements Workers<K>
 				child: undefined,
 				failure: undefined,
 				starting: undefined,
+				recovered: undefined,
 			};
 			this.#slots.set(address.key, slot);
 		}
@@ -229,6 +237,7 @@ class WorkerPool<P extends Principal, K extends KindShape> implements Workers<K>
 			const scripts = await this.#options.plugins.scripts(this.#options.kind, context);
 			child.shipped = scriptKey(scripts);
 			const lock = this.#options.lock(slot.address);
+			child.lock = lock;
 			await clearStaleLock(lock, context);
 			child.process.send({ kind: "start", address: slot.address, start: data, scripts, lock });
 			await awaitWithContext(child.started.promise, this.#closingContext);
@@ -276,6 +285,7 @@ class WorkerPool<P extends Principal, K extends KindShape> implements Workers<K>
 			reply: undefined,
 			ended: undefined,
 			grace: undefined,
+			lock: undefined,
 		};
 		child.started.promise.catch(() => {});
 		child.ready.promise.catch(() => {});
@@ -319,15 +329,16 @@ class WorkerPool<P extends Principal, K extends KindShape> implements Workers<K>
 	#lost(child: Child): void {
 		this.#ended(child);
 		if (child.stopping) return;
-		child.cause ??= { error: new Error("worker: link lost") };
+		child.cause ??= lostLink(child);
 		this.#shutdown(child);
 		this.#view.refresh();
 	}
 	#disconnected(child: Child): void {
 		this.#ended(child);
 		if (child.stopping || child.grace) return;
+		const cause = lostLink(child);
 		child.grace = setTimeout(() => {
-			child.cause ??= { error: new Error("worker: link lost") };
+			child.cause ??= cause;
 			child.process.kill();
 		}, 5000);
 	}
@@ -348,17 +359,27 @@ class WorkerPool<P extends Principal, K extends KindShape> implements Workers<K>
 		child.started.reject(uncrossed(error));
 		child.ready.reject(uncrossed(error));
 		this.#ended(child);
+		if (child.lock !== undefined && exit.signal !== null) {
+			const lock = child.lock;
+			void this.#queue(slot, () => clearStaleLock(lock, BACKGROUND_CONTEXT)).catch(() => {});
+		}
 		if (slot.child !== child) return;
 		slot.child = undefined;
 		if (!clean && !this.#closing.signal.aborted) {
-			if (!cause.killed)
-				this.#options.onError({
-					kind: "worker_exited",
-					address: slot.address.key,
-					code: exit.code,
-					signal: exit.signal,
-				});
-			this.#fail(slot, { ...cause, public: error }, child.process.stderrTail);
+			const now = Date.now();
+			if (cause.lost && (slot.recovered === undefined || now - slot.recovered >= 60000)) {
+				slot.recovered = now;
+				this.#options.onError({ kind: "worker_link_lost", address: slot.address.key, error: cause.error });
+			} else {
+				if (!cause.killed)
+					this.#options.onError({
+						kind: "worker_exited",
+						address: slot.address.key,
+						code: exit.code,
+						signal: exit.signal,
+					});
+				this.#fail(slot, { ...cause, public: error }, child.process.stderrTail);
+			}
 		}
 		this.#view.refresh();
 		this.#forget(slot);

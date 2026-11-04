@@ -103,6 +103,7 @@ export class ObjectsObject implements LocalTarget {
 		identity: string,
 		context: Context,
 		chain: readonly string[],
+		trigger: TelemetryContext = context.telemetry,
 	) {
 		this.host = host;
 		this.served = served;
@@ -112,7 +113,7 @@ export class ObjectsObject implements LocalTarget {
 		this.label = key ? `${served.contract.name}(${key})` : served.contract.name;
 		this.chain = chain;
 		this.#context = context;
-		this.#trigger = context.telemetry;
+		this.#trigger = trigger;
 		this.documents = new Documents({
 			label: this.label,
 			batch: host.batch,
