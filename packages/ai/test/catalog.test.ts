@@ -249,12 +249,11 @@ it("uses the last live NVIDIA model ID for a normalized catalog identity", () =>
 });
 
 it("keeps separate typed model identities across all included providers", () => {
-	expect(Object.keys(MODELS)).toHaveLength(41);
-	let count = 0;
+	expect(Object.keys(MODELS)).toHaveLength(42);
 	for (const table of [MODELS, IMAGE_MODELS, CLASSIFIER_MODELS]) {
-		for (const models of Object.values(table)) count += Object.keys(models).length;
+		for (const [provider, models] of Object.entries(table))
+			for (const [id, model] of Object.entries(models)) expect([model.provider, model.id]).toEqual([provider, id]);
 	}
-	expect(count).toBe(1690);
 	expectTypeOf(MODELS.xai["grok-4.5"].api).toEqualTypeOf<"openai-responses">();
 	expectTypeOf(MODELS.xai["grok-4.5"].provider).toEqualTypeOf<"xai">();
 	expectTypeOf(MODELS.xai["grok-4.5"].id).toEqualTypeOf<"grok-4.5">();

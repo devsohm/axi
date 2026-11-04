@@ -27,6 +27,17 @@ export function truncateErrorText(text: string, maxChars: number): string {
 		? text
 		: `${ownedSlice(text, 0, maxChars)}... [truncated ${text.length - maxChars} chars]`;
 }
+export function withCauseDetail(error: Error): string {
+	let leaf = error;
+	for (let remaining = 5; remaining > 0 && leaf.cause instanceof Error; remaining--) leaf = leaf.cause;
+	if (leaf === error) return error.message;
+	let detail = (leaf.message || leaf.name).trim();
+	const code = (leaf as Error & { code?: unknown }).code;
+	if ((typeof code === "string" || typeof code === "number") && !detail.includes(String(code)))
+		detail = detail ? `${detail} (${code})` : String(code);
+	if (!detail || error.message.includes(detail)) return error.message;
+	return error.message ? `${error.message}: ${detail}` : detail;
+}
 export function normalizeProviderError(error: unknown): NormalizedProviderError {
 	if (!(error instanceof Error)) return { message: safeJsonStringify(error), messageCarriesBody: false };
 	const fields = error as Error & {
@@ -59,7 +70,7 @@ export function normalizeProviderError(error: unknown): NormalizedProviderError 
 	return {
 		status,
 		body,
-		message: error.message,
+		message: status === undefined && body === undefined ? withCauseDetail(error) : error.message,
 		messageCarriesBody,
 	};
 }

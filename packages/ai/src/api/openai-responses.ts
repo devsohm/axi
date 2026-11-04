@@ -34,6 +34,7 @@ function clientKey(provider: string, options: OpenAIResponsesOptions | undefined
 }
 function compatibility(model: Model<"openai-responses">): Required<OpenAIResponsesCompat> {
 	return {
+		promptCacheKeyMode: model.compat?.promptCacheKeyMode ?? "auto",
 		supportsDeveloperRole: model.compat?.supportsDeveloperRole ?? true,
 		supportsMidConvoSystemMessages: model.compat?.supportsMidConvoSystemMessages ?? false,
 		sessionAffinityFormat:
@@ -89,7 +90,7 @@ function request(
 		input,
 		stream: true,
 		store: false,
-		prompt_cache_key: retention === "none" ? undefined : clampOpenAIPromptCacheKey(options.sessionId),
+		prompt_cache_key: retention === "none" || compat.promptCacheKeyMode === "disabled" ? undefined : clampOpenAIPromptCacheKey(options.sessionId),
 		prompt_cache_retention:
 			retention === "long" && compat.supportsLongCacheRetention && !compat.supportsExplicitPromptCacheMode
 				? "24h"
@@ -168,7 +169,7 @@ export const stream: StreamFunction<"openai-responses", OpenAIResponsesOptions> 
 			if (session) {
 				if (compat.sessionAffinityFormat === "openrouter") headers["x-session-id"] = session;
 				else {
-					if (compat.sessionAffinityFormat === "openai") headers.session_id = session;
+					if (compat.sessionAffinityFormat === "openai") headers["session-id"] = session;
 					headers["x-client-request-id"] = session;
 				}
 			}

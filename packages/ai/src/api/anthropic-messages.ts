@@ -16,6 +16,7 @@ import type {
 } from "../types.ts";
 import { appendAssistantMessageDiagnostic } from "../utils/diagnostics.ts";
 import { AssistantMessageEventStream } from "../utils/event-stream.ts";
+import { withCauseDetail } from "../utils/error-body.ts";
 import { headersToRecord } from "../utils/headers.ts";
 import { applyOpenRouterReportedCost, isOpenRouterModel } from "../utils/openrouter-cost.ts";
 import { ToolCallArgumentsStream } from "../utils/streaming-json.ts";
@@ -323,7 +324,7 @@ export const stream: StreamFunction<"anthropic-messages", AnthropicOptions> = (m
 			events.push({ type: "done", reason: output.stopReason, message: output });
 		} catch (error) {
 			output.stopReason = options.signal?.aborted ? "aborted" : "error";
-			output.errorMessage = error instanceof Error ? error.message : JSON.stringify(error);
+			output.errorMessage = error instanceof Error ? withCauseDetail(error) : JSON.stringify(error);
 			events.push({ type: "error", reason: output.stopReason, error: output });
 		} finally {
 			events.end();

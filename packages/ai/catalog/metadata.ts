@@ -212,8 +212,8 @@ export function applyCatalogMetadata(model: Model<Api>, options?: ModelsDevReaso
 				"opus-4.8",
 				"opus-5",
 				"opus.5",
-				"sonnet-5-5",
-				"sonnet-5.5",
+				"sonnet-5",
+				"sonnet.5",
 				"haiku-5-5",
 				"haiku-5.5",
 			])

@@ -714,6 +714,7 @@ export function buildModelsDevCatalog(data: SourceCatalog, nvidiaIds: readonly s
 		["alibaba-token-plan", "qwen-token-plan", "ap-southeast-1", false],
 		["alibaba-token-plan", "qwen-token-plan-individual", "ap-southeast-1", true],
 		["alibaba-token-plan-cn", "qwen-token-plan-cn", "cn-beijing", false],
+		["alibaba-token-plan-cn", "qwen-token-plan-individual-cn", "cn-beijing", true],
 	] as const) {
 		for (const [id, source] of Object.entries(data[key]?.models ?? {})) {
 			if (!source.tool_call || id === "qwen3.8-max-preview" || (restricted && !individualModels.has(id))) continue;

@@ -159,7 +159,7 @@ export function convertMessages(
 					reasoning_text?: string;
 				} = {
 					role: "assistant",
-					content: compat.requiresAssistantAfterToolResult ? "" : null,
+					content: compat.requiresAssistantAfterToolResult || compat.requiresNonNullAssistantContent ? "" : null,
 				};
 				const text = message.content
 					.filter((block) => block.type === "text")

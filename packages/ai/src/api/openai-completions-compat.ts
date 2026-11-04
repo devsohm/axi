@@ -2,6 +2,7 @@ import type { Model, OpenAICompletionsCompat } from "../types.ts";
 
 type OptionalControls =
 	| "cacheControlFormat"
+	| "promptCacheKeyMode"
 	| "thinkingTokenBudgetField"
 	| "vllmPriority"
 	| "supportsThinkingTokenBudget"
@@ -50,6 +51,7 @@ export function completionsCompat(model: Model<"openai-completions">): Completio
 				: "max_completion_tokens",
 		requiresToolResultName: false,
 		requiresAssistantAfterToolResult: false,
+		requiresNonNullAssistantContent: false,
 		requiresThinkingAsText: false,
 		requiresReasoningContentOnAssistantMessages: deepseek,
 		thinkingFormat: deepseek

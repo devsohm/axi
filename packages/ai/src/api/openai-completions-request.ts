@@ -86,8 +86,9 @@ export function completionsRequest({
 		messages,
 		stream: true,
 		prompt_cache_key:
-			(retention !== "none" && model.baseUrl.includes("api.openai.com")) ||
-			(retention === "long" && compat.supportsLongCacheRetention)
+			retention !== "none" && compat.promptCacheKeyMode !== "disabled" &&
+			(compat.promptCacheKeyMode === "enabled" || model.baseUrl.includes("api.openai.com") ||
+			(retention === "long" && compat.supportsLongCacheRetention))
 				? clampOpenAIPromptCacheKey(options.sessionId)
 				: undefined,
 		prompt_cache_retention: retention === "long" && compat.supportsLongCacheRetention ? "24h" : undefined,

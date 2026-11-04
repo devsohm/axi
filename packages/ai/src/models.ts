@@ -622,6 +622,7 @@ class Collection implements MutableModels {
 				return provider.stream(requestModel, transcript, requestOptions as ApiStreamOptions<A>);
 			},
 			observeModelRequest(model, options, false),
+			options?.signal,
 		);
 	}
 	async complete<A extends Api>(
@@ -641,6 +642,7 @@ class Collection implements MutableModels {
 				return provider.streamSimple(requestModel, transcript, requestOptions as SimpleStreamOptions);
 			},
 			observeModelRequest(model, options, false),
+			options?.signal,
 		);
 	}
 	async completeSimple(
@@ -665,6 +667,7 @@ class Collection implements MutableModels {
 				return provider.fetchDeferred(requestModel, handle, requestOptions);
 			},
 			observeModelRequest(model, options, true),
+			options?.signal,
 		);
 	}
 	async fetchDeferred(
@@ -766,13 +769,13 @@ export function createProvider<A extends Api = Api>(input: CreateProviderOptions
 		return models;
 	};
 	const implementation = (model: Model<Api>) => single ?? byApi?.[model.api];
-	const dispatch = (model: Model<Api>, run: (api: ProviderStreams) => AssistantMessageEventStream) => {
+	const dispatch = (model: Model<Api>, run: (api: ProviderStreams) => AssistantMessageEventStream, signal?: AbortSignal) => {
 		const api = implementation(model);
 		return api
 			? run(api)
 			: lazyStream(model, async () => {
 					throw new ModelsError("stream", `Provider ${input.id} has no API implementation for "${model.api}"`);
-				});
+				}, undefined, signal);
 	};
 	const fetch = input.fetchModels;
 	const provider: Provider<A> = {
@@ -810,8 +813,8 @@ export function createProvider<A extends Api = Api>(input: CreateProviderOptions
 			: undefined,
 		filterModels: input.filterModels,
 		filterAllModels: input.filterAllModels,
-		stream: (model, context, options) => dispatch(model, (api) => api.stream(model, context, options)),
-		streamSimple: (model, context, options) => dispatch(model, (api) => api.streamSimple(model, context, options)),
+		stream: (model, context, options) => dispatch(model, (api) => api.stream(model, context, options), options?.signal),
+		streamSimple: (model, context, options) => dispatch(model, (api) => api.streamSimple(model, context, options), options?.signal),
 	};
 	if (streams.some((api) => api.fetchDeferred !== undefined))
 		provider.fetchDeferred = (model, handle, options) =>
@@ -823,7 +826,7 @@ export function createProvider<A extends Api = Api>(input: CreateProviderOptions
 						`Provider ${input.id} does not support deferred responses for "${model.api}"`,
 					);
 				return api.fetchDeferred(model, handle, options);
-			});
+			}, undefined, options?.signal);
 	if (streams.some((api) => api.cancelDeferred !== undefined))
 		provider.cancelDeferred = async (model, handle, options) => {
 			const api = implementation(model);

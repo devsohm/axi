@@ -115,6 +115,7 @@ export const AnthropicAllowedFallbackModelSchema = Type.Object(
 const kwargs = (description: string) =>
 	Type.Optional(Type.Record(Type.String(), ChatTemplateKwargValueSchema, { description }));
 const affinity = (description: string) => Type.Optional(Type.Union(SessionAffinityFormatSchema.anyOf, { description }));
+const cacheKeyMode = () => Type.Optional(Type.Union([Type.Literal("auto"), Type.Literal("enabled"), Type.Literal("disabled")], { description: "Select automatic endpoint detection, enable prompt cache keys, or omit them." }));
 export const OpenAICompletionsCompatSchema = Type.Object(
 	{
 		supportsStore: bool("Send the store field when supported; otherwise detect support from the URL."),
@@ -128,6 +129,8 @@ export const OpenAICompletionsCompatSchema = Type.Object(
 			}),
 		),
 		requiresToolResultName: bool("Include a name on tool results; detected from the URL when omitted."),
+		requiresNonNullAssistantContent: bool("Use empty text instead of null for assistant tool calls.", false),
+		promptCacheKeyMode: cacheKeyMode(),
 		requiresAssistantAfterToolResult: bool(
 			"Insert an assistant message between tool results and a following user message when required; otherwise detect from the URL.",
 		),
@@ -214,13 +217,14 @@ export const OpenAICompletionsCompatSchema = Type.Object(
 );
 export const OpenAIResponsesCompatSchema = Type.Object(
 	{
+		promptCacheKeyMode: cacheKeyMode(),
 		supportsDeveloperRole: bool("Accept developer-role messages instead of system-role messages.", true),
 		supportsMidConvoSystemMessages: bool(
 			"Accept later developer or system messages; otherwise fold them into the leading message. Enabled explicitly for verified models.",
 			false,
 		),
 		sessionAffinityFormat: affinity(
-			"openai sends session_id and x-client-request-id; openai-nosession sends only x-client-request-id; openrouter sends x-session-id. Does not change prompt_cache_key.",
+			"openai sends session-id and x-client-request-id; openai-nosession sends only x-client-request-id; openrouter sends x-session-id. Does not change prompt_cache_key.",
 		),
 		supportsLongCacheRetention: bool(
 			"Accept long cache retention: a 30-minute prompt_cache_options TTL on GPT-5.6+ or 24-hour prompt_cache_retention on earlier models.",

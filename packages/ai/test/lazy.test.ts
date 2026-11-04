@@ -1,7 +1,37 @@
 import { expect, it } from "vitest";
-import { lazyStream } from "../src/api/lazy.ts";
+import { lazyApi, lazyStream } from "../src/api/lazy.ts";
 import { fauxAssistantMessage } from "../src/providers/faux.ts";
 import type { Model } from "../src/types.ts";
+import { normalizeContext } from "../src/utils/transcript.ts";
+
+it("classifies lazy setup failures after cancellation on all stream entry points", async () => {
+	const model: Model<"test"> = {
+		id: "test",
+		name: "Test",
+		api: "test",
+		provider: "test",
+		baseUrl: "",
+		reasoning: false,
+		input: ["text"],
+		contextWindow: 100,
+		maxTokens: 10,
+		cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+	};
+	const api = lazyApi(
+		async () => {
+			throw new Error("setup failed");
+		},
+		{ fetchDeferred: true },
+	);
+	const signal = AbortSignal.abort();
+	const context = normalizeContext({ messages: [] });
+	const streams = [
+		api.stream(model, context, { signal }),
+		api.streamSimple(model, context, { signal }),
+		api.fetchDeferred!(model, { api: "test", provider: "test", modelId: "test", id: "job" }, { signal }),
+	];
+	for (const stream of streams) expect((await stream.result()).stopReason).toBe("aborted");
+});
 
 it("forwards the final result of a proxy-backed source without relying on its has trap", async () => {
 	const model: Model<"faux"> = {

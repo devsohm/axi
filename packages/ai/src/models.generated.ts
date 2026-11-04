@@ -154,6 +154,11 @@ import {
 	QWEN_TOKEN_PLAN_INDIVIDUAL_CLASSIFIER_MODELS,
 } from "./providers/qwen-token-plan-individual.models.ts";
 import {
+	QWEN_TOKEN_PLAN_INDIVIDUAL_CN_MODELS,
+	QWEN_TOKEN_PLAN_INDIVIDUAL_CN_IMAGE_MODELS,
+	QWEN_TOKEN_PLAN_INDIVIDUAL_CN_CLASSIFIER_MODELS,
+} from "./providers/qwen-token-plan-individual-cn.models.ts";
+import {
 	TOGETHER_MODELS,
 	TOGETHER_IMAGE_MODELS,
 	TOGETHER_CLASSIFIER_MODELS,
@@ -236,6 +241,7 @@ export const MODELS = {
 	"qwen-token-plan": QWEN_TOKEN_PLAN_MODELS,
 	"qwen-token-plan-cn": QWEN_TOKEN_PLAN_CN_MODELS,
 	"qwen-token-plan-individual": QWEN_TOKEN_PLAN_INDIVIDUAL_MODELS,
+	"qwen-token-plan-individual-cn": QWEN_TOKEN_PLAN_INDIVIDUAL_CN_MODELS,
 	"together": TOGETHER_MODELS,
 	"typesafe": TYPESAFE_MODELS,
 	"vercel-ai-gateway": VERCEL_AI_GATEWAY_MODELS,
@@ -280,6 +286,7 @@ export const IMAGE_MODELS = {
 	"qwen-token-plan": QWEN_TOKEN_PLAN_IMAGE_MODELS,
 	"qwen-token-plan-cn": QWEN_TOKEN_PLAN_CN_IMAGE_MODELS,
 	"qwen-token-plan-individual": QWEN_TOKEN_PLAN_INDIVIDUAL_IMAGE_MODELS,
+	"qwen-token-plan-individual-cn": QWEN_TOKEN_PLAN_INDIVIDUAL_CN_IMAGE_MODELS,
 	"together": TOGETHER_IMAGE_MODELS,
 	"typesafe": TYPESAFE_IMAGE_MODELS,
 	"vercel-ai-gateway": VERCEL_AI_GATEWAY_IMAGE_MODELS,
@@ -324,6 +331,7 @@ export const CLASSIFIER_MODELS = {
 	"qwen-token-plan": QWEN_TOKEN_PLAN_CLASSIFIER_MODELS,
 	"qwen-token-plan-cn": QWEN_TOKEN_PLAN_CN_CLASSIFIER_MODELS,
 	"qwen-token-plan-individual": QWEN_TOKEN_PLAN_INDIVIDUAL_CLASSIFIER_MODELS,
+	"qwen-token-plan-individual-cn": QWEN_TOKEN_PLAN_INDIVIDUAL_CN_CLASSIFIER_MODELS,
 	"together": TOGETHER_CLASSIFIER_MODELS,
 	"typesafe": TYPESAFE_CLASSIFIER_MODELS,
 	"vercel-ai-gateway": VERCEL_AI_GATEWAY_CLASSIFIER_MODELS,
