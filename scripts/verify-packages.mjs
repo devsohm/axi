@@ -157,9 +157,13 @@ try {
 	);
 	run([path.join(consumer, "smoke.mjs")], consumer);
 	const compiler = JSON.parse(readFileSync(path.join(root, "packages/objects/package.json"))).peerDependencies.esbuild;
-	run([npm, "install", "--ignore-scripts", "--no-audit", "--no-fund", `esbuild@${compiler}`], consumer);
+	const react = JSON.parse(readFileSync(path.join(root, "packages/objects/package.json"))).peerDependencies.react;
+	const reactTypes = JSON.parse(readFileSync(path.join(root, "package.json"))).devDependencies["@types/react"];
+	run([npm, "install", "--ignore-scripts", "--no-audit", "--no-fund", `esbuild@${compiler}`, `react@${react}`, `@types/react@${reactTypes}`], consumer);
 	copyFileSync(path.join(root, "scripts/package-plugins-smoke.mjs"), path.join(consumer, "plugins-smoke.mjs"));
 	run([path.join(consumer, "plugins-smoke.mjs")], consumer);
+	copyFileSync(path.join(root, "scripts/package-host-smoke.mjs"), path.join(consumer, "host-smoke.mjs"));
+	run([path.join(consumer, "host-smoke.mjs")], consumer);
 	const objectsDocs = path.join(consumer, "node_modules/@axi/objects/docs");
 	assert.ok(
 		readFileSync(path.join(objectsDocs, "guide.md"), "utf8").length > 0,
@@ -190,6 +194,9 @@ try {
 import * as ai from "@axi/ai";
 import * as objects from "@axi/objects";
 import type { Context } from "@axi/objects/context";
+import type { AppOptions } from "@axi/objects/app";
+import type { TerminalOptions } from "@axi/objects/tui/launcher";
+import { HostProvider } from "@axi/objects/react";
 import * as codemode from "@axi/codemode";
 import * as durable from "@axi/durable";
 import * as env from "@axi/env";
@@ -208,6 +215,9 @@ export const observe = (harness: durable.Harness, id: durable.ConversationId, co
 export const watchCall = (call: durable.WatchCall<unknown>) => call.kind;
 export const parse = new ai.StreamingJsonParser();
 export const sharedStorage = (store: objects.Store, context: Context) => StoreStorage.open(store, "installed", context);
+export const appOptions = (options: AppOptions<{kind:"owner"}|{kind:"server"}>) => options;
+export const terminalOptions = (options: TerminalOptions) => options;
+export const clientProvider = HostProvider;
 `,
 	);
 	writeFileSync(

@@ -6,6 +6,8 @@ This directory contains the Axi package archives for Node.js applications. It is
 
 Use Node.js 22.19 or later. The release checks use Node.js 26.10.
 
+The optional Objects terminal launcher requires Node.js 26.5.1 or later for its sandbox. App and bundle helpers require the optional `esbuild` and `ws` peers. React bindings require React and, for TypeScript consumers, its type declarations. Install the peers for the entries your application uses.
+
 Extract the archive, open the extracted directory, and run:
 
 ```sh

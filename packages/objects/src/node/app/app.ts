@@ -1,0 +1,392 @@
+import { join, resolve } from "node:path";
+import type { TelemetryContext } from "@axi/telemetry";
+import { withAbortSignal, type Context } from "../../context/index.ts";
+import { hostKind, type Address, type HostKind, type KindShape } from "../../contracts/index.ts";
+import type { Principal } from "../../data/index.ts";
+import { canonicalJson } from "../../data/principal.ts";
+import { createHost, type Host, type HostError, type PluginFacet, type PrincipalAttributes } from "../../host/index.ts";
+import type { JsonValue } from "../../json.ts";
+import { openNodeSqliteDatabase } from "../../sqlite/node.ts";
+import { openStore, sqliteBackend } from "../../store/index.ts";
+import { localeChoiceFacet, themeChoiceFacet, themesFacet, translationsFacet } from "../../surfaces/index.ts";
+import { telemetryIngestFacet, type TelemetryIngestTarget } from "../../telemetry-ingest/index.ts";
+import type { Watchable } from "../../watch.ts";
+import { createHttp, type HttpComponent, type HttpError, type ListenAddress } from "../http/index.ts";
+import {
+	createPlugins,
+	type HostPackages,
+	type InstallOptions,
+	type PluginSource,
+	type Plugins,
+	type PluginsError,
+	type PluginsState,
+	type RolloutResult,
+	type RolloutStep,
+} from "../plugins/index.ts";
+import { tuiSurface, webSurface, WEB_PREFIX, type WebSurfaceOptions } from "../surfaces/index.ts";
+import { createWorkers, processLock, type ProcessLock, type Workers, type WorkersError } from "../workers/index.ts";
+import { ARCHIVE_FORMAT, packData, unpackData, type ArchiveManifest } from "./archive.ts";
+import { addressParam, HostData } from "./data.ts";
+import { filesFacet, type FilesCaps } from "./files.ts";
+import { appInfoFacet } from "./info.ts";
+import { createLayout, defaultDataDir, openDataDir, privateStore, workerDirectory } from "./layout.ts";
+import { OWNER_PATH, OwnerLink, ownerFacet, ownerTokenFile, type OwnerPrincipal } from "./owner.ts";
+import { Pairings, pairingFacet } from "./pairing.ts";
+import { secretFile } from "./secrets.ts";
+import { createSessions } from "./sessions.ts";
+
+export const Server = hostKind("server");
+export type AppApi = { readonly name: string; readonly versions: readonly string[]; readonly modules: HostPackages };
+export type AppKind = { readonly platform: "node" | "browser"; readonly packages?: HostPackages };
+export type AppWorkerKind<P extends Principal> = {
+	readonly kind: KindShape;
+	readonly entry: string;
+	readonly execArgv?: readonly string[];
+	readonly env?: Readonly<Record<string, string>>;
+	readonly facet?: string;
+	readonly start: (address: Address, context: Context) => Promise<JsonValue> | JsonValue;
+	readonly authorize: (principal: P, address: Address) => boolean;
+	readonly idleMs?: () => number;
+};
+export type AppError =
+	| { readonly kind: "host"; readonly error: HostError }
+	| { readonly kind: "http"; readonly error: HttpError }
+	| { readonly kind: "workers"; readonly error: WorkersError }
+	| { readonly kind: "plugins"; readonly error: PluginsError };
+export type AppLimits = {
+	readonly uploads?: number;
+	readonly ephemeralSessions?: number;
+	readonly pendingPairings?: number;
+	readonly pairingsPerAddress?: number;
+	readonly importBytes?: number;
+	readonly importEntries?: number;
+};
+export type AppWeb = Pick<WebSurfaceOptions, "entry" | "page" | "paths" | "public">;
+export type AppOptions<P extends Principal> = {
+	readonly name: string;
+	readonly dataDir?: string;
+	readonly root?: string;
+	readonly listen?: ListenAddress;
+	readonly api: AppApi;
+	readonly kinds: Readonly<Record<string, AppKind>>;
+	readonly principal: { readonly server: P; readonly worker: (address: Address) => P };
+	readonly workers?: readonly AppWorkerKind<P>[];
+	readonly files?: FilesCaps;
+	readonly limits?: AppLimits;
+	readonly install?: InstallOptions;
+	readonly web?: AppWeb;
+	readonly tui?: { readonly entry: string };
+	readonly telemetry?: TelemetryContext & TelemetryIngestTarget;
+	readonly principalAttributes?: PrincipalAttributes<P>;
+	readonly onError: (error: AppError) => void;
+} & (OwnerPrincipal extends P ? unknown : { readonly "the app's principal type must have { kind: 'owner' }": never });
+export type AppPlugins = {
+	readonly state: Watchable<PluginsState>;
+	install(source: PluginSource, context: Context): Promise<readonly string[]>;
+	readonly component: Plugins;
+};
+export interface App<P extends Principal> {
+	readonly host: Host<P>;
+	readonly http: HttpComponent<P>;
+	readonly workers: ReadonlyMap<string, Workers<HostKind>>;
+	readonly plugins: AppPlugins;
+	readonly web: { readonly base: string } | undefined;
+	readonly tui: { readonly base: string } | undefined;
+	readonly dataDir: string;
+	readonly ownerTokenFile: string;
+	ownerLink(): string;
+	applyChanges(context: Context): Promise<RolloutResult>;
+	exportData(address: Address, path: string, context: Context): Promise<void>;
+	importData(archive: string, address: Address, context: Context): Promise<void>;
+	close(context: Context): Promise<void>;
+}
+export type KitStart = {
+	readonly dir: string;
+	readonly facet: string;
+	readonly principal: JsonValue;
+	readonly server: JsonValue;
+	readonly files: { readonly maxFile?: number; readonly maxTotal?: number };
+	readonly telemetry: boolean;
+	readonly uploads?: number;
+};
+type ClientSurface<P extends Principal> = {
+	readonly name: "web" | "tui";
+	readonly facet: import("../../host/index.ts").Facet<P>;
+	readonly base: string;
+	step(name: string): RolloutStep;
+};
+function workerLock(name: string, dir: string, address: Address): string {
+	return `${name}:${dir}:${address.key}`;
+}
+function linkHost(host: string): string {
+	return host === "0.0.0.0" || host === ""
+		? "127.0.0.1"
+		: host === "::"
+			? "[::1]"
+			: host.includes(":")
+				? `[${host}]`
+				: host;
+}
+
+export async function startServer<P extends Principal>(options: AppOptions<P>, context: Context): Promise<App<P>> {
+	const dataDir = await openDataDir(resolve(options.dataDir ?? defaultDataDir(options.name))),
+		deadline = AbortSignal.timeout(1000);
+	const lock = await processLock(`objects-app:${dataDir}`, withAbortSignal(deadline, context)).catch(
+		(error: unknown) => {
+			throw deadline.aborted ? new Error(`startServer: another server runs on ${dataDir}`) : error;
+		},
+	);
+	const resources = await (async () => {
+		try {
+			const layout = await createLayout(dataDir),
+				cookieSecret = await secretFile(layout.cookieSecret);
+			await privateStore(layout.serverStore);
+			return {
+				layout,
+				cookieSecret,
+				store: await openStore(sqliteBackend(await openNodeSqliteDatabase(layout.serverStore)), context),
+			};
+		} catch (error) {
+			await lock.release();
+			throw error;
+		}
+	})();
+	const { store, layout, cookieSecret } = resources,
+		{ api, limits = {}, onError } = options;
+	const sessions = createSessions<P>(cookieSecret, { maxEphemeral: limits.ephemeralSessions });
+	const host = createHost<P>({
+		address: Server(),
+		principal: options.principal.server,
+		store,
+		telemetry: options.telemetry,
+		principalAttributes: options.principalAttributes,
+		onError: (error) => onError({ kind: "host", error }),
+	});
+	const http = createHttp(
+		host,
+		{
+			listen: options.listen ?? { host: "127.0.0.1", port: 0 },
+			links: { path: "/objects", opened: sessions.opened },
+			telemetry: options.telemetry,
+			onError: (error) => onError({ kind: "http", error }),
+		},
+		context,
+	);
+	const plugins = createPlugins(
+		{
+			roots: [{ path: resolve(options.root ?? "plugins"), required: true }, layout.plugins],
+			api: { name: api.name, versions: api.versions },
+			install: options.install,
+			publicPath: WEB_PREFIX + "assets/",
+			kinds: Object.fromEntries(
+				Object.entries(options.kinds).map(([name, kind]) => [
+					name,
+					{
+						platform: kind.platform,
+						hostPackages: [
+							...api.versions.flatMap((version) => [`${api.name}/${version}`, `${api.name}/${version}/${name}`]),
+							...Object.keys(kind.packages ?? {}),
+						],
+					},
+				]),
+			),
+			onError: (error) => onError({ kind: "plugins", error }),
+		},
+		context,
+	);
+	const workers = new Map<string, Workers<HostKind>>(),
+		workerHosts = new Map<string, string>(),
+		serverKey = canonicalJson(options.principal.server as JsonValue, context);
+	for (const config of options.workers ?? []) {
+		const facet = config.facet ?? "worker";
+		workers.set(
+			config.kind.kind,
+			createWorkers(
+				host,
+				config.kind as HostKind,
+				{
+					kind: facet,
+					entry: config.entry,
+					execArgv: config.execArgv,
+					env: config.env,
+					authorize: (principal, address) =>
+						canonicalJson(principal as JsonValue, context) === serverKey || config.authorize(principal, address),
+					principal: options.principal.worker,
+					start: async (address, ctx) => {
+						const principal = options.principal.worker(address) as JsonValue;
+						workerHosts.set(canonicalJson(principal, ctx), address.key);
+						const kit: KitStart = {
+							dir: workerDirectory(dataDir, address),
+							facet,
+							principal,
+							server: options.principal.server as JsonValue,
+							files: { ...options.files },
+							telemetry: options.telemetry !== undefined,
+							...(limits.uploads === undefined ? {} : { uploads: limits.uploads }),
+						};
+						return { kit, app: await config.start(address, ctx) } as unknown as JsonValue;
+					},
+					lock: (address) => workerLock(options.name, dataDir, address),
+					idleMs: config.idleMs,
+					plugins,
+					onError: (error) => onError({ kind: "workers", error }),
+				},
+				context,
+			),
+		);
+	}
+	const owner = new OwnerLink(),
+		surfaces: ClientSurface<P>[] = [];
+	const core: PluginFacet<P>[] = [
+		{ name: "objects.http", facet: http.facet },
+		{ name: "objects.app.info", facet: appInfoFacet({ dataDir, name: options.name, version: api.versions[0] ?? "" }) },
+		{ name: "objects.app.sessions", facet: sessions.facet },
+		{ name: "objects.app.owner", facet: ownerFacet(owner) },
+		{
+			name: "objects.app.pairing",
+			facet: pairingFacet(new Pairings({ maxPending: limits.pendingPairings, perAddress: limits.pairingsPerAddress })),
+		},
+		{ name: "objects.app.files", facet: filesFacet(join(layout.server, "files"), options.files, limits.uploads) },
+		{ name: "objects.themes", facet: themesFacet() },
+		{ name: "objects.themes.choice", facet: themeChoiceFacet() },
+		{ name: "objects.translations", facet: translationsFacet() },
+		{ name: "objects.locale.choice", facet: localeChoiceFacet() },
+	];
+	if (options.telemetry)
+		core.push({
+			name: "objects.telemetry",
+			facet: telemetryIngestFacet({
+				target: options.telemetry,
+				workerHost: (principal) => workerHosts.get(canonicalJson(principal as JsonValue, context)),
+				principalAttributes: (principal) => host.principalAttributes(principal, context),
+			}),
+		});
+	let link = "",
+		closing: Promise<void> | undefined;
+	async function addressLock(address: Address, ctx: Context): Promise<ProcessLock | undefined> {
+		const timeout = AbortSignal.timeout(2000);
+		try {
+			return await processLock(workerLock(options.name, dataDir, address), withAbortSignal(timeout, ctx));
+		} catch (error) {
+			if (timeout.aborted) return undefined;
+			throw error;
+		}
+	}
+	function pool(address: Address): Workers<HostKind> {
+		const pool = workers.get(address.kind);
+		if (!pool) throw new Error(`app: no worker kind "${address.kind}"`);
+		return pool;
+	}
+	const app: App<P> = {
+		host,
+		http,
+		workers,
+		dataDir,
+		ownerTokenFile: layout.ownerToken,
+		ownerLink: () => link,
+		plugins: {
+			state: plugins.state,
+			component: plugins,
+			install: (source, ctx) => plugins.installPlugin(source, layout.plugins, ctx),
+		},
+		get web() {
+			return surfaces.find((surface) => surface.name === "web");
+		},
+		get tui() {
+			return surfaces.find((surface) => surface.name === "tui");
+		},
+		async applyChanges(ctx) {
+			const built = await plugins.build(plugins.state.value.dirty, ctx);
+			return plugins.rollout(
+				[
+					plugins.step("server", host),
+					...Array.from(workers, ([name, worker]) => worker.step(name)),
+					...surfaces.map((surface) => surface.step(surface.name)),
+				],
+				built,
+				ctx,
+			);
+		},
+		async exportData(address, path, ctx) {
+			const worker = pool(address),
+				target = resolve(path),
+				manifest: ArchiveManifest = {
+					format: ARCHIVE_FORMAT,
+					app: options.name,
+					api: api.versions[0] ?? "",
+					address: { kind: address.kind, key: address.key },
+				};
+			for (let attempt = 1; ; attempt++) {
+				if (worker.state.value[address.key]?.status === "running") {
+					const data = await host.get(HostData, { address: addressParam(address) }, ctx);
+					try {
+						await data.exportTo({ path: target, manifest: JSON.stringify(manifest) }, ctx);
+					} finally {
+						data.release();
+					}
+					return;
+				}
+				const locked = await addressLock(address, ctx);
+				if (locked) {
+					try {
+						await packData(workerDirectory(dataDir, address), manifest, target, ctx);
+					} finally {
+						await locked.release();
+					}
+					return;
+				}
+				if (attempt === 5) throw new Error(`exportData: the worker at ${address.key} keeps starting; try again`);
+			}
+		},
+		async importData(archive, address, ctx) {
+			pool(address);
+			const locked = await addressLock(address, ctx);
+			if (!locked) throw new Error(`importData: ${address.key} has data (its worker runs)`);
+			try {
+				await unpackData(
+					resolve(archive),
+					workerDirectory(dataDir, address),
+					(manifest) => {
+						if (manifest?.format !== ARCHIVE_FORMAT)
+							throw new Error(`importData: not a format ${ARCHIVE_FORMAT} archive`);
+						if (manifest.app !== options.name)
+							throw new Error(`importData: an archive of "${manifest.app}", not "${options.name}"`);
+					},
+					{ bytes: limits.importBytes, entries: limits.importEntries },
+					ctx,
+				);
+			} finally {
+				await locked.release();
+			}
+		},
+		close(ctx) {
+			return (closing ??= (async () => {
+				await http.close(ctx);
+				for (const worker of workers.values()) await worker.close(ctx);
+				await host.close(ctx);
+				await store.close(ctx);
+				plugins.close();
+				await lock.release();
+			})());
+		},
+	};
+	try {
+		if (options.web) surfaces.push({ name: "web", ...(await webSurface(host, { ...options.web, plugins }, context)) });
+		if (options.tui)
+			surfaces.push({ name: "tui", ...(await tuiSurface(host, { entry: options.tui.entry, plugins }, context)) });
+		for (const surface of surfaces) core.push({ name: `objects.${surface.name}`, facet: surface.facet });
+		await plugins.load(
+			host,
+			{ kind: "server", core, modules: { ...api.modules, ...options.kinds.server?.packages } },
+			context,
+		);
+		await ownerTokenFile(layout.ownerToken, host, context);
+		const token = owner.renew(),
+			address = await http.listening(context);
+		link = `http://${linkHost(address.host)}:${address.port}${OWNER_PATH}#${token}`;
+	} catch (error) {
+		await app.close(context);
+		throw error;
+	}
+	return app;
+}

@@ -65,12 +65,13 @@ import { UnboundClock } from "./unbound-clock.ts";
 import { uuidv7 } from "./uuid.ts";
 export type { HostError, Position } from "./report.ts";
 export type { GetOptions } from "./ctx.ts";
+export type PrincipalAttributes<P extends Principal> = (principal: P) => Readonly<SpanAttributes>;
 export type HostOptions<P extends Principal = Principal, R extends JsonValue = JsonValue> = {
 	readonly address?: Address;
 	readonly principal?: P;
 	readonly principalKey?: PrincipalKeyFunction<P>;
 	readonly telemetry?: TelemetryContext;
-	readonly principalAttributes?: (principal: P) => Readonly<SpanAttributes>;
+	readonly principalAttributes?: PrincipalAttributes<P>;
 	readonly onError: (error: HostError) => void;
 	readonly closeTimeout?: number;
 	readonly readyTimeout?: number;

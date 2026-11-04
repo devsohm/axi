@@ -104,6 +104,16 @@
 			"source": "./src/tui/index.ts",
 			"types": "./dist/tui/index.d.ts",
 			"import": "./dist/tui/index.js"
+		},
+		"./app": {
+			"source": "./src/node/app/index.ts",
+			"types": "./dist/node/app/index.d.ts",
+			"import": "./dist/node/app/index.js"
+		},
+		"./tui/launcher": {
+			"source": "./src/node/tui/index.ts",
+			"types": "./dist/node/tui/index.d.ts",
+			"import": "./dist/node/tui/index.js"
 		}
 	},
 	"files": [
@@ -112,6 +122,7 @@
 	],
 	"dependencies": {
 		"@axi/telemetry": "0.1.0-rc.1",
+		"@types/ws": "8.18.2",
 		"typebox": "1.4.3"
 	},
 	"peerDependencies": {

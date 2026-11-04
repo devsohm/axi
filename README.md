@@ -12,7 +12,7 @@ npm run build:daemon --workspace @axi/env
 npm test
 ```
 
-The package exposes its object runtime at the root. Separate imports provide context, deltas, watches, output, SQLite, telemetry recording, HTTP, workers and plugins. See the [Objects package](packages/objects/README.md) for import paths.
+The package exposes its object runtime at the root. Separate imports provide context, deltas, watches, output, SQLite, telemetry recording, HTTP, workers, plugins, app hosts and browser and terminal clients. See the [Objects package](packages/objects/README.md) for import paths.
 
 `@axi/telemetry` provides explicit callback spans, typed schemas, local recording and adapter conformance cases.
 

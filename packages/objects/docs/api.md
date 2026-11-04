@@ -90,6 +90,7 @@ Exports from the package root. The linked declarations contain exact signatures.
 | `FollowAttach` | typealias | [`host/follow.d.ts`](../dist/host/follow.d.ts) |
 | `FollowAttachment` | typealias | [`host/follow.d.ts`](../dist/host/follow.d.ts) |
 | `FollowObserver` | typealias | [`host/follow.d.ts`](../dist/host/follow.d.ts) |
+| `forbidden` | function | [`data/errors.d.ts`](../dist/data/errors.d.ts) |
 | `formatNumber` | function | [`surfaces/format.d.ts`](../dist/surfaces/format.d.ts) |
 | `formatTime` | function | [`surfaces/format.d.ts`](../dist/surfaces/format.d.ts) |
 | `GetOptions` | typealias | [`host/ctx.d.ts`](../dist/host/ctx.d.ts) |
@@ -109,6 +110,7 @@ Exports from the package root. The linked declarations contain exact signatures.
 | `Inflated` | typealias | [`link/part.d.ts`](../dist/link/part.d.ts) |
 | `insertDocument` | function | [`store/engine.d.ts`](../dist/store/engine.d.ts) |
 | `int` | function | [`contracts/schema.d.ts`](../dist/contracts/schema.d.ts) |
+| `invalid` | function | [`data/errors.d.ts`](../dist/data/errors.d.ts) |
 | `ipcLink` | function | [`link/ipc.d.ts`](../dist/link/ipc.d.ts) |
 | `IpcPort` | interface | [`link/ipc.d.ts`](../dist/link/ipc.d.ts) |
 | `isNull` | function | [`store/expression.d.ts`](../dist/store/expression.d.ts) |
@@ -210,6 +212,7 @@ Exports from the package root. The linked declarations contain exact signatures.
 | `Prepared` | typealias | [`surfaces/loaded.d.ts`](../dist/surfaces/loaded.d.ts) |
 | `Presence` | typealias | [`host/presence.d.ts`](../dist/host/presence.d.ts) |
 | `Principal` | typealias | [`data/principal.d.ts`](../dist/data/principal.d.ts) |
+| `PrincipalAttributes` | typealias | [`host/host.d.ts`](../dist/host/host.d.ts) |
 | `PrincipalKeyFunction` | typealias | [`data/principal.d.ts`](../dist/data/principal.d.ts) |
 | `PutRowOf` | typealias | [`store/columns.d.ts`](../dist/store/columns.d.ts) |
 | `query` | function | [`store/query.d.ts`](../dist/store/query.d.ts) |

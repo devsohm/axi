@@ -28,3 +28,4 @@ export type { RouteHandle, RouteOptions } from "./route.ts";
 export type { OnHandler, OnLiveHandler, OnNativeHandler, RoutineDeclarations } from "./routines.ts";
 export { sleep, untilAborted } from "./sleep.ts";
 export type { PluginFacet } from "./staging.ts";
+export type { PrincipalAttributes } from "./host.ts";

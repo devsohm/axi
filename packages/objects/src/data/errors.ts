@@ -67,6 +67,9 @@ export function asObjectsError(value: unknown, label: string): ObjectsError {
 	if (isObjectsError(value)) return value;
 	return new ObjectsError({ code: "unavailable", message: `${label}: ${value instanceof Error ? value.message : String(value)}` }, { cause: value });
 }
+export function forbidden(message: string, details?: JsonValue): Extract<ObjectsError, { readonly code: "forbidden" }> {
+	return new ObjectsError({ code: "forbidden", message, ...(details === undefined ? {} : { details }) }) as Extract<ObjectsError, { readonly code: "forbidden" }>;
+}
 export function objectsErrorFromJson(raw: unknown): ObjectsError {
 	const reject = (problem: string): never => { throw new Error(`Invalid ObjectsError JSON: ${problem}`); };
 	if (!raw || typeof raw !== "object" || Array.isArray(raw)) return reject("not an object");

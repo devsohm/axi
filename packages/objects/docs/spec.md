@@ -56,6 +56,16 @@ HTTP routes deny anonymous callers unless explicitly public. Cross-site routes a
 
 Worker starts serialize per address and hold process locks. Stale file locks are cleared only when no process is listening. A missing child PID is never a signal target. Worker failure requires retry or rollout rather than an automatic restart loop.
 
+## App host and clients
+
+The app host opens one server Store and one Store per worker address. Startup holds a data-directory lock. Closing the app releases that lock after its components close. Persistent device and browser sessions store hashes rather than token secrets. Ephemeral sessions and pending sign-in links remain in memory.
+
+An address export holds its worker's data through the worker or its process lock. Import requires a new destination, validates archive paths and limits, and publishes the staged directory only after Store import succeeds. Finished files are included; incomplete uploads are not.
+
+Client plugin changes reload facets in place. A changed base bundle restarts the client. React and terminal scopes release their subscriptions and references when disposed. Page state survives component replacement within one client host; it does not survive that host's destruction.
+
+The Node terminal launcher retains credentials outside the sandbox. It requires Node 26.5.1 or later and mediates file, browser and clipboard actions through confirmation. It permits drawing escapes and removes terminal configuration escapes from sandbox output. Its bridge bounds frames to 17 MiB and bundle downloads to 8 MiB. Exit restores terminal modes and removes launcher listeners.
+
 ## Telemetry
 
 Recorded timing uses milliseconds with microsecond precision. Telemetry queues are bounded. In-flight writes count toward their bounds. A storage failure stops the recorder and rejects subsequent flush or close.

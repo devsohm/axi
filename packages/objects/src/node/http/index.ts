@@ -1,6 +1,6 @@
 export type { Connection, Provenance } from "./admission.ts";
 export { Authenticators, type Authenticator } from "./authenticate.ts";
-export { cookie, readCookie, type CookieOptions } from "./cookies.ts";
+export { cookie, readCookie, readSignedCookie, type CookieOptions } from "./cookies.ts";
 export { fileResponse, type FileResponseOptions } from "./file.ts";
 export {
 	createHttp,
@@ -21,7 +21,6 @@ export {
 	type HttpRoute,
 	type HttpRouteOptions,
 	type HttpSocket,
-	type HttpSocketOptions,
 	type HttpWrap,
 	type Router,
 	type WebSocketHandle,

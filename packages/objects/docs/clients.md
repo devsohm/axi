@@ -22,6 +22,16 @@ The `@axi/objects/tui` entry is independent of the terminal rendering library. `
 
 The sandbox cannot use this bridge as direct filesystem or network access. The trusted launcher controls credentials and machine actions. Its output filter permits drawing controls and drops clipboard, title and other terminal configuration escapes.
 
+### Trusted Node launcher
+
+Call `startTerminal` from `@axi/objects/tui/launcher` with the server URL and credentials. Credentials can be a token, a token file or an owner-approved pairing flow. The launcher retains the token outside the sandbox and authenticates downloads and connections itself.
+
+This launcher requires Node 26.5.1 or later. It starts a separate process with Node permissions, a bounded heap, no inherited credentials and a restricted builtin-module interface. The sandbox receives terminal size, input, language choices and drawing access through its bridge. The portable `@axi/objects/tui` runtime does not itself require this Node launcher.
+
+Copying text, opening a browser URL and reading an attachment require confirmation. A symlink attachment also shows the resolved file for approval. Attachment reads check the opened file's identity and size. Browser actions accept HTTP and HTTPS URLs without user information.
+
+The launcher limits frames, bundle downloads, simultaneous requests and sockets. It filters client output before writing to the terminal. Three Ctrl+C presses within one second exit the launcher. Exit restores terminal modes and removes its input and resize listeners. Call the returned `stop()` when the application owns the launcher's lifetime.
+
 ## Messages and preferences
 
 `defineMessages` creates a typed message catalog. A message may be a string or a function with typed parameters. `t.message` produces message data for remote state. `t.render` renders that data in the client's language.
