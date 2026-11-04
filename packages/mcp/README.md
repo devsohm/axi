@@ -36,6 +36,10 @@ read
 
 `listTools()`, `listResources()` and `listResourceTemplates()` follow pagination. Resource helpers also expose individual pages. `callTool()` preserves structured content and `isError`; protocol errors reject with `McpError`. Requests accept `signal`, `timeoutMs` and `onProgress`.
 
+Use `PipeTransport({ open })` when another component runs the server. The `open` callback connects stdout and stderr handlers and returns a pipe with `write`, `closeStdin`, `close` and an `exited` promise. The transport frames JSON-RPC messages, keeps a bounded stderr tail, and closes stdin before terminating an unresponsive server. It can connect to an Env remote process without spawning a local server.
+
+`validateMcpServerConfig(name, entry)` validates shared stdio and HTTP settings and keeps application fields. `isMcpServerOverride(entry)` identifies entries that only override settings. `createMcpToolName(server, tool)` produces a provider-safe identifier, with a hash suffix for collisions or long names. `mcpNamespace(server)` gives the server's namespace. `normalizeMcpInputSchema(schema)` supplies missing object-schema fields.
+
 ## Convert tool results for a model
 
 ```ts
@@ -50,6 +54,8 @@ console.log(JSON.stringify(content));
 ```
 
 Text and image blocks remain text and images. Embedded resources are unwrapped; other content becomes a short text placeholder.
+
+Pass converted blocks to `limitMcpContent(content, saveOutput)` to limit combined text to 20 KiB, retaining its beginning and end. The optional saver receives the full text and returns a path. Images remain in the result. The result reports a save failure in its text without discarding the excerpt.
 
 ## Add authentication
 

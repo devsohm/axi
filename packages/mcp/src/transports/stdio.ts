@@ -1,7 +1,8 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import crossSpawn from "cross-spawn";
-import { McpConnectionClosedError, parseJsonRpcMessage, type JsonRpcMessage } from "../protocol/jsonrpc.ts";
-import { DEFAULT_MAX_MESSAGE_BYTES, TransportEvents, type McpTransport } from "./transport.ts";
+import { McpConnectionClosedError, type JsonRpcMessage } from "../protocol/jsonrpc.ts";
+import { TransportEvents, type McpTransport } from "./transport.ts";
+import { JsonRpcLineReader } from "./lines.ts";
 const groups = new Set<number>();
 const useGroups = process.platform !== "win32";
 let exitHook = false;
@@ -38,7 +39,7 @@ function track(child: ChildProcess): void {
 	}
 	const pid = child.pid;
 	groups.add(pid);
-	child.once("exit", () => {
+	child.once("close", () => {
 		groups.delete(pid);
 	});
 }
@@ -57,19 +58,23 @@ export interface StdioTransportOptions {
 export class StdioTransport extends TransportEvents implements McpTransport {
 	readonly options: Readonly<StdioTransportOptions>;
 	#child?: ChildProcess;
-	#out = Buffer.alloc(0);
-	#err = Buffer.alloc(0);
+	readonly #lines: JsonRpcLineReader;
 	#started = false;
 	#closed = false;
 	constructor(options: StdioTransportOptions) {
 		super();
 		this.options = Object.freeze({ ...options, args: options.args ? [...options.args] : undefined });
+		this.#lines = new JsonRpcLineReader({
+			...this.options,
+			onMessage: (message) => this.emitMessage(message),
+			onError: (error) => this.emitError(error),
+		});
 	}
 	get pid(): number | undefined {
 		return this.#child?.pid;
 	}
 	get stderr(): string {
-		return this.#err.toString("utf8");
+		return this.#lines.stderr;
 	}
 	async start(): Promise<void> {
 		if (this.#started) throw new Error("MCP stdio transport already started");
@@ -84,24 +89,20 @@ export class StdioTransport extends TransportEvents implements McpTransport {
 		});
 		this.#child = child;
 		track(child);
-		child.stdout?.on("data", (value: Buffer | string) => this.#stdout(value));
+		child.stdout?.on("data", (value: Buffer | string) =>
+			this.#lines.readStdout(typeof value === "string" ? Buffer.from(value) : value),
+		);
 		child.stdout?.on("error", (error) => this.emitError(error));
 		child.stdin?.on("error", (error) => {
 			if (!this.#closed) this.emitError(error);
 		});
 		child.stderr?.on("error", (error) => this.emitError(error));
-		child.stderr?.on("data", (value: Buffer | string) => {
-			const bytes = Buffer.isBuffer(value) ? value : Buffer.from(value),
-				limit = this.options.maxStderrBytes ?? 65536;
-			this.#err = Buffer.concat([this.#err, bytes]);
-			if (this.#err.length > limit) this.#err = this.#err.subarray(-limit);
-			this.options.onStderr?.(bytes.toString("utf8"));
-		});
+		child.stderr?.on("data", (value: Buffer | string) =>
+			this.#lines.readStderr(typeof value === "string" ? Buffer.from(value) : value),
+		);
 		child.on("close", () => {
 			this.#child = undefined;
-			if (this.#out.toString("utf8").trim())
-				this.emitError(new Error("MCP stdio server closed with an incomplete JSON-RPC message"));
-			this.#out = Buffer.alloc(0);
+			this.#lines.end();
 			this.emitClose();
 		});
 		await new Promise<void>((resolve, reject) => {
@@ -126,33 +127,6 @@ export class StdioTransport extends TransportEvents implements McpTransport {
 		const payload = JSON.stringify(message) + "\n";
 		await new Promise<void>((resolve, reject) => input.write(payload, (error) => (error ? reject(error) : resolve())));
 	}
-	#stdout(value: Buffer | string): void {
-		this.#out = Buffer.concat([this.#out, Buffer.isBuffer(value) ? value : Buffer.from(value)]);
-		const limit = this.options.maxMessageBytes ?? DEFAULT_MAX_MESSAGE_BYTES;
-		for (;;) {
-			const end = this.#out.indexOf(10);
-			if (end < 0) {
-				if (this.#out.length > limit) {
-					this.#out = Buffer.alloc(0);
-					this.emitError(new Error(`MCP stdio message exceeds ${limit} bytes`));
-				}
-				return;
-			}
-			const line = this.#out.subarray(0, end);
-			this.#out = this.#out.subarray(end + 1);
-			if (line.length > limit) {
-				this.emitError(new Error(`MCP stdio message exceeds ${limit} bytes`));
-				continue;
-			}
-			const text = line.toString("utf8").replace(/\r$/, "");
-			if (!text.trim()) continue;
-			try {
-				this.emitMessage(parseJsonRpcMessage(JSON.parse(text)));
-			} catch (error) {
-				this.emitError(error);
-			}
-		}
-	}
 	async close(): Promise<void> {
 		if (this.#closed) return;
 		this.#closed = true;
@@ -161,7 +135,7 @@ export class StdioTransport extends TransportEvents implements McpTransport {
 			this.emitClose();
 			return;
 		}
-		if (child.exitCode !== null || child.signalCode !== null) {
+		if (!useGroups && (child.exitCode !== null || child.signalCode !== null)) {
 			child.stdin?.end();
 			return;
 		}
