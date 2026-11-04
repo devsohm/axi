@@ -192,7 +192,7 @@ assert.equal(DEFAULT_PROGRESS_POLICY.partialIntervalMs, 100);
 assert.equal("classifierJson" in (await import("@axi/ai/api/classifier-shared")), false);
 assert.equal("openRouterModelSchema" in (await import("@axi/ai/providers/openrouter-api")), false);
 assert.equal("isOpenRouterModel" in (await import("@axi/ai/providers/openrouter-api")), false);
-for (const subpath of ["api/anthropic-request", "api/bedrock-client", "providers/builtin"])
+for (const subpath of ["api/anthropic-request", "api/anthropic-threads", "api/bedrock-client", "providers/builtin"])
 	assert.throws(() => import.meta.resolve(`@axi/ai/${subpath}`), {
 		code: "ERR_PACKAGE_PATH_NOT_EXPORTED",
 	});

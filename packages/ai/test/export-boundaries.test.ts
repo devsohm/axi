@@ -17,7 +17,7 @@ function resolve(subpath: string) {
 	);
 }
 
-it.each(["api/anthropic-request", "api/bedrock-client", "providers/builtin"])(
+it.each(["api/anthropic-request", "api/anthropic-threads", "api/bedrock-client", "providers/builtin"])(
 	"keeps %s private to the implementation",
 	(subpath) => {
 		const result = resolve(subpath);

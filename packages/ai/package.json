@@ -51,6 +51,7 @@
 		"./api/anthropic-client": null,
 		"./api/anthropic-request": null,
 		"./api/anthropic-sse": null,
+		"./api/anthropic-threads": null,
 		"./api/bedrock-client": null,
 		"./api/bedrock-request": null,
 		"./api/bedrock-stream": null,
