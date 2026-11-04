@@ -1,7 +1,7 @@
 import { expect, it } from "vitest";
-import { NativeWatch } from "@axi/objects";
+import { NativeWatch } from "@axi/objects/watch";
 import { BACKGROUND_CONTEXT as context } from "@axi/objects/context";
-import type { NativeObserver, RegistryValue } from "@axi/objects/next";
+import type { NativeObserver, RegistryValue } from "@axi/objects";
 import { createRegistry, defineExtension, registryReader, type RegistrySnapshot } from "../src/index.ts";
 
 it("reads composed snapshots and wakes subscribers synchronously only for values", () => {

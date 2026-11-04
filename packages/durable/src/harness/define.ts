@@ -1,4 +1,4 @@
-import type { JsonValue } from "@axi/objects";
+import type { JsonValue } from "@axi/objects/json";
 import type { Task } from "../types.ts";
 import type { TSchema } from "@axi/ai";
 import type { AnyTask, Extension, HookRegistration, HooksOf, PromptSection, RunEndTask, ToolRegistration, Wrap } from "./types.ts";

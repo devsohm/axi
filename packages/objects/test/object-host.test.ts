@@ -17,7 +17,7 @@ import {
 	remote,
 	sleep,
 	type HostError,
-} from "../src/next/index.ts";
+} from "../src/index.ts";
 const count = defineState("count", { schema: obj({ n: int() }), version: 1, initial: () => ({ n: 0 }) });
 
 it("reports a removed provider once and recovers the same member watch when it returns", async () => {
@@ -114,9 +114,8 @@ it("publishes declared state before resolving a waiting get and commits its deri
 	});
 	const errors: HostError[] = [],
 		host = createHost({ onError: (error) => errors.push(error) });
-	const waiting = host.get(type, {}, context);
 	try {
-		await host.load(
+		const loading = host.load(
 			[
 				{
 					name: "sample",
@@ -139,6 +138,8 @@ it("publishes declared state before resolving a waiting get and commits its deri
 			],
 			context,
 		);
+		const waiting = host.get(type, {}, context);
+		await loading;
 		const ref = await waiting;
 		expect([ref.count.value, ref.doubled.value]).toEqual([{ n: 0 }, 0]);
 		expect(await ref.add(4, context)).toBe(4);

@@ -7,14 +7,14 @@ import {
 	obj,
 	openStore,
 	sqliteBackend,
-} from "../src/next/index.ts";
+} from "../src/index.ts";
 import {
 	Persistence,
 	storedAfter,
 	type Stored,
-} from "../src/next/documents/persistence.ts";
-import type { StagedWrite } from "../src/next/store/step.ts";
-import { ObjectsStore } from "../src/next/store/store.ts";
+} from "../src/documents/persistence.ts";
+import type { StagedWrite } from "../src/store/step.ts";
+import { ObjectsStore } from "../src/store/store.ts";
 import { openNodeSqliteDatabase } from "../src/sqlite/node.ts";
 
 it("writes bases, deltas and replacement incarnations without publishing a staged draft", async () => {

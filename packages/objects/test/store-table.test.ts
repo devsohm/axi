@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { int, opt, str } from "../src/next/contracts/index.ts";
+import { int, opt, str } from "../src/contracts/index.ts";
 import {
 	add,
 	coalesce,
@@ -8,8 +8,8 @@ import {
 	compileWhere,
 	eq,
 	prefix,
-} from "../src/next/store/expression.ts";
-import { defineTable } from "../src/next/store/table.ts";
+} from "../src/store/expression.ts";
+import { defineTable } from "../src/store/table.ts";
 
 it("normalizes a row and keeps table fingerprints independent of declaration order", () => {
 	const first = defineTable("events", {

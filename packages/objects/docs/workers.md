@@ -1,6 +1,6 @@
 # Node worker hosts
 
-The internal modules in `src/next-node/workers` start one Node process per object-host address. Their package paths remain internal. The [declarations](../dist/next-node/workers/index.d.ts) describe its types. A worker process can host a Durable runtime, but process management does not replace Durable's task scheduler.
+`@axi/objects/workers` starts one Node process per object-host address. The [declarations](../dist/node/workers/index.d.ts) describe its types. A worker process can host a Durable runtime, but process management does not replace Durable's task scheduler.
 
 ## Parent process
 
@@ -28,4 +28,4 @@ A crash, failed start or lost link stays failed until retry or a worker rollout.
 
 `workers.step(name)` joins a plugin rollout. It retries earlier failed addresses and ships the current script set to running workers. Results identify each host's report, clean stop or error. Cancelling a rollout wait does not cancel its outstanding child reload.
 
-Shutdown aborts the child's context and runs registered closers in reverse order. The child has three seconds to exit; the parent kills the process group after five seconds. Closing the component cancels starts and stops its children. Process locks wait for the current holder without polling and refuse stale socket files.
+Shutdown aborts the child's context and runs registered closers in reverse order. The child has three seconds to exit; the parent kills the process group after five seconds. Closing the component cancels starts and stops its children. Process locks wait for the current holder without polling. The serialized starter clears an unheld stale file socket before acquisition and preserves live holders.

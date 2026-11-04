@@ -1,7 +1,7 @@
 import { expect, it } from "vitest";
 import { BACKGROUND_CONTEXT as context } from "../src/context/index.ts";
-import { FollowSource, type FollowObserver } from "../src/next/host/follow.ts";
-import { Batch, Derive, Source } from "../src/next/state/internal.ts";
+import { FollowSource, type FollowObserver } from "../src/host/follow.ts";
+import { Batch, Derive, Source } from "../src/state/internal.ts";
 
 function runtime(batch: Batch) {
 	let observer: FollowObserver<unknown> | undefined,

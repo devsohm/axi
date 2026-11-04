@@ -1,5 +1,5 @@
 import { createModels } from "@axi/ai";
-import type { WatchCall, WatchEnd } from "@axi/objects";
+import type { WatchCall, WatchEnd } from "@axi/objects/watch";
 import { BACKGROUND_CONTEXT as context } from "@axi/objects/context";
 import { expect, test } from "vitest";
 import {

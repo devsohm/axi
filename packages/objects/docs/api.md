@@ -1,116 +1,244 @@
-# Objects API
+# @axi/objects API
 
-Root exports from `@axi/objects`. Open the declarations for exact types. Subpath modules have their own exports.
+Exports from the package root. The linked declarations contain exact signatures. Other public import paths appear in the package README.
 
-| Export | Declaration |
-| --- | --- |
-| `AcceptOptions` | [`connection.d.ts`](../dist/connection.d.ts) |
-| `Accepts` | [`contract.d.ts`](../dist/contract.d.ts) |
-| `Adapter` | [`contract.d.ts`](../dist/contract.d.ts) |
-| `AnyContract` | [`contract.d.ts`](../dist/contract.d.ts) |
-| `AttachedReplicatedState` | [`state.d.ts`](../dist/state.d.ts) |
-| `Cell` | [`cell.d.ts`](../dist/cell.d.ts) |
-| `ConnectOptions` | [`host.d.ts`](../dist/host.d.ts) |
-| `ContextKey` | [`context/index.d.ts`](../dist/context/index.d.ts) |
-| `Context` | [`context/index.d.ts`](../dist/context/index.d.ts) |
-| `CopyJsonOptions` | [`json.d.ts`](../dist/json.d.ts) |
-| `Ctx` | [`types.d.ts`](../dist/types.d.ts) |
-| `Description` | [`contract.d.ts`](../dist/contract.d.ts) |
-| `Draft` | [`delta/draft.d.ts`](../dist/delta/draft.d.ts) |
-| `EventOf` | [`declare.d.ts`](../dist/declare.d.ts) |
-| `FacetApi` | [`host.d.ts`](../dist/host.d.ts) |
-| `FacetDefinition` | [`host.d.ts`](../dist/host.d.ts) |
-| `FacetLoader` | [`host.d.ts`](../dist/host.d.ts) |
-| `Facet` | [`host.d.ts`](../dist/host.d.ts) |
-| `Factory` | [`object.d.ts`](../dist/object.d.ts) |
-| `Frame` | [`wire.d.ts`](../dist/wire.d.ts) |
-| `GetOptions` | [`types.d.ts`](../dist/types.d.ts) |
-| `HostFamily` | [`contract.d.ts`](../dist/contract.d.ts) |
-| `HostNamed` | [`contract.d.ts`](../dist/contract.d.ts) |
-| `HostOptions` | [`host.d.ts`](../dist/host.d.ts) |
-| `HostServeOptions` | [`object.d.ts`](../dist/object.d.ts) |
-| `Host` | [`host.d.ts`](../dist/host.d.ts) |
-| `ImplementationOf` | [`contract.d.ts`](../dist/contract.d.ts) |
-| `InputOf` | [`contract.d.ts`](../dist/contract.d.ts) |
-| `IpcChannel` | [`link.d.ts`](../dist/link.d.ts) |
-| `JsonRepresentation` | [`json.d.ts`](../dist/json.d.ts) |
-| `JsonValue` | [`json.d.ts`](../dist/json.d.ts) |
-| `Lifetime` | [`object.d.ts`](../dist/object.d.ts) |
-| `LinkOptions` | [`connection.d.ts`](../dist/connection.d.ts) |
-| `Link` | [`link.d.ts`](../dist/link.d.ts) |
-| `LoadOptions` | [`host.d.ts`](../dist/host.d.ts) |
-| `LocalContract` | [`contract.d.ts`](../dist/contract.d.ts) |
-| `MutableReplicatedState` | [`state.d.ts`](../dist/state.d.ts) |
-| `NativeWatchCall` | [`watch.d.ts`](../dist/watch.d.ts) |
-| `NativeWatchHandle` | [`watch.d.ts`](../dist/watch.d.ts) |
-| `NativeWatch` | [`watch.d.ts`](../dist/watch.d.ts) |
-| `NativeWatchable` | [`watch.d.ts`](../dist/watch.d.ts) |
-| `ObjectsErrorCode` | [`errors.d.ts`](../dist/errors.d.ts) |
-| `ObjectsError` | [`errors.d.ts`](../dist/errors.d.ts) |
-| `PACK_THRESHOLD` | [`link.d.ts`](../dist/link.d.ts) |
-| `PROTOCOL_VERSION` | [`wire.d.ts`](../dist/wire.d.ts) |
-| `PlacementFor` | [`contract.d.ts`](../dist/contract.d.ts) |
-| `Placement` | [`contract.d.ts`](../dist/contract.d.ts) |
-| `PluginRef` | [`host.d.ts`](../dist/host.d.ts) |
-| `PrincipalMatch` | [`host.d.ts`](../dist/host.d.ts) |
-| `PrincipalPattern` | [`host.d.ts`](../dist/host.d.ts) |
-| `Readable` | [`types.d.ts`](../dist/types.d.ts) |
-| `RefStatus` | [`types.d.ts`](../dist/types.d.ts) |
-| `Ref` | [`contract.d.ts`](../dist/contract.d.ts) |
-| `ReferencedServeOptions` | [`object.d.ts`](../dist/object.d.ts) |
-| `RegistryTable` | [`registry.d.ts`](../dist/registry.d.ts) |
-| `RegistryView` | [`registry.d.ts`](../dist/registry.d.ts) |
-| `Registry` | [`registry.d.ts`](../dist/registry.d.ts) |
-| `ReloadOptions` | [`reload.d.ts`](../dist/reload.d.ts) |
-| `ReloadReport` | [`reload.d.ts`](../dist/reload.d.ts) |
-| `RemoteContract` | [`contract.d.ts`](../dist/contract.d.ts) |
-| `ReplicatedStateDelivery` | [`state.d.ts`](../dist/state.d.ts) |
-| `ReplicatedStateSourceAttachment` | [`state.d.ts`](../dist/state.d.ts) |
-| `ReplicatedStateSourceFrame` | [`state.d.ts`](../dist/state.d.ts) |
-| `ReplicatedStateSourceOptions` | [`state.d.ts`](../dist/state.d.ts) |
-| `ReplicatedStateSource` | [`state.d.ts`](../dist/state.d.ts) |
-| `ReplicatedState` | [`state.d.ts`](../dist/state.d.ts) |
-| `ResourceDeclaration` | [`declare.d.ts`](../dist/declare.d.ts) |
-| `Resource` | [`declare.d.ts`](../dist/declare.d.ts) |
-| `RootOptions` | [`host.d.ts`](../dist/host.d.ts) |
-| `Route` | [`host.d.ts`](../dist/host.d.ts) |
-| `Self` | [`object.d.ts`](../dist/object.d.ts) |
-| `ServeOptionsFor` | [`object.d.ts`](../dist/object.d.ts) |
-| `ServeOptions` | [`object.d.ts`](../dist/object.d.ts) |
-| `Shape` | [`types.d.ts`](../dist/types.d.ts) |
-| `StateEvent` | [`types.d.ts`](../dist/types.d.ts) |
-| `StateInit` | [`object.d.ts`](../dist/object.d.ts) |
-| `StateOptions` | [`object.d.ts`](../dist/object.d.ts) |
-| `Subscribable` | [`declare.d.ts`](../dist/declare.d.ts) |
-| `ValueOf` | [`declare.d.ts`](../dist/declare.d.ts) |
-| `WatchCall` | [`watch.d.ts`](../dist/watch.d.ts) |
-| `WatchEnd` | [`watch.d.ts`](../dist/watch.d.ts) |
-| `WatchHandle` | [`watch.d.ts`](../dist/watch.d.ts) |
-| `Watch` | [`watch.d.ts`](../dist/watch.d.ts) |
-| `Watchable` | [`watch.d.ts`](../dist/watch.d.ts) |
-| `WebSocketAcceptOptions` | [`websocket.d.ts`](../dist/websocket.d.ts) |
-| `WebSocketLike` | [`link.d.ts`](../dist/link.d.ts) |
-| `WebSocketLinkOptions` | [`link.d.ts`](../dist/link.d.ts) |
-| `WebSocketServerLike` | [`websocket.d.ts`](../dist/websocket.d.ts) |
-| `acceptWebSockets` | [`websocket.d.ts`](../dist/websocket.d.ts) |
-| `bind` | [`contract.d.ts`](../dist/contract.d.ts) |
-| `copyJson` | [`json.d.ts`](../dist/json.d.ts) |
-| `coverage` | [`contract.d.ts`](../dist/contract.d.ts) |
-| `createHost` | [`host.d.ts`](../dist/host.d.ts) |
-| `defineFacet` | [`host.d.ts`](../dist/host.d.ts) |
-| `defineRegistry` | [`registry.d.ts`](../dist/registry.d.ts) |
-| `forbidden` | [`errors.d.ts`](../dist/errors.d.ts) |
-| `hostFamily` | [`contract.d.ts`](../dist/contract.d.ts) |
-| `hostNamed` | [`contract.d.ts`](../dist/contract.d.ts) |
-| `inflateMessage` | [`link.d.ts`](../dist/link.d.ts) |
-| `invalid` | [`errors.d.ts`](../dist/errors.d.ts) |
-| `ipcLink` | [`link.d.ts`](../dist/link.d.ts) |
-| `isJsonValue` | [`json.d.ts`](../dist/json.d.ts) |
-| `isObjectsError` | [`errors.d.ts`](../dist/errors.d.ts) |
-| `local` | [`contract.d.ts`](../dist/contract.d.ts) |
-| `memoryLinkPair` | [`link.d.ts`](../dist/link.d.ts) |
-| `method` | [`contract.d.ts`](../dist/contract.d.ts) |
-| `opaque` | [`contract.d.ts`](../dist/contract.d.ts) |
-| `remote` | [`contract.d.ts`](../dist/contract.d.ts) |
-| `replicatedState` | [`state.d.ts`](../dist/state.d.ts) |
-| `webSocketLink` | [`link.d.ts`](../dist/link.d.ts) |
+| Export | Kind | Declaration |
+| --- | --- | --- |
+| `AcceptsTable` | typealias | [`contracts/accepts.d.ts`](../dist/contracts/accepts.d.ts) |
+| `ActivityCounts` | typealias | [`host/activity.d.ts`](../dist/host/activity.d.ts) |
+| `add` | function | [`store/expression.d.ts`](../dist/store/expression.d.ts) |
+| `AddedColumn` | typealias | [`store/table-evolve.d.ts`](../dist/store/table-evolve.d.ts) |
+| `Address` | typealias | [`contracts/host-kind.d.ts`](../dist/contracts/host-kind.d.ts) |
+| `and` | function | [`store/expression.d.ts`](../dist/store/expression.d.ts) |
+| `applyBatch` | function | [`store/apply-batch.d.ts`](../dist/store/apply-batch.d.ts) |
+| `ArchiveManifest` | typealias | [`store/archive.d.ts`](../dist/store/archive.d.ts) |
+| `ArchivePart` | typealias | [`store/archive.d.ts`](../dist/store/archive.d.ts) |
+| `arr` | function | [`contracts/schema.d.ts`](../dist/contracts/schema.d.ts) |
+| `Backend` | class | [`store/backend.d.ts`](../dist/store/backend.d.ts) |
+| `binaryCodec` | const | [`link/binary.d.ts`](../dist/link/binary.d.ts) |
+| `BlockedReason` | typealias | [`jobs/run.d.ts`](../dist/jobs/run.d.ts) |
+| `bool` | function | [`contracts/schema.d.ts`](../dist/contracts/schema.d.ts) |
+| `Bounds` | typealias | [`contracts/schema.d.ts`](../dist/contracts/schema.d.ts) |
+| `broken` | const | [`data/failure.d.ts`](../dist/data/failure.d.ts) |
+| `bytes` | function | [`contracts/schema.d.ts`](../dist/contracts/schema.d.ts) |
+| `Claimant` | typealias | [`store/claims.d.ts`](../dist/store/claims.d.ts) |
+| `coalesce` | function | [`store/expression.d.ts`](../dist/store/expression.d.ts) |
+| `Codec` | interface | [`link/message.d.ts`](../dist/link/message.d.ts) |
+| `ColumnRef` | class | [`store/expression.d.ts`](../dist/store/expression.d.ts) |
+| `ColumnRefs` | typealias | [`store/query.d.ts`](../dist/store/query.d.ts) |
+| `Columns` | typealias | [`store/columns.d.ts`](../dist/store/columns.d.ts) |
+| `CommitPersistence` | typealias | [`documents/definition.d.ts`](../dist/documents/definition.d.ts) |
+| `CommittedReload` | typealias | [`host/host.d.ts`](../dist/host/host.d.ts) |
+| `compareText` | function | [`store/text.d.ts`](../dist/store/text.d.ts) |
+| `ComposeContext` | typealias | [`registries/registry.d.ts`](../dist/registries/registry.d.ts) |
+| `Compression` | interface | [`link/part.d.ts`](../dist/link/part.d.ts) |
+| `concat` | function | [`store/expression.d.ts`](../dist/store/expression.d.ts) |
+| `Condition` | class | [`store/expression.d.ts`](../dist/store/expression.d.ts) |
+| `constant` | function | [`state/watchable.d.ts`](../dist/state/watchable.d.ts) |
+| `Contract` | interface | [`contracts/contract.d.ts`](../dist/contracts/contract.d.ts) |
+| `Contribution` | typealias | [`registries/registry.d.ts`](../dist/registries/registry.d.ts) |
+| `createHost` | function | [`host/host.d.ts`](../dist/host/host.d.ts) |
+| `Ctx` | interface | [`host/ctx.d.ts`](../dist/host/ctx.d.ts) |
+| `DecodedRow` | typealias | [`store/adapter.d.ts`](../dist/store/adapter.d.ts) |
+| `decodeJsonl` | function | [`store/jsonl.d.ts`](../dist/store/jsonl.d.ts) |
+| `Defaulted` | typealias | [`contracts/schema.d.ts`](../dist/contracts/schema.d.ts) |
+| `defineFacet` | function | [`host/facet.d.ts`](../dist/host/facet.d.ts) |
+| `defineJob` | function | [`jobs/definition.d.ts`](../dist/jobs/definition.d.ts) |
+| `defineRegistry` | function | [`registries/registry.d.ts`](../dist/registries/registry.d.ts) |
+| `defineState` | function | [`documents/definition.d.ts`](../dist/documents/definition.d.ts) |
+| `defineTable` | function | [`store/table.d.ts`](../dist/store/table.d.ts) |
+| `describeMessage` | function | [`link/text.d.ts`](../dist/link/text.d.ts) |
+| `DocumentAddress` | typealias | [`store/engine.d.ts`](../dist/store/engine.d.ts) |
+| `DocumentContent` | typealias | [`store/engine.d.ts`](../dist/store/engine.d.ts) |
+| `DocumentEntry` | typealias | [`store/engine.d.ts`](../dist/store/engine.d.ts) |
+| `DocumentHistory` | typealias | [`store/engine.d.ts`](../dist/store/engine.d.ts) |
+| `DocumentPoint` | typealias | [`store/engine.d.ts`](../dist/store/engine.d.ts) |
+| `DocumentRecord` | typealias | [`store/engine.d.ts`](../dist/store/engine.d.ts) |
+| `DocumentScope` | typealias | [`store/engine.d.ts`](../dist/store/engine.d.ts) |
+| `EncodedRow` | typealias | [`store/rows.d.ts`](../dist/store/rows.d.ts) |
+| `encodeJsonl` | function | [`store/jsonl.d.ts`](../dist/store/jsonl.d.ts) |
+| `eq` | function | [`store/expression.d.ts`](../dist/store/expression.d.ts) |
+| `evolve` | function | [`contracts/evolve.d.ts`](../dist/contracts/evolve.d.ts) |
+| `evolveTable` | function | [`store/table-evolve.d.ts`](../dist/store/table-evolve.d.ts) |
+| `Expression` | class | [`store/expression.d.ts`](../dist/store/expression.d.ts) |
+| `Facet` | typealias | [`host/facet.d.ts`](../dist/host/facet.d.ts) |
+| `FacetHost` | interface | [`host/facet.d.ts`](../dist/host/facet.d.ts) |
+| `FacetSelf` | interface | [`host/facet.d.ts`](../dist/host/facet.d.ts) |
+| `Factory` | typealias | [`host/attempt.d.ts`](../dist/host/attempt.d.ts) |
+| `FailureCause` | typealias | [`data/failure.d.ts`](../dist/data/failure.d.ts) |
+| `findDocument` | function | [`store/engine.d.ts`](../dist/store/engine.d.ts) |
+| `findDocumentEntry` | function | [`store/engine.d.ts`](../dist/store/engine.d.ts) |
+| `FollowAttach` | typealias | [`host/follow.d.ts`](../dist/host/follow.d.ts) |
+| `FollowAttachment` | typealias | [`host/follow.d.ts`](../dist/host/follow.d.ts) |
+| `FollowObserver` | typealias | [`host/follow.d.ts`](../dist/host/follow.d.ts) |
+| `GetOptions` | typealias | [`host/ctx.d.ts`](../dist/host/ctx.d.ts) |
+| `gt` | function | [`store/expression.d.ts`](../dist/store/expression.d.ts) |
+| `gte` | function | [`store/expression.d.ts`](../dist/store/expression.d.ts) |
+| `HandleOf` | typealias | [`documents/handles.d.ts`](../dist/documents/handles.d.ts) |
+| `Held` | typealias | [`host/reference.d.ts`](../dist/host/reference.d.ts) |
+| `Host` | interface | [`host/host.d.ts`](../dist/host/host.d.ts) |
+| `HostError` | typealias | [`host/report.d.ts`](../dist/host/report.d.ts) |
+| `hostKind` | function | [`contracts/host-kind.d.ts`](../dist/contracts/host-kind.d.ts) |
+| `HostKind` | interface | [`contracts/host-kind.d.ts`](../dist/contracts/host-kind.d.ts) |
+| `HostOptions` | typealias | [`host/host.d.ts`](../dist/host/host.d.ts) |
+| `Implementation` | typealias | [`contracts/contract.d.ts`](../dist/contracts/contract.d.ts) |
+| `importStore` | function | [`store/import.d.ts`](../dist/store/import.d.ts) |
+| `inArray` | function | [`store/expression.d.ts`](../dist/store/expression.d.ts) |
+| `Inflated` | typealias | [`link/part.d.ts`](../dist/link/part.d.ts) |
+| `insertDocument` | function | [`store/engine.d.ts`](../dist/store/engine.d.ts) |
+| `int` | function | [`contracts/schema.d.ts`](../dist/contracts/schema.d.ts) |
+| `ipcLink` | function | [`link/ipc.d.ts`](../dist/link/ipc.d.ts) |
+| `IpcPort` | interface | [`link/ipc.d.ts`](../dist/link/ipc.d.ts) |
+| `isNull` | function | [`store/expression.d.ts`](../dist/store/expression.d.ts) |
+| `isObjectsError` | function | [`data/errors.d.ts`](../dist/data/errors.d.ts) |
+| `JobAccepts` | typealias | [`jobs/definition.d.ts`](../dist/jobs/definition.d.ts) |
+| `JobCtx` | typealias | [`jobs/job.d.ts`](../dist/jobs/job.d.ts) |
+| `JobDefinition` | class | [`jobs/definition.d.ts`](../dist/jobs/definition.d.ts) |
+| `JobError` | typealias | [`jobs/definition.d.ts`](../dist/jobs/definition.d.ts) |
+| `JobHandle` | interface | [`jobs/job.d.ts`](../dist/jobs/job.d.ts) |
+| `JobImplementation` | typealias | [`jobs/job.d.ts`](../dist/jobs/job.d.ts) |
+| `JobOptions` | typealias | [`jobs/definition.d.ts`](../dist/jobs/definition.d.ts) |
+| `json` | function | [`store/json-column.d.ts`](../dist/store/json-column.d.ts) |
+| `JsonColumnOptions` | typealias | [`store/json-column.d.ts`](../dist/store/json-column.d.ts) |
+| `JsonColumnSchema` | typealias | [`store/json-column.d.ts`](../dist/store/json-column.d.ts) |
+| `JsonObject` | typealias | [`documents/definition.d.ts`](../dist/documents/definition.d.ts) |
+| `keyed` | function | [`contracts/schema.d.ts`](../dist/contracts/schema.d.ts) |
+| `keyedEntries` | function | [`registries/entries.d.ts`](../dist/registries/entries.d.ts) |
+| `KeyedHandle` | interface | [`documents/handles.d.ts`](../dist/documents/handles.d.ts) |
+| `KeyedMember` | class | [`contracts/schema.d.ts`](../dist/contracts/schema.d.ts) |
+| `KeyedWatchable` | interface | [`contracts/contract.d.ts`](../dist/contracts/contract.d.ts) |
+| `KeyOf` | typealias | [`store/table.d.ts`](../dist/store/table.d.ts) |
+| `KindShape` | typealias | [`contracts/host-kind.d.ts`](../dist/contracts/host-kind.d.ts) |
+| `Link` | interface | [`link/link.d.ts`](../dist/link/link.d.ts) |
+| `LinkOptions` | typealias | [`host/host.d.ts`](../dist/host/host.d.ts) |
+| `listDocumentEntries` | function | [`store/engine.d.ts`](../dist/store/engine.d.ts) |
+| `listDocuments` | function | [`store/engine.d.ts`](../dist/store/engine.d.ts) |
+| `lit` | function | [`contracts/schema.d.ts`](../dist/contracts/schema.d.ts) |
+| `loadContent` | function | [`store/engine.d.ts`](../dist/store/engine.d.ts) |
+| `loadDocument` | function | [`store/engine.d.ts`](../dist/store/engine.d.ts) |
+| `LoadReport` | typealias | [`host/host.d.ts`](../dist/host/host.d.ts) |
+| `local` | function | [`contracts/declare.d.ts`](../dist/contracts/declare.d.ts) |
+| `lt` | function | [`store/expression.d.ts`](../dist/store/expression.d.ts) |
+| `lte` | function | [`store/expression.d.ts`](../dist/store/expression.d.ts) |
+| `map` | function | [`contracts/schema.d.ts`](../dist/contracts/schema.d.ts) |
+| `mapShared` | function | [`state/derive.d.ts`](../dist/state/derive.d.ts) |
+| `max` | function | [`store/expression.d.ts`](../dist/store/expression.d.ts) |
+| `memoryLinkPair` | function | [`link/link.d.ts`](../dist/link/link.d.ts) |
+| `Message` | typealias | [`link/message.d.ts`](../dist/link/message.d.ts) |
+| `method` | function | [`contracts/schema.d.ts`](../dist/contracts/schema.d.ts) |
+| `min` | function | [`store/expression.d.ts`](../dist/store/expression.d.ts) |
+| `Native` | interface | [`host/native.d.ts`](../dist/host/native.d.ts) |
+| `NativeCloseReason` | typealias | [`host/native.d.ts`](../dist/host/native.d.ts) |
+| `NativeObservation` | typealias | [`state/observation.d.ts`](../dist/state/observation.d.ts) |
+| `NativeObserver` | interface | [`state/observation.d.ts`](../dist/state/observation.d.ts) |
+| `NativeOptions` | typealias | [`host/native.d.ts`](../dist/host/native.d.ts) |
+| `ne` | function | [`store/expression.d.ts`](../dist/store/expression.d.ts) |
+| `not` | function | [`store/expression.d.ts`](../dist/store/expression.d.ts) |
+| `nul` | function | [`contracts/schema.d.ts`](../dist/contracts/schema.d.ts) |
+| `num` | function | [`contracts/schema.d.ts`](../dist/contracts/schema.d.ts) |
+| `obj` | function | [`contracts/schema.d.ts`](../dist/contracts/schema.d.ts) |
+| `OBJECTS_TELEMETRY_SCHEMA` | const | [`telemetry.d.ts`](../dist/telemetry.d.ts) |
+| `ObjectsError` | const | [`data/errors.d.ts`](../dist/data/errors.d.ts) |
+| `ObjectsErrorCode` | typealias | [`data/errors.d.ts`](../dist/data/errors.d.ts) |
+| `ObjectsErrorReason` | typealias | [`data/errors.d.ts`](../dist/data/errors.d.ts) |
+| `ObjectsSpanName` | typealias | [`telemetry.d.ts`](../dist/telemetry.d.ts) |
+| `ObjectsStore` | class | [`store/store.d.ts`](../dist/store/store.d.ts) |
+| `oneOf` | function | [`contracts/schema.d.ts`](../dist/contracts/schema.d.ts) |
+| `OnHandler` | typealias | [`host/routines.d.ts`](../dist/host/routines.d.ts) |
+| `OnLiveHandler` | typealias | [`host/routines.d.ts`](../dist/host/routines.d.ts) |
+| `OnNativeHandler` | typealias | [`host/routines.d.ts`](../dist/host/routines.d.ts) |
+| `openStore` | function | [`store/store.d.ts`](../dist/store/store.d.ts) |
+| `opt` | function | [`contracts/schema.d.ts`](../dist/contracts/schema.d.ts) |
+| `or` | function | [`store/expression.d.ts`](../dist/store/expression.d.ts) |
+| `Order` | typealias | [`store/sql.d.ts`](../dist/store/sql.d.ts) |
+| `orderedEntries` | function | [`registries/entries.d.ts`](../dist/registries/entries.d.ts) |
+| `Outbox` | class | [`store/outbox.d.ts`](../dist/store/outbox.d.ts) |
+| `OutboxCommit` | typealias | [`store/outbox.d.ts`](../dist/store/outbox.d.ts) |
+| `Outcome` | typealias | [`jobs/definition.d.ts`](../dist/jobs/definition.d.ts) |
+| `OwnedDocumentEntry` | typealias | [`store/engine.d.ts`](../dist/store/engine.d.ts) |
+| `OwnerTable` | class | [`store/adapter.d.ts`](../dist/store/adapter.d.ts) |
+| `Page` | typealias | [`store/table-handle.d.ts`](../dist/store/table-handle.d.ts) |
+| `PageOptions` | typealias | [`store/table-handle.d.ts`](../dist/store/table-handle.d.ts) |
+| `ParamsOf` | typealias | [`contracts/contract.d.ts`](../dist/contracts/contract.d.ts) |
+| `ParamsOfKind` | typealias | [`contracts/host-kind.d.ts`](../dist/contracts/host-kind.d.ts) |
+| `PartLimits` | typealias | [`link/part.d.ts`](../dist/link/part.d.ts) |
+| `PatchOf` | typealias | [`store/table-evolve.d.ts`](../dist/store/table-evolve.d.ts) |
+| `PluginError` | class | [`data/errors.d.ts`](../dist/data/errors.d.ts) |
+| `PluginFacet` | typealias | [`host/staging.d.ts`](../dist/host/staging.d.ts) |
+| `PluginFailure` | typealias | [`host/host.d.ts`](../dist/host/host.d.ts) |
+| `Position` | typealias | [`host/report.d.ts`](../dist/host/report.d.ts) |
+| `prefix` | function | [`store/expression.d.ts`](../dist/store/expression.d.ts) |
+| `Presence` | typealias | [`host/presence.d.ts`](../dist/host/presence.d.ts) |
+| `Principal` | typealias | [`data/principal.d.ts`](../dist/data/principal.d.ts) |
+| `PrincipalKeyFunction` | typealias | [`data/principal.d.ts`](../dist/data/principal.d.ts) |
+| `PutRowOf` | typealias | [`store/columns.d.ts`](../dist/store/columns.d.ts) |
+| `query` | function | [`store/query.d.ts`](../dist/store/query.d.ts) |
+| `Query` | class | [`store/query.d.ts`](../dist/store/query.d.ts) |
+| `readDocument` | function | [`store/engine.d.ts`](../dist/store/engine.d.ts) |
+| `readDocumentEntry` | function | [`store/engine.d.ts`](../dist/store/engine.d.ts) |
+| `Reference` | typealias | [`host/reference.d.ts`](../dist/host/reference.d.ts) |
+| `RefIn` | typealias | [`host/reference.d.ts`](../dist/host/reference.d.ts) |
+| `RefState` | typealias | [`host/ref-state.d.ts`](../dist/host/ref-state.d.ts) |
+| `Registry` | typealias | [`registries/registry.d.ts`](../dist/registries/registry.d.ts) |
+| `RegistryAccepts` | typealias | [`registries/registry.d.ts`](../dist/registries/registry.d.ts) |
+| `RegistryConflict` | typealias | [`registries/registry.d.ts`](../dist/registries/registry.d.ts) |
+| `RegistryEntry` | typealias | [`registries/registry.d.ts`](../dist/registries/registry.d.ts) |
+| `RegistryProvider` | typealias | [`registries/registry.d.ts`](../dist/registries/registry.d.ts) |
+| `RegistryTable` | typealias | [`registries/registry.d.ts`](../dist/registries/registry.d.ts) |
+| `RegistryValue` | interface | [`registries/registry.d.ts`](../dist/registries/registry.d.ts) |
+| `ReloadedObject` | typealias | [`host/host.d.ts`](../dist/host/host.d.ts) |
+| `ReloadOptions` | typealias | [`host/host.d.ts`](../dist/host/host.d.ts) |
+| `ReloadReport` | typealias | [`host/host.d.ts`](../dist/host/host.d.ts) |
+| `remote` | function | [`contracts/declare.d.ts`](../dist/contracts/declare.d.ts) |
+| `replacePrefix` | function | [`store/expression.d.ts`](../dist/store/expression.d.ts) |
+| `retireRecord` | function | [`store/engine.d.ts`](../dist/store/engine.d.ts) |
+| `RevokedBy` | typealias | [`host/revocation.d.ts`](../dist/host/revocation.d.ts) |
+| `RootOptions` | typealias | [`host/root.d.ts`](../dist/host/root.d.ts) |
+| `RouteHandle` | typealias | [`host/route.d.ts`](../dist/host/route.d.ts) |
+| `RouteOptions` | typealias | [`host/route.d.ts`](../dist/host/route.d.ts) |
+| `RoutineDeclarations` | interface | [`host/routines.d.ts`](../dist/host/routines.d.ts) |
+| `RowOf` | typealias | [`store/columns.d.ts`](../dist/store/columns.d.ts) |
+| `Run` | interface | [`jobs/run.d.ts`](../dist/jobs/run.d.ts) |
+| `RunningEntry` | typealias | [`jobs/running.d.ts`](../dist/jobs/running.d.ts) |
+| `RunState` | interface | [`jobs/job.d.ts`](../dist/jobs/job.d.ts) |
+| `Self` | interface | [`host/attempt.d.ts`](../dist/host/attempt.d.ts) |
+| `SeriesCommit` | typealias | [`store/store.d.ts`](../dist/store/store.d.ts) |
+| `SeriesResult` | typealias | [`store/store.d.ts`](../dist/store/store.d.ts) |
+| `ServeOptions` | typealias | [`host/facet.d.ts`](../dist/host/facet.d.ts) |
+| `SetOf` | typealias | [`store/expression.d.ts`](../dist/store/expression.d.ts) |
+| `SingletonHandle` | interface | [`documents/handles.d.ts`](../dist/documents/handles.d.ts) |
+| `sleep` | function | [`host/sleep.d.ts`](../dist/host/sleep.d.ts) |
+| `sqliteBackend` | function | [`store/backend.d.ts`](../dist/store/backend.d.ts) |
+| `StagedWrite` | typealias | [`store/step.d.ts`](../dist/store/step.d.ts) |
+| `StartOptions` | typealias | [`jobs/job.d.ts`](../dist/jobs/job.d.ts) |
+| `StateDefinition` | class | [`documents/definition.d.ts`](../dist/documents/definition.d.ts) |
+| `Static` | type | [`contracts/schema.d.ts`](../dist/contracts/schema.d.ts) |
+| `Step` | class | [`store/step.d.ts`](../dist/store/step.d.ts) |
+| `Store` | interface | [`store/store.d.ts`](../dist/store/store.d.ts) |
+| `StoredDocument` | typealias | [`store/engine.d.ts`](../dist/store/engine.d.ts) |
+| `StoreOptions` | typealias | [`store/store.d.ts`](../dist/store/store.d.ts) |
+| `StoreOwnerTables` | class | [`store/adapter.d.ts`](../dist/store/adapter.d.ts) |
+| `StoreSelf` | interface | [`host/attempt.d.ts`](../dist/host/attempt.d.ts) |
+| `StoreWrite` | typealias | [`store/writes.d.ts`](../dist/store/writes.d.ts) |
+| `str` | function | [`contracts/schema.d.ts`](../dist/contracts/schema.d.ts) |
+| `sub` | function | [`store/expression.d.ts`](../dist/store/expression.d.ts) |
+| `Table` | interface | [`store/table-handle.d.ts`](../dist/store/table-handle.d.ts) |
+| `TableDefinition` | class | [`store/table.d.ts`](../dist/store/table.d.ts) |
+| `TableEditor` | interface | [`store/table-evolve.d.ts`](../dist/store/table-evolve.d.ts) |
+| `TableItem` | typealias | [`registries/entries.d.ts`](../dist/registries/entries.d.ts) |
+| `TableOf` | typealias | [`store/table-handle.d.ts`](../dist/store/table-handle.d.ts) |
+| `TableOptions` | typealias | [`store/table.d.ts`](../dist/store/table.d.ts) |
+| `TableTailEditor` | interface | [`store/table-evolve.d.ts`](../dist/store/table-evolve.d.ts) |
+| `textCodec` | const | [`link/text.d.ts`](../dist/link/text.d.ts) |
+| `TSchema` | type | [`contracts/schema.d.ts`](../dist/contracts/schema.d.ts) |
+| `Tx` | interface | [`documents/transaction.d.ts`](../dist/documents/transaction.d.ts) |
+| `union` | function | [`contracts/schema.d.ts`](../dist/contracts/schema.d.ts) |
+| `unknown` | function | [`contracts/schema.d.ts`](../dist/contracts/schema.d.ts) |
+| `untilAborted` | function | [`host/sleep.d.ts`](../dist/host/sleep.d.ts) |
+| `Watchable` | interface | [`watch.d.ts`](../dist/watch.d.ts) |
+| `WebSocketLike` | interface | [`link/websocket.d.ts`](../dist/link/websocket.d.ts) |
+| `webSocketLink` | function | [`link/websocket.d.ts`](../dist/link/websocket.d.ts) |
+| `when` | function | [`store/expression.d.ts`](../dist/store/expression.d.ts) |
+| `WhereNode` | typealias | [`store/expression.d.ts`](../dist/store/expression.d.ts) |
+| `Writable` | interface | [`state/writable.d.ts`](../dist/state/writable.d.ts) |
+| `writeContent` | function | [`store/engine.d.ts`](../dist/store/engine.d.ts) |

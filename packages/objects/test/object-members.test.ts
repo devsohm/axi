@@ -1,11 +1,11 @@
 import { expect, it } from "vitest";
 import { BACKGROUND_CONTEXT as context } from "../src/context/index.ts";
 import type { JsonValue } from "../src/json.ts";
-import { ObjectsError } from "../src/next/data/index.ts";
-import { MemberSource } from "../src/next/host/member-source.ts";
-import { ReferenceState, type RefState } from "../src/next/host/ref-state.ts";
-import { Batch, Constant } from "../src/next/state/internal.ts";
-import { constant, createHost, defineFacet, int, local } from "../src/next/index.ts";
+import { ObjectsError } from "../src/data/index.ts";
+import { MemberSource } from "../src/host/member-source.ts";
+import { ReferenceState, type RefState } from "../src/host/ref-state.ts";
+import { Batch, Constant } from "../src/state/internal.ts";
+import { constant, createHost, defineFacet, int, local } from "../src/index.ts";
 
 const turn = (): Promise<void> => new Promise((resolve) => setImmediate(resolve));
 it("shares the terminal record when references release their member watches", async () => {

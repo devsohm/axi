@@ -1,7 +1,7 @@
 export { MemoryStorage } from "./storage/memory.ts";
 export { ReadOnlySession, StorageRequestError } from "./errors.ts";
 export * from "./types.ts";
-export type { NativeWatchCall, WatchCall } from "@axi/objects";
+export type { NativeWatchCall, WatchCall } from "@axi/objects/watch";
 export { defineDoc, defineDocFamily } from "./documents.ts";
 export {
 	defineEntry,

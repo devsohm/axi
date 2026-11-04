@@ -2,7 +2,7 @@ import { commitWrites } from "../src/testing/commit-writes.ts";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { Context } from "@axi/objects";
+import type { Context } from "@axi/objects/context";
 import { BACKGROUND_CONTEXT as context } from "@axi/objects/context";
 import { describe, expect, it } from "vitest";
 import { err, FileError, type Result } from "../src/env/index.ts";

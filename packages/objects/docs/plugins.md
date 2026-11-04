@@ -1,12 +1,12 @@
-# Node plugin component
+# Node plugins
 
-The internal modules in `src/next-node/plugins` manage plugin directories for the experimental object host. They require Node and the optional `esbuild` peer dependency. They have no public package import. The portable host accepts facets through `load()` and `reload()` without importing this component.
+`@axi/objects/plugins` manages plugin directories. It requires Node and the optional `esbuild` peer dependency. The portable host accepts facets through `load()` and `reload()` without importing this component.
 
 ## Plugin directories
 
-A plugin directory contains a `package.json` with a valid package name. Each configured facet kind has at most one file with a `.ts`, `.tsx`, `.js`, or `.mjs` extension. A directory without facet files can hold shared contracts.
+A plugin directory contains a `package.json` with a valid package name. A root can also contain single-file plugins. The `objects.plugins` manifest setting selects plugin paths and exclusion globs. Each configured facet kind has at most one file with a `.ts`, `.tsx`, `.js`, or `.mjs` extension. A directory without facet files can hold shared contracts.
 
-`discoverPlugins(roots, { kinds }, context)` reads each root one directory deep. It follows linked plugin directories to their real paths. The first root wins duplicate names. Invalid directories and duplicates appear in `problems`. Missing roots are empty.
+`discoverPlugins(roots, { kinds }, context)` reads configured roots and manifest-selected paths. A root can be a path or `{ path, required }`. It follows linked plugin directories to their real paths. The first root wins duplicate names. Invalid directories and duplicates appear in `problems`. Missing optional roots are empty. A required root failure stops startup.
 
 The manifest's `dependencies` are bundled. Its `objects.external` list names packages kept external in Node builds. Host packages are supplied by the application and remain external.
 
@@ -14,7 +14,7 @@ The manifest's `dependencies` are bundled. Its `objects.external` list names pac
 
 `buildFacet(plugin, kind, options, context)` returns a script or a failed result. It writes no output files. A successful build contains the source, digest, hashed inputs, copied files, and optional browser styles and assets. The digest is stable across checkout paths.
 
-A facet can import its own files, declared dependencies, host packages, and files of other discovered plugins. Import another plugin's files by its package name, such as `@app/notes/contracts`. A relative path into another plugin is refused. A copied file can import only host packages and files within its own plugin. A path outside these directories is refused. Node builtins and external packages are refused in browser builds. CSS and assets are available only in browser builds.
+A facet can import its own files, declared dependencies, host packages, and permitted shared files of other discovered plugins. Import another plugin's files by its package name, such as `@app/notes/contracts`. A relative path into another plugin is refused. A copied file can import only host packages and files within its own plugin. A path outside these directories is refused. Node builtins and external packages are refused in browser builds. CSS and assets are available only in browser builds.
 
 Plugin scripts have no `import.meta`, `__dirname`, `__filename`, literal dynamic imports, or top-level `await`. `pluginFile(path)` resolves a file inside the evaluated plugin's directory and refuses a path outside that directory.
 
@@ -56,3 +56,7 @@ The worker component uses this runtime to evaluate scripts built by its parent p
 - `base` reports a change in application code that requires the application's restart policy.
 
 Each mark has a monotonically increasing generation. An old build cannot clear a newer edit. Watchers skip `node_modules` and `.git`, add watches for new directories, and watch linked plugin directories separately. A watch failure is reported once. The application can still build on demand.
+
+## Test one plugin
+
+`testPlugin()` uses the production builder and evaluator with an in-memory SQLite host. Its options provide API modules, facet kinds and stub facets. The returned handles expose the plugin host, reports and close operation.

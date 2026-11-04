@@ -1,4 +1,4 @@
-import type { Context } from "@axi/objects";
+import type { Context } from "@axi/objects/context";
 import { type ExecutionEnv, getOrThrow } from "../env/index.ts";
 
 export async function resolveToolPath(env: ExecutionEnv, path: string, context: Context): Promise<string> {

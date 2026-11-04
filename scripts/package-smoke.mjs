@@ -39,7 +39,7 @@ import {
 	memoryLinkPair,
 	openStore,
 	sqliteBackend,
-} from "@axi/objects/next";
+} from "@axi/objects";
 import { openNodeSqliteDatabase } from "@axi/objects/sqlite/node";
 import { StoreStorage } from "@axi/durable/storage/store";
 import { openNodeSqliteStorage } from "@axi/durable/storage/sqlite/node";

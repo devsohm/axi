@@ -1,8 +1,8 @@
 import { expect, it, vi } from "vitest";
 import { BACKGROUND_CONTEXT as context, withAbortSignal, type Context } from "../src/context/index.ts";
-import { Routines, type RoutineDeclarations, type RoutineOwner } from "../src/next/host/routines.ts";
-import type { HostError } from "../src/next/host/report.ts";
-import { Batch, Source } from "../src/next/state/internal.ts";
+import { Routines, type RoutineDeclarations, type RoutineOwner } from "../src/host/routines.ts";
+import type { HostError } from "../src/host/report.ts";
+import { Batch, Source } from "../src/state/internal.ts";
 
 class Values extends Source {
 	#n = 0;
@@ -26,6 +26,7 @@ function owner() {
 		errors: HostError[] = [],
 		pending = new Set<Promise<unknown>>();
 	const host = {
+		spanHost: "client",
 		report(error: HostError) {
 			errors.push(error);
 		},
@@ -34,6 +35,7 @@ function owner() {
 		},
 	};
 	const value: RoutineOwner = {
+		type: "app",
 		label: "app",
 		host,
 		caller: { principal: { kind: "owner" }, incarnation: "app" },

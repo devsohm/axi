@@ -5,7 +5,7 @@ import {
 	type DocumentEntry,
 	type DocumentHistory,
 	type DocumentRecord as EngineRecord,
-} from "@axi/objects/next";
+} from "@axi/objects";
 import type { SqliteExecutor } from "@axi/objects/sqlite";
 import { seqFromNumber } from "../../ids.ts";
 import type {

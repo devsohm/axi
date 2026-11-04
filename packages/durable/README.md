@@ -40,7 +40,7 @@ A Session prepares transactions in order. Immediate commits publish after storag
 
 `@axi/durable/storage/sqlite/node` opens file-backed or in-memory storage with Node SQLite. `@axi/durable/storage/sqlite/cloudflare` opens storage on a SQLite-backed Durable Object.
 
-`@axi/durable/storage/store` exports `StoreStorage`. It keeps Durable records and document history in the shared Store from `@axi/objects/next`. Open the Store, then call `StoreStorage.open(store, owner, context)`. Each owner has separate tables and document claims. Closing storage releases its claims and leaves the Store open for the application to close. Store exports, imports, and outbox replay include this data.
+`@axi/durable/storage/store` exports `StoreStorage`. It keeps Durable records and document history in the shared Store from `@axi/objects`. Open the Store, then call `StoreStorage.open(store, owner, context)`. Each owner has separate tables and document claims. Closing storage releases its claims and leaves the Store open for the application to close. Store exports, imports, and outbox replay include this data.
 
 `@axi/durable/storage/jsonl` opens portable file-backed storage. It writes document and live-task sidecars before publishing each commit in `main.jsonl`. Reopening discards torn final lines and unconfirmed tails, replays confirmed commits, and rejects corruption. Current-only document history and terminal-task sidecars are reclaimed after publication. `fsync: true` flushes sidecars before the main marker; it does not guarantee every acknowledged tail commit survives host failure.
 

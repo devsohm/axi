@@ -1,5 +1,5 @@
-import type { Context } from "@axi/objects";
-import type { Order, OwnerTable, WhereNode } from "@axi/objects/next";
+import type { Context } from "@axi/objects/context";
+import type { Order, OwnerTable, WhereNode } from "@axi/objects";
 import type { SqliteExecutor, SqliteValue } from "@axi/objects/sqlite";
 import type { CommitTables } from "./commit.ts";
 

@@ -1,4 +1,6 @@
-import { type Context, type JsonValue, Watch, type WatchEnd } from "@axi/objects";
+import { type Context } from "@axi/objects/context";
+import { type JsonValue } from "@axi/objects/json";
+import { Watch, type WatchEnd } from "@axi/objects/watch";
 import { awaitWithContext, BACKGROUND_CONTEXT, withoutAbortSignal } from "@axi/objects/context";
 import { track, PendingOps, type Op } from "@axi/objects/delta";
 import {

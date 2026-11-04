@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { NativeWatch, type NativeWatchable, Watch, type Watchable } from "../src/index.ts";
+import { NativeWatch, type NativeWatchable, Watch, type Watchable } from "../src/watch.ts";
 import { BACKGROUND_CONTEXT, withAbortSignal } from "../src/context/index.ts";
 
 const turn = () => new Promise<void>((resolve) => setTimeout(resolve, 0));

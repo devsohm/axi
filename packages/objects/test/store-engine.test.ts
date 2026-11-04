@@ -1,10 +1,10 @@
 import { expect, it } from "vitest";
-import { IdAllocator } from "../src/next/store/allocator.ts";
+import { IdAllocator } from "../src/store/allocator.ts";
 import {
 	readCatalog,
 	writeCatalog,
 	type TableRecord,
-} from "../src/next/store/catalog.ts";
+} from "../src/store/catalog.ts";
 import {
 	changeDocument,
 	createDocument,
@@ -17,11 +17,11 @@ import {
 	writeContent,
 	listDocumentKeys,
 	listDocumentEntries,
-} from "../src/next/store/engine.ts";
-import { applyStoreSchema } from "../src/next/store/schema.ts";
-import { Step, type StagedWrite } from "../src/next/store/step.ts";
+} from "../src/store/engine.ts";
+import { applyStoreSchema } from "../src/store/schema.ts";
+import { Step, type StagedWrite } from "../src/store/step.ts";
 import { openNodeSqliteDatabase } from "../src/sqlite/node.ts";
-import type { StoreWrite } from "../src/next/store/writes.ts";
+import type { StoreWrite } from "../src/store/writes.ts";
 
 async function fixture() {
 	const db = await openNodeSqliteDatabase(":memory:");

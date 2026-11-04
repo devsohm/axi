@@ -1,6 +1,6 @@
 import { commitWrites } from "../src/testing/commit-writes.ts";
 import { createModels } from "@axi/ai";
-import type { Context } from "@axi/objects";
+import type { Context } from "@axi/objects/context";
 import { BACKGROUND_CONTEXT as context } from "@axi/objects/context";
 import { expect, it } from "vitest";
 import { idFromNumber } from "../src/ids.ts";

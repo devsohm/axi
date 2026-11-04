@@ -1,6 +1,8 @@
 import type { Observer as StateObserver, Observation } from "../types.ts";
 import { GuardedObserver } from "../session/observer.ts";
-import { type Context, type JsonValue, Watch, type WatchCall } from "@axi/objects";
+import { type Context } from "@axi/objects/context";
+import { type JsonValue } from "@axi/objects/json";
+import { Watch, type WatchCall } from "@axi/objects/watch";
 import { BACKGROUND_CONTEXT, withoutAbortSignal } from "@axi/objects/context";
 import { applyImmutable, type Op } from "@axi/objects/delta";
 import { contained, NORMAL_END, sessionObserverEnd, type SessionImpl } from "../session/session.ts";

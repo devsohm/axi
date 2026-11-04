@@ -1,4 +1,4 @@
-import type { Context } from "@axi/objects";
+import type { Context } from "@axi/objects/context";
 import { FileError, type FileWatcher, type FileChange, type WatchTarget } from "@axi/durable/env";
 import { type Connection, isConnectionLost } from "./connection.ts";
 import { toFileError } from "./errors.ts";

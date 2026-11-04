@@ -1,16 +1,17 @@
+import { LiveQueries } from "../src/store/live-query.ts";
 import { expect, it } from "vitest";
 import { BACKGROUND_CONTEXT as context } from "../src/context/index.ts";
-import { int, local, method, obj } from "../src/next/contracts/index.ts";
-import { ObjectsError } from "../src/next/data/index.ts";
-import { bindProvider } from "../src/next/data/internal.ts";
-import { defineState } from "../src/next/documents/index.ts";
-import { Documents } from "../src/next/documents/internal.ts";
-import { Attempt, type AttemptObject, type Self } from "../src/next/host/attempt.ts";
-import { Binding } from "../src/next/host/reference.ts";
-import { LOADING } from "../src/next/host/ref-state.ts";
-import type { HostError } from "../src/next/host/report.ts";
-import { RegistryRecord } from "../src/next/registries/internal.ts";
-import { Batch } from "../src/next/state/internal.ts";
+import { int, local, method, obj } from "../src/contracts/index.ts";
+import { ObjectsError } from "../src/data/index.ts";
+import { bindProvider } from "../src/data/internal.ts";
+import { defineState } from "../src/documents/index.ts";
+import { Documents } from "../src/documents/internal.ts";
+import { Attempt, type AttemptObject, type Self } from "../src/host/attempt.ts";
+import { Binding } from "../src/host/reference.ts";
+import { LOADING } from "../src/host/ref-state.ts";
+import type { HostError } from "../src/host/report.ts";
+import { RegistryRecord } from "../src/registries/internal.ts";
+import { Batch } from "../src/state/internal.ts";
 const counter = defineState("counter", { version: 1, schema: obj({ n: int() }), initial: () => ({ n: 0 }) });
 const type = local("app.counter", {
 	version: 1,
@@ -35,6 +36,7 @@ function environment(factory: (self: Self) => unknown) {
 		},
 	});
 	const host = {
+		spanHost: "client",
 		batch,
 		principal: { kind: "host" },
 		incarnation: "host",
@@ -66,6 +68,7 @@ function environment(factory: (self: Self) => unknown) {
 	};
 	let attempt: Attempt;
 	const object: AttemptObject = {
+		liveQueries: new LiveQueries(),
 		label: type.name,
 		documents,
 		host,

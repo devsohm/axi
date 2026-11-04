@@ -1,4 +1,4 @@
-import type { JsonValue } from "@axi/objects";
+import type { JsonValue } from "@axi/objects/json";
 import { BACKGROUND_CONTEXT as context } from "@axi/objects/context";
 import { expect, it, vi } from "vitest";
 import { seqFromNumber } from "../src/ids.ts";

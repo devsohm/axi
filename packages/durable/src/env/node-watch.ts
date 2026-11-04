@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { type FSWatcher, watch } from "node:fs";
 import { lstat, readdir, readFile, stat, statfs } from "node:fs/promises";
 import { dirname, join, relative, sep } from "node:path";
-import type { Context } from "@axi/objects";
+import type { Context } from "@axi/objects/context";
 import { FileError, type FileWatcher, type FileChange, type WatchTarget } from "./index.ts";
 import { fileError } from "./node-files.ts";
 

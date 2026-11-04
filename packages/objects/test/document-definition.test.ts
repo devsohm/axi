@@ -1,8 +1,8 @@
 import { expect, it } from "vitest";
 import { BACKGROUND_CONTEXT as context } from "../src/context/index.ts";
-import { defineState, int, obj, str } from "../src/next/index.ts";
-import { Line } from "../src/next/documents/line.ts";
-import { SealToken } from "../src/next/documents/fence.ts";
+import { defineState, int, obj, str } from "../src/index.ts";
+import { Line } from "../src/documents/line.ts";
+import { SealToken } from "../src/documents/fence.ts";
 
 it("creates independent values, upgrades old state, and applies the configured checkpoint rule", () => {
 	const Progress = defineState("progress", {

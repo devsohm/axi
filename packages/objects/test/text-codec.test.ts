@@ -1,8 +1,8 @@
 import { expect, it } from "vitest";
 import { BACKGROUND_CONTEXT as context } from "../src/context/index.ts";
-import { checkMessage } from "../src/next/link/message.ts";
-import { DeflatedPart } from "../src/next/link/part.ts";
-import { describeMessage, textCodec } from "../src/next/link/text.ts";
+import { checkMessage } from "../src/link/message.ts";
+import { DeflatedPart } from "../src/link/part.ts";
+import { describeMessage, textCodec } from "../src/link/text.ts";
 
 it("keeps positional envelopes, opaque compressed parts and byte segments across a text link", () => {
 	const value = {

@@ -1,13 +1,13 @@
 import { expect, it, vi } from "vitest";
 import { BACKGROUND_CONTEXT as context } from "../src/context/index.ts";
-import { defineJob, defineState, obj, str } from "../src/next/index.ts";
-import { ObjectsError } from "../src/next/data/index.ts";
-import { Documents, SealToken } from "../src/next/documents/internal.ts";
-import type { HostError } from "../src/next/host/report.ts";
-import { untilAborted } from "../src/next/host/sleep.ts";
-import { Job, type AnyJobImplementation } from "../src/next/jobs/job.ts";
-import { JobRecords } from "../src/next/jobs/records.ts";
-import { Batch } from "../src/next/state/internal.ts";
+import { defineJob, defineState, obj, str } from "../src/index.ts";
+import { ObjectsError } from "../src/data/index.ts";
+import { Documents, SealToken } from "../src/documents/internal.ts";
+import type { HostError } from "../src/host/report.ts";
+import { untilAborted } from "../src/host/sleep.ts";
+import { Job, type AnyJobImplementation } from "../src/jobs/job.ts";
+import { JobRecords } from "../src/jobs/records.ts";
+import { Batch } from "../src/state/internal.ts";
 
 const progress = defineState("progress", {
 	version: 1,
@@ -28,6 +28,7 @@ function setup(implementation: AnyJobImplementation) {
 		token = new SealToken();
 	const batch = new Batch((error) => errors.push(error), undefined);
 	const host = {
+		spanHost: "client",
 		report(error: HostError) {
 			errors.push(error);
 		},

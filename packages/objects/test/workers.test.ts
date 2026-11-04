@@ -6,15 +6,15 @@ import { runInNewContext } from "node:vm";
 import { fileURLToPath } from "node:url";
 import { expect, it, vi } from "vitest";
 import { BACKGROUND_CONTEXT as context, withAbortSignal } from "../src/context/index.ts";
-import { createHost } from "../src/next/index.ts";
-import { createPlugins } from "../src/next-node/plugins/index.ts";
-import { createWorkers, processLock, type WorkersError } from "../src/next-node/workers/index.ts";
+import { createHost } from "../src/index.ts";
+import { createPlugins } from "../src/node/plugins/index.ts";
+import { createWorkers, processLock, type WorkersError } from "../src/node/workers/index.ts";
 import { Control, Runner, Value } from "./fixtures/worker-contracts.ts";
 
 async function setup(onOutput: () => void = () => {}) {
 	const directory = await mkdtemp(join(tmpdir(), "axi-workers-"));
 	const plugins = createPlugins(
-		{ roots: [directory], kinds: { worker: { platform: "node", hostPackages: ["@axi/objects/next"] } }, onError() {} },
+		{ roots: [directory], kinds: { worker: { platform: "node", hostPackages: ["@axi/objects"] } }, onError() {} },
 		context,
 	);
 	const host = createHost({ principal: { kind: "server" }, onError() {} });
@@ -135,7 +135,7 @@ it("ships a plugin update to a running child and gives later children the same c
 	const directory = join(f.directory, "value");
 	await mkdir(directory);
 	await writeFile(join(directory, "package.json"), JSON.stringify({ name: "value", type: "module" }));
-	const source = (text: string) => `import {hostKind,str,remote,defineFacet,constant} from "@axi/objects/next";
+	const source = (text: string) => `import {hostKind,str,remote,defineFacet,constant} from "@axi/objects";
 const Runner=hostKind("runner",{id:str()});const Value=remote("runtime.value",{version:1,params:{id:str()},hostAddress:({id})=>Runner({id}),variants:{active:{state:{text:str()},methods:{}}}});
 export default defineFacet(host=>host.serve(Value,()=>({variant:"active",members:{text:constant(${JSON.stringify(text)})}})));`;
 	await writeFile(join(directory, "worker.ts"), source("before"));

@@ -1,11 +1,11 @@
 import { expect, it } from "vitest";
 import { BACKGROUND_CONTEXT as context } from "../src/context/index.ts";
-import { constant, createHost, defineFacet, hostKind, int, memoryLinkPair, method, remote } from "../src/next/index.ts";
-import { ObjectsError } from "../src/next/data/index.ts";
-import { CallWindow } from "../src/next/remote/calls.ts";
-import { Replica } from "../src/next/remote/replica.ts";
-import { Batch } from "../src/next/state/internal.ts";
-import { nodeCompression } from "../src/next-node/compression.ts";
+import { constant, createHost, defineFacet, hostKind, int, memoryLinkPair, method, remote } from "../src/index.ts";
+import { ObjectsError } from "../src/data/index.ts";
+import { CallWindow } from "../src/remote/calls.ts";
+import { Replica } from "../src/remote/replica.ts";
+import { Batch } from "../src/state/internal.ts";
+import { nodeCompression } from "../src/node/compression.ts";
 
 it("uses the same variant index at both ends when declarations are not alphabetical", async () => {
 	const Server = hostKind("variant.server");

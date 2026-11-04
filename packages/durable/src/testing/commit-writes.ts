@@ -1,4 +1,4 @@
-import type { Context } from "@axi/objects";
+import type { Context } from "@axi/objects/context";
 import type { Seq, Storage, StorageWrite } from "../types.ts";
 
 export async function commitWrites(storage: Storage, writes: readonly StorageWrite[], context: Context): Promise<Seq> {

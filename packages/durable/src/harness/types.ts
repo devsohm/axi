@@ -1,5 +1,6 @@
 import type { ConversationView, ConversationWindow } from "./view.ts";
-import type { Context, JsonValue } from "@axi/objects";
+import type { Context } from "@axi/objects/context";
+import type { JsonValue } from "@axi/objects/json";
 import type {
 	Api,
 	AssistantMessage,

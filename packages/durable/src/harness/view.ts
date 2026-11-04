@@ -1,4 +1,6 @@
-import { type Context, type JsonValue, Watch, type WatchCall, type WatchEnd } from "@axi/objects";
+import { type Context } from "@axi/objects/context";
+import { type JsonValue } from "@axi/objects/json";
+import { Watch, type WatchCall, type WatchEnd } from "@axi/objects/watch";
 import { withoutAbortSignal } from "@axi/objects/context";
 import { applyImmutable, type NonEmptyPath, type Op, type Path } from "@axi/objects/delta";
 import { contained, NORMAL_END, sessionObserverEnd, type ObservedCommit, type SessionImpl } from "../session/session.ts";

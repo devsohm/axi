@@ -1,4 +1,5 @@
-import type { Context, JsonValue } from "@axi/objects";
+import type { Context } from "@axi/objects/context";
+import type { JsonValue } from "@axi/objects/json";
 import { apply, type Op } from "@axi/objects/delta";
 import type { SqliteDatabase, SqliteExecutor, SqliteValue } from "@axi/objects/sqlite";
 import { StorageRequestError } from "../../errors.ts";

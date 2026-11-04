@@ -10,8 +10,8 @@ import {
 	local,
 	ObjectsError,
 	type HostError,
-} from "../../src/next/index.ts";
-import { ObjectsObject } from "../../src/next/host/object.ts";
+} from "../../src/index.ts";
+import { ObjectsObject } from "../../src/host/object.ts";
 const weak: WeakRef<ObjectsObject>[] = [],
 	original = ObjectsObject.prototype.attempt;
 ObjectsObject.prototype.attempt = function () {

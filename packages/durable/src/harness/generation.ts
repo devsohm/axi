@@ -1,5 +1,7 @@
 import type { TaskCreationOptions } from "../session/transaction.ts";
-import { type Context, copyJson, type Draft, type JsonValue } from "@axi/objects";
+import { type Context } from "@axi/objects/context";
+import { copyJson, type JsonValue } from "@axi/objects/json";
+import { type Draft } from "@axi/objects/delta";
 import type {
 	Api,
 	AssistantMessage,

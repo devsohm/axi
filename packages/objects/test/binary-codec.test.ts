@@ -1,9 +1,9 @@
 import { expect, it } from "vitest";
 import { BACKGROUND_CONTEXT as context } from "../src/context/index.ts";
-import { binaryCodec } from "../src/next/link/binary.ts";
-import { checkMessage } from "../src/next/link/message.ts";
-import { DeflatedPart } from "../src/next/link/part.ts";
-import { parsePart, parsePayload } from "../src/next/link/values.ts";
+import { binaryCodec } from "../src/link/binary.ts";
+import { checkMessage } from "../src/link/message.ts";
+import { DeflatedPart } from "../src/link/part.ts";
+import { parsePart, parsePayload } from "../src/link/values.ts";
 
 it("writes protocol tags, safe-integer varints, origin flags and retirement indexes", () => {
 	expect([...binaryCodec.encode({ kind: "release", hold: 300 })]).toEqual([

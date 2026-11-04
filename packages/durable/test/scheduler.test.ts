@@ -1,7 +1,7 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { type Context } from "@axi/objects";
+import { type Context } from "@axi/objects/context";
 import { BACKGROUND_CONTEXT as context, awaitWithContext } from "@axi/objects/context";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { defineDoc, defineTask, MemoryStorage } from "../src/index.ts";

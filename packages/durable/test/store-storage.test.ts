@@ -3,7 +3,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { BACKGROUND_CONTEXT as context } from "@axi/objects/context";
-import { openStore, sqliteBackend, type Store } from "@axi/objects/next";
+import { openStore, sqliteBackend, type Store } from "@axi/objects";
 import { openNodeSqliteDatabase } from "@axi/objects/sqlite/node";
 import { describe, expect, it } from "vitest";
 import { idFromNumber } from "../src/ids.ts";

@@ -1,4 +1,4 @@
-import type { Context } from "@axi/objects";
+import type { Context } from "@axi/objects/context";
 import { NodeExecutionEnv } from "../../env/node.ts";
 import { JsonlStorage, type JsonlStorageOptions } from "./storage.ts";
 

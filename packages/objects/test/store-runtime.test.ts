@@ -1,3 +1,4 @@
+import { LiveQueries } from "../src/store/live-query.ts";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -6,17 +7,17 @@ import {
 	BACKGROUND_CONTEXT as context,
 	withCancel,
 } from "../src/context/index.ts";
-import { sqliteBackend } from "../src/next/store/backend.ts";
-import { createDocument, loadContent } from "../src/next/store/engine.ts";
-import { openStore, type ObjectsStore } from "../src/next/store/store.ts";
+import { sqliteBackend } from "../src/store/backend.ts";
+import { createDocument, loadContent } from "../src/store/engine.ts";
+import { openStore, type ObjectsStore } from "../src/store/store.ts";
 import { openNodeSqliteDatabase } from "../src/sqlite/node.ts";
-import { str } from "../src/next/contracts/index.ts";
-import { defineTable } from "../src/next/store/table.ts";
-import { evolveTable } from "../src/next/store/table-evolve.ts";
-import { TableHandle } from "../src/next/store/table-handle.ts";
-import { prepareTables } from "../src/next/store/table-migration.ts";
-import { TableChanges } from "../src/next/store/table-changes.ts";
-import type { StagedWrite } from "../src/next/store/step.ts";
+import { str } from "../src/contracts/index.ts";
+import { defineTable } from "../src/store/table.ts";
+import { evolveTable } from "../src/store/table-evolve.ts";
+import { TableHandle } from "../src/store/table-handle.ts";
+import { prepareTables } from "../src/store/table-migration.ts";
+import { TableChanges } from "../src/store/table-changes.ts";
+import type { StagedWrite } from "../src/store/step.ts";
 
 const fence = { admit: () => true, adopt: () => {} };
 
@@ -24,7 +25,7 @@ it("preserves rows through a column rename and refuses obsolete table handles", 
 	const store = (await openStore(sqliteBackend(await openNodeSqliteDatabase(":memory:")), context)) as ObjectsStore;
 	const first = defineTable("messages", { version: 1, columns: { id: str(), text: str() }, key: ["id"] });
 	const second = evolveTable(first, table => table.rename("text", "body"));
-	const owner = { label: "workspace", scope: {}, assertLive() {}, fail(error: Error) { throw error; } };
+	const owner = { label: "workspace", scope: {}, queries: new LiveQueries(), assertLive() {}, fail(error: Error) { throw error; } };
 	try {
 		await prepareTables([{ definition: first, table: "workspace:messages" }], store, fence, "workspace", context);
 		const old = new TableHandle(first, "workspace:messages", store, owner);

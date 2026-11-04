@@ -1,8 +1,8 @@
 import { expect, it, vi } from "vitest";
 import { BACKGROUND_CONTEXT as context } from "../src/context/index.ts";
-import { Channel } from "../src/next/link/channel.ts";
-import { memoryLinkPair } from "../src/next/link/link.ts";
-import { textCodec } from "../src/next/link/text.ts";
+import { Channel } from "../src/link/channel.ts";
+import { memoryLinkPair } from "../src/link/link.ts";
+import { textCodec } from "../src/link/text.ts";
 const incarnation = "0190f5a2-7c3e-7d4a-9b1c-2d3e4f5a6b7c";
 const flushed = () => new Promise((resolve) => setImmediate(resolve));
 
@@ -95,7 +95,7 @@ it("reports a malformed handshake once and closes a peer that stays silent", asy
 			context,
 		);
 		quiet.start();
-		quiet.tick(Date.now() + 30, 15, 30);
+		quiet.tick(Date.now() + 30, 0, 15, 30);
 		expect(quiet.closed).toBe(true);
 	} finally {
 		vi.useRealTimers();

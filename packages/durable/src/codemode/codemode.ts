@@ -7,7 +7,8 @@ import type {
 	CodemodeSandboxBase,
 } from "@axi/codemode/portable";
 import { CODEMODE_SOURCE_GRAMMAR, parseCodemodeSource } from "@axi/codemode/source";
-import { type Context, copyJson, type JsonValue } from "@axi/objects";
+import { type Context } from "@axi/objects/context";
+import { copyJson, type JsonValue } from "@axi/objects/json";
 import { type Static, Type } from "typebox";
 import { defineDoc } from "../documents.ts";
 import { errorMessage } from "../errors.ts";

@@ -1,5 +1,5 @@
-import type { JsonValue } from "@axi/objects";
-import { defineTable, int, json, str, unknown } from "@axi/objects/next";
+import type { JsonValue } from "@axi/objects/json";
+import { defineTable, int, json, str, unknown } from "@axi/objects";
 import type {
 	ConversationRecord,
 	EntryRecord,

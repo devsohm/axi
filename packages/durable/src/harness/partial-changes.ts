@@ -1,4 +1,5 @@
-import type { Draft, JsonRepresentation, JsonValue } from "@axi/objects";
+import type { Draft } from "@axi/objects/delta";
+import type { JsonRepresentation, JsonValue } from "@axi/objects/json";
 import { appendText } from "@axi/objects/delta";
 import type { AssistantMessage, AssistantMessageEvent } from "@axi/ai";
 import { type JsonChange, StreamingJsonParser } from "@axi/ai/utils/streaming-json";

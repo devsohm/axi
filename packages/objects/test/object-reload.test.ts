@@ -1,6 +1,6 @@
 import { expect, it, vi } from "vitest";
 import { BACKGROUND_CONTEXT as context, type Context, withCancel } from "../src/context/index.ts";
-import { ObjectsHost } from "../src/next/host/host.ts";
+import { ObjectsHost } from "../src/host/host.ts";
 import {
 	createHost,
 	constant,
@@ -14,7 +14,7 @@ import {
 	obj,
 	str,
 	unknown,
-} from "../src/next/index.ts";
+} from "../src/index.ts";
 
 const Total = local("reload.total", {
 	version: 1,

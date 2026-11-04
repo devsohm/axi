@@ -1,14 +1,14 @@
 import { expect, it } from "vitest";
 import { BACKGROUND_CONTEXT as context } from "../src/context/index.ts";
-import { openStore, sqliteBackend } from "../src/next/index.ts";
-import { PluginError } from "../src/next/data/index.ts";
-import { Persistence } from "../src/next/documents/internal.ts";
-import { PersistedRuns } from "../src/next/jobs/persisted.ts";
-import { JobRun } from "../src/next/jobs/run.ts";
-import { outcomeOf, storedRun } from "../src/next/jobs/stored.ts";
-import { createDocument } from "../src/next/store/engine.ts";
-import type { StagedWrite } from "../src/next/store/step.ts";
-import { ObjectsStore } from "../src/next/store/store.ts";
+import { openStore, sqliteBackend } from "../src/index.ts";
+import { PluginError } from "../src/data/index.ts";
+import { Persistence } from "../src/documents/internal.ts";
+import { PersistedRuns } from "../src/jobs/persisted.ts";
+import { JobRun } from "../src/jobs/run.ts";
+import { outcomeOf, storedRun } from "../src/jobs/stored.ts";
+import { createDocument } from "../src/store/engine.ts";
+import type { StagedWrite } from "../src/store/step.ts";
+import { ObjectsStore } from "../src/store/store.ts";
 import { openNodeSqliteDatabase } from "../src/sqlite/node.ts";
 
 it("reloads persisted job records and retires incompatible state without decoding it", async () => {

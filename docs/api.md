@@ -15,7 +15,7 @@ The package pages list project exports from each root entry. Public declaration 
 
 ## Tutorials and guides
 
-- Objects: [tutorial](../packages/objects/docs/tutorial.md), [API usage](../packages/objects/docs/guide.md), [experimental API](../packages/objects/docs/experimental.md), [internal plugin component](../packages/objects/docs/plugins.md), [HTTP](../packages/objects/docs/http.md), and [worker hosts](../packages/objects/docs/workers.md).
+- Objects: [tutorial](../packages/objects/docs/tutorial.md), [API usage](../packages/objects/docs/guide.md), [plugins](../packages/objects/docs/plugins.md), [HTTP](../packages/objects/docs/http.md), and [worker hosts](../packages/objects/docs/workers.md).
 - Durable: [documents, tools, tasks, and recovery](../packages/durable/docs/tutorial.md).
 - TUI: [connect a Durable runtime](../packages/tui/docs/durable-connection.md) and [native build prerequisites](../packages/tui/native/README.md).
 - Env: [operation semantics](../packages/env/docs/semantics.md) and [daemon protocol](../packages/env/docs/protocol.md).

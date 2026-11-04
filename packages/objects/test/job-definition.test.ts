@@ -6,7 +6,7 @@ import {
 	int,
 	obj,
 	str,
-} from "../src/next/index.ts";
+} from "../src/index.ts";
 
 it("snapshots job schemas and enforces the persistence requirements at declaration", () => {
 	const Progress = defineState("progress", {

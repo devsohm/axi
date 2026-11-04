@@ -1,6 +1,8 @@
-import type { WatchHandle, WatchCall, WatchEnd } from "@axi/objects";
+import type { WatchHandle, WatchCall, WatchEnd } from "@axi/objects/watch";
 import type { TelemetryCarrier } from "@axi/telemetry";
-import type { Context, Draft, JsonValue } from "@axi/objects";
+import type { Context } from "@axi/objects/context";
+import type { Draft } from "@axi/objects/delta";
+import type { JsonValue } from "@axi/objects/json";
 import type { Op } from "@axi/objects/delta";
 import type { Message, Models } from "@axi/ai";
 import type { ExecutionEnv } from "./env/index.ts";
@@ -539,7 +541,7 @@ export type TableCommitChange = Extract<
 >;
 export type CommitChange = TableCommitChange | DocumentCommitChange;
 export type CommitPublication = { readonly seq: Seq; readonly changes: readonly CommitChange[] };
-export type { WatchEnd, WatchHandle } from "@axi/objects";
+export type { WatchEnd, WatchHandle } from "@axi/objects/watch";
 export type DocumentWatch<Value extends JsonObject> = WatchHandle<Readonly<Value>>;
 export type SessionEnd = { readonly kind: "closed" } | { readonly kind: "failed"; readonly error: unknown };
 export type Observer<Value> = {

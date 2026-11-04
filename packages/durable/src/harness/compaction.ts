@@ -1,4 +1,5 @@
-import type { Context, Draft } from "@axi/objects";
+import type { Context } from "@axi/objects/context";
+import type { Draft } from "@axi/objects/delta";
 import type { AssistantMessage, Message, ModelThinkingLevel, SimpleStreamOptions } from "@axi/ai";
 import { calculateContextTokens, estimateMessageTokens } from "@axi/ai/utils/estimate";
 import { isRetryableAssistantError, retryDelayMs } from "@axi/ai/utils/retry";

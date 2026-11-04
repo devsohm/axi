@@ -1,4 +1,4 @@
-import { copyJson, type JsonValue } from "@axi/objects";
+import { copyJson, type JsonValue } from "@axi/objects/json";
 import type { Op } from "@axi/objects/delta";
 import { idFromNumber } from "./ids.ts";
 import type {

@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { parsePayload, payloadPart } from "../src/next/link/values.ts";
+import { parsePayload, payloadPart } from "../src/link/values.ts";
 
 test("byte segments preserve a Buffer subview despite its JSON conversion", () => {
 	const bytes = Buffer.from([1, 2, 3, 4]).subarray(1, 3);

@@ -1,6 +1,7 @@
 import type { Observer, Observation } from "../types.ts";
 import type { TaskGraph } from "./task-graph.ts";
-import type { Context, JsonValue } from "@axi/objects";
+import type { Context } from "@axi/objects/context";
+import type { JsonValue } from "@axi/objects/json";
 import { withAbortSignal, withoutAbortSignal } from "@axi/objects/context";
 import { AXI_ATTRIBUTION, mergeClientIdentity, withClientIdentity, type Models, type ClientIdentity } from "@axi/ai";
 import {

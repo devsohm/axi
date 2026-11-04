@@ -1,10 +1,10 @@
 import { expect, it, vi } from "vitest";
-import { local } from "../src/next/index.ts";
-import { ObjectsError } from "../src/next/data/index.ts";
-import { checkDependencies, ParkedLong } from "../src/next/host/dependencies.ts";
-import { Binding } from "../src/next/host/reference.ts";
-import type { HostError } from "../src/next/host/report.ts";
-import { Batch } from "../src/next/state/internal.ts";
+import { local } from "../src/index.ts";
+import { ObjectsError } from "../src/data/index.ts";
+import { checkDependencies, ParkedLong } from "../src/host/dependencies.ts";
+import { Binding } from "../src/host/reference.ts";
+import type { HostError } from "../src/host/report.ts";
+import { Batch } from "../src/state/internal.ts";
 
 it("parks on recoverable failures and breaks on lost authority or an ended dependency", () => {
 	const type = local("app.dependency", { version: 1, params: {}, members: {} }),

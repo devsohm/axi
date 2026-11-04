@@ -1,117 +1,67 @@
-# Object runtime specification
+# Objects specification
 
-This specification describes the public contracts of `@axi/objects`. The [guide](guide.md) explains usage and defaults. The [tutorial](tutorial.md) provides runnable examples.
+## Identity and declarations
 
-## Identity and contracts
+Object identity consists of contract, canonical parameters and principal. Parameter defaults are normalized before identity lookup. Contract declarations own immutable schema snapshots and fingerprints. Equal versions require compatible fingerprints. Accepted older versions use explicit adapters.
 
-An object is identified by its type name, normalized input and principal key. Normalization applies schema defaults, removes unknown fields and validates input. Canonical identity omits default-valued fields. Changing those identity rules requires a new type name.
+A local contract has one member set. A remote contract has named variants and a host-address function. Placement cannot be overridden by a request. Method arguments and results are checked at dispatch, including local calls. Factories declare synchronously and return an implementation rather than a promise.
 
-Local contracts describe host-only methods, state and opaque native values. Remote contracts describe JSON input, placement and named variants. Remote placement is part of the contract fingerprint. A request cannot override it. A provider or relay rejects input that selects another destination.
+## Host lifecycle
 
-At an equal contract version, the provider must cover every member the consumer requests. Member kinds must agree. Method arguments must accept the consumer's values; state and results must fit its expected schemas. Both parties must agree on whether a method takes arguments. A void consumer discards a result. Opaque descriptors must agree.
+`load()` runs once. Local acquisition before loading fails with `not_ready`. Loading publishes accepted declarations together and starts empty-parameter local objects. Its report waits for their first outcome. Failed setup excludes that plugin. Invalid plugin names reject before host state changes.
 
-A breaking change requires a higher contract version. Consumers of an older version need an explicit `accepts` adapter. Adapters cannot change placement. Identical schema shapes do not detect changes of meaning; authors must version those changes themselves.
+References report `loading`, `live`, `failed` or `ended`. Their released ownership cannot be reused. Object-owned dependencies remain through an attempt. Call-owned references end with their call context. Root contexts use the host principal by default. An explicit undefined principal creates an anonymous scope.
 
-Remote calls validate arguments and results at dispatch, including calls within one process. Both consumer and provider schemas remove unknown argument fields before validation. Local calls do not perform per-call schema validation. Outgoing state snapshots and resets are validated; ordinary delta writes receive additional schema checks in development mode.
+Dependencies can park activation without consuming its readiness deadline. Transient activation failures retry with backoff. Broken failures wait for an explicit retry or replacement. Native resources close in reverse order. A late opener is closed if its attempt already ended.
 
-## Declaration and activation
+Host close stops new work, closes links, seals scopes and objects, drains admitted calls and closes resources. Cleanup continues after individual close failures. The application closes the Store separately.
 
-A factory runs synchronously and returns an implementation. Returning a promise is invalid. It may declare:
+## Publication and storage
 
-| Declaration | Surviving identity |
-| --- | --- |
-| State | Name; its value survives compatible reloads |
-| Reference | Object address and consumer contract |
-| Resource | Name, version, dependencies and exclusivity |
-| Listener | Name, source and selector |
-| Task | Position; execution restarts on reload |
-| Derivation | Position; computation is replaced on reload |
-| Registration | Registry name and entry key |
+Transactions serialize changes to one object's documents. Store commits order writes across owners. A transaction publishes no draft before storage adoption. Document changes, table changes and live-query refreshes publish in one batch. A failed refresh keeps the last live rows and reports its failure once per episode.
 
-Names are nonempty and unique within their declaration kind. Factories cannot write cells, read resources or call references. Dependencies must be declared before activation; in-host reference cycles are rejected.
+Persisted state declares a schema version and checkpoint policy. A schema change requires a compatible migration. Tables record version history and bounded migrations. Jobs persist unsettled run records separately from their state. Recovery uses committed records, not unfinished in-memory callbacks.
 
-Activation opens resources in dependency order, waits for references and forwarded state, initializes new cells, attaches derived values and starts runtime listeners and tasks. Initializers run in parallel in separate roots. They must not wait for their own object or another unfinished initializer of that object.
-
-Concurrent acquisitions of one address share activation. Failure unwinds the run and rejects its waiting references. A later acquisition can retry. An activation abandoned by every reference cleans up its result, including a resource that finishes opening after cancellation.
-
-`install()` registers one facet synchronously. `load()` resolves and registers its entire batch before awaiting host-object activation. Registration failures can throw synchronously; installation is not a rollback transaction. Close a host when abandoning startup.
-
-`awaitHostObjects: false` starts the same objects without awaiting them. `ready()` waits for the host-object references present at call time. It does not join background tasks or continuously monitor health. Applications coordinate bootstrap readiness and parent admission explicitly.
-
-## Ownership and lifetime
-
-References expose late-bound members, status, readiness, shape and release operations. Their status is `loading`, `live`, `gone` or `released`. `get()` waits for requested state; `hold()` returns immediately. Initial state reads fail with `not_ready`; unavailable variant members fail with `not_in_variant`. Released references reject further calls.
-
-`self.get()` creates an object-owned reference. `ctx.get()` creates a call-owned reference released when its context settles. External references belong to the caller. Releasing one remote view does not end other views sharing its binding.
-
-The default object lifetime is referenced, with an optional linger delay after its final reference leaves. A local type whose input accepts an empty object can instead have host lifetime. It then has one object for the host principal and cannot linger. Only host-lifetime objects can register contributions.
-
-Disposal stops tasks and listeners, joins invocations, closes resources in reverse opening order and releases dependencies. Forced disposal marks references gone and cancels calls first. Bulk disposal visits referrers before their dependencies and closes links last. Cleanup attempts remaining steps even when another step fails.
-
-## Roots and principals
-
-The application supplies the host principal, accepted peer principals and routed host principals. `principalKey` defines identity. A key equal to the host's own key reaches its own objects. Include grant revisions and connection provenance when they affect identity.
-
-A root is a short call tree with one code version and cancellation scope. Calls using its context keep that scope. Calls without a context, and calls made by long-lived task holders, start fresh roots. Contexts expire when their call settles and cannot be used on another host.
-
-Ingress roots act as their supplied principal. Code inside objects acts as the host. The accepting side stamps downstream principals; only a trusted parent may forward one. Variants describe available members and do not replace application authorization. Revocation disposes matching external objects and re-stamps or closes matching links; pattern revocations propagate to children.
-
-Standalone `Context` is a separate invocation API. Its cancellation, typed values and telemetry span are explicit. `withTelemetry()` accepts a callback span; the application retains the root adapter. Every context exposes span recording methods, including through the disabled default. Derived contexts do not mutate parents. `traceIn()` preserves callback results and rejection identity while passing a span-scoped child context. No ambient span or automatic host instrumentation is installed.
-
-## State and revisions
-
-Roots transferred to trackers, cells or standalone state must be alias-free strict JSON. They are trusted and are not defensively traversed or frozen. Published values and operation payloads remain immutable by contract. Consumers must copy before giving data to mutable code.
-
-Draft insertions validate and copy their inputs before changing state. Invalid insertion is atomic. Arrays remain dense; expanding their length inserts nulls. Draft handles follow elements through array reindexing, expire after settlement or competing adoption, and ignore writes to removed elements.
-
-Preparation produces a candidate and its operations without changing authority. Adoption checks its owner and revision, then changes the root. Foreign, cancelled, stale and consumed preparations are refused. Even a no-op adoption advances the tracker revision and invalidates competitors; observable state does not publish a no-op.
-
-Operation batches support root replacement, property sets and deletes, string append and front truncation, array splices and permutations. Batches reproduce the resulting value but are not canonical. Unsafe prototype-related path segments are rejected by replay and decoding; tracker mutations at those keys fold into a safe ancestor replacement.
-
-Immutable replay shares unchanged containers and operation payloads. Mutable replay requires a detached root and separate batches for each replica. Encoders and decoders belong to one ordered stream. Reset their dictionaries after replacement; recover from a fresh replacement after an invalid stream.
-
-Object cell notifications install related values before observers run. Standalone state subscriptions serialize each subscriber's asynchronous callbacks independently. At most 100 deliveries wait per subscriber; overflow retains the newest value and any unstarted initial hydration. Unsubscribe drops waiting callbacks without cancelling the running one. Callback failures are reported and do not stop later deliveries.
-
-## Watch handles
-
-`Watchable<T>` exposes a current value and an asynchronous `watch(context)` acquisition. A watch begins with the value held at acquisition. Its single listener receives later frames in order and never runs inside `start()` or `advance()`. The handle's `value` changes before each callback. Sources must attach the watch and capture its initial value without losing intervening changes.
-
-`Watch<T>` delivers tagged calls containing immutable JSON values, delta operations and a retirement flag. `NativeWatch<T>` delivers tagged in-process values without delta operations. Both pass the commit context separately and serialize asynchronous callbacks. JSON watches fold pending operations. More than 10,000 pending operations trigger a root replacement using the configured replacement callback or the latest value. Native watches retain at most 100 waiting values, then replace the backlog with the latest value.
-
-`observeAbort()` installs one acquisition signal. Delivered contexts retain their other fields but do not carry that signal. `stop()`, cancellation, source closure and listener failure end the watch once, detach it from its source and discard queued calls. They do not cancel a callback already running. `closed` reports a tagged terminal result, and the handle retains its last delivered value. Starting twice, starting after termination or installing cancellation twice is an error.
-
-A retirement is a value call with `retired: true`; it does not end the watch. A recoverable failure is delivered as a `failed` call. The next value after a failure replaces the prior JSON state. `endAfterDelivery()` rejects new source calls and ends after pending delivery completes. A listener failure is reported and ends that watch.
+An uncertain database outcome is terminal for the Store. Export holds its queue until the iterator ends or is cancelled. Import validates and applies the complete archive to an empty database. Optional outbox replay accepts consecutive commits and checks row counts.
 
 ## Reload
 
-A host serializes reloads and retains at most current and previous code versions. Preparation records new declarations, checks provider and consumer compatibility, opens nonexclusive candidate resources, checks registrations and stages listeners. Candidate tasks do not run before commit. Failed preparation discards candidates and preserves installed code.
+Reload applies a complete facet set. Identical facet objects remain installed. Staging runs no native open or job. Failed plugins retain previous code. Dependency checks preserve a changed consumer's prior code when its required provider update failed.
 
-Raising a cell version or replacing an exclusive resource gates the affected object. Roots already holding its lease may finish. Other old roots receive retryable `upgrade_conflict`. New objects of changing types are refused after the admission cut. Gates have a deadline; missing it aborts the reload with its blocking roots.
+Publication replaces accepted providers and contributions in one batch. A pure implementation swap retains documents and admitted calls. Natives or table migrations require restart and cleanup. Removed types leave held references waiting. Reports retain declaration order even when dependency order determines execution.
 
-Cell migration works on a private copy and validates the prospective schemas. A changed schema without a version increase, or a lower version, is refused. Exclusive replacement closes the old resource before opening its replacement; rollback attempts to restore it. A failed restoration marks the resource unavailable.
+Reloads serialize. Cancellation before publication leaves the prior set intact. Cancellation after publication does not undo the accepted update. Error details identify committed plugin changes.
 
-Commit synchronously publishes implementations, state, tables and shapes, then releases observers and starts new work. A kept resource adopts the new declaration's cleanup. The host's own lifecycle reference adopts a changed provider contract without briefly releasing its object. Other consumers keep normal compatibility checks.
+## Links and authority
 
-An unexpected commit failure makes the host terminally failed. It must stop admitting calls. Compatible old roots otherwise finish on retained old implementations. Retirement releases declarations used only by that version. A missed retirement deadline cancels remaining roots, allows a bounded grace period and retires anyway. Later calls with an unavailable version fail with `superseded`.
+Links handshake before queued work. Untrusted envelopes are validated. Malformed messages, duplicate identifiers and control traffic from an unauthorized role close the channel. Asynchronous handling holds later messages until it completes.
 
-Only direct child hosts participate in a cluster reload. The coordinator gathers votes, commits locally and sends decisions before starting new-version work. Joining or reconnecting hosts are fenced and reconciled. Clients do not vote or supply code-version roots.
+Only parent links can stamp principals and incarnations. Routes authorize each hold before resolution. Revocation ends matching external objects, unbound work and downstream links. The host's own principal is exempt.
 
-## Links and flow control
+Each origin has independent call and state windows. Two unacknowledged local state messages fill the state window. Method replies and control messages remain independent. Remote views keep their last snapshot while disconnected. Sent calls fail on loss and are never replayed automatically.
 
-Memory, IPC and structural WebSocket links carry protocol version 4. Received frames are validated. Malformed frames, duplicate IDs and control frames from the wrong side close the link. Version mismatch invokes the configured callback and closes; versions are not negotiated.
+Default heartbeat settings ping after 15 seconds and close after 30 seconds. A delayed local timer does not count a sleeping process as peer silence. Type names and host kinds are bounded to 256 characters on the wire. Trace carriers have at most eight printable entries of bounded length.
 
-A remote hold implies state unless disabled. A shape becomes visible only after all snapshots it lists arrive. Further member updates use deltas, resets or errors. Remote views of the same key share a hold and member streams. After upstream loss they retain last hydrated values while reconnecting; in-flight calls reject and may already have executed remotely.
+## Jobs and routines
 
-Routes authorize before and after resolution and recheck revocation across awaits. Knowing a child host does not authorize a relay. WebSocket authentication completes before buffered frames enter a host.
+A routine serializes its calls and coalesces source changes during a call. It waits on a failed source until values return. Failed routines retry with backoff. Ending the attempt cancels their contexts and joins admitted work.
 
-Acknowledged frame sizes regulate state traffic. Defaults are a 256 KiB window, four windows of pending operations, a 15-second ping interval and a 45-second silence timeout. Overflow replaces stalled streams with current-value resets. Initial snapshots for new holds, method results and control frames bypass waiting state. Therefore a result can precede the state change it caused. IPC links report no encoded sizes and are not windowed. `maxCalls` bounds admitted peer calls when configured.
+A job runs outside its finish transaction. Its successful finish commits cleanup and application changes together. Five finish failures block further tries. A reload can retry a blocked finish. Persisted runs recover their saved arguments, progress and supported trace carrier. Deferred state may be lost before its persistence deadline. Applications own external-effect idempotency.
 
-## Helpers and limits
+## Node helpers
 
-The Node host manager serializes start, stop and replacement, uses kernel-backed process locks and closes child process trees after a grace period. Applications supply restart and liveness policy. Process-group cleanup computes the target from the child PID. A missing PID uses the sentinel `-1`, so that exceptional path attempts a signal to PID 1; applications must not treat it as a safe missing-process guard.
+Plugin roots may be required or optional. Discovery reports collisions and invalid entries. Builds restrict imports to permitted plugin, shared and host-package paths. Plugin scripts execute as trusted code. File watching marks changes without applying them. Rollouts ship built generations through ordered host steps. Workers evaluate prebuilt scripts without rebuilding them.
 
-Output helpers bound head or tail windows without splitting UTF-8 characters, track skipped output and sanitize display controls. Progress writes are coalesced with one write in flight, paced by a minimum interval and 100 KiB per second. Stop joins the active write and returns pending waiters for final delivery.
+HTTP routes deny anonymous callers unless explicitly public. Cross-site routes are public and anonymous. Authentication, host, origin, header and response-body checks run at the request boundary. Resource and root scopes last through response completion or cancellation.
 
-SQLite adapters expose asynchronous operations over an exclusive transaction queue. The temporary transaction executor expires when its callback settles. Operations on the outer database wait behind that callback and must not be awaited from inside it. Callback failure rolls back; rollback failure is reported separately. Migrations require contiguous versions beginning at one and apply atomically. The Node adapter uses synchronous SQLite internally. Durable Object storage remains owned by its host.
+Worker starts serialize per address and hold process locks. Stale file locks are cleared only when no process is listening. A missing child PID is never a signal target. Worker failure requires retry or rollout rather than an automatic restart loop.
 
-Facets execute as trusted code in the host process. Module generations remain cached. The publication queue is synchronous and shared by hosts in a process. Cluster decisions and module lists are not persisted. Links release provider-side holds on disconnect. Cross-host cycles require application discipline. Cleanup that waits on a disconnected dependency needs an application deadline. Object cells and reload coordination do not provide persistence across process restart.
+## Telemetry
+
+Recorded timing uses milliseconds with microsecond precision. Telemetry queues are bounded. In-flight writes count toward their bounds. A storage failure stops the recorder and rejects subsequent flush or close.
+
+A host records activation, resource, method, routine, job, route, remote-call and HTTP lifetimes. Trace carriers cross supported transports. Cancellation keeps an ok status. Errors use bounded messages. Browser ingestion enforces the browser incarnation prefix and accepts at most 1,200 spans per minute. Browser batches hold at most 100 spans. Worker batches hold at most 1,000 spans and 1,000 metric rows.
+
+## Limits
+
+Facets and plugins run with host-process authority. Reload does not isolate untrusted code. In-memory documents disappear with the process. Persistence requires an attached Store. Links provide reconnection of references, not replay of arbitrary side effects. Synchronous publication means a slow listener delays other listeners in that batch.

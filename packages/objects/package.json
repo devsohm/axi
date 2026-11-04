@@ -29,11 +29,6 @@
 			"types": "./dist/output.d.ts",
 			"import": "./dist/output.js"
 		},
-		"./node": {
-			"source": "./src/node.ts",
-			"types": "./dist/node.d.ts",
-			"import": "./dist/node.js"
-		},
 		"./package.json": "./package.json",
 		"./sqlite": {
 			"source": "./src/sqlite/index.ts",
@@ -55,15 +50,40 @@
 			"types": "./dist/telemetry-sqlite/index.d.ts",
 			"import": "./dist/telemetry-sqlite/index.js"
 		},
-		"./next": {
-			"source": "./src/next/index.ts",
-			"types": "./dist/next/index.d.ts",
-			"import": "./dist/next/index.js"
-		},
 		"./telemetry-sqlite/node": {
 			"source": "./src/telemetry-sqlite/node.ts",
 			"types": "./dist/telemetry-sqlite/node.d.ts",
 			"import": "./dist/telemetry-sqlite/node.js"
+		},
+		"./json": {
+			"source": "./src/json.ts",
+			"types": "./dist/json.d.ts",
+			"import": "./dist/json.js"
+		},
+		"./watch": {
+			"source": "./src/watch.ts",
+			"types": "./dist/watch.d.ts",
+			"import": "./dist/watch.js"
+		},
+		"./http": {
+			"source": "./src/node/http/index.ts",
+			"types": "./dist/node/http/index.d.ts",
+			"import": "./dist/node/http/index.js"
+		},
+		"./workers": {
+			"source": "./src/node/workers/index.ts",
+			"types": "./dist/node/workers/index.d.ts",
+			"import": "./dist/node/workers/index.js"
+		},
+		"./plugins": {
+			"source": "./src/node/plugins/index.ts",
+			"types": "./dist/node/plugins/index.d.ts",
+			"import": "./dist/node/plugins/index.js"
+		},
+		"./plugins/runtime": {
+			"source": "./src/node/plugins/runtime.ts",
+			"types": "./dist/node/plugins/runtime.d.ts",
+			"import": "./dist/node/plugins/runtime.js"
 		}
 	},
 	"files": [

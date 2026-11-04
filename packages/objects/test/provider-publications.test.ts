@@ -1,10 +1,10 @@
 import { expect, it } from "vitest";
 import { BACKGROUND_CONTEXT as context } from "../src/context/index.ts";
-import { ObjectsError } from "../src/next/data/index.ts";
-import type { Hold } from "../src/next/remote/hold.ts";
-import type { HostLink } from "../src/next/remote/host-link.ts";
-import { ProviderSide } from "../src/next/remote/provider.ts";
-import { Batch } from "../src/next/state/internal.ts";
+import { ObjectsError } from "../src/data/index.ts";
+import type { Hold } from "../src/remote/hold.ts";
+import type { HostLink } from "../src/remote/host-link.ts";
+import { ProviderSide } from "../src/remote/provider.ts";
+import { Batch } from "../src/state/internal.ts";
 
 it.each([false, true])("drops state for a hold that unbinds before its batch flushes (window busy: %s)", busy => {
 	const messages: unknown[] = [], errors: unknown[] = [];

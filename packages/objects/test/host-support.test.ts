@@ -3,12 +3,12 @@ import {
 	BACKGROUND_CONTEXT as context,
 	withCancel,
 } from "../src/context/index.ts";
-import { Activity } from "../src/next/host/activity.ts";
-import { NativeHandle } from "../src/next/host/native.ts";
-import { ParkedCalls } from "../src/next/host/parked.ts";
-import { RevocationKeys } from "../src/next/host/revocation.ts";
-import { UnboundIndex } from "../src/next/host/unbound.ts";
-import { Batch, type BatchError } from "../src/next/state/internal.ts";
+import { Activity } from "../src/host/activity.ts";
+import { NativeHandle } from "../src/host/native.ts";
+import { ParkedCalls } from "../src/host/parked.ts";
+import { RevocationKeys } from "../src/host/revocation.ts";
+import { UnboundIndex } from "../src/host/unbound.ts";
+import { Batch, type BatchError } from "../src/state/internal.ts";
 
 it("keeps a reindexed request for the next publication and leaves other names waiting", () => {
 	const index = new UnboundIndex();
@@ -53,6 +53,8 @@ it("closes a resource that arrives after its opener was abandoned", async () => 
 		100,
 		{
 			object: "app",
+			type: "app",
+			host: "client",
 			position: 1,
 			context,
 			report: (error) => reports.push(error),
@@ -83,6 +85,8 @@ it("reports a native close timeout, aborts its close context, and frees its time
 			10,
 			{
 				object: "app",
+			type: "app",
+			host: "client",
 				position: 1,
 				context,
 				report: (error) => reports.push(error),

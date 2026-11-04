@@ -1,5 +1,5 @@
 import { commitWrites } from "./commit-writes.ts";
-import type { JsonValue } from "@axi/objects";
+import type { JsonValue } from "@axi/objects/json";
 import { BACKGROUND_CONTEXT as context } from "@axi/objects/context";
 import {
 	type ConversationId,

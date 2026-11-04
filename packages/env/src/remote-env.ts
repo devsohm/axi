@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { posix, win32 } from "node:path";
 import { StringDecoder } from "node:string_decoder";
 import { fileURLToPath } from "node:url";
-import type { Context } from "@axi/objects";
+import type { Context } from "@axi/objects/context";
 import {
 	err,
 	ExecutionError,

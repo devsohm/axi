@@ -1,5 +1,7 @@
 import { cutOffTooOften, cutOffCount, salvageable } from "./live.ts";
-import { type Context, copyJson, type Draft, type JsonRepresentation, type JsonValue } from "@axi/objects";
+import { type Context } from "@axi/objects/context";
+import { copyJson, type JsonRepresentation, type JsonValue } from "@axi/objects/json";
+import { type Draft } from "@axi/objects/delta";
 import { awaitWithContext } from "@axi/objects/context";
 import { overlap } from "@axi/objects/delta";
 import { boundOutput, OutputBuffer, type OutputLimits, PROGRESS_BYTES_PER_SECOND, Progress } from "@axi/objects/output";

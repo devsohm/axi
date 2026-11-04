@@ -1,31 +1,31 @@
-# Telemetry API
+# @axi/telemetry API
 
-Project exports from `@axi/telemetry`. Open the linked declarations for exact types. Subpath modules have their own exports; see the toolkit's package-import reference.
+Exports from the package root. The linked declarations contain exact signatures. Other public import paths appear in the package README.
 
 | Export | Kind | Declaration |
 | --- | --- | --- |
 | `AttributeValue` | typealias | [`index.d.ts`](../dist/index.d.ts) |
-| `createTypedMetrics` | export | [`index.d.ts`](../dist/index.d.ts) |
+| `createTypedMetrics` | function | [`metrics.d.ts`](../dist/metrics.d.ts) |
 | `createTypedSpanStarter` | function | [`index.d.ts`](../dist/index.d.ts) |
 | `defineTelemetrySchema` | function | [`index.d.ts`](../dist/index.d.ts) |
 | `ExactTelemetryAttributes` | typealias | [`index.d.ts`](../dist/index.d.ts) |
-| `HistogramOptions` | export | [`index.d.ts`](../dist/index.d.ts) |
+| `HistogramOptions` | interface | [`metrics.d.ts`](../dist/metrics.d.ts) |
 | `InferEventAttributes` | typealias | [`index.d.ts`](../dist/index.d.ts) |
 | `InferOptionalAttributes` | typealias | [`index.d.ts`](../dist/index.d.ts) |
 | `InferRequiredAndOptionalAttributes` | typealias | [`index.d.ts`](../dist/index.d.ts) |
 | `InferStartAttributes` | typealias | [`index.d.ts`](../dist/index.d.ts) |
-| `InMemoryTelemetryContext` | export | [`index.d.ts`](../dist/index.d.ts) |
-| `InstrumentOptions` | export | [`index.d.ts`](../dist/index.d.ts) |
+| `InMemoryTelemetryContext` | class | [`memory.d.ts`](../dist/memory.d.ts) |
+| `InstrumentOptions` | interface | [`metrics.d.ts`](../dist/metrics.d.ts) |
 | `MetricQuery` | interface | [`index.d.ts`](../dist/index.d.ts) |
-| `NOOP_TELEMETRY_CONTEXT` | export | [`index.d.ts`](../dist/index.d.ts) |
-| `NOOP_TELEMETRY_METRICS` | export | [`index.d.ts`](../dist/index.d.ts) |
-| `NOOP_TELEMETRY_PROPAGATION` | export | [`index.d.ts`](../dist/index.d.ts) |
-| `RecordedTelemetryEvent` | export | [`index.d.ts`](../dist/index.d.ts) |
-| `RecordedTelemetryLink` | export | [`index.d.ts`](../dist/index.d.ts) |
-| `RecordedTelemetryMeasurement` | export | [`index.d.ts`](../dist/index.d.ts) |
-| `RecordedTelemetrySpan` | export | [`index.d.ts`](../dist/index.d.ts) |
-| `SchemaTelemetryCounter` | export | [`index.d.ts`](../dist/index.d.ts) |
-| `SchemaTelemetryHistogram` | export | [`index.d.ts`](../dist/index.d.ts) |
+| `NOOP_TELEMETRY_CONTEXT` | const | [`noop.d.ts`](../dist/noop.d.ts) |
+| `NOOP_TELEMETRY_METRICS` | const | [`noop.d.ts`](../dist/noop.d.ts) |
+| `NOOP_TELEMETRY_PROPAGATION` | const | [`noop.d.ts`](../dist/noop.d.ts) |
+| `RecordedTelemetryEvent` | interface | [`memory.d.ts`](../dist/memory.d.ts) |
+| `RecordedTelemetryLink` | interface | [`memory.d.ts`](../dist/memory.d.ts) |
+| `RecordedTelemetryMeasurement` | interface | [`memory.d.ts`](../dist/memory.d.ts) |
+| `RecordedTelemetrySpan` | interface | [`memory.d.ts`](../dist/memory.d.ts) |
+| `SchemaTelemetryCounter` | typealias | [`metrics.d.ts`](../dist/metrics.d.ts) |
+| `SchemaTelemetryHistogram` | typealias | [`metrics.d.ts`](../dist/metrics.d.ts) |
 | `SchemaTelemetrySpan` | typealias | [`index.d.ts`](../dist/index.d.ts) |
 | `SpanAttributes` | interface | [`index.d.ts`](../dist/index.d.ts) |
 | `SpanLink` | interface | [`index.d.ts`](../dist/index.d.ts) |
@@ -39,13 +39,14 @@ Project exports from `@axi/telemetry`. Open the linked declarations for exact ty
 | `TelemetryAttributeType` | typealias | [`index.d.ts`](../dist/index.d.ts) |
 | `TelemetryCarrier` | typealias | [`index.d.ts`](../dist/index.d.ts) |
 | `TelemetryContext` | interface | [`index.d.ts`](../dist/index.d.ts) |
-| `TelemetryCounter` | export | [`index.d.ts`](../dist/index.d.ts) |
+| `TelemetryCounter` | interface | [`metrics.d.ts`](../dist/metrics.d.ts) |
 | `TelemetryEventAttributeDefinition` | typealias | [`index.d.ts`](../dist/index.d.ts) |
 | `TelemetryEventDefinition` | interface | [`index.d.ts`](../dist/index.d.ts) |
-| `TelemetryHistogram` | export | [`index.d.ts`](../dist/index.d.ts) |
-| `TelemetryMetricAttributeDefinition` | export | [`index.d.ts`](../dist/index.d.ts) |
-| `TelemetryMetricDefinition` | export | [`index.d.ts`](../dist/index.d.ts) |
-| `TelemetryMetrics` | export | [`index.d.ts`](../dist/index.d.ts) |
+| `TelemetryHistogram` | interface | [`metrics.d.ts`](../dist/metrics.d.ts) |
+| `TelemetryMetricAttributeDefinition` | typealias | [`metrics.d.ts`](../dist/metrics.d.ts) |
+| `TelemetryMetricDefinition` | typealias | [`metrics.d.ts`](../dist/metrics.d.ts) |
+| `TelemetryMetrics` | interface | [`metrics.d.ts`](../dist/metrics.d.ts) |
+| `telemetryNow` | function | [`memory.d.ts`](../dist/memory.d.ts) |
 | `TelemetryParentDefinition` | typealias | [`index.d.ts`](../dist/index.d.ts) |
 | `TelemetryPropagation` | interface | [`index.d.ts`](../dist/index.d.ts) |
 | `TelemetrySchemaDefinition` | interface | [`index.d.ts`](../dist/index.d.ts) |
@@ -59,7 +60,7 @@ Project exports from `@axi/telemetry`. Open the linked declarations for exact ty
 | `TelemetrySpanDefinition` | interface | [`index.d.ts`](../dist/index.d.ts) |
 | `TelemetryStartAttributeDefinition` | typealias | [`index.d.ts`](../dist/index.d.ts) |
 | `TelemetryStore` | interface | [`index.d.ts`](../dist/index.d.ts) |
-| `TelemetryUpDownCounter` | export | [`index.d.ts`](../dist/index.d.ts) |
+| `TelemetryUpDownCounter` | interface | [`metrics.d.ts`](../dist/metrics.d.ts) |
 | `TraceQuery` | interface | [`index.d.ts`](../dist/index.d.ts) |
 | `TypedSpanStarter` | typealias | [`index.d.ts`](../dist/index.d.ts) |
-| `TypedTelemetryMetrics` | export | [`index.d.ts`](../dist/index.d.ts) |
+| `TypedTelemetryMetrics` | interface | [`metrics.d.ts`](../dist/metrics.d.ts) |

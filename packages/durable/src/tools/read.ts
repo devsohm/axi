@@ -1,4 +1,4 @@
-import type { Context } from "@axi/objects";
+import type { Context } from "@axi/objects/context";
 import { characterEnd } from "@axi/objects/output";
 import { type Static, Type } from "typebox";
 import { type BinaryReader, type FileInfo, getOrThrow, rangeDecoder, startsWithBom } from "../env/index.ts";

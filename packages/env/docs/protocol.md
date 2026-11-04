@@ -8,7 +8,7 @@ The daemon writes `AXI-ENV <token>\n` before any frame. The client discards earl
 
 The first request is `hello` with `{ protocol: 1 }`. Its result contains `protocol`, `version`, `os`, `arch`, `home`, `tmpdir`, `separator`, `cwd`, `driveCwds`, `pid` and `features`. The version is the environment package version. OS and architecture names use Rust spelling. `nodePlatform()` converts known names to Node spelling. Windows `driveCwds` contains working directories for drive-relative paths.
 
-`features` currently includes `listFiles`. A client checks this list before requesting an operation added after the initial protocol release.
+`features` includes `listFiles` and `process`. A client checks this list before requesting an operation added after the initial protocol release.
 
 ## Frame layout
 

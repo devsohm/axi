@@ -1,4 +1,5 @@
-import type { Context, JsonValue } from "@axi/objects";
+import type { Context } from "@axi/objects/context";
+import type { JsonValue } from "@axi/objects/json";
 import { SessionFailed, StorageRequestError } from "../errors.ts";
 import type * as T from "../types.ts";
 import { scopeOf } from "./cached-storage.ts";

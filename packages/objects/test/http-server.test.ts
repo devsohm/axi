@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { WebSocket } from "ws";
 import { expect, it } from "vitest";
 import { BACKGROUND_CONTEXT as context } from "../src/context/index.ts";
-import { createHost, defineFacet } from "../src/next/index.ts";
+import { createHost, defineFacet } from "../src/index.ts";
 import {
 	Authenticators,
 	cookie,
@@ -14,7 +14,7 @@ import {
 	readCookie,
 	type HttpContribution,
 	type HttpError,
-} from "../src/next-node/http/index.ts";
+} from "../src/node/http/index.ts";
 
 async function server(routes: HttpContribution) {
 	const errors: HttpError[] = [];
@@ -93,12 +93,18 @@ it("uses unbound authentication and route callbacks and reports errors on the HT
 						});
 						self.contribute(Http, {
 							routes: {
-								"GET /ready": async function (this: unknown) {
-									received.route.push(this);
-									return { kind: "json", value: "ready" };
+								"GET /ready": {
+									public: true,
+									handler: async function (this: unknown) {
+										received.route.push(this);
+										return { kind: "json", value: "ready" };
+									},
 								},
-								"GET /error": async () => {
-									throw new Error("test route failure");
+								"GET /error": {
+									public: true,
+									handler: async () => {
+										throw new Error("test route failure");
+									},
 								},
 							},
 						});
@@ -139,7 +145,10 @@ it("serves typed routes on a real listener with authentication, cookies and resp
 				},
 				headers: { "Set-Cookie": cookie("session", "a.b", { secret: "local-test", request }) },
 			}),
-			"GET /cookie": async (request) => ({ kind: "json", value: readCookie(request, "session", "local-test") ?? null }),
+			"GET /cookie": {
+				public: true,
+				handler: async (request) => ({ kind: "json", value: readCookie(request, "session", "local-test") ?? null }),
+			},
 		},
 	});
 	const result = await fetch(`${s.origin}/hello/Ada?q=hello`, { headers: { authorization: "user" } });
@@ -154,7 +163,7 @@ it("serves typed routes on a real listener with authentication, cookies and resp
 it("limits bodies and rejects browser requests from a foreign origin while allowing anonymous webhooks", async () => {
 	await using s = await server({
 		routes: {
-			"POST /data": async (request) => ({ kind: "json", value: await request.json(4) }),
+			"POST /data": { public: true, handler: async (request) => ({ kind: "json", value: await request.json(4) }) },
 			"POST /hook": {
 				crossSite: true,
 				handler: async (_request, ctx) => ({ kind: "json", value: { principal: ctx.principal?.kind ?? null } }),
@@ -186,9 +195,15 @@ it("reads files lazily with ranges and HEAD and reports route failures without l
 	try {
 		await using s = await server({
 			routes: {
-				"GET /file": async () => fileResponse(path, { root: directory, ranges: true, download: "note.txt" }),
-				"GET /failure": async () => {
-					throw new Error("private failure text");
+				"GET /file": {
+					public: true,
+					handler: async () => fileResponse(path, { root: directory, ranges: true, download: "note.txt" }),
+				},
+				"GET /failure": {
+					public: true,
+					handler: async () => {
+						throw new Error("private failure text");
+					},
 				},
 			},
 		});
@@ -225,7 +240,28 @@ it("serves authenticated WebSockets and closes a socket whose handler is removed
 	socket.send("hello");
 	expect(await reply).toBe("hello");
 	const closed = new Promise<void>((resolve) => socket.once("close", () => resolve()));
-	await s.reload({ routes: { "GET /": async () => ({ kind: "html", body: "updated" }) } });
+	await s.reload({ routes: { "GET /": { public: true, handler: async () => ({ kind: "html", body: "updated" }) } } });
 	await closed;
 	expect(await (await fetch(s.origin)).text()).toBe("updated");
+});
+
+it("denies anonymous private routes before invoking plugin code and limits script sources to declared paths", async () => {
+	let calls = 0;
+	await using s = await server({
+		scripts: ["/assets/"],
+		routes: {
+			"GET /private": async () => {
+				calls++;
+				return { kind: "json", value: "private" };
+			},
+			"GET /public": { public: true, handler: async () => ({ kind: "json", value: "public" }) },
+		},
+	});
+	expect((await fetch(s.origin + "/private")).status).toBe(401);
+	expect(calls).toBe(0);
+	expect((await fetch(s.origin + "/private", { headers: { authorization: "user" } })).status).toBe(200);
+	expect(calls).toBe(1);
+	const response = await fetch(s.origin + "/public");
+	expect(await response.json()).toBe("public");
+	expect(response.headers.get("content-security-policy")).toContain(`script-src ${s.origin}/assets/ 'nonce-`);
 });

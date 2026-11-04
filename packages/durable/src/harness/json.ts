@@ -1,4 +1,4 @@
-import type { JsonValue } from "@axi/objects";
+import type { JsonValue } from "@axi/objects/json";
 import { appendText, type Draft } from "@axi/objects/delta";
 
 type JsonMap = Record<string, JsonValue>;

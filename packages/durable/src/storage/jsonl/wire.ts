@@ -1,4 +1,4 @@
-import type { JsonValue } from "@axi/objects";
+import type { JsonValue } from "@axi/objects/json";
 import { seqFromNumber } from "../../ids.ts";
 import type {
 	DocumentContent,

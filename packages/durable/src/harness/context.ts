@@ -1,4 +1,4 @@
-import type { Context } from "@axi/objects";
+import type { Context } from "@axi/objects/context";
 import type { Message, ToolCall, ToolResultMessage } from "@axi/ai";
 import { SystemEntry } from "../entries.ts";
 import { idFromNumber } from "../ids.ts";

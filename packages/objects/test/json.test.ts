@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { copyJson, isJsonValue } from "../src/index.ts";
+import { copyJson, isJsonValue } from "../src/json.ts";
 
 describe("JSON values", () => {
 	it("preserves primitive values and negative zero", () => {

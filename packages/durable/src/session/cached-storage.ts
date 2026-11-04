@@ -1,4 +1,5 @@
-import type { Context, JsonValue } from "@axi/objects";
+import type { Context } from "@axi/objects/context";
+import type { JsonValue } from "@axi/objects/json";
 import type * as T from "../types.ts";
 import { freezeRecord, LruMap } from "./record-cache.ts";
 type Task = T.TaskRecord<JsonValue, JsonValue, JsonValue>;

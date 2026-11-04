@@ -1,4 +1,4 @@
-import type { Context } from "@axi/objects";
+import type { Context } from "@axi/objects/context";
 import {
 	findDocument,
 	insertDocument,
@@ -13,7 +13,7 @@ import {
 	type StagedWrite,
 	type Step,
 	type StoreWrite,
-} from "@axi/objects/next";
+} from "@axi/objects";
 import type {
 	DocumentContent,
 	DocumentCopySource,

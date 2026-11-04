@@ -2,13 +2,13 @@ import { getEventListeners } from "node:events";
 import { expect, it } from "vitest";
 import { BACKGROUND_CONTEXT as context, withAbortSignal } from "../src/context/index.ts";
 import type { JsonValue } from "../src/json.ts";
-import { int, local, method, obj, str } from "../src/next/contracts/index.ts";
-import { ObjectsError } from "../src/next/data/index.ts";
-import { CallContext, withLinkedAbortSignal } from "../src/next/host/ctx.ts";
-import { Binding, type Target, type Reference } from "../src/next/host/reference.ts";
-import { LIVE, LOADING, type RefState } from "../src/next/host/ref-state.ts";
-import { RootScopes } from "../src/next/host/root.ts";
-import { Batch, Constant } from "../src/next/state/internal.ts";
+import { int, local, method, obj, str } from "../src/contracts/index.ts";
+import { ObjectsError } from "../src/data/index.ts";
+import { CallContext, withLinkedAbortSignal } from "../src/host/ctx.ts";
+import { Binding, type Target, type Reference } from "../src/host/reference.ts";
+import { LIVE, LOADING, type RefState } from "../src/host/ref-state.ts";
+import { RootScopes } from "../src/host/root.ts";
+import { Batch, Constant } from "../src/state/internal.ts";
 const contract = local("test.counter", {
 	version: 1,
 	params: {},
@@ -103,7 +103,7 @@ it("releases call-scoped references and rejects a get that resolves after its sc
 		gates = [Promise.withResolvers<Binding>(), Promise.withResolvers<Binding>()];
 	const acquired: Binding[] = [];
 	let next = 0;
-	const host = { incarnation: "host", acquire: () => gates[next++]!.promise };
+	const host = { incarnation: "host", spanHost: "client", acquire: () => gates[next++]!.promise };
 	const scope = new CallContext(context, caller, host);
 	const first = scope.get(contract, {}),
 		second = scope.get(contract, {});
@@ -138,6 +138,7 @@ it("detaches linked cancellation listeners and closes root scopes around uncoope
 	expect(linked.context.abortSignal?.aborted).toBe(false);
 	expect(getEventListeners(callerSignal, "abort")).toHaveLength(0);
 	const scopes = new RootScopes({
+		spanHost: "client",
 		incarnation: "host",
 		async acquire() {
 			throw new Error("Unused");

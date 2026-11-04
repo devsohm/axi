@@ -8,10 +8,10 @@ import {
 	method,
 	obj,
 	str,
-} from "../src/next/contracts/index.ts";
-import { defineState } from "../src/next/documents/index.ts";
-import { createHost, defineFacet } from "../src/next/host/index.ts";
-import { constant } from "../src/next/state/index.ts";
+} from "../src/contracts/index.ts";
+import { defineState } from "../src/documents/index.ts";
+import { createHost, defineFacet } from "../src/host/index.ts";
+import { constant } from "../src/state/index.ts";
 
 it("serves older state, methods and keyed documents through one shared mapping", async () => {
 	const first = local("counter.versioned", {

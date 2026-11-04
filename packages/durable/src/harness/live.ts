@@ -1,4 +1,5 @@
-import { copyJson, type Draft, type JsonRepresentation, type JsonValue } from "@axi/objects";
+import { copyJson, type JsonRepresentation, type JsonValue } from "@axi/objects/json";
+import { type Draft } from "@axi/objects/delta";
 import type { AssistantMessage, Usage } from "@axi/ai";
 import { defineDoc } from "../documents.ts";
 import { AssistantEntry } from "../entries.ts";

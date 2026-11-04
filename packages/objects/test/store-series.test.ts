@@ -1,12 +1,12 @@
 import { expect, it } from "vitest";
 import { BACKGROUND_CONTEXT as context } from "../src/context/index.ts";
-import { sqliteBackend } from "../src/next/store/backend.ts";
-import { createDocument, findDocument } from "../src/next/store/engine.ts";
+import { sqliteBackend } from "../src/store/backend.ts";
+import { createDocument, findDocument } from "../src/store/engine.ts";
 import {
 	openStore,
 	type ObjectsStore,
 	type SeriesCommit,
-} from "../src/next/store/store.ts";
+} from "../src/store/store.ts";
 import { openNodeSqliteDatabase } from "../src/sqlite/node.ts";
 
 const address = {

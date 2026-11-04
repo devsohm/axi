@@ -1,4 +1,4 @@
-import type { Context } from "@axi/objects";
+import type { Context } from "@axi/objects/context";
 import { addressId } from "../documents.ts";
 import type {
 	ConversationId,

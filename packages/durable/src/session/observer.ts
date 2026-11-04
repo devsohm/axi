@@ -1,4 +1,5 @@
-import type { Context, WatchEnd } from "@axi/objects";
+import type { Context } from "@axi/objects/context";
+import type { WatchEnd } from "@axi/objects/watch";
 
 type Target<Call> = {
 	advance(call: Call, context: Context): void;

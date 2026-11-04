@@ -1,6 +1,6 @@
 import { expect, it } from "vitest";
 import { BACKGROUND_CONTEXT as context } from "../src/context/index.ts";
-import { ObjectsError } from "../src/next/data/index.ts";
+import { ObjectsError } from "../src/data/index.ts";
 import {
 	defineJob,
 	defineState,
@@ -9,13 +9,13 @@ import {
 	openStore,
 	sqliteBackend,
 	str,
-} from "../src/next/index.ts";
-import { Documents, Persistence } from "../src/next/documents/internal.ts";
-import type { HostError } from "../src/next/host/report.ts";
-import { JobRecords } from "../src/next/jobs/records.ts";
-import type { JobRun } from "../src/next/jobs/run.ts";
-import { Batch } from "../src/next/state/internal.ts";
-import { ObjectsStore } from "../src/next/store/store.ts";
+} from "../src/index.ts";
+import { Documents, Persistence } from "../src/documents/internal.ts";
+import type { HostError } from "../src/host/report.ts";
+import { JobRecords } from "../src/jobs/records.ts";
+import type { JobRun } from "../src/jobs/run.ts";
+import { Batch } from "../src/state/internal.ts";
+import { ObjectsStore } from "../src/store/store.ts";
 import { openNodeSqliteDatabase } from "../src/sqlite/node.ts";
 
 function owner(store?: ObjectsStore) {

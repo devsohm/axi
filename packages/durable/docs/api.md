@@ -1,239 +1,239 @@
-# Durable API
+# @axi/durable API
 
-Root exports from `@axi/durable`. Open the declarations for exact types. Subpath modules have their own exports.
+Exports from the package root. The linked declarations contain exact signatures. Other public import paths appear in the package README.
 
-| Export | Declaration |
-| --- | --- |
-| `AfterFailedRun` | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
-| `AgentChange` | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
-| `AgentDoc` | [`harness/agent.d.ts`](../dist/harness/agent.d.ts) |
-| `AgentState` | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
-| `Agent` | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
-| `AnyTask` | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
-| `AssistantEntry` | [`entries.d.ts`](../dist/entries.d.ts) |
-| `BlockedReason` | [`harness/scheduler.d.ts`](../dist/harness/scheduler.d.ts) |
-| `CheckpointInfo` | [`types.d.ts`](../dist/types.d.ts) |
-| `CommitChange` | [`types.d.ts`](../dist/types.d.ts) |
-| `CommitObservation` | [`types.d.ts`](../dist/types.d.ts) |
-| `CommitObserver` | [`types.d.ts`](../dist/types.d.ts) |
-| `CommitOptions` | [`types.d.ts`](../dist/types.d.ts) |
-| `CommitPersistence` | [`types.d.ts`](../dist/types.d.ts) |
-| `CommitResult` | [`types.d.ts`](../dist/types.d.ts) |
-| `CommitPublication` | [`types.d.ts`](../dist/types.d.ts) |
-| `CommonDocDefinition` | [`types.d.ts`](../dist/types.d.ts) |
-| `CompactionCheckpoint` | [`harness/compaction.d.ts`](../dist/harness/compaction.d.ts) |
-| `CompactionEntry` | [`entries.d.ts`](../dist/entries.d.ts) |
-| `CompactionFailure` | [`harness/live.d.ts`](../dist/harness/live.d.ts) |
-| `CompactionHooks` | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
-| `CompactionInput` | [`harness/compaction.d.ts`](../dist/harness/compaction.d.ts) |
-| `CompactionPolicy` | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
-| `CompactionReason` | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
-| `CompactionResult` | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
-| `CompactionSettings` | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
-| `CompactionStatus` | [`harness/live.d.ts`](../dist/harness/live.d.ts) |
-| `CompactionTask` | [`harness/compaction.d.ts`](../dist/harness/compaction.d.ts) |
-| `ContextEdit` | [`types.d.ts`](../dist/types.d.ts) |
-| `ContextView` | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
-| `ConversationAbortOptions` | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
-| `ConversationBusy` | [`errors.d.ts`](../dist/errors.d.ts) |
-| `ConversationCreateOptions` | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
-| `ConversationDocFamilyToken` | [`types.d.ts`](../dist/types.d.ts) |
-| `ConversationDocToken` | [`types.d.ts`](../dist/types.d.ts) |
-| `ConversationHandle` | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
-| `ConversationId` | [`types.d.ts`](../dist/types.d.ts) |
-| `ConversationIdle` | [`errors.d.ts`](../dist/errors.d.ts) |
-| `ConversationInit` | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
-| `ConversationOwnership` | [`types.d.ts`](../dist/types.d.ts) |
-| `ConversationQuery` | [`types.d.ts`](../dist/types.d.ts) |
-| `ConversationRecord` | [`types.d.ts`](../dist/types.d.ts) |
-| `ConversationRetryPolicy` | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
-| `ConversationStreamOptions` | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
-| `ConversationTranscriptOptions` | [`harness/transcript.d.ts`](../dist/harness/transcript.d.ts) |
-| `ConversationTranscript` | [`harness/transcript.d.ts`](../dist/harness/transcript.d.ts) |
-| `ConversationView` | [`harness/view.d.ts`](../dist/harness/view.d.ts) |
-| `ConversationWatch` | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
-| `ConversationWindow` | [`harness/view.d.ts`](../dist/harness/view.d.ts) |
-| `Conversation` | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
-| `Cursor` | [`types.d.ts`](../dist/types.d.ts) |
-| `DEFAULT_COMPACTION_POLICY` | [`harness/agent.d.ts`](../dist/harness/agent.d.ts) |
-| `DEFAULT_HARNESS_IDENTITY` | [`harness/harness.d.ts`](../dist/harness/harness.d.ts) |
-| `DEFAULT_PROGRESS_POLICY` | [`harness/agent.d.ts`](../dist/harness/agent.d.ts) |
-| `DEFAULT_RESTART_LIMIT` | [`harness/agent.d.ts`](../dist/harness/agent.d.ts) |
-| `DEFAULT_RETRY_POLICY` | [`harness/agent.d.ts`](../dist/harness/agent.d.ts) |
-| `DURABLE_TELEMETRY_SCHEMA` | [`harness/telemetry.d.ts`](../dist/harness/telemetry.d.ts) |
-| `DocDefinition` | [`types.d.ts`](../dist/types.d.ts) |
-| `DocFamilyDefinition` | [`types.d.ts`](../dist/types.d.ts) |
-| `DocFamilyToken` | [`types.d.ts`](../dist/types.d.ts) |
-| `DocToken` | [`types.d.ts`](../dist/types.d.ts) |
-| `DocumentAddress` | [`types.d.ts`](../dist/types.d.ts) |
-| `DocumentCommitChange` | [`types.d.ts`](../dist/types.d.ts) |
-| `DocumentContent` | [`types.d.ts`](../dist/types.d.ts) |
-| `DocumentCopySource` | [`types.d.ts`](../dist/types.d.ts) |
-| `DocumentCreate` | [`types.d.ts`](../dist/types.d.ts) |
-| `DocumentId` | [`types.d.ts`](../dist/types.d.ts) |
-| `DocumentObserver` | [`types.d.ts`](../dist/types.d.ts) |
-| `DocumentPoint` | [`types.d.ts`](../dist/types.d.ts) |
-| `DocumentQuery` | [`types.d.ts`](../dist/types.d.ts) |
-| `DocumentReader` | [`types.d.ts`](../dist/types.d.ts) |
-| `DocumentRecord` | [`types.d.ts`](../dist/types.d.ts) |
-| `DocumentSemantics` | [`types.d.ts`](../dist/types.d.ts) |
-| `DocumentWatch` | [`types.d.ts`](../dist/types.d.ts) |
-| `EntryDraft` | [`types.d.ts`](../dist/types.d.ts) |
-| `EntryId` | [`types.d.ts`](../dist/types.d.ts) |
-| `EntryLoader` | [`harness/transcript.d.ts`](../dist/harness/transcript.d.ts) |
-| `EntryQuery` | [`types.d.ts`](../dist/types.d.ts) |
-| `EntryRecord` | [`types.d.ts`](../dist/types.d.ts) |
-| `Entry` | [`types.d.ts`](../dist/types.d.ts) |
-| `EnvTarget` | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
-| `Extension` | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
-| `GenerationCheckpoint` | [`harness/generation.d.ts`](../dist/harness/generation.d.ts) |
-| `GenerationHooks` | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
-| `GenerationInput` | [`harness/generation.d.ts`](../dist/harness/generation.d.ts) |
-| `GenerationResult` | [`harness/generation.d.ts`](../dist/harness/generation.d.ts) |
-| `GenerationTask` | [`harness/generation.d.ts`](../dist/harness/generation.d.ts) |
-| `HarnessInspection` | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
-| `HarnessOptions` | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
-| `HarnessSettings` | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
-| `Harness` | [`harness/harness.d.ts`](../dist/harness/harness.d.ts) |
-| `HookApi` | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
-| `HookRegistration` | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
-| `HookResult` | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
-| `HookRunner` | [`types.d.ts`](../dist/types.d.ts) |
-| `HooksOf` | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
-| `HostCallback` | [`types.d.ts`](../dist/types.d.ts) |
-| `Id` | [`types.d.ts`](../dist/types.d.ts) |
-| `InboxDoc` | [`harness/inbox.d.ts`](../dist/harness/inbox.d.ts) |
-| `InboxItem` | [`harness/inbox.d.ts`](../dist/harness/inbox.d.ts) |
-| `InboxState` | [`harness/inbox.d.ts`](../dist/harness/inbox.d.ts) |
-| `InputEntry` | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
-| `InputSubmissionDraft` | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
-| `JoinPolicy` | [`types.d.ts`](../dist/types.d.ts) |
-| `JsonObject` | [`types.d.ts`](../dist/types.d.ts) |
-| `LatestConversationSemantics` | [`types.d.ts`](../dist/types.d.ts) |
-| `LiveDoc` | [`harness/live.d.ts`](../dist/harness/live.d.ts) |
-| `LiveRun` | [`harness/live.d.ts`](../dist/harness/live.d.ts) |
-| `LiveState` | [`harness/live.d.ts`](../dist/harness/live.d.ts) |
-| `MemoryStorage` | [`storage/memory.d.ts`](../dist/storage/memory.d.ts) |
-| `ModelRef` | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
-| `NativeWatchCall` | [`index.d.ts`](../dist/index.d.ts) |
-| `NestedCallDoc` | [`harness/tool.d.ts`](../dist/harness/tool.d.ts) |
-| `NestedCallState` | [`harness/tool.d.ts`](../dist/harness/tool.d.ts) |
-| `NestedToolExecutionResult` | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
-| `NestedToolSlot` | [`harness/live.d.ts`](../dist/harness/live.d.ts) |
-| `NestedToolSummary` | [`harness/live.d.ts`](../dist/harness/live.d.ts) |
-| `NextTaskState` | [`types.d.ts`](../dist/types.d.ts) |
-| `Observation` | [`types.d.ts`](../dist/types.d.ts) |
-| `Observer` | [`types.d.ts`](../dist/types.d.ts) |
-| `Page` | [`types.d.ts`](../dist/types.d.ts) |
-| `PhaseHandler` | [`types.d.ts`](../dist/types.d.ts) |
-| `ProgressPolicy` | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
-| `PromptInput` | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
-| `PromptSection` | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
-| `ProviderDoc` | [`harness/provider.d.ts`](../dist/harness/provider.d.ts) |
-| `ProviderState` | [`harness/provider.d.ts`](../dist/harness/provider.d.ts) |
-| `QueueMode` | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
-| `ROOT_CONVERSATION_ID` | [`types.d.ts`](../dist/types.d.ts) |
-| `ReadAfterWrite` | [`errors.d.ts`](../dist/errors.d.ts) |
-| `ReadOnlySession` | [`errors.d.ts`](../dist/errors.d.ts) |
-| `RegistryReader` | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
-| `RegistrySnapshot` | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
-| `Registry` | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
-| `ReportFrom` | [`types.d.ts`](../dist/types.d.ts) |
-| `ReportInfo` | [`types.d.ts`](../dist/types.d.ts) |
-| `ReportTask` | [`types.d.ts`](../dist/types.d.ts) |
-| `Report` | [`types.d.ts`](../dist/types.d.ts) |
-| `ResetEntry` | [`entries.d.ts`](../dist/entries.d.ts) |
-| `RewindableConversationDocFamilyToken` | [`types.d.ts`](../dist/types.d.ts) |
-| `RewindableConversationDocToken` | [`types.d.ts`](../dist/types.d.ts) |
-| `RewindableConversationSemantics` | [`types.d.ts`](../dist/types.d.ts) |
-| `RunEndTask` | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
-| `RunFailureReason` | [`harness/live.d.ts`](../dist/harness/live.d.ts) |
-| `RunFailure` | [`harness/live.d.ts`](../dist/harness/live.d.ts) |
-| `RunSummary` | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
-| `RunningTask` | [`types.d.ts`](../dist/types.d.ts) |
-| `ScanOrder` | [`types.d.ts`](../dist/types.d.ts) |
-| `Seq` | [`types.d.ts`](../dist/types.d.ts) |
-| `SessionDocFamilyToken` | [`types.d.ts`](../dist/types.d.ts) |
-| `SessionDocToken` | [`types.d.ts`](../dist/types.d.ts) |
-| `SessionEnd` | [`types.d.ts`](../dist/types.d.ts) |
-| `SessionFailed` | [`errors.d.ts`](../dist/errors.d.ts) |
-| `Session` | [`types.d.ts`](../dist/types.d.ts) |
-| `SetTimer` | [`types.d.ts`](../dist/types.d.ts) |
-| `Settings` | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
-| `SettledSubmissionRecord` | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
-| `SettledTask` | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
-| `StorageRequestError` | [`errors.d.ts`](../dist/errors.d.ts) |
-| `StorageWrite` | [`types.d.ts`](../dist/types.d.ts) |
-| `Storage` | [`types.d.ts`](../dist/types.d.ts) |
-| `StoredDocument` | [`types.d.ts`](../dist/types.d.ts) |
-| `SubmissionCreate` | [`types.d.ts`](../dist/types.d.ts) |
-| `SubmissionDraft` | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
-| `SubmissionId` | [`types.d.ts`](../dist/types.d.ts) |
-| `SubmissionQuery` | [`types.d.ts`](../dist/types.d.ts) |
-| `SubmissionRecord` | [`types.d.ts`](../dist/types.d.ts) |
-| `SubmissionSettlement` | [`types.d.ts`](../dist/types.d.ts) |
-| `Submission` | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
-| `SummaryRequest` | [`harness/compaction.d.ts`](../dist/harness/compaction.d.ts) |
-| `SystemEntry` | [`entries.d.ts`](../dist/entries.d.ts) |
-| `TableCommitChange` | [`types.d.ts`](../dist/types.d.ts) |
-| `TaskDefinition` | [`types.d.ts`](../dist/types.d.ts) |
-| `TaskDocFamilyToken` | [`types.d.ts`](../dist/types.d.ts) |
-| `TaskDocToken` | [`types.d.ts`](../dist/types.d.ts) |
-| `TaskGraphNode` | [`harness/task-graph.d.ts`](../dist/harness/task-graph.d.ts) |
-| `TaskGraphState` | [`harness/task-graph.d.ts`](../dist/harness/task-graph.d.ts) |
-| `TaskGraphWatch` | [`harness/task-graph.d.ts`](../dist/harness/task-graph.d.ts) |
-| `TaskGraph` | [`harness/task-graph.d.ts`](../dist/harness/task-graph.d.ts) |
-| `TaskId` | [`types.d.ts`](../dist/types.d.ts) |
-| `TaskInspection` | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
-| `TaskOptions` | [`types.d.ts`](../dist/types.d.ts) |
-| `TaskOutcomeError` | [`types.d.ts`](../dist/types.d.ts) |
-| `TaskOutcome` | [`types.d.ts`](../dist/types.d.ts) |
-| `TaskOwnership` | [`types.d.ts`](../dist/types.d.ts) |
-| `TaskQuery` | [`types.d.ts`](../dist/types.d.ts) |
-| `TaskRecord` | [`types.d.ts`](../dist/types.d.ts) |
-| `TaskRuntime` | [`types.d.ts`](../dist/types.d.ts) |
-| `TaskState` | [`types.d.ts`](../dist/types.d.ts) |
-| `Task` | [`types.d.ts`](../dist/types.d.ts) |
-| `ToolControl` | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
-| `ToolDiagnostic` | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
-| `ToolExecutionApi` | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
-| `ToolExecutionMode` | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
-| `ToolExecutionResult` | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
-| `ToolHookCall` | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
-| `ToolHooks` | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
-| `ToolRegistration` | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
-| `ToolResultEntry` | [`entries.d.ts`](../dist/entries.d.ts) |
-| `ToolSlot` | [`harness/live.d.ts`](../dist/harness/live.d.ts) |
-| `ToolTaskCheckpoint` | [`harness/tool.d.ts`](../dist/harness/tool.d.ts) |
-| `ToolTaskInput` | [`harness/tool.d.ts`](../dist/harness/tool.d.ts) |
-| `ToolTaskResult` | [`harness/tool.d.ts`](../dist/harness/tool.d.ts) |
-| `ToolTask` | [`harness/tool.d.ts`](../dist/harness/tool.d.ts) |
-| `TranscriptItem` | [`harness/transcript.d.ts`](../dist/harness/transcript.d.ts) |
-| `TranscriptView` | [`harness/transcript.d.ts`](../dist/harness/transcript.d.ts) |
-| `Tx` | [`types.d.ts`](../dist/types.d.ts) |
-| `TypedEntryDraft` | [`types.d.ts`](../dist/types.d.ts) |
-| `TypedEntry` | [`types.d.ts`](../dist/types.d.ts) |
-| `UsageDoc` | [`harness/usage.d.ts`](../dist/harness/usage.d.ts) |
-| `UsageState` | [`harness/usage.d.ts`](../dist/harness/usage.d.ts) |
-| `UserEntry` | [`entries.d.ts`](../dist/entries.d.ts) |
-| `UserInput` | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
-| `Wake` | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
-| `WatchCall` | [`index.d.ts`](../dist/index.d.ts) |
-| `WatchEnd` | [`index.d.ts`](../dist/index.d.ts) |
-| `WatchHandle` | [`index.d.ts`](../dist/index.d.ts) |
-| `Wrap` | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
-| `configure` | [`harness/agent.d.ts`](../dist/harness/agent.d.ts) |
-| `createRegistry` | [`harness/registry.d.ts`](../dist/harness/registry.d.ts) |
-| `createSession` | [`session/session.d.ts`](../dist/session/session.d.ts) |
-| `defineDocFamily` | [`documents.d.ts`](../dist/documents.d.ts) |
-| `defineDoc` | [`documents.d.ts`](../dist/documents.d.ts) |
-| `defineEntry` | [`entries.d.ts`](../dist/entries.d.ts) |
-| `defineExtension` | [`harness/define.d.ts`](../dist/harness/define.d.ts) |
-| `defineTask` | [`tasks.d.ts`](../dist/tasks.d.ts) |
-| `defineTool` | [`harness/define.d.ts`](../dist/harness/define.d.ts) |
-| `hook` | [`harness/define.d.ts`](../dist/harness/define.d.ts) |
-| `registryReader` | [`harness/registry-reader.d.ts`](../dist/harness/registry-reader.d.ts) |
-| `runEndTask` | [`harness/define.d.ts`](../dist/harness/define.d.ts) |
-| `section` | [`harness/define.d.ts`](../dist/harness/define.d.ts) |
-| `wrapSection` | [`harness/define.d.ts`](../dist/harness/define.d.ts) |
-| `wrapTool` | [`harness/define.d.ts`](../dist/harness/define.d.ts) |
+| Export | Kind | Declaration |
+| --- | --- | --- |
+| `AfterFailedRun` | typealias | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
+| `Agent` | typealias | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
+| `AgentChange` | typealias | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
+| `AgentDoc` | const | [`harness/agent.d.ts`](../dist/harness/agent.d.ts) |
+| `AgentState` | typealias | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
+| `AnyTask` | typealias | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
+| `AssistantEntry` | const | [`entries.d.ts`](../dist/entries.d.ts) |
+| `BlockedReason` | typealias | [`harness/scheduler.d.ts`](../dist/harness/scheduler.d.ts) |
+| `CheckpointInfo` | typealias | [`types.d.ts`](../dist/types.d.ts) |
+| `CommitChange` | typealias | [`types.d.ts`](../dist/types.d.ts) |
+| `CommitObservation` | typealias | [`types.d.ts`](../dist/types.d.ts) |
+| `CommitObserver` | typealias | [`types.d.ts`](../dist/types.d.ts) |
+| `CommitOptions` | typealias | [`types.d.ts`](../dist/types.d.ts) |
+| `CommitPersistence` | typealias | [`types.d.ts`](../dist/types.d.ts) |
+| `CommitPublication` | typealias | [`types.d.ts`](../dist/types.d.ts) |
+| `CommitResult` | typealias | [`types.d.ts`](../dist/types.d.ts) |
+| `CommonDocDefinition` | typealias | [`types.d.ts`](../dist/types.d.ts) |
+| `CompactionCheckpoint` | typealias | [`harness/compaction.d.ts`](../dist/harness/compaction.d.ts) |
+| `CompactionEntry` | const | [`entries.d.ts`](../dist/entries.d.ts) |
+| `CompactionFailure` | typealias | [`harness/live.d.ts`](../dist/harness/live.d.ts) |
+| `CompactionHooks` | interface | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
+| `CompactionInput` | typealias | [`harness/compaction.d.ts`](../dist/harness/compaction.d.ts) |
+| `CompactionPolicy` | typealias | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
+| `CompactionReason` | typealias | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
+| `CompactionResult` | typealias | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
+| `CompactionSettings` | typealias | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
+| `CompactionStatus` | typealias | [`harness/live.d.ts`](../dist/harness/live.d.ts) |
+| `CompactionTask` | const | [`harness/compaction.d.ts`](../dist/harness/compaction.d.ts) |
+| `configure` | function | [`harness/agent.d.ts`](../dist/harness/agent.d.ts) |
+| `ContextEdit` | typealias | [`types.d.ts`](../dist/types.d.ts) |
+| `ContextView` | typealias | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
+| `Conversation` | interface | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
+| `ConversationAbortOptions` | typealias | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
+| `ConversationBusy` | class | [`errors.d.ts`](../dist/errors.d.ts) |
+| `ConversationCreateOptions` | typealias | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
+| `ConversationDocFamilyToken` | typealias | [`types.d.ts`](../dist/types.d.ts) |
+| `ConversationDocToken` | typealias | [`types.d.ts`](../dist/types.d.ts) |
+| `ConversationHandle` | interface | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
+| `ConversationId` | typealias | [`types.d.ts`](../dist/types.d.ts) |
+| `ConversationIdle` | class | [`errors.d.ts`](../dist/errors.d.ts) |
+| `ConversationInit` | typealias | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
+| `ConversationOwnership` | typealias | [`types.d.ts`](../dist/types.d.ts) |
+| `ConversationQuery` | typealias | [`types.d.ts`](../dist/types.d.ts) |
+| `ConversationRecord` | typealias | [`types.d.ts`](../dist/types.d.ts) |
+| `ConversationRetryPolicy` | typealias | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
+| `ConversationStreamOptions` | typealias | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
+| `ConversationTranscript` | class | [`harness/transcript.d.ts`](../dist/harness/transcript.d.ts) |
+| `ConversationTranscriptOptions` | typealias | [`harness/transcript.d.ts`](../dist/harness/transcript.d.ts) |
+| `ConversationView` | typealias | [`harness/view.d.ts`](../dist/harness/view.d.ts) |
+| `ConversationWatch` | typealias | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
+| `ConversationWindow` | typealias | [`harness/view.d.ts`](../dist/harness/view.d.ts) |
+| `createRegistry` | function | [`harness/registry.d.ts`](../dist/harness/registry.d.ts) |
+| `createSession` | function | [`session/session.d.ts`](../dist/session/session.d.ts) |
+| `Cursor` | typealias | [`types.d.ts`](../dist/types.d.ts) |
+| `DEFAULT_COMPACTION_POLICY` | const | [`harness/agent.d.ts`](../dist/harness/agent.d.ts) |
+| `DEFAULT_HARNESS_IDENTITY` | const | [`harness/harness.d.ts`](../dist/harness/harness.d.ts) |
+| `DEFAULT_PROGRESS_POLICY` | const | [`harness/agent.d.ts`](../dist/harness/agent.d.ts) |
+| `DEFAULT_RESTART_LIMIT` | const | [`harness/agent.d.ts`](../dist/harness/agent.d.ts) |
+| `DEFAULT_RETRY_POLICY` | const | [`harness/agent.d.ts`](../dist/harness/agent.d.ts) |
+| `defineDoc` | function | [`documents.d.ts`](../dist/documents.d.ts) |
+| `defineDocFamily` | function | [`documents.d.ts`](../dist/documents.d.ts) |
+| `defineEntry` | function | [`entries.d.ts`](../dist/entries.d.ts) |
+| `defineExtension` | function | [`harness/define.d.ts`](../dist/harness/define.d.ts) |
+| `defineTask` | function | [`tasks.d.ts`](../dist/tasks.d.ts) |
+| `defineTool` | function | [`harness/define.d.ts`](../dist/harness/define.d.ts) |
+| `DocDefinition` | typealias | [`types.d.ts`](../dist/types.d.ts) |
+| `DocFamilyDefinition` | typealias | [`types.d.ts`](../dist/types.d.ts) |
+| `DocFamilyToken` | interface | [`types.d.ts`](../dist/types.d.ts) |
+| `DocToken` | interface | [`types.d.ts`](../dist/types.d.ts) |
+| `DocumentAddress` | typealias | [`types.d.ts`](../dist/types.d.ts) |
+| `DocumentCommitChange` | typealias | [`types.d.ts`](../dist/types.d.ts) |
+| `DocumentContent` | typealias | [`types.d.ts`](../dist/types.d.ts) |
+| `DocumentCopySource` | typealias | [`types.d.ts`](../dist/types.d.ts) |
+| `DocumentCreate` | typealias | [`types.d.ts`](../dist/types.d.ts) |
+| `DocumentId` | typealias | [`types.d.ts`](../dist/types.d.ts) |
+| `DocumentObserver` | interface | [`types.d.ts`](../dist/types.d.ts) |
+| `DocumentPoint` | typealias | [`types.d.ts`](../dist/types.d.ts) |
+| `DocumentQuery` | typealias | [`types.d.ts`](../dist/types.d.ts) |
+| `DocumentReader` | typealias | [`types.d.ts`](../dist/types.d.ts) |
+| `DocumentRecord` | typealias | [`types.d.ts`](../dist/types.d.ts) |
+| `DocumentSemantics` | typealias | [`types.d.ts`](../dist/types.d.ts) |
+| `DocumentWatch` | typealias | [`types.d.ts`](../dist/types.d.ts) |
+| `DURABLE_TELEMETRY_SCHEMA` | const | [`harness/telemetry.d.ts`](../dist/harness/telemetry.d.ts) |
+| `Entry` | interface | [`types.d.ts`](../dist/types.d.ts) |
+| `EntryDraft` | typealias | [`types.d.ts`](../dist/types.d.ts) |
+| `EntryId` | typealias | [`types.d.ts`](../dist/types.d.ts) |
+| `EntryLoader` | typealias | [`harness/transcript.d.ts`](../dist/harness/transcript.d.ts) |
+| `EntryQuery` | typealias | [`types.d.ts`](../dist/types.d.ts) |
+| `EntryRecord` | typealias | [`types.d.ts`](../dist/types.d.ts) |
+| `EnvTarget` | typealias | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
+| `Extension` | interface | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
+| `GenerationCheckpoint` | typealias | [`harness/generation.d.ts`](../dist/harness/generation.d.ts) |
+| `GenerationHooks` | interface | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
+| `GenerationInput` | typealias | [`harness/generation.d.ts`](../dist/harness/generation.d.ts) |
+| `GenerationResult` | typealias | [`harness/generation.d.ts`](../dist/harness/generation.d.ts) |
+| `GenerationTask` | const | [`harness/generation.d.ts`](../dist/harness/generation.d.ts) |
+| `Harness` | interface | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
+| `HarnessInspection` | typealias | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
+| `HarnessOptions` | typealias | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
+| `HarnessSettings` | typealias | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
+| `hook` | function | [`harness/define.d.ts`](../dist/harness/define.d.ts) |
+| `HookApi` | interface | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
+| `HookRegistration` | typealias | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
+| `HookResult` | typealias | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
+| `HookRunner` | interface | [`types.d.ts`](../dist/types.d.ts) |
+| `HooksOf` | typealias | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
+| `HostCallback` | typealias | [`types.d.ts`](../dist/types.d.ts) |
+| `Id` | typealias | [`types.d.ts`](../dist/types.d.ts) |
+| `InboxDoc` | const | [`harness/inbox.d.ts`](../dist/harness/inbox.d.ts) |
+| `InboxItem` | typealias | [`harness/inbox.d.ts`](../dist/harness/inbox.d.ts) |
+| `InboxState` | typealias | [`harness/inbox.d.ts`](../dist/harness/inbox.d.ts) |
+| `InputEntry` | typealias | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
+| `InputSubmissionDraft` | typealias | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
+| `JoinPolicy` | typealias | [`types.d.ts`](../dist/types.d.ts) |
+| `JsonObject` | typealias | [`types.d.ts`](../dist/types.d.ts) |
+| `LatestConversationSemantics` | typealias | [`types.d.ts`](../dist/types.d.ts) |
+| `LiveDoc` | const | [`harness/live.d.ts`](../dist/harness/live.d.ts) |
+| `LiveRun` | typealias | [`harness/live.d.ts`](../dist/harness/live.d.ts) |
+| `LiveState` | typealias | [`harness/live.d.ts`](../dist/harness/live.d.ts) |
+| `MemoryStorage` | class | [`storage/memory.d.ts`](../dist/storage/memory.d.ts) |
+| `ModelRef` | typealias | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
+| `NativeWatchCall` | type | [`index.d.ts`](../dist/index.d.ts) |
+| `NestedCallDoc` | const | [`harness/tool.d.ts`](../dist/harness/tool.d.ts) |
+| `NestedCallState` | typealias | [`harness/tool.d.ts`](../dist/harness/tool.d.ts) |
+| `NestedToolExecutionResult` | typealias | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
+| `NestedToolSlot` | typealias | [`harness/live.d.ts`](../dist/harness/live.d.ts) |
+| `NestedToolSummary` | typealias | [`harness/live.d.ts`](../dist/harness/live.d.ts) |
+| `NextTaskState` | typealias | [`types.d.ts`](../dist/types.d.ts) |
+| `Observation` | typealias | [`types.d.ts`](../dist/types.d.ts) |
+| `Observer` | typealias | [`types.d.ts`](../dist/types.d.ts) |
+| `Page` | typealias | [`types.d.ts`](../dist/types.d.ts) |
+| `PhaseHandler` | typealias | [`types.d.ts`](../dist/types.d.ts) |
+| `ProgressPolicy` | typealias | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
+| `PromptInput` | typealias | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
+| `PromptSection` | typealias | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
+| `ProviderDoc` | const | [`harness/provider.d.ts`](../dist/harness/provider.d.ts) |
+| `ProviderState` | typealias | [`harness/provider.d.ts`](../dist/harness/provider.d.ts) |
+| `QueueMode` | typealias | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
+| `ReadAfterWrite` | class | [`errors.d.ts`](../dist/errors.d.ts) |
+| `ReadOnlySession` | class | [`errors.d.ts`](../dist/errors.d.ts) |
+| `Registry` | interface | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
+| `registryReader` | function | [`harness/registry-reader.d.ts`](../dist/harness/registry-reader.d.ts) |
+| `RegistryReader` | interface | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
+| `RegistrySnapshot` | interface | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
+| `Report` | typealias | [`types.d.ts`](../dist/types.d.ts) |
+| `ReportFrom` | typealias | [`types.d.ts`](../dist/types.d.ts) |
+| `ReportInfo` | typealias | [`types.d.ts`](../dist/types.d.ts) |
+| `ReportTask` | typealias | [`types.d.ts`](../dist/types.d.ts) |
+| `ResetEntry` | const | [`entries.d.ts`](../dist/entries.d.ts) |
+| `RewindableConversationDocFamilyToken` | typealias | [`types.d.ts`](../dist/types.d.ts) |
+| `RewindableConversationDocToken` | typealias | [`types.d.ts`](../dist/types.d.ts) |
+| `RewindableConversationSemantics` | typealias | [`types.d.ts`](../dist/types.d.ts) |
+| `ROOT_CONVERSATION_ID` | const | [`types.d.ts`](../dist/types.d.ts) |
+| `runEndTask` | function | [`harness/define.d.ts`](../dist/harness/define.d.ts) |
+| `RunEndTask` | typealias | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
+| `RunFailure` | typealias | [`harness/live.d.ts`](../dist/harness/live.d.ts) |
+| `RunFailureReason` | typealias | [`harness/live.d.ts`](../dist/harness/live.d.ts) |
+| `RunningTask` | typealias | [`types.d.ts`](../dist/types.d.ts) |
+| `RunSummary` | typealias | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
+| `ScanOrder` | typealias | [`types.d.ts`](../dist/types.d.ts) |
+| `section` | function | [`harness/define.d.ts`](../dist/harness/define.d.ts) |
+| `Seq` | typealias | [`types.d.ts`](../dist/types.d.ts) |
+| `Session` | interface | [`types.d.ts`](../dist/types.d.ts) |
+| `SessionDocFamilyToken` | typealias | [`types.d.ts`](../dist/types.d.ts) |
+| `SessionDocToken` | typealias | [`types.d.ts`](../dist/types.d.ts) |
+| `SessionEnd` | typealias | [`types.d.ts`](../dist/types.d.ts) |
+| `SessionFailed` | class | [`errors.d.ts`](../dist/errors.d.ts) |
+| `SetTimer` | typealias | [`types.d.ts`](../dist/types.d.ts) |
+| `Settings` | typealias | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
+| `SettledSubmissionRecord` | typealias | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
+| `SettledTask` | typealias | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
+| `Storage` | interface | [`types.d.ts`](../dist/types.d.ts) |
+| `StorageRequestError` | class | [`errors.d.ts`](../dist/errors.d.ts) |
+| `StorageWrite` | typealias | [`types.d.ts`](../dist/types.d.ts) |
+| `StoredDocument` | typealias | [`types.d.ts`](../dist/types.d.ts) |
+| `Submission` | interface | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
+| `SubmissionCreate` | typealias | [`types.d.ts`](../dist/types.d.ts) |
+| `SubmissionDraft` | typealias | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
+| `SubmissionId` | typealias | [`types.d.ts`](../dist/types.d.ts) |
+| `SubmissionQuery` | typealias | [`types.d.ts`](../dist/types.d.ts) |
+| `SubmissionRecord` | typealias | [`types.d.ts`](../dist/types.d.ts) |
+| `SubmissionSettlement` | typealias | [`types.d.ts`](../dist/types.d.ts) |
+| `SummaryRequest` | typealias | [`harness/compaction.d.ts`](../dist/harness/compaction.d.ts) |
+| `SystemEntry` | const | [`entries.d.ts`](../dist/entries.d.ts) |
+| `TableCommitChange` | typealias | [`types.d.ts`](../dist/types.d.ts) |
+| `Task` | interface | [`types.d.ts`](../dist/types.d.ts) |
+| `TaskDefinition` | typealias | [`types.d.ts`](../dist/types.d.ts) |
+| `TaskDocFamilyToken` | typealias | [`types.d.ts`](../dist/types.d.ts) |
+| `TaskDocToken` | typealias | [`types.d.ts`](../dist/types.d.ts) |
+| `TaskGraph` | typealias | [`harness/task-graph.d.ts`](../dist/harness/task-graph.d.ts) |
+| `TaskGraphNode` | typealias | [`harness/task-graph.d.ts`](../dist/harness/task-graph.d.ts) |
+| `TaskGraphState` | typealias | [`harness/task-graph.d.ts`](../dist/harness/task-graph.d.ts) |
+| `TaskGraphWatch` | typealias | [`harness/task-graph.d.ts`](../dist/harness/task-graph.d.ts) |
+| `TaskId` | typealias | [`types.d.ts`](../dist/types.d.ts) |
+| `TaskInspection` | typealias | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
+| `TaskOptions` | typealias | [`types.d.ts`](../dist/types.d.ts) |
+| `TaskOutcome` | typealias | [`types.d.ts`](../dist/types.d.ts) |
+| `TaskOutcomeError` | typealias | [`types.d.ts`](../dist/types.d.ts) |
+| `TaskOwnership` | typealias | [`types.d.ts`](../dist/types.d.ts) |
+| `TaskQuery` | typealias | [`types.d.ts`](../dist/types.d.ts) |
+| `TaskRecord` | typealias | [`types.d.ts`](../dist/types.d.ts) |
+| `TaskRuntime` | interface | [`types.d.ts`](../dist/types.d.ts) |
+| `TaskState` | typealias | [`types.d.ts`](../dist/types.d.ts) |
+| `ToolControl` | typealias | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
+| `ToolDiagnostic` | typealias | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
+| `ToolExecutionApi` | interface | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
+| `ToolExecutionMode` | typealias | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
+| `ToolExecutionResult` | typealias | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
+| `ToolHookCall` | typealias | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
+| `ToolHooks` | interface | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
+| `ToolRegistration` | typealias | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
+| `ToolResultEntry` | const | [`entries.d.ts`](../dist/entries.d.ts) |
+| `ToolSlot` | typealias | [`harness/live.d.ts`](../dist/harness/live.d.ts) |
+| `ToolTask` | const | [`harness/tool.d.ts`](../dist/harness/tool.d.ts) |
+| `ToolTaskCheckpoint` | typealias | [`harness/tool.d.ts`](../dist/harness/tool.d.ts) |
+| `ToolTaskInput` | typealias | [`harness/tool.d.ts`](../dist/harness/tool.d.ts) |
+| `ToolTaskResult` | typealias | [`harness/tool.d.ts`](../dist/harness/tool.d.ts) |
+| `TranscriptItem` | typealias | [`harness/transcript.d.ts`](../dist/harness/transcript.d.ts) |
+| `TranscriptView` | typealias | [`harness/transcript.d.ts`](../dist/harness/transcript.d.ts) |
+| `Tx` | interface | [`types.d.ts`](../dist/types.d.ts) |
+| `TypedEntry` | typealias | [`types.d.ts`](../dist/types.d.ts) |
+| `TypedEntryDraft` | typealias | [`types.d.ts`](../dist/types.d.ts) |
+| `UsageDoc` | const | [`harness/usage.d.ts`](../dist/harness/usage.d.ts) |
+| `UsageState` | typealias | [`harness/usage.d.ts`](../dist/harness/usage.d.ts) |
+| `UserEntry` | const | [`entries.d.ts`](../dist/entries.d.ts) |
+| `UserInput` | typealias | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
+| `Wake` | typealias | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
+| `WatchCall` | type | [`index.d.ts`](../dist/index.d.ts) |
+| `WatchEnd` | type | [`types.d.ts`](../dist/types.d.ts) |
+| `WatchHandle` | type | [`types.d.ts`](../dist/types.d.ts) |
+| `Wrap` | typealias | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
+| `wrapSection` | function | [`harness/define.d.ts`](../dist/harness/define.d.ts) |
+| `wrapTool` | function | [`harness/define.d.ts`](../dist/harness/define.d.ts) |

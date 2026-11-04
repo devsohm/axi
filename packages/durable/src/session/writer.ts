@@ -1,4 +1,4 @@
-import type { Context } from "@axi/objects";
+import type { Context } from "@axi/objects/context";
 import { withoutAbortSignal } from "@axi/objects/context";
 import { SessionFailed } from "../errors.ts";
 import type { CommitResult, Seq, StorageWrite } from "../types.ts";

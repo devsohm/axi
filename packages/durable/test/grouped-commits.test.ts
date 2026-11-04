@@ -1,7 +1,7 @@
 import { BACKGROUND_CONTEXT as context } from "@axi/objects/context";
 import { describe, expect, it } from "vitest";
 import { MemoryStorage } from "../src/index.ts";
-import type { Context } from "@axi/objects";
+import type { Context } from "@axi/objects/context";
 import { SessionImpl } from "../src/session/session.ts";
 import type { Storage } from "../src/types.ts";
 

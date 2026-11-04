@@ -1,16 +1,16 @@
 import { expect, it, vi } from "vitest";
 import { BACKGROUND_CONTEXT as context } from "../src/context/index.ts";
-import { int, local, method, obj, type Contract } from "../src/next/contracts/index.ts";
-import { ObjectsError } from "../src/next/data/index.ts";
-import { bindProvider } from "../src/next/data/internal.ts";
-import { defineState } from "../src/next/documents/index.ts";
-import { Attempt, type Self } from "../src/next/host/attempt.ts";
-import { Backoff } from "../src/next/host/backoff.ts";
-import { ObjectsObject, type ObjectHost, type Served } from "../src/next/host/object.ts";
-import { Binding, type Reference } from "../src/next/host/reference.ts";
-import type { HostError } from "../src/next/host/report.ts";
-import { RegistryRecord } from "../src/next/registries/internal.ts";
-import { Batch } from "../src/next/state/internal.ts";
+import { int, local, method, obj, type Contract } from "../src/contracts/index.ts";
+import { ObjectsError } from "../src/data/index.ts";
+import { bindProvider } from "../src/data/internal.ts";
+import { defineState } from "../src/documents/index.ts";
+import { Attempt, type Self } from "../src/host/attempt.ts";
+import { Backoff } from "../src/host/backoff.ts";
+import { ObjectsObject, type ObjectHost, type Served } from "../src/host/object.ts";
+import { Binding, type Reference } from "../src/host/reference.ts";
+import type { HostError } from "../src/host/report.ts";
+import { RegistryRecord } from "../src/registries/internal.ts";
+import { Batch } from "../src/state/internal.ts";
 const counter = defineState("counter", { version: 1, schema: obj({ n: int() }), initial: () => ({ n: 0 }) });
 const type = local("app.item", {
 	version: 1,
@@ -29,6 +29,7 @@ function fixture(factory: (self: Self) => unknown, linger = 0) {
 	const batch = new Batch((error) => errors.push(error), undefined),
 		backoff = new Backoff(() => object.attempt());
 	const host: ObjectHost = {
+		spanHost: "client",
 		batch,
 		backoff,
 		principal: caller.principal,

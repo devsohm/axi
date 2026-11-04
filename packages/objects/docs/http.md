@@ -1,6 +1,6 @@
 # Node HTTP component
 
-The internal modules in `src/next-node/http` connect an experimental object host to HTTP and WebSocket clients. They require Node and the optional `ws` peer dependency. The package manifest does not expose an HTTP import path. The [declarations](../dist/next-node/http/index.d.ts) describe its types.
+`@axi/objects/http` connects an object host to HTTP and WebSocket clients. It requires Node and the optional `ws` peer dependency. The [declarations](../dist/node/http/index.d.ts) describe its types.
 
 ## Component lifetime
 
@@ -22,7 +22,7 @@ Authentication and route functions run without a bound `this` value. The `onErro
 
 ## Admission and responses
 
-A local request needs a loopback connection and a matching loopback Host and port. Other hosts require an explicit contribution. Forwarded loopback requests require a verified relay. Browser origin checks run before authentication. Cross-site routes run anonymously. Foreign requests cannot download byte responses.
+A local request needs a loopback connection and a matching loopback Host and port. Other hosts require an explicit contribution. Forwarded loopback requests require a verified relay. Browser origin checks run before authentication. Routes without a principal return 401 unless explicitly public. Cross-site routes are public and run anonymously. Foreign requests cannot download byte responses.
 
 Every response starts with no-store, no-sniff, no-referrer and framing restrictions, plus a content-security policy with a fresh script nonce. Route headers can override these defaults. Header names and values are checked before writing. Signed cookies use HMAC-SHA256, bind the cookie name, and enforce a signed expiry when configured.
 
@@ -30,6 +30,6 @@ Routes return JSON, HTML, redirects, errors or byte readers. Request bodies defa
 
 ## Shutdown and reload
 
-Plugin sockets require authentication and have a heartbeat. Removing their handler, allowed host or relay terminates affected connections. Object links also cap queued output.
+Plugin sockets require authentication unless explicitly public and have a heartbeat. Removing their handler, allowed host or relay terminates affected connections. Object links also cap queued output.
 
 Call `http.close(context)` before `host.close(context)`. It refuses new work, drains requests and closes sockets up to `closeTimeout`, which defaults to 30 seconds. It then seals remaining request scopes. This component provides transport and request ownership; it does not create a second agent scheduler.

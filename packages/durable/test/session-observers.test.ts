@@ -1,4 +1,5 @@
-import type { Context, WatchEnd } from "@axi/objects";
+import type { Context } from "@axi/objects/context";
+import type { WatchEnd } from "@axi/objects/watch";
 import { BACKGROUND_CONTEXT as context } from "@axi/objects/context";
 import { describe, expect, it } from "vitest";
 import { createSession, defineDoc, MemoryStorage, type StorageWrite } from "../src/index.ts";

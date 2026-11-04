@@ -1,4 +1,4 @@
-import { hostKind, method, remote, str } from "../../src/next/index.ts";
+import { hostKind, method, remote, str } from "../../src/index.ts";
 export const Runner = hostKind("runner", { id: str() });
 export const Control = remote("runtime.control", {
 	version: 1,

@@ -1,5 +1,5 @@
 import type { Context } from "@axi/objects/context";
-import type { RegistryValue } from "@axi/objects/next";
+import type { RegistryValue } from "@axi/objects";
 import type { RegistryReader, RegistrySnapshot, ToolRegistration } from "./types.ts";
 
 export function registryReader<T extends ToolRegistration = ToolRegistration>(value: RegistryValue<RegistrySnapshot<T>>, context: Context): RegistryReader<T> {

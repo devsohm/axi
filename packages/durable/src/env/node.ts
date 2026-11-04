@@ -16,7 +16,7 @@ import {
 import { homedir, tmpdir } from "node:os";
 import { dirname, join, normalize, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { Context } from "@axi/objects";
+import type { Context } from "@axi/objects/context";
 import {
 	type BinaryReader,
 	type DirReader,

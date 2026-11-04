@@ -1,5 +1,5 @@
 import type { Op } from "@axi/objects/delta";
-import type { WatchEnd } from "@axi/objects";
+import type { WatchEnd } from "@axi/objects/watch";
 import { BACKGROUND_CONTEXT as context } from "@axi/objects/context";
 import { expect, test } from "vitest";
 import { defineDoc, defineDocFamily, MemoryStorage } from "../src/index.ts";

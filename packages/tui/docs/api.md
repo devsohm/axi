@@ -1,184 +1,184 @@
-# TUI API
+# @axi/tui API
 
-Root exports from `@axi/tui`. Open the declarations for exact types. Subpath modules have their own exports.
+Exports from the package root. The linked declarations contain exact signatures. Other public import paths appear in the package README.
 
-| Export | Declaration |
-| --- | --- |
-| `AutocompleteItem` | [`autocomplete.d.ts`](../dist/autocomplete.d.ts) |
-| `AutocompleteProvider` | [`autocomplete.d.ts`](../dist/autocomplete.d.ts) |
-| `AutocompleteSuggestions` | [`autocomplete.d.ts`](../dist/autocomplete.d.ts) |
-| `Box` | [`components/box.d.ts`](../dist/components/box.d.ts) |
-| `CURSOR_MARKER` | [`tui.d.ts`](../dist/tui.d.ts) |
-| `CancellableLoader` | [`components/cancellable-loader.d.ts`](../dist/components/cancellable-loader.d.ts) |
-| `CellDimensions` | [`terminal-image.d.ts`](../dist/terminal-image.d.ts) |
-| `ColorMixSpace` | [`colors.d.ts`](../dist/colors.d.ts) |
-| `Color` | [`colors.d.ts`](../dist/colors.d.ts) |
-| `CombinedAutocompleteProvider` | [`autocomplete.d.ts`](../dist/autocomplete.d.ts) |
-| `Component` | [`tui.d.ts`](../dist/tui.d.ts) |
-| `Container` | [`tui.d.ts`](../dist/tui.d.ts) |
-| `DefaultTextStyle` | [`components/markdown.d.ts`](../dist/components/markdown.d.ts) |
-| `EditorComponent` | [`editor-component.d.ts`](../dist/editor-component.d.ts) |
-| `EditorOptions` | [`components/editor.d.ts`](../dist/components/editor.d.ts) |
-| `EditorTheme` | [`components/editor.d.ts`](../dist/components/editor.d.ts) |
-| `Editor` | [`components/editor.d.ts`](../dist/components/editor.d.ts) |
-| `Focusable` | [`tui.d.ts`](../dist/tui.d.ts) |
-| `FuzzyMatch` | [`fuzzy.d.ts`](../dist/fuzzy.d.ts) |
-| `HStack` | [`components/h-stack.d.ts`](../dist/components/h-stack.d.ts) |
-| `ImageDimensions` | [`terminal-image.d.ts`](../dist/terminal-image.d.ts) |
-| `ImageOptions` | [`components/image.d.ts`](../dist/components/image.d.ts) |
-| `ImageProtocol` | [`terminal-image.d.ts`](../dist/terminal-image.d.ts) |
-| `ImageRenderOptions` | [`terminal-image.d.ts`](../dist/terminal-image.d.ts) |
-| `ImageTheme` | [`components/image.d.ts`](../dist/components/image.d.ts) |
-| `ImageTranscoder` | [`components/image.d.ts`](../dist/components/image.d.ts) |
-| `Image` | [`components/image.d.ts`](../dist/components/image.d.ts) |
-| `IndexedColor` | [`colors.d.ts`](../dist/colors.d.ts) |
-| `Input` | [`components/input.d.ts`](../dist/components/input.d.ts) |
-| `KeyEventType` | [`keys.d.ts`](../dist/keys.d.ts) |
-| `KeyId` | [`keys.d.ts`](../dist/keys.d.ts) |
-| `Key` | [`keys.d.ts`](../dist/keys.d.ts) |
-| `KeybindingConflict` | [`keybindings.d.ts`](../dist/keybindings.d.ts) |
-| `KeybindingDefinition` | [`keybindings.d.ts`](../dist/keybindings.d.ts) |
-| `KeybindingDefinitions` | [`keybindings.d.ts`](../dist/keybindings.d.ts) |
-| `Keybinding` | [`keybindings.d.ts`](../dist/keybindings.d.ts) |
-| `KeybindingsConfig` | [`keybindings.d.ts`](../dist/keybindings.d.ts) |
-| `KeybindingsManager` | [`keybindings.d.ts`](../dist/keybindings.d.ts) |
-| `Keybindings` | [`keybindings.d.ts`](../dist/keybindings.d.ts) |
-| `LoaderIndicatorOptions` | [`components/loader.d.ts`](../dist/components/loader.d.ts) |
-| `Loader` | [`components/loader.d.ts`](../dist/components/loader.d.ts) |
-| `MarkdownOptions` | [`components/markdown.d.ts`](../dist/components/markdown.d.ts) |
-| `MarkdownTheme` | [`components/markdown.d.ts`](../dist/components/markdown.d.ts) |
-| `Markdown` | [`components/markdown.d.ts`](../dist/components/markdown.d.ts) |
-| `Marked` | [`index.d.ts`](../dist/index.d.ts) |
-| `MouseRegionHandler` | [`components/mouse-region.d.ts`](../dist/components/mouse-region.d.ts) |
-| `MouseRegion` | [`components/mouse-region.d.ts`](../dist/components/mouse-region.d.ts) |
-| `NativeClipboard` | [`native-platform.d.ts`](../dist/native-platform.d.ts) |
-| `OkhslChannels` | [`colors.d.ts`](../dist/colors.d.ts) |
-| `OklchChannels` | [`colors.d.ts`](../dist/colors.d.ts) |
-| `OklchColorValue` | [`colors.d.ts`](../dist/colors.d.ts) |
-| `OverlayAnchor` | [`tui.d.ts`](../dist/tui.d.ts) |
-| `OverlayBounds` | [`tui.d.ts`](../dist/tui.d.ts) |
-| `OverlayHandle` | [`tui.d.ts`](../dist/tui.d.ts) |
-| `OverlayMargin` | [`tui.d.ts`](../dist/tui.d.ts) |
-| `OverlayOptions` | [`tui.d.ts`](../dist/tui.d.ts) |
-| `OverlayUnfocusOptions` | [`tui.d.ts`](../dist/tui.d.ts) |
-| `ProcessTerminal` | [`terminal.d.ts`](../dist/terminal.d.ts) |
-| `ProgramStatus` | [`program-status.d.ts`](../dist/program-status.d.ts) |
-| `RenderLatexOptions` | [`latex.d.ts`](../dist/latex.d.ts) |
-| `RgbColorValue` | [`colors.d.ts`](../dist/colors.d.ts) |
-| `RgbColor` | [`terminal-colors.d.ts`](../dist/terminal-colors.d.ts) |
-| `ScrollViewOptions` | [`components/scroll-view.d.ts`](../dist/components/scroll-view.d.ts) |
-| `ScrollViewScrollToOptions` | [`components/scroll-view.d.ts`](../dist/components/scroll-view.d.ts) |
-| `ScrollViewScrollbar` | [`components/scroll-view.d.ts`](../dist/components/scroll-view.d.ts) |
-| `ScrollView` | [`components/scroll-view.d.ts`](../dist/components/scroll-view.d.ts) |
-| `SelectItem` | [`components/select-list.d.ts`](../dist/components/select-list.d.ts) |
-| `SelectListLayoutOptions` | [`components/select-list.d.ts`](../dist/components/select-list.d.ts) |
-| `SelectListTheme` | [`components/select-list.d.ts`](../dist/components/select-list.d.ts) |
-| `SelectListTruncatePrimaryContext` | [`components/select-list.d.ts`](../dist/components/select-list.d.ts) |
-| `SelectList` | [`components/select-list.d.ts`](../dist/components/select-list.d.ts) |
-| `SettingItem` | [`components/settings-list.d.ts`](../dist/components/settings-list.d.ts) |
-| `SettingsListTheme` | [`components/settings-list.d.ts`](../dist/components/settings-list.d.ts) |
-| `SettingsList` | [`components/settings-list.d.ts`](../dist/components/settings-list.d.ts) |
-| `SizeValue` | [`tui.d.ts`](../dist/tui.d.ts) |
-| `SlashCommand` | [`autocomplete.d.ts`](../dist/autocomplete.d.ts) |
-| `Spacer` | [`components/spacer.d.ts`](../dist/components/spacer.d.ts) |
-| `StackChild` | [`components/stack.d.ts`](../dist/components/stack.d.ts) |
-| `StackEntryOptions` | [`components/stack.d.ts`](../dist/components/stack.d.ts) |
-| `StackEntry` | [`components/stack.d.ts`](../dist/components/stack.d.ts) |
-| `StackOptions` | [`components/stack.d.ts`](../dist/components/stack.d.ts) |
-| `StdinBufferEventMap` | [`stdin-buffer.d.ts`](../dist/stdin-buffer.d.ts) |
-| `StdinBufferOptions` | [`stdin-buffer.d.ts`](../dist/stdin-buffer.d.ts) |
-| `StdinBuffer` | [`stdin-buffer.d.ts`](../dist/stdin-buffer.d.ts) |
-| `TUI_KEYBINDINGS` | [`keybindings.d.ts`](../dist/keybindings.d.ts) |
-| `TUI` | [`tui.d.ts`](../dist/tui.d.ts) |
-| `TerminalCapabilities` | [`terminal-image.d.ts`](../dist/terminal-image.d.ts) |
-| `TerminalColorMode` | [`colors.d.ts`](../dist/colors.d.ts) |
-| `TerminalColorScheme` | [`terminal-colors.d.ts`](../dist/terminal-colors.d.ts) |
-| `TerminalColors` | [`terminal-colors.d.ts`](../dist/terminal-colors.d.ts) |
-| `Terminal` | [`terminal.d.ts`](../dist/terminal.d.ts) |
-| `TextAttributes` | [`colors.d.ts`](../dist/colors.d.ts) |
-| `TextStyle` | [`colors.d.ts`](../dist/colors.d.ts) |
-| `Text` | [`components/text.d.ts`](../dist/components/text.d.ts) |
-| `Token` | [`index.d.ts`](../dist/index.d.ts) |
-| `Tokens` | [`index.d.ts`](../dist/index.d.ts) |
-| `TruncatedText` | [`components/truncated-text.d.ts`](../dist/components/truncated-text.d.ts) |
-| `TuiAltScreenOptions` | [`tui-alt-screen.d.ts`](../dist/tui-alt-screen.d.ts) |
-| `TuiAltScreen` | [`tui-alt-screen.d.ts`](../dist/tui-alt-screen.d.ts) |
-| `TuiInputListenerResult` | [`tui.d.ts`](../dist/tui.d.ts) |
-| `TuiInputListener` | [`tui.d.ts`](../dist/tui.d.ts) |
-| `TuiMainScreenRenderState` | [`tui-main-screen.d.ts`](../dist/tui-main-screen.d.ts) |
-| `TuiMainScreen` | [`tui-main-screen.d.ts`](../dist/tui-main-screen.d.ts) |
-| `TuiMode` | [`tui.d.ts`](../dist/tui.d.ts) |
-| `TuiMouseButton` | [`tui.d.ts`](../dist/tui.d.ts) |
-| `TuiMouseEventResult` | [`tui.d.ts`](../dist/tui.d.ts) |
-| `TuiMouseEventType` | [`tui.d.ts`](../dist/tui.d.ts) |
-| `TuiMouseEvent` | [`tui.d.ts`](../dist/tui.d.ts) |
-| `TuiStopOptions` | [`tui.d.ts`](../dist/tui.d.ts) |
-| `VStack` | [`components/v-stack.d.ts`](../dist/components/v-stack.d.ts) |
-| `ViewportTUI` | [`tui.d.ts`](../dist/tui.d.ts) |
-| `WheelScrollLines` | [`wheel-scroll.d.ts`](../dist/wheel-scroll.d.ts) |
-| `allocateImageId` | [`terminal-image.d.ts`](../dist/terminal-image.d.ts) |
-| `backgroundAnsi` | [`colors.d.ts`](../dist/colors.d.ts) |
-| `calculateImageRows` | [`terminal-image.d.ts`](../dist/terminal-image.d.ts) |
-| `colorToHex` | [`colors.d.ts`](../dist/colors.d.ts) |
-| `colorToOkhsl` | [`colors.d.ts`](../dist/colors.d.ts) |
-| `colorToOklch` | [`colors.d.ts`](../dist/colors.d.ts) |
-| `colorToRgb` | [`colors.d.ts`](../dist/colors.d.ts) |
-| `compositeTuiLine` | [`tui.d.ts`](../dist/tui.d.ts) |
-| `decodeKittyPrintable` | [`keys.d.ts`](../dist/keys.d.ts) |
-| `deleteAllKittyImages` | [`terminal-image.d.ts`](../dist/terminal-image.d.ts) |
-| `deleteKittyImage` | [`terminal-image.d.ts`](../dist/terminal-image.d.ts) |
-| `detectCapabilities` | [`terminal-image.d.ts`](../dist/terminal-image.d.ts) |
-| `encodeITerm2` | [`terminal-image.d.ts`](../dist/terminal-image.d.ts) |
-| `encodeKitty` | [`terminal-image.d.ts`](../dist/terminal-image.d.ts) |
-| `foregroundAnsi` | [`colors.d.ts`](../dist/colors.d.ts) |
-| `formatProgramStatus` | [`program-status.d.ts`](../dist/program-status.d.ts) |
-| `fuzzyFilter` | [`fuzzy.d.ts`](../dist/fuzzy.d.ts) |
-| `fuzzyMatch` | [`fuzzy.d.ts`](../dist/fuzzy.d.ts) |
-| `getCapabilities` | [`terminal-image.d.ts`](../dist/terminal-image.d.ts) |
-| `getCellDimensions` | [`terminal-image.d.ts`](../dist/terminal-image.d.ts) |
-| `getGifDimensions` | [`terminal-image.d.ts`](../dist/terminal-image.d.ts) |
-| `getImageDimensions` | [`terminal-image.d.ts`](../dist/terminal-image.d.ts) |
-| `getJpegDimensions` | [`terminal-image.d.ts`](../dist/terminal-image.d.ts) |
-| `getKeybindings` | [`keybindings.d.ts`](../dist/keybindings.d.ts) |
-| `getNativeClipboard` | [`native-platform.d.ts`](../dist/native-platform.d.ts) |
-| `getOsc8LinkAtColumn` | [`utils.d.ts`](../dist/utils.d.ts) |
-| `getPngDimensions` | [`terminal-image.d.ts`](../dist/terminal-image.d.ts) |
-| `getSelectPageIndex` | [`keybindings.d.ts`](../dist/keybindings.d.ts) |
-| `getTerminalColorMode` | [`terminal-image.d.ts`](../dist/terminal-image.d.ts) |
-| `getWebpDimensions` | [`terminal-image.d.ts`](../dist/terminal-image.d.ts) |
-| `hyperlink` | [`terminal-image.d.ts`](../dist/terminal-image.d.ts) |
-| `imageFallback` | [`terminal-image.d.ts`](../dist/terminal-image.d.ts) |
-| `indexedColor` | [`colors.d.ts`](../dist/colors.d.ts) |
-| `isAppleTerminalSession` | [`terminal.d.ts`](../dist/terminal.d.ts) |
-| `isFocusable` | [`tui.d.ts`](../dist/tui.d.ts) |
-| `isKeyRelease` | [`keys.d.ts`](../dist/keys.d.ts) |
-| `isKeyRepeat` | [`keys.d.ts`](../dist/keys.d.ts) |
-| `isKittyProtocolActive` | [`keys.d.ts`](../dist/keys.d.ts) |
-| `isViewportTUI` | [`tui.d.ts`](../dist/tui.d.ts) |
-| `matchesKey` | [`keys.d.ts`](../dist/keys.d.ts) |
-| `mixColors` | [`colors.d.ts`](../dist/colors.d.ts) |
-| `okhslColor` | [`colors.d.ts`](../dist/colors.d.ts) |
-| `oklabToOkhslLightness` | [`oklab.d.ts`](../dist/oklab.d.ts) |
-| `oklchColor` | [`colors.d.ts`](../dist/colors.d.ts) |
-| `parseColor` | [`colors.d.ts`](../dist/colors.d.ts) |
-| `parseKey` | [`keys.d.ts`](../dist/keys.d.ts) |
-| `parseTerminalColorSchemeReport` | [`terminal-colors.d.ts`](../dist/terminal-colors.d.ts) |
-| `renderFakeCursor` | [`tui.d.ts`](../dist/tui.d.ts) |
-| `renderImage` | [`terminal-image.d.ts`](../dist/terminal-image.d.ts) |
-| `renderLatex` | [`latex.d.ts`](../dist/latex.d.ts) |
-| `replaceControlCharacters` | [`utils.d.ts`](../dist/utils.d.ts) |
-| `resetCapabilitiesCache` | [`terminal-image.d.ts`](../dist/terminal-image.d.ts) |
-| `rgbColor` | [`colors.d.ts`](../dist/colors.d.ts) |
-| `setCapabilities` | [`terminal-image.d.ts`](../dist/terminal-image.d.ts) |
-| `setCapabilityOverrides` | [`terminal-image.d.ts`](../dist/terminal-image.d.ts) |
-| `setCellDimensions` | [`terminal-image.d.ts`](../dist/terminal-image.d.ts) |
-| `setImageTranscoder` | [`components/image.d.ts`](../dist/components/image.d.ts) |
-| `setKeybindings` | [`keybindings.d.ts`](../dist/keybindings.d.ts) |
-| `setKittyProtocolActive` | [`keys.d.ts`](../dist/keys.d.ts) |
-| `sliceByColumn` | [`utils.d.ts`](../dist/utils.d.ts) |
-| `stripTerminalSequences` | [`utils.d.ts`](../dist/utils.d.ts) |
-| `styleTextWithAnsi` | [`colors.d.ts`](../dist/colors.d.ts) |
-| `styleText` | [`colors.d.ts`](../dist/colors.d.ts) |
-| `truncateToWidth` | [`utils.d.ts`](../dist/utils.d.ts) |
-| `visibleWidth` | [`utils.d.ts`](../dist/utils.d.ts) |
-| `wrapTextWithAnsi` | [`utils.d.ts`](../dist/utils.d.ts) |
+| Export | Kind | Declaration |
+| --- | --- | --- |
+| `allocateImageId` | function | [`terminal-image.d.ts`](../dist/terminal-image.d.ts) |
+| `AutocompleteItem` | interface | [`autocomplete.d.ts`](../dist/autocomplete.d.ts) |
+| `AutocompleteProvider` | interface | [`autocomplete.d.ts`](../dist/autocomplete.d.ts) |
+| `AutocompleteSuggestions` | interface | [`autocomplete.d.ts`](../dist/autocomplete.d.ts) |
+| `backgroundAnsi` | function | [`colors.d.ts`](../dist/colors.d.ts) |
+| `Box` | class | [`components/box.d.ts`](../dist/components/box.d.ts) |
+| `calculateImageRows` | function | [`terminal-image.d.ts`](../dist/terminal-image.d.ts) |
+| `CancellableLoader` | class | [`components/cancellable-loader.d.ts`](../dist/components/cancellable-loader.d.ts) |
+| `CellDimensions` | interface | [`terminal-image.d.ts`](../dist/terminal-image.d.ts) |
+| `Color` | typealias | [`colors.d.ts`](../dist/colors.d.ts) |
+| `ColorMixSpace` | typealias | [`colors.d.ts`](../dist/colors.d.ts) |
+| `colorToHex` | function | [`colors.d.ts`](../dist/colors.d.ts) |
+| `colorToOkhsl` | function | [`colors.d.ts`](../dist/colors.d.ts) |
+| `colorToOklch` | function | [`colors.d.ts`](../dist/colors.d.ts) |
+| `colorToRgb` | function | [`colors.d.ts`](../dist/colors.d.ts) |
+| `CombinedAutocompleteProvider` | class | [`autocomplete.d.ts`](../dist/autocomplete.d.ts) |
+| `Component` | interface | [`tui.d.ts`](../dist/tui.d.ts) |
+| `compositeTuiLine` | function | [`tui.d.ts`](../dist/tui.d.ts) |
+| `Container` | class | [`tui.d.ts`](../dist/tui.d.ts) |
+| `CURSOR_MARKER` | const | [`tui.d.ts`](../dist/tui.d.ts) |
+| `decodeKittyPrintable` | function | [`keys.d.ts`](../dist/keys.d.ts) |
+| `DefaultTextStyle` | interface | [`components/markdown.d.ts`](../dist/components/markdown.d.ts) |
+| `deleteAllKittyImages` | function | [`terminal-image.d.ts`](../dist/terminal-image.d.ts) |
+| `deleteKittyImage` | function | [`terminal-image.d.ts`](../dist/terminal-image.d.ts) |
+| `detectCapabilities` | function | [`terminal-image.d.ts`](../dist/terminal-image.d.ts) |
+| `Editor` | class | [`components/editor.d.ts`](../dist/components/editor.d.ts) |
+| `EditorComponent` | interface | [`editor-component.d.ts`](../dist/editor-component.d.ts) |
+| `EditorOptions` | interface | [`components/editor.d.ts`](../dist/components/editor.d.ts) |
+| `EditorTheme` | interface | [`components/editor.d.ts`](../dist/components/editor.d.ts) |
+| `encodeITerm2` | function | [`terminal-image.d.ts`](../dist/terminal-image.d.ts) |
+| `encodeKitty` | function | [`terminal-image.d.ts`](../dist/terminal-image.d.ts) |
+| `Focusable` | interface | [`tui.d.ts`](../dist/tui.d.ts) |
+| `foregroundAnsi` | function | [`colors.d.ts`](../dist/colors.d.ts) |
+| `formatProgramStatus` | function | [`program-status.d.ts`](../dist/program-status.d.ts) |
+| `fuzzyFilter` | function | [`fuzzy.d.ts`](../dist/fuzzy.d.ts) |
+| `fuzzyMatch` | function | [`fuzzy.d.ts`](../dist/fuzzy.d.ts) |
+| `FuzzyMatch` | interface | [`fuzzy.d.ts`](../dist/fuzzy.d.ts) |
+| `getCapabilities` | function | [`terminal-image.d.ts`](../dist/terminal-image.d.ts) |
+| `getCellDimensions` | function | [`terminal-image.d.ts`](../dist/terminal-image.d.ts) |
+| `getGifDimensions` | function | [`terminal-image.d.ts`](../dist/terminal-image.d.ts) |
+| `getImageDimensions` | function | [`terminal-image.d.ts`](../dist/terminal-image.d.ts) |
+| `getJpegDimensions` | function | [`terminal-image.d.ts`](../dist/terminal-image.d.ts) |
+| `getKeybindings` | function | [`keybindings.d.ts`](../dist/keybindings.d.ts) |
+| `getNativeClipboard` | function | [`native-platform.d.ts`](../dist/native-platform.d.ts) |
+| `getOsc8LinkAtColumn` | function | [`utils.d.ts`](../dist/utils.d.ts) |
+| `getPngDimensions` | function | [`terminal-image.d.ts`](../dist/terminal-image.d.ts) |
+| `getSelectPageIndex` | function | [`keybindings.d.ts`](../dist/keybindings.d.ts) |
+| `getTerminalColorMode` | function | [`terminal-image.d.ts`](../dist/terminal-image.d.ts) |
+| `getWebpDimensions` | function | [`terminal-image.d.ts`](../dist/terminal-image.d.ts) |
+| `HStack` | class | [`components/h-stack.d.ts`](../dist/components/h-stack.d.ts) |
+| `hyperlink` | function | [`terminal-image.d.ts`](../dist/terminal-image.d.ts) |
+| `Image` | class | [`components/image.d.ts`](../dist/components/image.d.ts) |
+| `ImageDimensions` | interface | [`terminal-image.d.ts`](../dist/terminal-image.d.ts) |
+| `imageFallback` | function | [`terminal-image.d.ts`](../dist/terminal-image.d.ts) |
+| `ImageOptions` | interface | [`components/image.d.ts`](../dist/components/image.d.ts) |
+| `ImageProtocol` | typealias | [`terminal-image.d.ts`](../dist/terminal-image.d.ts) |
+| `ImageRenderOptions` | interface | [`terminal-image.d.ts`](../dist/terminal-image.d.ts) |
+| `ImageTheme` | interface | [`components/image.d.ts`](../dist/components/image.d.ts) |
+| `ImageTranscoder` | typealias | [`components/image.d.ts`](../dist/components/image.d.ts) |
+| `indexedColor` | function | [`colors.d.ts`](../dist/colors.d.ts) |
+| `IndexedColor` | interface | [`colors.d.ts`](../dist/colors.d.ts) |
+| `Input` | class | [`components/input.d.ts`](../dist/components/input.d.ts) |
+| `isAppleTerminalSession` | function | [`terminal.d.ts`](../dist/terminal.d.ts) |
+| `isFocusable` | function | [`tui.d.ts`](../dist/tui.d.ts) |
+| `isKeyRelease` | function | [`keys.d.ts`](../dist/keys.d.ts) |
+| `isKeyRepeat` | function | [`keys.d.ts`](../dist/keys.d.ts) |
+| `isKittyProtocolActive` | function | [`keys.d.ts`](../dist/keys.d.ts) |
+| `isViewportTUI` | function | [`tui.d.ts`](../dist/tui.d.ts) |
+| `Key` | const | [`keys.d.ts`](../dist/keys.d.ts) |
+| `Keybinding` | typealias | [`keybindings.d.ts`](../dist/keybindings.d.ts) |
+| `KeybindingConflict` | interface | [`keybindings.d.ts`](../dist/keybindings.d.ts) |
+| `KeybindingDefinition` | interface | [`keybindings.d.ts`](../dist/keybindings.d.ts) |
+| `KeybindingDefinitions` | typealias | [`keybindings.d.ts`](../dist/keybindings.d.ts) |
+| `Keybindings` | interface | [`keybindings.d.ts`](../dist/keybindings.d.ts) |
+| `KeybindingsConfig` | typealias | [`keybindings.d.ts`](../dist/keybindings.d.ts) |
+| `KeybindingsManager` | class | [`keybindings.d.ts`](../dist/keybindings.d.ts) |
+| `KeyEventType` | typealias | [`keys.d.ts`](../dist/keys.d.ts) |
+| `KeyId` | typealias | [`keys.d.ts`](../dist/keys.d.ts) |
+| `Loader` | class | [`components/loader.d.ts`](../dist/components/loader.d.ts) |
+| `LoaderIndicatorOptions` | interface | [`components/loader.d.ts`](../dist/components/loader.d.ts) |
+| `Markdown` | class | [`components/markdown.d.ts`](../dist/components/markdown.d.ts) |
+| `MarkdownOptions` | interface | [`components/markdown.d.ts`](../dist/components/markdown.d.ts) |
+| `MarkdownTheme` | interface | [`components/markdown.d.ts`](../dist/components/markdown.d.ts) |
+| `Marked` | export | [`index.d.ts`](../dist/index.d.ts) |
+| `matchesKey` | function | [`keys.d.ts`](../dist/keys.d.ts) |
+| `mixColors` | function | [`colors.d.ts`](../dist/colors.d.ts) |
+| `MouseRegion` | class | [`components/mouse-region.d.ts`](../dist/components/mouse-region.d.ts) |
+| `MouseRegionHandler` | typealias | [`components/mouse-region.d.ts`](../dist/components/mouse-region.d.ts) |
+| `NativeClipboard` | interface | [`native-platform.d.ts`](../dist/native-platform.d.ts) |
+| `OkhslChannels` | interface | [`colors.d.ts`](../dist/colors.d.ts) |
+| `okhslColor` | function | [`colors.d.ts`](../dist/colors.d.ts) |
+| `oklabToOkhslLightness` | function | [`oklab.d.ts`](../dist/oklab.d.ts) |
+| `OklchChannels` | interface | [`colors.d.ts`](../dist/colors.d.ts) |
+| `oklchColor` | function | [`colors.d.ts`](../dist/colors.d.ts) |
+| `OklchColorValue` | interface | [`colors.d.ts`](../dist/colors.d.ts) |
+| `OverlayAnchor` | typealias | [`tui.d.ts`](../dist/tui.d.ts) |
+| `OverlayBounds` | interface | [`tui.d.ts`](../dist/tui.d.ts) |
+| `OverlayHandle` | interface | [`tui.d.ts`](../dist/tui.d.ts) |
+| `OverlayMargin` | interface | [`tui.d.ts`](../dist/tui.d.ts) |
+| `OverlayOptions` | interface | [`tui.d.ts`](../dist/tui.d.ts) |
+| `OverlayUnfocusOptions` | interface | [`tui.d.ts`](../dist/tui.d.ts) |
+| `parseColor` | function | [`colors.d.ts`](../dist/colors.d.ts) |
+| `parseKey` | function | [`keys.d.ts`](../dist/keys.d.ts) |
+| `parseTerminalColorSchemeReport` | function | [`terminal-colors.d.ts`](../dist/terminal-colors.d.ts) |
+| `ProcessTerminal` | class | [`terminal.d.ts`](../dist/terminal.d.ts) |
+| `ProgramStatus` | interface | [`program-status.d.ts`](../dist/program-status.d.ts) |
+| `renderFakeCursor` | function | [`tui.d.ts`](../dist/tui.d.ts) |
+| `renderImage` | function | [`terminal-image.d.ts`](../dist/terminal-image.d.ts) |
+| `renderLatex` | function | [`latex.d.ts`](../dist/latex.d.ts) |
+| `RenderLatexOptions` | interface | [`latex.d.ts`](../dist/latex.d.ts) |
+| `replaceControlCharacters` | function | [`utils.d.ts`](../dist/utils.d.ts) |
+| `resetCapabilitiesCache` | function | [`terminal-image.d.ts`](../dist/terminal-image.d.ts) |
+| `rgbColor` | function | [`colors.d.ts`](../dist/colors.d.ts) |
+| `RgbColor` | interface | [`terminal-colors.d.ts`](../dist/terminal-colors.d.ts) |
+| `RgbColorValue` | interface | [`colors.d.ts`](../dist/colors.d.ts) |
+| `ScrollView` | class | [`components/scroll-view.d.ts`](../dist/components/scroll-view.d.ts) |
+| `ScrollViewOptions` | interface | [`components/scroll-view.d.ts`](../dist/components/scroll-view.d.ts) |
+| `ScrollViewScrollbar` | typealias | [`components/scroll-view.d.ts`](../dist/components/scroll-view.d.ts) |
+| `ScrollViewScrollToOptions` | interface | [`components/scroll-view.d.ts`](../dist/components/scroll-view.d.ts) |
+| `SelectItem` | interface | [`components/select-list.d.ts`](../dist/components/select-list.d.ts) |
+| `SelectList` | class | [`components/select-list.d.ts`](../dist/components/select-list.d.ts) |
+| `SelectListLayoutOptions` | interface | [`components/select-list.d.ts`](../dist/components/select-list.d.ts) |
+| `SelectListTheme` | interface | [`components/select-list.d.ts`](../dist/components/select-list.d.ts) |
+| `SelectListTruncatePrimaryContext` | interface | [`components/select-list.d.ts`](../dist/components/select-list.d.ts) |
+| `setCapabilities` | function | [`terminal-image.d.ts`](../dist/terminal-image.d.ts) |
+| `setCapabilityOverrides` | function | [`terminal-image.d.ts`](../dist/terminal-image.d.ts) |
+| `setCellDimensions` | function | [`terminal-image.d.ts`](../dist/terminal-image.d.ts) |
+| `setImageTranscoder` | function | [`components/image.d.ts`](../dist/components/image.d.ts) |
+| `setKeybindings` | function | [`keybindings.d.ts`](../dist/keybindings.d.ts) |
+| `setKittyProtocolActive` | function | [`keys.d.ts`](../dist/keys.d.ts) |
+| `SettingItem` | interface | [`components/settings-list.d.ts`](../dist/components/settings-list.d.ts) |
+| `SettingsList` | class | [`components/settings-list.d.ts`](../dist/components/settings-list.d.ts) |
+| `SettingsListTheme` | interface | [`components/settings-list.d.ts`](../dist/components/settings-list.d.ts) |
+| `SizeValue` | typealias | [`tui.d.ts`](../dist/tui.d.ts) |
+| `SlashCommand` | interface | [`autocomplete.d.ts`](../dist/autocomplete.d.ts) |
+| `sliceByColumn` | function | [`utils.d.ts`](../dist/utils.d.ts) |
+| `Spacer` | class | [`components/spacer.d.ts`](../dist/components/spacer.d.ts) |
+| `StackChild` | typealias | [`components/stack.d.ts`](../dist/components/stack.d.ts) |
+| `StackEntry` | interface | [`components/stack.d.ts`](../dist/components/stack.d.ts) |
+| `StackEntryOptions` | interface | [`components/stack.d.ts`](../dist/components/stack.d.ts) |
+| `StackOptions` | interface | [`components/stack.d.ts`](../dist/components/stack.d.ts) |
+| `StdinBuffer` | class | [`stdin-buffer.d.ts`](../dist/stdin-buffer.d.ts) |
+| `StdinBufferEventMap` | typealias | [`stdin-buffer.d.ts`](../dist/stdin-buffer.d.ts) |
+| `StdinBufferOptions` | typealias | [`stdin-buffer.d.ts`](../dist/stdin-buffer.d.ts) |
+| `stripTerminalSequences` | function | [`utils.d.ts`](../dist/utils.d.ts) |
+| `styleText` | function | [`colors.d.ts`](../dist/colors.d.ts) |
+| `styleTextWithAnsi` | function | [`colors.d.ts`](../dist/colors.d.ts) |
+| `Terminal` | interface | [`terminal.d.ts`](../dist/terminal.d.ts) |
+| `TerminalCapabilities` | interface | [`terminal-image.d.ts`](../dist/terminal-image.d.ts) |
+| `TerminalColorMode` | typealias | [`colors.d.ts`](../dist/colors.d.ts) |
+| `TerminalColors` | interface | [`terminal-colors.d.ts`](../dist/terminal-colors.d.ts) |
+| `TerminalColorScheme` | typealias | [`terminal-colors.d.ts`](../dist/terminal-colors.d.ts) |
+| `Text` | class | [`components/text.d.ts`](../dist/components/text.d.ts) |
+| `TextAttributes` | interface | [`colors.d.ts`](../dist/colors.d.ts) |
+| `TextStyle` | interface | [`colors.d.ts`](../dist/colors.d.ts) |
+| `Token` | type | [`index.d.ts`](../dist/index.d.ts) |
+| `Tokens` | type | [`index.d.ts`](../dist/index.d.ts) |
+| `TruncatedText` | class | [`components/truncated-text.d.ts`](../dist/components/truncated-text.d.ts) |
+| `truncateToWidth` | function | [`utils.d.ts`](../dist/utils.d.ts) |
+| `TUI` | interface | [`tui.d.ts`](../dist/tui.d.ts) |
+| `TUI_KEYBINDINGS` | const | [`keybindings.d.ts`](../dist/keybindings.d.ts) |
+| `TuiAltScreen` | class | [`tui-alt-screen.d.ts`](../dist/tui-alt-screen.d.ts) |
+| `TuiAltScreenOptions` | interface | [`tui-alt-screen.d.ts`](../dist/tui-alt-screen.d.ts) |
+| `TuiInputListener` | typealias | [`tui.d.ts`](../dist/tui.d.ts) |
+| `TuiInputListenerResult` | typealias | [`tui.d.ts`](../dist/tui.d.ts) |
+| `TuiMainScreen` | class | [`tui-main-screen.d.ts`](../dist/tui-main-screen.d.ts) |
+| `TuiMainScreenRenderState` | interface | [`tui-main-screen.d.ts`](../dist/tui-main-screen.d.ts) |
+| `TuiMode` | typealias | [`tui.d.ts`](../dist/tui.d.ts) |
+| `TuiMouseButton` | typealias | [`tui.d.ts`](../dist/tui.d.ts) |
+| `TuiMouseEvent` | interface | [`tui.d.ts`](../dist/tui.d.ts) |
+| `TuiMouseEventResult` | interface | [`tui.d.ts`](../dist/tui.d.ts) |
+| `TuiMouseEventType` | typealias | [`tui.d.ts`](../dist/tui.d.ts) |
+| `TuiStopOptions` | interface | [`tui.d.ts`](../dist/tui.d.ts) |
+| `ViewportTUI` | interface | [`tui.d.ts`](../dist/tui.d.ts) |
+| `visibleWidth` | function | [`utils.d.ts`](../dist/utils.d.ts) |
+| `VStack` | class | [`components/v-stack.d.ts`](../dist/components/v-stack.d.ts) |
+| `WheelScrollLines` | typealias | [`wheel-scroll.d.ts`](../dist/wheel-scroll.d.ts) |
+| `wrapTextWithAnsi` | function | [`utils.d.ts`](../dist/utils.d.ts) |

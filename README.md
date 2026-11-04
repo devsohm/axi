@@ -2,7 +2,7 @@
 
 Typed libraries for agent applications.
 
-`@axi/objects` provides typed object contracts, state, resources, registries, reloads and communication between hosts. It includes memory, IPC and WebSocket transports, a Node process manager, invocation contexts, bounded output and SQLite adapters.
+`@axi/objects` provides typed object contracts, state, resources, registries, reloads and communication between hosts. It includes memory, IPC and WebSocket transports, Node worker management, invocation contexts, bounded output and SQLite adapters.
 
 ```sh
 npm ci
@@ -12,7 +12,7 @@ npm run build:daemon --workspace @axi/env
 npm test
 ```
 
-The package exports its root, `context`, `delta`, `node`, `output`, `sqlite`, `sqlite/node`, `sqlite/cloudflare`, `telemetry-sqlite`, `next` and `package.json` entries. The experimental Node plugin, HTTP and worker components remain internal.
+The package exposes its object runtime at the root. Separate imports provide context, deltas, watches, output, SQLite, telemetry recording, HTTP, workers and plugins. See the [Objects package](packages/objects/README.md) for import paths.
 
 `@axi/telemetry` provides explicit callback spans, typed schemas, local recording and adapter conformance cases.
 
@@ -20,7 +20,7 @@ The package exports its root, `context`, `delta`, `node`, `output`, `sqlite`, `s
 
 `@axi/mcp` provides an independent MCP client with stdio and Streamable HTTP transports, tools, resources, notifications, progress and cancellation. Its OAuth subpath provides discovery, PKCE, registration, refresh and callback handling. It has no Code Mode dependency.
 
-`@axi/ai` provides the model runtime, authentication contracts, scripted responses and transcript tools. Implemented protocols include OpenAI Chat Completions and Responses, Azure Responses, legacy Codex, Anthropic Messages, Google, Vertex, Bedrock, Mistral, image generation, four classifier APIs and the serialized message transport. A Workers AI binding adapter forwards requests through an injected binding. It includes 41 provider factories, typed catalogs, seven OAuth flows, optional global compatibility APIs and catalog maintenance scripts.
+`@axi/ai` provides the model runtime, authentication contracts, scripted responses and transcript tools. Implemented protocols include OpenAI Chat Completions and Responses, Azure Responses, legacy Codex, Anthropic Messages, Google, Vertex, Bedrock, Mistral, image generation, four classifier APIs and the serialized message transport. A Workers AI binding adapter forwards requests through an injected binding. It includes provider factories, typed catalogs, OAuth flows, optional global compatibility APIs and catalog maintenance scripts.
 
 `@axi/durable` provides conversations, tasks, document transactions and memory, JSONL, SQLite and IndexedDB storage. Its Harness connects models and extensions to queued input, generation, tool execution, compaction, cancellation and recovery. Applications observe committed state through views, watches and events. Optional subpaths provide native file and shell tools, image processing, durable Code Mode and reusable storage and environment tests.
 

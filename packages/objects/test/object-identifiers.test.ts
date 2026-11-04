@@ -1,5 +1,5 @@
 import { expect, it, vi } from "vitest";
-import { uuidv7 } from "../src/next/host/uuid.ts";
+import { uuidv7 } from "../src/host/uuid.ts";
 
 it("mints unique ordered version-seven identifiers even while the wall clock goes backwards", () => {
 	vi.useFakeTimers();

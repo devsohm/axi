@@ -1,7 +1,7 @@
 import { expect, it } from "vitest";
 import { BACKGROUND_CONTEXT as context } from "../src/context/index.ts";
-import { References } from "../src/next/host/presence.ts";
-import { Batch } from "../src/next/state/internal.ts";
+import { References } from "../src/host/presence.ts";
+import { Batch } from "../src/state/internal.ts";
 
 it("lists local and remote holders and folds removals and additions in commit order", async () => {
 	const batch = new Batch(() => {}, undefined),

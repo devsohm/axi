@@ -1,4 +1,4 @@
-import type { Context } from "@axi/objects";
+import type { Context } from "@axi/objects/context";
 import type { Conversation, ConversationHandle, Tx } from "../src/index.ts";
 
 export function checkConversationOperations(

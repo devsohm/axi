@@ -1,5 +1,6 @@
 import type { AnyModel, ClassifierContext, ImagesContext, Models, ModelType, ModelTypeMap, Usage } from "@axi/ai";
-import type { Context, JsonValue } from "@axi/objects";
+import type { Context } from "@axi/objects/context";
+import type { JsonValue } from "@axi/objects/json";
 import { Type } from "typebox";
 import { defineTool } from "../harness/define.ts";
 import type { ToolRegistration } from "../harness/types.ts";

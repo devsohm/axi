@@ -1,4 +1,4 @@
-import type { Context } from "@axi/objects";
+import type { Context } from "@axi/objects/context";
 import type { FileError, FileSystem } from "../../env/index.ts";
 import { StorageRequestError } from "../../errors.ts";
 import { idFromNumber } from "../../ids.ts";

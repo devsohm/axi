@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { BACKGROUND_CONTEXT as context } from "../src/context/index.ts";
-import { bool, int, obj, opt, str } from "../src/next/contracts/index.ts";
-import { Claims } from "../src/next/store/claims.ts";
-import { describeColumns } from "../src/next/store/columns.ts";
-import { json } from "../src/next/store/json-column.ts";
-import { RowCodec } from "../src/next/store/rows.ts";
+import { bool, int, obj, opt, str } from "../src/contracts/index.ts";
+import { Claims } from "../src/store/claims.ts";
+import { describeColumns } from "../src/store/columns.ts";
+import { json } from "../src/store/json-column.ts";
+import { RowCodec } from "../src/store/rows.ts";
 
 describe("stored rows", () => {
 	it("preserves thrown migration causes and leaves an absent cause absent", () => {

@@ -1,9 +1,9 @@
 import { expect, it } from "vitest";
 import { BACKGROUND_CONTEXT as context } from "../src/context/index.ts";
 import type { JsonValue } from "../src/json.ts";
-import { int, local, method } from "../src/next/index.ts";
-import { attachDerives, checkImplementation } from "../src/next/host/members.ts";
-import { Batch, Constant, Derive } from "../src/next/state/internal.ts";
+import { int, local, method } from "../src/index.ts";
+import { attachDerives, checkImplementation } from "../src/host/members.ts";
+import { Batch, Constant, Derive } from "../src/state/internal.ts";
 
 it("requires own contract members and calls no-argument methods with the context alone", async () => {
 	const contract = local("test.members", {

@@ -1,11 +1,11 @@
 import { expect, it } from "vitest";
 import { BACKGROUND_CONTEXT as context } from "../src/context/index.ts";
-import { ObjectsError, PluginError } from "../src/next/data/index.ts";
+import { ObjectsError, PluginError } from "../src/data/index.ts";
 import {
 	checkMessage,
 	errorFromWire,
 	wireError,
-} from "../src/next/link/internal.ts";
+} from "../src/link/internal.ts";
 
 it("accepts the protocol's message envelopes and enforces identifiers and allowed fields", () => {
 	const good: unknown[] = [

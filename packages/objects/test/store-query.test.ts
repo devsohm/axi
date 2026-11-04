@@ -1,17 +1,17 @@
 import { expect, it } from "vitest";
 import { BACKGROUND_CONTEXT } from "../src/context/index.ts";
-import { int, opt, str } from "../src/next/contracts/index.ts";
-import { applySet, matches } from "../src/next/store/evaluate.ts";
+import { int, opt, str } from "../src/contracts/index.ts";
+import { applySet, matches } from "../src/store/evaluate.ts";
 import {
 	ColumnRef,
 	add,
 	coalesce,
 	compileSet,
 	prefix,
-} from "../src/next/store/expression.ts";
-import { decodeCursor, encodeCursor, query } from "../src/next/store/query.ts";
-import { createTableSql, TableSql } from "../src/next/store/sql.ts";
-import { defineTable } from "../src/next/store/table.ts";
+} from "../src/store/expression.ts";
+import { decodeCursor, encodeCursor, query } from "../src/store/query.ts";
+import { createTableSql, TableSql } from "../src/store/sql.ts";
+import { defineTable } from "../src/store/table.ts";
 import { openNodeSqliteDatabase } from "../src/sqlite/node.ts";
 import type { SqliteValue } from "../src/sqlite/index.ts";
 

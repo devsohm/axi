@@ -1,4 +1,5 @@
-import type { Context, JsonValue } from "@axi/objects";
+import type { Context } from "@axi/objects/context";
+import type { JsonValue } from "@axi/objects/json";
 import {
 	findDocumentEntry,
 	listDocumentEntries,
@@ -7,7 +8,7 @@ import {
 	type SeriesCommit,
 	type ObjectsStore,
 	type Store,
-} from "@axi/objects/next";
+} from "@axi/objects";
 import type { SqliteExecutor } from "@axi/objects/sqlite";
 import { StorageRequestError } from "../../errors.ts";
 import { idFromNumber, seqFromNumber } from "../../ids.ts";

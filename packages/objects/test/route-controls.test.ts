@@ -10,7 +10,7 @@ import {
 	memoryLinkPair,
 	remote,
 	str,
-} from "../src/next/index.ts";
+} from "../src/index.ts";
 
 it("keeps an explicitly anonymous root anonymous and limits it to local objects", async () => {
 	const Value = local("root.local", { version: 1, params: {}, members: { value: int() } });

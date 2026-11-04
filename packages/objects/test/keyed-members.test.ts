@@ -1,8 +1,8 @@
 import { expect, it } from "vitest";
 import { BACKGROUND_CONTEXT as context } from "../src/context/index.ts";
-import { keyed, local, int, obj } from "../src/next/contracts/index.ts";
-import { defineState, type KeyedHandle } from "../src/next/documents/index.ts";
-import { createHost, defineFacet } from "../src/next/host/index.ts";
+import { keyed, local, int, obj } from "../src/contracts/index.ts";
+import { defineState, type KeyedHandle } from "../src/documents/index.ts";
+import { createHost, defineFacet } from "../src/host/index.ts";
 
 async function notes() {
 	const shape = obj({ n: int() });

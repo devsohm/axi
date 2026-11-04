@@ -4,12 +4,12 @@ import {
 	readCatalog,
 	writeCatalog,
 	type TableRecord,
-} from "../src/next/store/catalog.ts";
+} from "../src/store/catalog.ts";
 import {
 	applyStoreSchema,
 	STORE_SCHEMA,
 	TABLES,
-} from "../src/next/store/schema.ts";
+} from "../src/store/schema.ts";
 
 describe("store schema", () => {
 	it("initializes metadata and roundtrips table definitions through a real SQLite transaction", async () => {

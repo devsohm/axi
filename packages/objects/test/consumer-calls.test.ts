@@ -1,12 +1,12 @@
 import { expect, it, vi } from "vitest";
 import { BACKGROUND_CONTEXT as context } from "../src/context/index.ts";
-import { int, local, method } from "../src/next/contracts/index.ts";
-import { currentVariants } from "../src/next/contracts/internal.ts";
-import { ObjectsError } from "../src/next/data/index.ts";
-import { type Message, wireError } from "../src/next/link/internal.ts";
-import { ConsumerSide } from "../src/next/remote/consumer.ts";
-import type { HostLink } from "../src/next/remote/host-link.ts";
-import type { RemoteObject } from "../src/next/remote/remote-object.ts";
+import { int, local, method } from "../src/contracts/index.ts";
+import { currentVariants } from "../src/contracts/internal.ts";
+import { ObjectsError } from "../src/data/index.ts";
+import { type Message, wireError } from "../src/link/internal.ts";
+import { ConsumerSide } from "../src/remote/consumer.ts";
+import type { HostLink } from "../src/remote/host-link.ts";
+import type { RemoteObject } from "../src/remote/remote-object.ts";
 
 it("rejects waiting calls when their provider fails without sending them after an active call ends", async () => {
 	const contract = local("tests.waiting-calls", {

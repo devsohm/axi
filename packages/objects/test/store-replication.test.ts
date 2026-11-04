@@ -1,24 +1,25 @@
+import { LiveQueries } from "../src/store/live-query.ts";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, it } from "vitest";
 import { BACKGROUND_CONTEXT as context } from "../src/context/index.ts";
-import { int, obj, opt, str } from "../src/next/contracts/index.ts";
-import { applyBatch } from "../src/next/store/apply-batch.ts";
-import type { ArchivePart } from "../src/next/store/archive.ts";
-import { sqliteBackend } from "../src/next/store/backend.ts";
-import { createDocument } from "../src/next/store/engine.ts";
-import { importStore } from "../src/next/store/import.ts";
-import { json } from "../src/next/store/json-column.ts";
-import { decodeJsonl, encodeJsonl } from "../src/next/store/jsonl.ts";
-import { query } from "../src/next/store/query.ts";
-import type { StagedWrite } from "../src/next/store/step.ts";
-import { openStore, type ObjectsStore } from "../src/next/store/store.ts";
-import { defineTable } from "../src/next/store/table.ts";
-import { TableChanges } from "../src/next/store/table-changes.ts";
-import { evolveTable } from "../src/next/store/table-evolve.ts";
-import { TableHandle } from "../src/next/store/table-handle.ts";
-import { prepareTables } from "../src/next/store/table-migration.ts";
+import { int, obj, opt, str } from "../src/contracts/index.ts";
+import { applyBatch } from "../src/store/apply-batch.ts";
+import type { ArchivePart } from "../src/store/archive.ts";
+import { sqliteBackend } from "../src/store/backend.ts";
+import { createDocument } from "../src/store/engine.ts";
+import { importStore } from "../src/store/import.ts";
+import { json } from "../src/store/json-column.ts";
+import { decodeJsonl, encodeJsonl } from "../src/store/jsonl.ts";
+import { query } from "../src/store/query.ts";
+import type { StagedWrite } from "../src/store/step.ts";
+import { openStore, type ObjectsStore } from "../src/store/store.ts";
+import { defineTable } from "../src/store/table.ts";
+import { TableChanges } from "../src/store/table-changes.ts";
+import { evolveTable } from "../src/store/table-evolve.ts";
+import { TableHandle } from "../src/store/table-handle.ts";
+import { prepareTables } from "../src/store/table-migration.ts";
 import { openNodeSqliteDatabase } from "../src/sqlite/node.ts";
 
 const fence = { admit: () => true, adopt: () => {} };
@@ -35,6 +36,7 @@ const definition = defineTable("notes", {
 const owner = {
 	label: "app",
 	scope: {},
+	queries: new LiveQueries(),
 	assertLive() {},
 	fail(error: Error): void {
 		throw error;

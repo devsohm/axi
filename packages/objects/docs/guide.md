@@ -1,197 +1,86 @@
-# Object runtime guide
+# Objects guide
 
-Define a contract, serve it on a host, then hold a reference to an object. References with the same type, normalized input and principal share an object. Release references when their owner no longer needs them.
+## Contracts and references
 
-| Import | Purpose |
-| --- | --- |
-| `@axi/objects` | Contracts, hosts, state, resources, registries and links. |
-| `@axi/objects/context` | Cancellation and values attached to an invocation. |
-| `@axi/objects/delta` | JSON drafts, prepared revisions, diffs and delta encoding. |
-| `@axi/objects/output` | Output limits and progress delivery. |
-| `@axi/objects/node` | Module loading and child-process management. |
-| `@axi/objects/sqlite` | Database contracts and schema changes. |
-| `@axi/objects/sqlite/node` | Node SQLite connections. |
-| `@axi/objects/sqlite/cloudflare` | Cloudflare Durable Object SQLite connections. |
+Use `local(name, { version, params, members })` for a host-local contract. Use `remote()` with named `variants` and `hostAddress` for an object that can cross a link. `hostKind()` constructs addresses. It does not create hosts.
 
-```ts
-import { Type } from "typebox";
-import { createHost, local, method } from "@axi/objects";
+Schema helpers describe parameters, state and method inputs and results. `obj()` refuses extra fields. Contract declarations snapshot their schemas and calculate fingerprints. A fingerprint identifies shape, not application meaning or authorization.
 
-const Counter = local("counter", {
-	version: 1,
-	input: Type.Object({}),
-	members: { count: Type.Number(), add: method(Type.Number()) },
-});
+Use `defineFacet()` to group declarations. The facet's `host.serve()` registers factories and registry providers. Call `host.load()` once with named facets before acquiring references. An invalid plugin name rejects the load. A failed plugin setup appears in the report and does not prevent independent plugins from loading.
 
-const host = createHost({ self: null });
-host.serve(Counter, (_input, _principal, self) => {
-	const count = self.state("count", Type.Number(), 0);
-	return {
-		count,
-		add(amount, ctx) {
-			count.change(ctx, value => value + amount);
-		},
-	};
-});
+`host.get(type, params, context)` waits for a live reference. `host.hold()` returns a reference while it loads. References expose `state`, `retry()` and `release()`. State is `loading`, `live`, `failed` or `ended`. A failed reference carries its cause and optional retry time.
 
-const counter = await host.get(Counter, {});
-await counter.add(2);
-console.log(counter.count.value);
-counter.release();
-await host.close();
-```
-
-Factories declare state, references, resources, listeners and tasks synchronously. Resources open before the object becomes live. Cleanup closes resources in reverse order and releases dependencies afterward.
-
-A facet groups service declarations. Install facets with `host.install()` or `host.load()`. Reload them with `host.reload()`. Reload preparation checks contracts, state, resources and listeners before publishing a code version. A failed preparation retains the installed code.
-
-Use remote contracts with memory, IPC or WebSocket links to reach objects on another host. The accepting host supplies the caller's principal. State updates follow the held object without requiring a subscriber. A reference created with `state: false` receives no state until another view requests it.
-
-Node applications can import `nodeLoader`, `forkDriver`, `createHostManager` and `childControl` from `@axi/objects/node`. The loader refreshes modules within loaded facet directories. Its module cache lasts for the process lifetime.
-
-Use `host.root()` to share an invocation context across calls. Contexts expire when their call or root finishes. Tasks start a fresh root for each call. Close the host to cancel work, dispose its objects and close its links.
-
-## JSON revisions
-
-`track(initial)` opens a revision sequence. Start an edit with `beginChange()`, edit its `state`, and call `prepare()`. Preparation returns a candidate and its operations. The current value changes only when you call `adopt(candidate)`. Abort a failed edit. Adopting one candidate invalidates competing edits from the previous revision.
-
-Use `appendText(draft, key, text)` when adding streamed text to a required string property. It combines consecutive appends into one operation without comparing the entire previous string. An ordinary assignment or deletion of that property restores normal comparison. Operation text owns its bytes, so retaining a small append does not retain a larger source string.
-
-The tracker retains its newest open draft until it settles, another draft opens, or a candidate is adopted. Older competing drafts use weak references and can be collected when callers release them.
-
-The following rules apply to `track`, `prepareReplace`, `replicatedState` and replacement methods:
-
-- Passing a root transfers ownership. Do not change it afterward.
-- Roots must contain finite JSON values, dense plain arrays, and plain or null-prototype objects. They must have no cycles, accessors, symbols or shared containers at different paths. Validate external roots before passing them in.
-- Draft assignments copy and validate their values. You keep ownership of the assigned input. An invalid insertion changes nothing.
-- A draft expires after preparation, cancellation or another candidate's adoption. Retained draft handles expire too.
-- Published revisions and operation batches are immutable by contract. They can share containers and are not frozen. Copy a value before handing it to code that can mutate it.
-- A no-op adoption still advances the revision. Delta operations can differ in shape while producing the same final value.
-
-Use `applyImmutable(previous, operations)` to replay a revision without changing the previous value. `applyImmutableBatches` shares one copy scope across an ordered backlog and returns only its final value. Mutable `apply` needs its own copy of the starting value and each batch; sharing those inputs between mutable replicas makes their values share containers.
-
-Use one encoder and decoder per ordered delta stream. A replacement resets their path dictionaries. After a decode or replay error, discard that stream's decoder and recover from a replacement.
-
-## Standalone observable state
-
-`replicatedState(initial)` provides observable JSON state without a host. Its synchronous `change(context, callback)` publishes one committed value. A failed callback leaves the previous value in place. `replace(context, value)` transfers ownership of a new root.
-
-`replicatedState(source, { onError })` attaches to an external revision source. Attachment captures a snapshot and then receives consecutive committed frames. A missing or repeated cursor ends the attachment and reports an error. Call `dispose()` to release it; its last value remains readable.
-
-Subscriptions receive the initial value, context and delivery metadata. Each subscription waits for its own asynchronous callback before delivering its next value. It retains up to 100 pending deliveries; overflow keeps the newest update and any initial hydration that has not started. Delivery sequences can therefore skip. Unsubscribing drops pending work but does not cancel or join the callback already running. Callback failures are reported and later delivery continues. Object cells use the separate `Readable` subscription API.
-
-## Contract compatibility
-
-Use `local()` for objects confined to one host. Declare methods with `method()`, state with a schema, and native values with `opaque("name@version")`. A loading reference can distinguish those member kinds before its object is ready. Local method arguments and results are not checked on each call.
-
-Use `remote()` for objects that can cross a link. Each contract declares its input schema, placement and variants. `hostNamed(name)` places all objects on one host. `hostFamily(prefix, key)` forms a host name from a required, nonempty string input field. References choose their destination from that placement. Consumers cannot override it.
-
-Input normalization applies schema defaults, removes unknown fields and validates the result. The object address uses canonical input with default-valued fields omitted. Changing that identity rule requires a new type name. Use an optional schema property with a default when callers should be able to omit the property.
-
-Two contracts with the same version can bind when the provider covers the consumer. Every requested member must exist with the same kind. Method arguments must accept the consumer's values; results and state must fit the consumer's schemas. Opaque identifiers must agree. A consumer of a void method ignores any result. Both sides must agree on whether the method takes arguments.
-
-Breaking changes require a higher version and an `accepts` adapter for each older consumer version still supported. An adapter maps the current implementation to the older view. It cannot change placement. Contract fingerprints describe structure, not application meaning; a meaning change still requires a version bump even when schemas stay identical.
-
-## Host and object lifecycle
-
-| API | Behavior |
-| --- | --- |
-| `serve(type, factory, options)` | Registers a synchronous factory. Referenced lifetime is the default. |
-| `hold(type, input, options)` | Returns a reference immediately; it may still be loading. |
-| `get(type, input, options)` | Waits for a live reference and its requested state. Failure releases this reference. |
-| `root(callback, options)` | Runs a short call tree with one principal, cancellation signal and code version. |
-| `install(facet, options)` | Installs one facet synchronously, then awaits its host objects by default. |
-| `load(facets, options)` | Resolves modules and installs the whole batch before awaiting host objects. |
-| `ready()` | Waits for the host-object references present when called. |
-| `registry(definition)` | Reads versioned registration tables and subscribes to table changes. |
-| `invalidatePrincipal(match)` | Revokes matching external identities, objects and links. Patterns propagate to child hosts. |
-| `close()` | Disposes objects before closing connections. |
-
-The default readiness timeout is 60 seconds. A failed activation rejects waiting references; a later acquisition can retry. State reads before initial readiness throw `not_ready`. A method can wait for activation, but calling a reference inside a factory is an error.
-
-When a route resolves a host, the parent admits that host's connection even if the initiating client has left. The resolved host can still use its parent. Authorization is checked again before serving the original client request.
-
-Activation opens declared resources, waits for dependencies, initializes cells, then attaches derivations, listeners and tasks. Cell `init` functions run in parallel in separate roots after resources and references are ready. They must not wait for their own object, read another unfinished initializer, or create dependency cycles. Initializing a cell does not persist it.
-
-Objects normally end after their last reference is released. A service's `linger` delays disposal. A local service with `lifetime: "host"` instead has one object with empty normalized input and the host's principal. It cannot have required input fields or linger. Only these host objects can register entries. A failed host-object activation is reported through `onError` and can be retried by a reload that changes its service.
-
-`awaitHostObjects: false` leaves startup coordination to the application. A child whose host objects need its parent can load without the barrier, await a local bootstrap reference, announce readiness to its manager, then await `host.ready()`. The application must still handle later startup failures. `ready()` does not join tasks or provide a continuous health check.
-
-Disposal stops tasks and listeners, waits for calls, closes resources in reverse opening order, then releases dependencies. Forced disposal first marks references gone and cancels calls. Bulk disposal handles referrers before their dependencies so resource cleanup can still use held objects. Cleanup attempts all steps and aggregates failures.
+Use `self.get()` inside a factory to declare an object-owned dependency. Use `ctx.get()` inside a call for a reference released when that call settles. Release references acquired directly from the host yourself. `host.root()` supplies the same call ownership to application code.
 
 ## Factory declarations
 
-| Declaration | Ownership and reload behavior |
+Factories run synchronously. A factory declares handles before it reads their values or calls dependencies. Activation loads documents, binds dependencies and opens native resources before admitting calls.
+
+| Declaration | Purpose |
 | --- | --- |
-| `state(name, schema, initial, options)` | Keeps a named cell and value. A higher cell version permits migration; the schema cannot change without a version bump. |
-| `get(type, input, options)` | Holds an object-owned reference, reused by address. |
-| `resource(name, declaration)` | Keeps an open resource while its version, dependencies and exclusivity agree. |
-| `on(name, source, handler)` | Holds a subscription and replaces its handler on reload. An optional selector chooses the event source. |
-| `task(callback)` | Runs background work until cancellation; reload replaces the run. |
-| `derive(sources, callback)` | Computes synchronous observable state; reload creates new derivations. |
-| `register(registry, entries)` | Adds entries to the host object's versioned registry table. |
-| `expose(resource)` | Exposes the open native resource value through a local member. |
+| `self.state(definition)` | Object-owned document |
+| `self.get(type, params)` | Object-owned reference |
+| `self.registry(registry)` | Composed plugin contributions |
+| `self.writable(initial)` | In-process mutable value |
+| `self.derive(sources, compute)` | Derived JSON value |
+| `self.open(open, close, options)` | Native resource with bounded cleanup |
+| `self.follow(attach)` | Source attached during activation |
+| `self.on(source, handler)` | Serialized source-triggered routine |
+| `self.onLive(handler)` | Routine started once the attempt is live |
+| `self.job(definition, implementation)` | Job with run and finish phases |
+| `self.retryOn(...sources)` | Additional retry triggers |
+| `self.tx(callback, context)` | Atomic document and table transaction |
 
-Declaration names are unique within their kind and object. Factories only declare dependencies; resource values, unfinished cells and reference calls are unavailable inside them. Resources may explicitly depend on references or other resources of the same object.
+An empty-parameter local factory receives `StoreSelf`. With a Store, it can also declare tables, persisted documents, persisted jobs and contributions. `self.query(table, query, limit)` exposes bounded live rows. A commit refreshes affected queries before publishing its document changes. Failed query refreshes retain the last result and report the failure.
 
-A kept resource adopts its replacement declaration at commit, including its cleanup function. A replaced resource closes with the declaration that opened it. An open that finishes after cancellation closes its resulting value instead of publishing it.
+## Documents, tables and jobs
 
-State listeners receive the current value when attached. Replacing their source during reload attaches them again, so handlers must reconcile state rather than count notifications. Event subscriptions survive when their source and selector are unchanged; selector comparison also accepts equal function source text. Avoid selectors whose changing captured values are essential to their behavior.
+`defineState()` specifies a document's name, schema, version and initial value. A keyed definition addresses documents with `handle.at(key)`. Change documents with `handle.change()` or draft several handles in `self.tx()`. A failed transaction publishes nothing.
 
-Object state notifications are synchronous and ordered. Every changed cell and dependent value is installed before listeners run. Listener failures go to `onError`. `change()` callbacks and derivations must be synchronous. A value returned from `change()` replaces the draft and is always validated. Development mode additionally validates normal writes and exposed remote state. `replace()` transfers ownership; its optional `diff` controls whether to publish a structural diff or a whole-value replacement.
+A persisted definition also supplies `checkpointWhen`. Schema migrations run through its `migrate` callback. State survives a code swap. Persistence also retains it across host restarts when the application reopens the same Store.
 
-## Contexts and principals
+`defineTable()` specifies columns, a primary key, indexes and a version. `evolveTable()` records later schema changes and row transformations. `query()` builds conditions and ordering. Use table paging for bounded reads and `self.query()` for a watched result.
 
-The application supplies `self` and every link's principal. `principalKey` determines identity; include grant revisions and connection provenance when those distinguish callers. A principal with the same key as `self` is treated as the host itself. Objects are otherwise separate for each principal key.
+`defineJob()` specifies arguments, results, optional state, concurrency and persistence. Its `run` executes outside a transaction. Its `finish` callback and record cleanup execute together in a transaction. Failed finishes retry and block after five failures. Persisted runs reserve their record before executing. Recovery resumes eligible work from committed state. External effects still need application idempotency.
 
-An ingress root acts as its supplied principal. Methods, initializers, listeners and tasks inside an object act as the host. A context carries cancellation, root identity and code version. A nested call with that context stays in the call tree. Calls without a context, or calls made by long-lived task holders, start a fresh root.
+Deferred job-state writes become visible immediately and persist by their deadline or an earlier immediate write. A crash can lose uncommitted deferred state. The outcome and close paths flush deferred state.
 
-Contexts expire when their call or root settles. A foreign host's context is refused. `ctx.get()` waits for readiness and releases the acquired reference when the call ends. Cancellation and readiness timeout release only that acquisition.
+## Reload
 
-The separate `@axi/objects/context` API carries invocation values, cancellation and telemetry for code outside an object call. Use `withContextValue`, `withCancel`, `withAbortSignal`, `withoutAbortSignal` and `awaitWithContext`; `BACKGROUND_CONTEXT` has no caller cancellation. Every standalone `Context` has a `telemetry` member, defaulting to the no-op span. `withTelemetry(span, context)` replaces it in a derived context. Start a root span through your telemetry adapter, then pass its callback's span to this helper. `traceIn(options, callback, context)` starts a callback-managed child span and passes a context with that span. Both preserve typed values and cancellation. They do not automatically instrument hosts, calls or link frames. These values do not replace the host's call context.
+Pass the complete desired facet set to `host.reload()`. Reusing the same facet object keeps it unchanged. Omitted facets are removed. Reloads are serialized.
 
-## Reload transactions
+Staging records setup and factory declarations without opening natives or publishing state. A failed plugin keeps its prior implementation. A changed consumer also stays on prior code when it requires an incompatible provider whose update failed.
 
-A reload loads replacement facets and prepares every affected live object before publishing new code. Preparation records declarations, opens candidate nonexclusive resources, validates contracts and registry collisions, and stages subscriptions. It does not start candidate tasks or publish candidate state. An unsuccessful preparation rolls back candidates and leaves installed code in place.
+Objects without native resources or table migration can swap implementations while retaining documents. Calls already running finish on their admitted implementation. Objects requiring a restart drain calls, close natives and activate replacement code. Parked or failed objects retry. References keep their last visible values until the replacement binds.
 
-Changing a cell version or replacing an exclusive resource requires a gate. Existing roots that already touched the object may finish. New old-version roots receive retryable `upgrade_conflict`; they are not queued. The gate waits up to `gateDeadline`, closes replaced exclusive resources, opens their replacements and migrates private state copies. Tasks stop at the gate; listener events wait for commit or rollback. A failed replacement attempts to reopen its old resource.
+A reload report describes plugin changes and each affected object's result. Cancellation before publication changes nothing. Cancellation after publication can reject the wait while retaining the committed update.
 
-Commit installs state, implementations, tables and reference shapes in one synchronous publication step. Observers run afterward. An unexpected commit failure marks the host failed; it must not continue admitting work against a partially installed version.
+## Principals, links and routes
 
-The host keeps current and previous code versions. Existing roots use their original version. Before another reload, retirement waits up to `retireDeadline`, then cancels remaining old roots and grants a short cleanup period. A call for a version no longer retained receives `superseded`. Gated objects refuse older versions after commit even if other objects still retain them.
+The host or accepting link supplies the principal. `principalKey` controls identity. A local object uses the host principal. Remote objects separate identities by principal. Named variants restrict available members. Plugin methods still enforce their application rules.
 
-The coordinator prepares its direct child hosts and collects their votes before committing. Any failed vote aborts the transaction. It sends commit decisions before starting new-version work. A child that reconnects behind the coordinator is fenced until reconciliation finishes. Cluster module lists use the longest matching host-name prefix. Clients observe changes but do not vote or send code-version roots.
+`memoryLinkPair()` connects hosts in one process. `ipcLink()` and `webSocketLink()` adapt transports. `accept()` admits a downstream principal. `connect()` supplies a parent link. Only a parent can stamp a forwarded caller's principal and incarnation.
 
-## Links and remote state
+Register routes before loading. `host.route(kind, { authorize, resolve }, context)` authorizes each hold and resolves a link for its address. Resolution runs at most once per address at a time. `retry(address)` retries held work. `suspend(address)` prevents new resolution until retry or release. There is no timer retry loop.
 
-`connect()` supplies the parent link. `accept()` supplies authenticated downstream links; a host link also needs a configured name. Browser peers are clients. `acceptWebSockets()` buffers incoming frames while its principal callback runs and refuses unauthenticated sockets.
+A lost link fails in-flight calls. Their remote effect may already have happened. Reconnecting rebinds held references and retains their last snapshots while loading. Calls are not replayed automatically.
 
-`route(prefix, { authorize, resolve, principal })` controls relayed access. Authorization runs before and after link resolution, and revocation is checked across awaits. A known child is not sufficient authorization. Forwarded principals and reload control frames are accepted only from the configured parent.
+## Store and SQLite
 
-Remote references with the same address, principal and consumer fingerprint share one binding. Views retain their own status, callbacks and release ownership. A shape is installed only after all its required snapshots arrive. Later frames carry per-member deltas or resets. The binding retains its last hydrated values during reconnect, but in-flight calls reject when their link ends; whether those calls executed is unknown.
+Open a database through `@axi/objects/sqlite/node` or `@axi/objects/sqlite/cloudflare`. Pass `sqliteBackend(database)` to `openStore()`, then pass the Store to `createHost()`. Close the host before closing the Store. The Store owns its database after opening.
 
-Links use protocol version 4. Mismatched versions invoke `onProtocolMismatch` and close; there is no protocol negotiation. Ping intervals and timeouts detect lost peers. `maxCalls` limits admitted concurrent calls and rejects excess work immediately.
+Store commits apply document and table writes atomically. Adoption follows the database commit. An uncertain commit outcome stops the Store. An optional outbox retains applied writes for ordered replay.
 
-Acknowledgements regulate state traffic. The default state window is 256 KiB; queued operations are bounded by `pendingCap`, defaulting to four windows. Stalled streams collapse to current-value resets. Method results and other control traffic can pass waiting state. A new reference's initial unit bypasses waiting state so unrelated streams cannot prevent its first hydration. IPC links do not report encoded sizes and are not windowed.
+`store.export(context)` holds the commit queue while yielding an archive. `encodeJsonl()` and `decodeJsonl()` encode archive records as UTF-8 lines. `importStore()` validates an archive and imports it atomically into an empty database. Export records are separate from Durable's JSONL session backend.
 
-## Output and SQLite helpers
+The SQLite executor's transaction callback owns an exclusive queue slot. Use its temporary executor inside that callback. Awaiting the outer database there would deadlock. The temporary executor expires afterward. Failed callbacks roll back before rejecting.
 
-`boundOutput()` selects a head or tail window without splitting UTF-8 characters. `OutputBuffer` accepts string or byte chunks, handles split characters, tracks dropped bytes and lines, and sanitizes display control characters. Call `end()` when the stream finishes. Skipped-output metadata is accepted only for tail retention.
+## Observers and tracing
 
-`Progress` coalesces writes and spaces them by the minimum interval and written size at 100 KiB per second. `markAndWait()` settles with the write containing that change. `stop()` stops scheduling, joins the current write and returns waiters for the caller's final commit.
+A JSON watch delivers the newest value, delta operations, a retirement flag and a commit context. A native watch delivers in-process values without delta operations. Callbacks run in order. Backlogged JSON changes fold together. Stop or cancellation detaches the watch and releases queued state.
 
-`SqliteExecutor` exposes asynchronous `exec`, `run`, `runCounted`, `get` and `all`. Use positional bindings. `runCounted` returns the number of rows inserted, updated or deleted, excluding index and trigger writes. A database transaction owns an exclusive queue slot: use only its temporary executor inside the callback. Database operations, another transaction and `close()` wait behind it and would deadlock if awaited from inside it. The temporary executor expires when the callback settles. Callback failure rolls back before rejection; rollback failure is reported separately.
+Pass an explicit `Context` through calls. `withCancel()` and `withAbortSignal()` derive cancellation scopes. `withContextValue()` carries typed values. `withTelemetry()` attaches a callback span without changing the parent context.
 
-The Node adapter caches at most 256 prepared statements per connection. Frequently used statements remain cached when new query shapes displace older entries.
+A host telemetry adapter records methods, holds, calls, activation, cleanup, jobs, routines, HTTP, routes and reloads. Remote carriers preserve supported parent context. Cancellation records an aborted outcome without a failure status. `ctx.trace()` adds an application span while preserving principal, incarnation and acquired-reference ownership.
 
-The Node adapter shares prepared statements across transactions and defaults to WAL mode, normal synchronous mode, a 1,000-page checkpoint threshold and a 5,000 ms busy timeout. The Durable Object adapter shares a queue for each storage object and leaves storage ownership with the object. It rejects `bigint` bindings outside the safe integer range and converts returned blobs to `Uint8Array`.
-
-`applySqliteMigrations()` validates the metadata table name and contiguous versions starting at 1, then applies pending statements and updates the tracked version in one transaction. A database newer than the supplied migrations is refused.
-
-## Operational limits
-
-Facets are trusted code in the host process. The Node loader imports a new module generation for each reload; old generations stay cached and plugins are not isolated. The process-wide synchronous publication queue means a slow observer delays other observers in the same process.
-
-Cluster commit decisions and child module lists are not persisted. A coordinator failure can leave children on an older version until reconciliation. Only direct child hosts participate in a coordinated reload. Links do not resume provider-side holds after disconnect. The host manager does not automatically restart a failed child; the application chooses its policy.
-
-On platforms that use filesystem socket locks, competing stale-lock probes can race. Bound remote cleanup calls so a disconnected dependency cannot prevent shutdown indefinitely. These runtime helpers do not provide durable application recovery by themselves.
+The SQLite telemetry recorder queues finished spans and ten-second metric aggregates. `flush()` writes them. `close()` flushes partial intervals and leaves its database open. Page ingestion checks sender identity, field bounds and per-minute span limits. Worker ingestion stamps its authenticated host. Senders keep unsent batches while disconnected and discard failed sends as best effort.

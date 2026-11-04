@@ -1,5 +1,5 @@
 import { posix, win32 } from "node:path";
-import type { Context } from "@axi/objects";
+import type { Context } from "@axi/objects/context";
 import {
 	err,
 	FileError,

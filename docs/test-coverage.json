@@ -31,33 +31,24 @@
 				{
 					"behavior": "declarations, contracts, state and delta replay",
 					"tests": [
-						"packages/objects/test/contract.test.ts",
-						"packages/objects/test/cell.test.ts",
-						"packages/objects/test/state.test.ts",
 						"packages/objects/test/delta.test.ts",
 						"packages/objects/test/replay-model.test.ts",
-						"packages/objects/test/state-delivery.test.ts"
+						"packages/objects/test/contracts.test.ts",
+						"packages/objects/test/state-sources.test.ts",
+						"packages/objects/test/schema-boundaries.test.ts"
 					]
 				},
 				{
 					"behavior": "object routing, links and host lifecycle",
 					"tests": [
-						"packages/objects/test/runtime.test.ts",
-						"packages/objects/test/link.test.ts",
-						"packages/objects/test/remote-lifecycle.test.ts",
-						"packages/objects/test/routed-hosts.test.ts",
-						"packages/objects/test/object-lifecycle.test.ts",
-						"packages/objects/test/route-controls.test.ts"
+						"packages/objects/test/route-controls.test.ts",
+						"packages/objects/test/runtime-boundaries.test.ts",
+						"packages/objects/test/runtime-tracing.test.ts"
 					]
-				},
-				{
-					"behavior": "cluster reload, retirement and rollback",
-					"tests": ["packages/objects/test/cluster-lifecycle.test.ts"]
 				},
 				{
 					"behavior": "processes, cancellation, output and SQLite",
 					"tests": [
-						"packages/objects/test/manager.test.ts",
 						"packages/objects/test/context.test.ts",
 						"packages/objects/test/output.test.ts",
 						"packages/objects/test/sqlite.test.ts",
@@ -65,8 +56,8 @@
 					]
 				},
 				{
-					"behavior": "experimental contracts, version mappings, errors, principal keys and bounded link parts",
-					"tests": ["packages/objects/test/next-contracts.test.ts"]
+					"behavior": "contracts, version mappings, errors, principal keys and bounded link parts",
+					"tests": ["packages/objects/test/contracts.test.ts"]
 				},
 				{
 					"behavior": "shared Store table declarations, queries, document history, commit failures, outbox and export lifecycle and replication/import validation",
@@ -109,7 +100,8 @@
 						"packages/objects/test/job-state-persistence.test.ts",
 						"packages/objects/test/job-records.test.ts",
 						"packages/objects/test/job-record-lifecycle.test.ts",
-						"packages/objects/test/job-execution.test.ts"
+						"packages/objects/test/job-execution.test.ts",
+						"packages/objects/test/runtime-tracing.test.ts"
 					]
 				},
 				{
@@ -126,7 +118,7 @@
 					]
 				},
 				{
-					"behavior": "experimental host activation, remote reconnection, interrupted calls and report retention",
+					"behavior": "host activation, remote reconnection, interrupted calls and report retention",
 					"tests": [
 						"packages/objects/test/object-host.test.ts",
 						"packages/objects/test/object-attempt.test.ts",
@@ -135,7 +127,7 @@
 					]
 				},
 				{
-					"behavior": "experimental facet staging, replacement, resource restart and job/version handover",
+					"behavior": "facet staging, replacement, resource restart and job/version handover",
 					"tests": ["packages/objects/test/object-reload.test.ts"]
 				},
 				{
@@ -145,6 +137,14 @@
 				{
 					"behavior": "worker processes, recovery, rollout, idle cleanup and locks",
 					"tests": ["packages/objects/test/workers.test.ts"]
+				},
+				{
+					"behavior": "plugin discovery, evaluation and installation",
+					"tests": ["packages/objects/test/node-plugins.test.ts", "packages/objects/test/plugin-discovery.test.ts"]
+				},
+				{
+					"behavior": "authenticated telemetry ingestion and disconnected delivery",
+					"tests": ["packages/objects/test/telemetry-ingest.test.ts"]
 				}
 			]
 		},

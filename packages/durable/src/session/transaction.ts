@@ -1,6 +1,8 @@
 import { BACKGROUND_CONTEXT } from "@axi/objects/context";
 import type { TelemetryCarrier } from "@axi/telemetry";
-import { copyJson, type Context, type Draft, type JsonValue } from "@axi/objects";
+import { copyJson, type JsonValue } from "@axi/objects/json";
+import { type Context } from "@axi/objects/context";
+import { type Draft } from "@axi/objects/delta";
 import { type Change, type Op, type PendingOps, type Prepared, type Tracker, track } from "@axi/objects/delta";
 import {
 	addressId,

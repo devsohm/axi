@@ -189,7 +189,7 @@ try {
 		`
 import * as ai from "@axi/ai";
 import * as objects from "@axi/objects";
-import * as next from "@axi/objects/next";
+import type { Context } from "@axi/objects/context";
 import * as codemode from "@axi/codemode";
 import * as durable from "@axi/durable";
 import * as env from "@axi/env";
@@ -198,16 +198,16 @@ import * as telemetry from "@axi/telemetry";
 import * as tui from "@axi/tui";
 import type { SummaryRequest, BlockedReason } from "@axi/durable";
 import { StoreStorage } from "@axi/durable/storage/store";
-export const packages = [ai, objects, next, codemode, durable, env, mcp, telemetry, tui];
+export const packages = [ai, objects, codemode, durable, env, mcp, telemetry, tui];
 export const reasons = ["missing_task", "task_too_old", "migration_failed"] satisfies BlockedReason[];
 // @ts-expect-error Restart-limited tasks settle rather than remaining blocked.
 export const removedReason: BlockedReason = "restart_limit";
 export const summaryModel = (request: SummaryRequest) => request.model.modelId;
-export const observe = (harness: durable.Harness, id: durable.ConversationId, context: objects.Context) =>
+export const observe = (harness: durable.Harness, id: durable.ConversationId, context: Context) =>
   harness.observeConversation(id, { advance() {}, end() {} }, context, { min: 2, max: 4 });
 export const watchCall = (call: durable.WatchCall<unknown>) => call.kind;
 export const parse = new ai.StreamingJsonParser();
-export const sharedStorage = (store: next.Store, context: objects.Context) => StoreStorage.open(store, "installed", context);
+export const sharedStorage = (store: objects.Store, context: Context) => StoreStorage.open(store, "installed", context);
 `,
 	);
 	writeFileSync(

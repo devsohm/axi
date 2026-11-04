@@ -1,4 +1,5 @@
-import type { Context, JsonValue } from "@axi/objects";
+import type { Context } from "@axi/objects/context";
+import type { JsonValue } from "@axi/objects/json";
 import type { ConversationId, Storage, TaskId, TaskRecord } from "../types.ts";
 import type { Transaction } from "../session/transaction.ts";
 import { conversationKey, ownedKey, ROOTS_KEY, taskKey } from "../session/keys.ts";

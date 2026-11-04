@@ -1,4 +1,5 @@
-import { type Context, copyJson, type JsonValue } from "@axi/objects";
+import { type Context } from "@axi/objects/context";
+import { copyJson, type JsonValue } from "@axi/objects/json";
 import { awaitWithContext, withAbortSignal, withoutAbortSignal, withTelemetry } from "@axi/objects/context";
 import type { Models } from "@axi/ai";
 import {

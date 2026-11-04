@@ -1,4 +1,5 @@
-import { type Context, copyJson, type JsonRepresentation } from "@axi/objects";
+import { type Context } from "@axi/objects/context";
+import { copyJson, type JsonRepresentation } from "@axi/objects/json";
 import { withTelemetry } from "@axi/objects/context";
 import {
 	createTypedSpanStarter,

@@ -3,8 +3,8 @@ import {
 	BACKGROUND_CONTEXT as context,
 	withCancel,
 } from "../src/context/index.ts";
-import { ObjectsError } from "../src/next/data/index.ts";
-import { JobRun } from "../src/next/jobs/run.ts";
+import { ObjectsError } from "../src/data/index.ts";
+import { JobRun } from "../src/jobs/run.ts";
 
 it("keeps its originating version and fingerprint while presenting adapted arguments", () => {
 	const run = new JobRun("run", 2, "job-v2", "request", { input: 1 }, "running");

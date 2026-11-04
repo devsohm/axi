@@ -3,14 +3,14 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, it, vi } from "vitest";
 import { BACKGROUND_CONTEXT as context } from "../src/context/index.ts";
-import * as api from "../src/next/index.ts";
-import { buildFacet, createPlugins, discoverPlugins, evaluateFacet, mapStack } from "../src/next-node/plugins/index.ts";
-import { PluginWatcher } from "../src/next-node/plugins/watcher.ts";
-import { Batch } from "../src/next/state/internal.ts";
+import * as api from "../src/index.ts";
+import { buildFacet, createPlugins, discoverPlugins, evaluateFacet, mapStack } from "../src/node/plugins/index.ts";
+import { PluginWatcher } from "../src/node/plugins/watcher.ts";
+import { Batch } from "../src/state/internal.ts";
 
-const packages = { "@axi/objects/next": api };
+const packages = { "@axi/objects": api };
 const Metric = api.local("plugin.metric", { version: 1, params: {}, members: { reading: api.int() } });
-const source = (reading: number) => `import {defineFacet,local,int,constant} from "@axi/objects/next";
+const source = (reading: number) => `import {defineFacet,local,int,constant} from "@axi/objects";
 const Metric=local("plugin.metric",{version:1,params:{},members:{reading:int()}});
 export default defineFacet(host=>host.serve(Metric,()=>({reading:constant(${reading})})));`;
 
@@ -92,7 +92,7 @@ it("updates a loaded plugin, keeps its last working code after a broken edit, an
 it("maps evaluation errors back to the plugin source and refuses file access outside the plugin", async () => {
 	const root = await mkdtemp(join(tmpdir(), "axi-plugins-"));
 	await fixture(root, {
-		"worker.ts": `import {pluginFile} from "@axi/objects/next/plugins";
+		"worker.ts": `import {pluginFile} from "@axi/objects/plugins";
 export default {setup(){},escape(){return pluginFile("../elsewhere");},fail(){throw new Error("plugin failed");}};`,
 	});
 	try {

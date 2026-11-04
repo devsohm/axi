@@ -1,5 +1,5 @@
-import * as objects from "../../src/next/index.ts";
-import { workerMain } from "../../src/next-node/workers/index.ts";
+import * as objects from "../../src/index.ts";
+import { workerMain } from "../../src/node/workers/index.ts";
 import { Control } from "./worker-contracts.ts";
 
 workerMain(
@@ -24,5 +24,5 @@ workerMain(
 		process.stdout.write("worker ready\n");
 		return undefined;
 	},
-	{ hostPackages: { "@axi/objects/next": objects }, redact: () => ({ message: "worker failed" }), onError() {} },
+	{ hostPackages: { "@axi/objects": objects }, redact: () => ({ message: "worker failed" }), onError() {} },
 );

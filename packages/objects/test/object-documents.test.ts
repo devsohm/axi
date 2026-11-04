@@ -1,13 +1,14 @@
+import { LiveQueries } from "../src/store/live-query.ts";
 import { afterEach, expect, it, vi } from "vitest";
 import { BACKGROUND_CONTEXT as context } from "../src/context/index.ts";
-import { defineState, defineTable, int, obj, openStore, sqliteBackend, str } from "../src/next/index.ts";
-import { Documents, SealToken, type AnyDefinition } from "../src/next/documents/internal.ts";
-import type { KeyDeclarer } from "../src/next/documents/handles.ts";
-import type { StateDefinition, JsonObject } from "../src/next/documents/definition.ts";
-import { Batch } from "../src/next/state/internal.ts";
-import { ObjectsStore } from "../src/next/store/store.ts";
-import { TableHandle } from "../src/next/store/table-handle.ts";
-import { prepareTables } from "../src/next/store/table-migration.ts";
+import { defineState, defineTable, int, obj, openStore, sqliteBackend, str } from "../src/index.ts";
+import { Documents, SealToken, type AnyDefinition } from "../src/documents/internal.ts";
+import type { KeyDeclarer } from "../src/documents/handles.ts";
+import type { StateDefinition, JsonObject } from "../src/documents/definition.ts";
+import { Batch } from "../src/state/internal.ts";
+import { ObjectsStore } from "../src/store/store.ts";
+import { TableHandle } from "../src/store/table-handle.ts";
+import { prepareTables } from "../src/store/table-migration.ts";
 import { openNodeSqliteDatabase } from "../src/sqlite/node.ts";
 
 const Note = defineState("note", {
@@ -314,6 +315,7 @@ it("commits table changes with document changes and preserves both when a column
 	const table = new TableHandle(definition, "app.owner:rows", disk, {
 		label: "app.owner",
 		scope: app.documents,
+		queries: new LiveQueries(),
 		assertLive() {},
 		fail(error) {
 			app.errors.push(error);
