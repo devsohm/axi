@@ -84,6 +84,9 @@ export async function consumeSseStream(stream: ReadableStream<Uint8Array>, optio
 		buffer += decoder.decode();
 		if (buffer) line(buffer);
 		flush();
+	} catch (error) {
+		await reader.cancel().catch(() => undefined);
+		throw error;
 	} finally {
 		reader.releaseLock();
 	}
@@ -131,6 +134,29 @@ function media(response: Response): string | undefined {
 }
 function discard(response: Response): Promise<void> {
 	return response.body?.cancel().catch(() => undefined) ?? Promise.resolve();
+}
+async function boundedBody(response: Response, budget: number): Promise<{ text: string; overflow: boolean }> {
+	if (!response.body) return { text: "", overflow: false };
+	const reader = response.body.getReader(),
+		decoder = new TextDecoder();
+	let text = "",
+		bytes = 0;
+	try {
+		for (;;) {
+			const chunk = await reader.read();
+			if (chunk.done) return { text: text + decoder.decode(), overflow: false };
+			const available = budget - bytes;
+			if (chunk.value.byteLength > available) {
+				text += decoder.decode(chunk.value.subarray(0, available), { stream: true });
+				await reader.cancel().catch(() => undefined);
+				return { text, overflow: true };
+			}
+			bytes += chunk.value.byteLength;
+			text += decoder.decode(chunk.value, { stream: true });
+		}
+	} finally {
+		reader.releaseLock();
+	}
 }
 type Cursor = { id: string | undefined; retry: number | undefined; received: boolean };
 export class StreamableHttpTransport extends TransportEvents implements McpTransport {
@@ -211,7 +237,7 @@ export class StreamableHttpTransport extends TransportEvents implements McpTrans
 	}
 	async #check(response: Response): Promise<void> {
 		if (response.ok) return;
-		const body = Array.from((await response.text().catch(() => "")).slice(0, 8192)).join("");
+		const { text: body } = await boundedBody(response, 8192).catch(() => ({ text: "" }));
 		if (response.status === 401) throw new McpAuthRequiredError(response, body);
 		if (response.status === 404 && this.#session) throw new McpSessionExpiredError(body);
 		const text = body.trim(),
@@ -250,7 +276,10 @@ export class StreamableHttpTransport extends TransportEvents implements McpTrans
 			throw new McpHttpError(response.status, `MCP server accepted request ${message.method} without a response`);
 		const type = media(response);
 		if (type === "application/json") {
-			const value: unknown = await response.json();
+			const budget = this.options.maxMessageBytes ?? DEFAULT_MAX_MESSAGE_BYTES;
+			const body = await boundedBody(response, budget);
+			if (body.overflow) throw new Error(`MCP JSON response exceeds ${budget} bytes`);
+			const value: unknown = JSON.parse(body.text);
 			for (const row of Array.isArray(value) ? value : [value]) this.emitMessage(parseJsonRpcMessage(row));
 			return;
 		}

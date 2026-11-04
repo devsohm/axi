@@ -99,7 +99,7 @@ describe("legacy Codex requests", () => {
 			expect(captured).toBe(String(account));
 		}
 	});
-	it("retains a completed retry callback on the caller's abort signal", async () => {
+	it("releases a completed retry callback from the caller's abort signal", async () => {
 		const controller = new AbortController();
 		let calls = 0;
 		const result = await stream(model, context, {
@@ -117,10 +117,10 @@ describe("legacy Codex requests", () => {
 		}).toEqual({
 			calls: 2,
 			reason: "stop",
-			listeners: 1,
+			listeners: 0,
 		});
 		controller.abort();
-		expect(getEventListeners(controller.signal, "abort")).toHaveLength(1);
+		expect(getEventListeners(controller.signal, "abort")).toHaveLength(0);
 	});
 	it.each(["7", '"heartbeat"', "[]", "0", "false", '""'])(
 		"ignores a non-event WebSocket frame %s before the response",

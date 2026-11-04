@@ -44,6 +44,15 @@ const theme: MarkdownTheme = {
 	underline: plain,
 };
 
+test("HTML comments disappear from blocks and inline text but remain literal in code", () => {
+	const render = (source: string) => new Markdown(source, 0, 0, theme).render(60).map((line) => line.trimEnd());
+	expect(render("before\n\n<!-- hidden -->\n\nafter")).toEqual(["before", "", "after"]);
+	expect(render("a <!-- hidden --> b")).toEqual(["a b"]);
+	expect(render("<!-- still streaming")).toEqual([""]);
+	expect(render("`<!-- visible -->`")).toEqual(["<!-- visible -->"]);
+	expect(render("> <!-- hidden -->\n>\n> visible")).toEqual(["│ visible"]);
+});
+
 test("a list followed by an HTML block keeps each block at its own indentation", () => {
 	expect(new Markdown("- a\n<b>", 0, 0, theme).render(20).map((line) => line.trimEnd())).toEqual(["- a", "<b>"]);
 });

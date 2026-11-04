@@ -4,7 +4,73 @@ import { expect, test } from "vitest";
 import { McpClient, StreamableHttpTransport, LATEST_PROTOCOL_VERSION } from "../src/index.ts";
 import { consumeSseStream, type SseEvent } from "../src/transports/streamable-http.ts";
 
-test("HTTP errors preserve the bounded UTF-16 excerpt when its end splits a character", async () => {
+test("HTTP error excerpts stop reading after the byte budget", async () => {
+	let cancelled = false;
+	let reads = 0;
+	const transport = new StreamableHttpTransport({
+		url: "https://example.invalid/mcp",
+		fetch: async () =>
+			new Response(
+				new ReadableStream({
+					pull(controller) {
+						reads++;
+						controller.enqueue(new TextEncoder().encode("x".repeat(1024)));
+						if (reads === 100) controller.close();
+					},
+					cancel() {
+						cancelled = true;
+					},
+				}),
+				{ status: 502 },
+			),
+	});
+	await transport.start();
+	try {
+		await expect(transport.send({ jsonrpc: "2.0", id: 1, method: "ping" })).rejects.toMatchObject({
+			body: "x".repeat(8192),
+		});
+		expect(cancelled).toBe(true);
+		expect(reads).toBeLessThan(12);
+	} finally {
+		await transport.close();
+	}
+});
+
+test("JSON responses obey the transport byte budget", async () => {
+	const transport = new StreamableHttpTransport({
+		url: "https://example.invalid/mcp",
+		maxMessageBytes: 64,
+		fetch: async () => Response.json({ jsonrpc: "2.0", id: 1, result: "é".repeat(64) }),
+	});
+	await transport.start();
+	try {
+		await expect(transport.send({ jsonrpc: "2.0", id: 1, method: "ping" })).rejects.toThrow(
+			"MCP JSON response exceeds 64 bytes",
+		);
+	} finally {
+		await transport.close();
+	}
+});
+
+test("rejected SSE input cancels its source even if cancellation fails", async () => {
+	let cancelled = false;
+	const source = new ReadableStream<Uint8Array>({
+		start(controller) {
+			controller.enqueue(new TextEncoder().encode("data: oversized\n\n"));
+		},
+		cancel() {
+			cancelled = true;
+			throw new Error("cancel failed");
+		},
+	});
+	await expect(consumeSseStream(source, { maxEventBytes: 2, onEvent() {} })).rejects.toThrow(
+		"MCP SSE event exceeds 2 bytes",
+	);
+	expect(cancelled).toBe(true);
+	expect(source.locked).toBe(false);
+});
+
+test("HTTP errors keep a UTF-8 byte excerpt without an incomplete character", async () => {
 	const text = "a" + "🙂".repeat(8192);
 	for (const status of [401, 503]) {
 		const transport = new StreamableHttpTransport({
@@ -15,7 +81,8 @@ test("HTTP errors preserve the bounded UTF-16 excerpt when its end splits a char
 		await transport.start();
 		try {
 			await expect(transport.send({ jsonrpc: "2.0", id: 1, method: "ping" })).rejects.toMatchObject({
-				status, body: text.slice(0, 8192),
+				status,
+				body: "a" + "🙂".repeat(2047),
 			});
 		} finally {
 			await transport.close();

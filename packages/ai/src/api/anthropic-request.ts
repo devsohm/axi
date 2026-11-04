@@ -310,7 +310,7 @@ export function anthropicRequest(
 				name: oauth ? anthropicToolName(tool.name) : tool.name,
 				description: tool.description,
 				input_schema: {
-					...(strict ? schema : {}),
+					...schema,
 					type: "object",
 					properties: schema.properties ?? {},
 					required: schema.required ?? [],

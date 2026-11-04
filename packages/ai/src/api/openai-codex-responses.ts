@@ -132,11 +132,15 @@ function delay(ms: number, signal?: AbortSignal): Promise<void> {
 			reject(new Error("Request was aborted"));
 			return;
 		}
-		const timer = setTimeout(resolve, ms);
-		signal?.addEventListener("abort", () => {
+		const abort = () => {
 			clearTimeout(timer);
 			reject(new Error("Request was aborted"));
-		});
+		};
+		const timer = setTimeout(() => {
+			signal?.removeEventListener("abort", abort);
+			resolve();
+		}, ms);
+		signal?.addEventListener("abort", abort, { once: true });
 	});
 }
 async function http(

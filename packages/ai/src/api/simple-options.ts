@@ -12,9 +12,12 @@ import type {
 } from "../types.ts";
 import { estimateContextTokens } from "../utils/estimate.ts";
 export function clampMaxTokensToContext(model: Model<Api>, context: TranscriptContext, maxTokens: number): number {
-	return model.contextWindow <= 0
-		? Math.max(1, maxTokens)
-		: Math.min(maxTokens, Math.max(1, model.contextWindow - estimateContextTokens(context).tokens - 4096));
+	if (model.contextWindow <= 0) return Math.max(1, maxTokens);
+	const input = estimateContextTokens(context).tokens;
+	const fixedRoom = model.contextWindow - input - 4096;
+	const proportionalRoom = model.contextWindow - input - Math.max(4096, Math.ceil(input * 0.15));
+	const room = proportionalRoom >= 32768 ? proportionalRoom : Math.min(32768, fixedRoom);
+	return Math.min(maxTokens, Math.max(1, room));
 }
 export function resolveSamplingParams(
 	model: Model<Api>,
@@ -46,6 +49,7 @@ export function buildBaseOptions(
 		transport: options?.transport,
 		cacheRetention: options?.cacheRetention,
 		sessionId: options?.sessionId,
+		disableContinuation: options?.disableContinuation,
 		headers: options?.headers,
 		onPayload: options?.onPayload,
 		onResponse: options?.onResponse,

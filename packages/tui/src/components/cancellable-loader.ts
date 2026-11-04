@@ -8,7 +8,7 @@ export class CancellableLoader extends Loader {
 		return this.#controller.signal;
 	}
 	get aborted(): boolean {
-		return this.signal.aborted;
+		return this.#controller.signal.aborted;
 	}
 	handleInput(data: string): void {
 		if (getKeybindings().matches(data, "tui.select.cancel")) {

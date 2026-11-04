@@ -63,9 +63,9 @@ export class ScrollView extends Container {
 		return this.#active;
 	}
 	get isScrollbarVisible(): boolean {
-		return this.#scrollbar === "always"
+		return this.scrollbar === "always"
 			? this.#viewport > 0
-			: this.#scrollbar === "auto" && this.#height > this.#viewport && this.#transient;
+			: this.scrollbar === "auto" && this.#height > this.#viewport && this.#transient;
 	}
 	#hide(): void {
 		this.#transient = false;
@@ -73,7 +73,7 @@ export class ScrollView extends Container {
 		this.#timer = undefined;
 	}
 	#activity(): void {
-		if (this.#scrollbar !== "auto" || this.#height <= this.#viewport) return;
+		if (this.scrollbar !== "auto" || this.#height <= this.#viewport) return;
 		this.#transient = true;
 		if (this.#timer !== undefined) clearTimeout(this.#timer);
 		this.#timer = undefined;
@@ -99,7 +99,7 @@ export class ScrollView extends Container {
 		this.#redraw?.();
 	}
 	getContentWidth(width: number): number {
-		return this.#scrollbar === "always" && width > 1 ? width - 1 : width;
+		return this.scrollbar === "always" && width > 1 ? width - 1 : width;
 	}
 	scrollTo(value: number, options: ScrollViewScrollToOptions = {}): void {
 		const max = Math.max(0, this.#height - this.#viewport),

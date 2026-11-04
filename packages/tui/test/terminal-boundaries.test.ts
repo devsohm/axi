@@ -4,6 +4,41 @@ import { decodeKittyPrintable, matchesKey, parseKey } from "../src/keys.ts";
 import { TuiMainScreen } from "../src/tui-main-screen.ts";
 import { wrapTextWithAnsi } from "../src/utils.ts";
 import { TestTerminal } from "./support/terminal.ts";
+import { CancellableLoader } from "../src/components/cancellable-loader.ts";
+import { ScrollView } from "../src/components/scroll-view.ts";
+
+test("scrollbar policy overrides determine both content width and visibility", () => {
+	class VisibleScroll extends ScrollView {
+		override get scrollbar() {
+			return "always" as const;
+		}
+	}
+	const view = new VisibleScroll({ render: (width) => [String(width)], invalidate() {} });
+	view.updateLayout(10, 3, () => {});
+	expect(view.getContentWidth(10)).toBe(9);
+	expect(view.isScrollbarVisible).toBe(true);
+});
+
+test("loader cancellation state belongs to its own controller", () => {
+	class ExternalSignalLoader extends CancellableLoader {
+		override get signal() {
+			return AbortSignal.abort();
+		}
+	}
+	const loader = new ExternalSignalLoader(
+		{ requestRender() {} },
+		(text) => text,
+		(text) => text,
+	);
+	try {
+		expect(loader.signal.aborted).toBe(true);
+		expect(loader.aborted).toBe(false);
+		loader.handleInput("\x1b");
+		expect(loader.aborted).toBe(true);
+	} finally {
+		loader.dispose();
+	}
+});
 
 test("native Shift+Enter accepts plain and escape-prefixed returns without changing Alt+Enter", () => {
 	for (const input of ["\r", "\x1b\r"]) {

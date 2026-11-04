@@ -114,6 +114,23 @@ const extensions: TokenizerExtension[] = [
 const parser = new Marked();
 parser.setOptions({ tokenizer: new StrictTokenizer() });
 parser.use({ tokenizer: { emStrong: markedCjkFriendly().tokenizer?.emStrong }, extensions });
+function visibleHtml(raw: string): string {
+	return raw.replace(/<!--[\s\S]*?(?:-->|$)/g, "");
+}
+function removeCommentBlocks(tokens: Token[]): void {
+	for (let index = 0; index < tokens.length; ) {
+		const token = tokens[index]!;
+		if (token.type === "list") for (const item of token.items) removeCommentBlocks(item.tokens);
+		if (token.type === "blockquote") removeCommentBlocks(token.tokens ?? []);
+		if (token.type !== "html" || visibleHtml(token.raw).trim()) {
+			index++;
+			continue;
+		}
+		tokens.splice(index, 1);
+		if (tokens[index]?.type === "space" && (!index || tokens[index - 1]?.type === "space")) tokens.splice(index, 1);
+		else if (index === tokens.length && tokens[index - 1]?.type === "space") tokens.splice(--index, 1);
+	}
+}
 function trimFences(tokens: readonly Token[]): void {
 	const last = tokens.at(-1);
 	if (last?.type === "list") {
@@ -233,6 +250,7 @@ export class Markdown implements Component {
 		let tokens = cached?.source === source ? cached.tokens : undefined;
 		if (!tokens) {
 			tokens = parser.lexer(source);
+			removeCommentBlocks(tokens);
 			trimFences(tokens);
 			this.#tokens = new WeakRef({ source, tokens });
 		}
@@ -290,7 +308,13 @@ export class Markdown implements Component {
 		let result = "";
 		const apply = (text: string) => text.split("\n").map(context.applyText).join("\n"),
 			theme = this.#theme;
-		for (const token of tokens) {
+		let joinSpace = false;
+		for (const [index, original] of tokens.entries()) {
+			const token =
+				joinSpace && original.type === "text" && !original.tokens?.length
+					? { ...original, text: original.text.replace(/^[ \t]+/, "") }
+					: original;
+			joinSpace = false;
 			switch (token.type) {
 				case "latex": {
 					const math = token as MathToken;
@@ -337,7 +361,8 @@ export class Markdown implements Component {
 					result += "\n";
 					break;
 				case "html":
-					if (typeof token.raw === "string") result += apply(token.raw);
+					if (token.raw.startsWith("<!--")) joinSpace = index === 0 || /[ \t]$/.test(tokens[index - 1]!.raw);
+					else result += apply(token.raw);
 					break;
 				default:
 					if ("text" in token && typeof token.text === "string") result += apply(token.text);
@@ -430,7 +455,7 @@ export class Markdown implements Component {
 			case "hr":
 				return [theme.hr("─".repeat(Math.min(width, 80))), ...space];
 			case "html":
-				return typeof token.raw === "string" ? [this.defaultStyle(token.raw.trim())] : [];
+				return typeof token.raw === "string" ? [this.defaultStyle(visibleHtml(token.raw).trim())] : [];
 			case "space":
 				return [""];
 			default:

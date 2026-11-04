@@ -61,6 +61,35 @@ function answer(): Response {
 		end,
 	]);
 }
+
+it("retains local definitions referenced by non-strict tools", async () => {
+	let payload: unknown;
+	const parameters = Type.Object({ setting: Type.Ref("#/$defs/setting") }, { $defs: { setting: Type.String() } });
+	await stream(
+		model,
+		normalizeContext({
+			messages: [{ role: "user", content: "check", timestamp: 1 }],
+			tools: [{ name: "check", description: "Check", parameters }],
+		}),
+		{
+			apiKey: "test",
+			onPayload(body) {
+				payload = body;
+			},
+			fetch: async () => answer(),
+		},
+	).result();
+	expect(payload).toMatchObject({
+		tools: [
+			{
+				input_schema: {
+					$defs: { setting: { type: "string" } },
+					properties: { setting: { $ref: "#/$defs/setting" } },
+				},
+			},
+		],
+	});
+});
 function assistant(content: AssistantMessage["content"]): AssistantMessage {
 	return {
 		role: "assistant",

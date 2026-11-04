@@ -165,6 +165,7 @@ export interface StreamOptions extends ProviderRequestOptions<Model<Api>> {
 	transport?: Transport;
 	cacheRetention?: CacheRetention;
 	sessionId?: string;
+	disableContinuation?: boolean;
 	websocketConnectTimeoutMs?: number;
 	metadata?: Record<string, unknown>;
 }
