@@ -10,6 +10,7 @@ import {
 } from "@axi/telemetry";
 import type { LazyStreamObserver } from "./api/lazy.ts";
 import type { Api, Model } from "./types.ts";
+import { ownedSlice } from "./utils/text.ts";
 
 const provider = { type: "string", description: "Provider ID.", required: true } as const;
 const model = { type: "string", description: "Requested model ID.", required: true } as const;
@@ -185,7 +186,7 @@ export function observeModelRequest(
 				if (stopReason === "error")
 					active.setStatus({
 						status: "error",
-						error: { name: "provider_error", message: message.errorMessage?.slice(0, 500) ?? "" },
+						error: { name: "provider_error", message: ownedSlice(message.errorMessage ?? "", 0, 500) },
 					});
 				duration.record(performance.now() - started, { ...labels, stop: stopReason }, active);
 				if (!poll || (stopReason !== "pending" && stopReason !== "deferred")) {

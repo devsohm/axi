@@ -1,4 +1,4 @@
-import { copyJson, type Draft, type JsonRepresentation, type JsonValue } from "@axi/chord";
+import { copyJson, type Draft, type JsonRepresentation, type JsonValue } from "@axi/objects";
 import type { AssistantMessage, Usage } from "@axi/ai";
 import { defineDoc } from "../documents.ts";
 import { AssistantEntry } from "../entries.ts";
@@ -28,7 +28,7 @@ type SlotProgress = {
 	details?: JsonValue;
 	diagnostics?: ToolDiagnostic[];
 };
-export type ToolSlot = SlotProgress & { taskId?: TaskId; entry?: EntryId };
+export type ToolSlot = SlotProgress & { taskId?: TaskId; entry?: EntryId; unoffered?: true };
 export type NestedToolSummary = {
 	isError: boolean;
 	durationMs?: number;
@@ -44,14 +44,19 @@ export type NestedToolSlot = SlotProgress & {
 };
 export type CompactionStatus = {
 	taskId: TaskId<CompactionResult>;
-	reason: CompactionReason;
+	trigger: CompactionReason;
 	blocking: boolean;
 	attempt: number;
 	retry?: { at: number; error: string };
 };
-export type CompactionFailure = { taskId: TaskId<CompactionResult>; reason: CompactionReason; error: string };
+export type CompactionFailure = { taskId: TaskId<CompactionResult>; trigger: CompactionReason; error: string };
+export type RunFailureReason = "model_error" | "no_model" | "aborted" | "reset" | "faulted" | "orphaned" | "interrupted" | "restart_limit" | "nothing_to_answer" | "turn_limit";
+export type RunFailure = { taskId: TaskId; inputs: SubmissionId[]; reason: RunFailureReason; detail?: string; first?: EntryId };
+export type LiveRun = { taskId: TaskId; inputs: SubmissionId[]; turns: number; first?: EntryId; afterRun?: { tasks?: TaskId[] } };
+export type RunEnd = { readonly status: "done"; readonly answer: EntryId } | { readonly status: "unanswered"; readonly reason: RunFailureReason; readonly detail?: string; readonly settlement?: SubmissionSettlement };
 export type LiveState = {
-	run?: { taskId: TaskId; inputs: SubmissionId[] };
+	run?: LiveRun;
+	runFailure?: RunFailure;
 	generation?: {
 		attempt: number;
 		message?: JsonRepresentation<AssistantMessage>;
@@ -65,19 +70,37 @@ export type LiveState = {
 };
 export const LiveDoc = defineDoc<LiveState>({
 	kind: "axi.live",
-	version: 1,
+	version: 3,
 	scope: "conversation",
 	history: "latest",
 	fork: "initial",
 	initial: () => ({}),
+	migrate: value => {
+		const state = value as LiveState;
+		const renamed = <T>(item: T): T => Object.fromEntries(Object.entries(item as object).map(([key, entry]) => [key === "reason" ? "trigger" : key, entry])) as T;
+		return {
+			...state,
+			...(state.run === undefined ? {} : { run: { ...state.run, turns: typeof state.run.turns === "number" ? state.run.turns : 0 } }),
+			...(state.compactions === undefined ? {} : { compactions: state.compactions.map(renamed) }),
+			...(state.compactionFailure === undefined ? {} : { compactionFailure: renamed(state.compactionFailure) }),
+		};
+	},
 	checkpointWhen: (state) =>
 		state.generation === undefined &&
 		!state.tools?.some((slot) => slot.status === "running") &&
 		!state.nestedTools?.some((slot) => slot.status === "running"),
 });
-export function endRun(tx: Tx, live: Draft<LiveState>, taskId: TaskId, settlement: SubmissionSettlement): void {
-	if (live.run?.taskId === taskId) {
-		for (const input of live.run.inputs) tx.settleSubmission(input, settlement);
+export function endRun(tx: Tx, live: Draft<LiveState>, taskId: TaskId, end: RunEnd): void {
+	const run = live.run;
+	if (run?.taskId === taskId) {
+		if (end.status === "done") {
+			for (const input of run.inputs) tx.settleSubmission(input, { status: "done", answer: end.answer });
+		} else if (run.afterRun === undefined) {
+			const { reason, detail } = end;
+			const settlement = end.settlement ?? { status: "unanswered", reason, ...(detail === undefined ? {} : { detail }) };
+			for (const input of run.inputs) tx.settleSubmission(input, settlement);
+			live.runFailure = { taskId, inputs: [...run.inputs], reason, ...(detail === undefined ? {} : { detail }), ...(run.first === undefined ? {} : { first: run.first }) };
+		}
 		delete live.run;
 	}
 	delete live.generation;
@@ -100,7 +123,7 @@ export function removeCompactionStatus(live: Draft<LiveState>, id: TaskId): void
 }
 export function failCompactionStatus(live: Draft<LiveState>, id: TaskId, error: string): void {
 	const status = compactionStatus(live, id);
-	if (status) live.compactionFailure = { taskId: status.taskId, reason: status.reason, error };
+	if (status) live.compactionFailure = { taskId: status.taskId, trigger: status.trigger, error };
 	removeCompactionStatus(live, id);
 }
 export function toolSlot(live: Draft<LiveState>, id: TaskId): Draft<ToolSlot | NestedToolSlot> | undefined {
@@ -158,6 +181,11 @@ export async function settleSchedulerOutcome(
 		if (slot) finishSlot(slot);
 		removeNestedSlots(live, record.id);
 	} else if (record.kind === "axi.compaction") {
+		const detail = outcome.status === "faulted" ? outcome.error.detail : undefined;
+		if (detail !== null && typeof detail === "object" && "reason" in detail && detail.reason === "restart_limit") {
+			removeCompactionStatus(await tx.doc(LiveDoc, record.conversationId), record.id);
+			return;
+		}
 		failCompactionStatus(
 			await tx.doc(LiveDoc, record.conversationId),
 			record.id,
@@ -166,14 +194,27 @@ export async function settleSchedulerOutcome(
 	} else if (record.kind === "axi.generation") {
 		const live = await tx.doc(LiveDoc, record.conversationId);
 		if (live.run?.taskId !== record.id) return;
-		await convertPartial(tx, live, record.conversationId);
+		const detail = outcome.status === "faulted" ? outcome.error.detail : undefined;
+		const cutOff = detail !== null && typeof detail === "object" && "reason" in detail && detail.reason === "restart_limit";
+		if (!cutOff) await convertPartial(tx, live, record.conversationId);
 		endRun(
 			tx,
 			live,
 			record.id,
 			outcome.status === "faulted"
-				? { status: "unanswered", reason: "faulted", detail: outcome.error.message }
-				: { status: "unanswered", reason: outcome.reason },
+				? { status: "unanswered", reason: cutOff ? "aborted" : "faulted", detail: outcome.error.message }
+				: { status: "unanswered", reason: "orphaned", detail: outcome.reason, settlement: { status: "unanswered", reason: outcome.reason } },
 		);
 	}
+}
+
+export const LIMITS_RESTARTS: ReadonlySet<string> = new Set(["axi.generation", "axi.tool", "axi.compaction"]);
+export function cutOffTooOften(task: { readonly restarts?: number }, runtime: { readonly settings: { readonly restartLimit: number } }): boolean {
+	return task.restarts !== undefined && task.restarts >= runtime.settings.restartLimit;
+}
+export function cutOffCount(task: { readonly restarts?: number }): string {
+	return task.restarts === 1 ? "once" : `${task.restarts ?? 0} times in a row`;
+}
+export function salvageable(task: { readonly restarts?: number }, runtime: { readonly settings: { readonly restartLimit: number } }): boolean {
+	return (task.restarts ?? 0) <= runtime.settings.restartLimit;
 }

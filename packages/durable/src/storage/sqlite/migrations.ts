@@ -1,6 +1,6 @@
-import { applySqliteMigrations as apply, type SqliteDatabase, type SqliteMigration } from "@axi/chord/sqlite";
+import { applySqliteMigrations as apply, type SqliteDatabase, type SqliteMigration } from "@axi/objects/sqlite";
 import { DEFAULT_SQLITE_SCHEMA, type SqliteSchema } from "./schema.ts";
-export type { SqliteMigration } from "@axi/chord/sqlite";
+export type { SqliteMigration } from "@axi/objects/sqlite";
 export function createSqliteMigrations(schema: SqliteSchema): readonly SqliteMigration[] {
 	const { tables: t, indexes: i } = schema;
 	const taskColumns = (sleeping: boolean): readonly string[] => [

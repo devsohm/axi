@@ -88,8 +88,8 @@ describe("Mistral transport", () => {
 			if (event.type === "toolcall_delta" || event.type === "toolcall_end")
 				snapshots.push(structuredClone(event.partial.content[0]));
 		expect(snapshots).toEqual([
-			{ type: "toolCall", id: "abc123456", name: "read", arguments: {}, partialArgs: '{"path":' },
-			{ type: "toolCall", id: "abc123456", name: "read", arguments: { path: "a" }, partialArgs: '{"path":"a"}' },
+			{ type: "toolCall", id: "abc123456", name: "read", arguments: {} },
+			{ type: "toolCall", id: "abc123456", name: "read", arguments: { path: "a" } },
 			{ type: "toolCall", id: "abc123456", name: "read", arguments: { path: "a" } },
 		]);
 	});

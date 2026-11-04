@@ -1,4 +1,4 @@
-import { BACKGROUND_CONTEXT as context } from "@axi/chord/context";
+import { BACKGROUND_CONTEXT as context } from "@axi/objects/context";
 import { describe, expect, it } from "vitest";
 import { defineDoc, defineDocFamily, defineTask, MemoryStorage, type TaskId } from "../src/index.ts";
 import { SessionImpl } from "../src/session/session.ts";

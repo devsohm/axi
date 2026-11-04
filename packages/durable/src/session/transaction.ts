@@ -1,7 +1,7 @@
-import { BACKGROUND_CONTEXT } from "@axi/chord/context";
+import { BACKGROUND_CONTEXT } from "@axi/objects/context";
 import type { TelemetryCarrier } from "@axi/telemetry";
-import { copyJson, type Context, type Draft, type JsonValue } from "@axi/chord";
-import { type Change, type Prepared, type Tracker, track } from "@axi/chord/delta";
+import { copyJson, type Context, type Draft, type JsonValue } from "@axi/objects";
+import { type Change, type Op, type PendingOps, type Prepared, type Tracker, track } from "@axi/objects/delta";
 import {
 	addressId,
 	checkRecordScope,
@@ -16,6 +16,7 @@ import { ReadAfterWrite } from "../errors.ts";
 import type * as T from "../types.ts";
 import { ROOT_CONVERSATION_ID } from "../types.ts";
 import { prepareForkDocumentCopies } from "./forks.ts";
+import { documentKey, incarnationKey, scopeKey, tableKeys } from "./keys.ts";
 
 type TaskRecord = T.TaskRecord<JsonValue, JsonValue, JsonValue>;
 export type LoadedDocument = {
@@ -26,10 +27,22 @@ export type LoadedDocument = {
 	deltasSinceBase: number;
 	readonly tracker: Tracker<T.JsonObject>;
 };
+export type HeldDocument = { readonly loaded: LoadedDocument; readonly pending: PendingOps; base: boolean };
+export type AdoptedDocuments = {
+	readonly observed: readonly T.DocumentCommitChange[];
+	readonly stored: readonly T.DocumentCommitChange[];
+};
 export type TaskCreationOptions = T.TaskOptions & { readonly submissionIds?: readonly T.SubmissionId[] };
 export type TransactionScope = { readonly conversationId?: T.ConversationId; readonly taskId?: T.TaskId };
 export interface TransactionHost {
 	readonly storage: T.Storage;
+	touch(key: string): Promise<void> | undefined;
+	latestEntryId(id: T.ConversationId, context: Context): Promise<T.EntryId | undefined>;
+	latestHeadMarker(
+		id: T.ConversationId,
+		context: Context,
+	): Promise<(T.EntryRecord & { readonly head: T.EntryId }) | undefined>;
+	taskDocuments(id: T.TaskId): Iterable<T.DocumentRecord> | undefined;
 	now(): number;
 	cached(address: string): LoadedDocument | undefined;
 	load(
@@ -59,6 +72,7 @@ type DocumentEdit = {
 };
 type ContentWrite = Extract<T.StorageWrite, { type: "document.create" | "document.change" | "document.copy" }>;
 type DocumentPlan = {
+	held?: { ops: readonly Op[]; observed: boolean };
 	readonly identity: string;
 	readonly record: T.DocumentCreate | T.DocumentRecord;
 	retire: boolean;
@@ -77,6 +91,7 @@ type TaskEdit = {
 	write?: { readonly kind: "create" | "replace"; readonly record: TaskRecord };
 };
 type SubmissionChange = T.SubmissionSettlement | { readonly status: "placed"; readonly entry: T.EntryId };
+const NO_OPS: readonly Op[] = [];
 function tableCopy<Value>(value: Value): Value {
 	return copyJson(value, { omitUndefinedProperties: true }) as Value;
 }
@@ -104,6 +119,15 @@ export class Transaction implements T.Tx {
 		this.#host = host;
 		this.#context = context;
 		this.#scope = scope;
+	}
+	get context(): Context {
+		return this.#context;
+	}
+	get hasTableWrite(): boolean {
+		return this.#written;
+	}
+	static belongsTo(tx: T.Tx, host: TransactionHost): tx is Transaction {
+		return #host in tx && tx.#host === host;
 	}
 	conversation(id: T.ConversationId) {
 		return this.#read("conversation", () => this.#host.storage.conversation(id, this.#context));
@@ -133,9 +157,10 @@ export class Transaction implements T.Tx {
 		return this.#read("scanTasks", () => this.#host.storage.scanTasks(query, limit, cursor, this.#context));
 	}
 	latestHeadMarker(conversationId: T.ConversationId) {
-		return this.#read("latestHeadMarker", () =>
-			this.#host.storage.findLatestHeadMarker(conversationId, undefined, this.#context),
-		);
+		return this.#read("latestHeadMarker", () => this.#host.latestHeadMarker(conversationId, this.#context));
+	}
+	latestEntryId(conversationId: T.ConversationId) {
+		return this.#read("latestEntryId", () => this.#host.latestEntryId(conversationId, this.#context));
 	}
 	submission(id: T.SubmissionId) {
 		return this.#read("submission", () => this.#host.storage.submission(id, this.#context));
@@ -273,13 +298,13 @@ export class Transaction implements T.Tx {
 					id,
 					conversationId,
 					kind: definition.name,
+					version: definition.version,
+					input,
 					trace:
 						options.trace === "root"
 							? undefined
 							: (options.trace ?? this.#context.telemetry.propagation?.inject(this.#context.telemetry)),
 					links: options.links,
-					version: definition.version,
-					input,
 					...(owner ? { owner: owner.id } : {}),
 					background: options.background ?? false,
 					abortRequested: false,
@@ -336,6 +361,9 @@ export class Transaction implements T.Tx {
 	}
 	stagedTasks(): TaskRecord[] {
 		return [...this.#tasks.values()].flatMap((edit) => (edit.write ? [edit.write.record] : []));
+	}
+	createdTaskIds(): T.TaskId[] {
+		return [...this.#tasks].flatMap(([id, edit]) => (edit.write?.kind === "create" ? [id] : []));
 	}
 	stagedConversations(): T.ConversationRecord[] {
 		return this.#writes.flatMap((write) => (write.type === "conversation" ? [write.value] : []));
@@ -430,6 +458,8 @@ export class Transaction implements T.Tx {
 			this.#latest.set(edit.identity, edit);
 			return this.#track(
 				(async () => {
+					const gate = this.#host.touch(documentKey(edit.identity));
+					if (gate !== undefined) await gate;
 					const record =
 						this.#host.cached(edit.identity)?.record ??
 						(await this.#host.storage.findDocument(edit.address, "current", this.#context));
@@ -589,6 +619,17 @@ export class Transaction implements T.Tx {
 			}
 			for (const taskId of terminal) {
 				if (this.#tasks.get(taskId)?.write?.kind === "create") continue;
+				const gate = this.#host.touch(scopeKey({ kind: "task", taskId }));
+				if (gate !== undefined) await gate;
+				const known = this.#host.taskDocuments(taskId);
+				if (known !== undefined) {
+					for (const record of known) {
+						if (retiring.has(record.id)) continue;
+						this.#plans.push({ identity: addressId(record), record, retire: true });
+						retiring.add(record.id);
+					}
+					continue;
+				}
 				let cursor: T.Cursor | undefined;
 				do {
 					const page = await this.#host.storage.scanDocuments(
@@ -618,7 +659,7 @@ export class Transaction implements T.Tx {
 			if (current.status === "done" || current.status === "unanswered") continue;
 			if (change.status === "placed" && current.status !== "queued") throw new Error(`Submission ${id} is not queued`);
 			if (change.status === "done" && current.status !== "placed")
-				throw new Error(`Submission ${id} is not a placed input`);
+				throw new Error(`Submission ${id} is not a placed input or continue`);
 			const next =
 				change.status === "placed"
 					? { ...current, status: current.type === "input" ? "placed" : "done", entry: change.entry }
@@ -647,8 +688,86 @@ export class Transaction implements T.Tx {
 		}
 		return this.#writes;
 	}
-	adopt(seq: T.Seq): T.DocumentCommitChange[] {
+	holdable(): { loaded: LoadedDocument; ops: readonly Op[]; base: boolean }[] | undefined {
+		if (this.#writes.some((write) => write.type !== "document.change")) return undefined;
+		const result = [];
+		for (const plan of this.#plans) {
+			if (plan.content === undefined && !plan.retire) continue;
+			const loaded = plan.change?.loaded;
+			if (plan.retire || loaded === undefined || plan.content?.type !== "document.change") return undefined;
+			const record = loaded.record;
+			if (
+				record.scope.kind !== "conversation" ||
+				record.history !== "latest" ||
+				record.fork !== "initial" ||
+				loaded.storedVersion !== plan.change!.version
+			)
+				return undefined;
+			result.push({ loaded, ops: plan.change!.prepared.ops, base: plan.content.content.kind === "base" });
+		}
+		return result;
+	}
+	adoptHeld(): T.DocumentCommitChange[] {
 		const changes: T.DocumentCommitChange[] = [];
+		for (const plan of this.#plans) {
+			const change = plan.change!;
+			if (change.prepared.ops.length === 0) {
+				change.prepared.abort();
+				continue;
+			}
+			change.tracker.adopt(change.prepared);
+			changes.push({
+				type: "document",
+				kind: "change",
+				record: change.loaded!.record,
+				conversationId: plan.conversationId,
+				version: change.version,
+				value: change.prepared.value,
+				ops: change.prepared.ops,
+			});
+		}
+		return changes;
+	}
+	takeHeld<Hold extends HeldDocument>(find: (id: T.DocumentId) => Hold | undefined): Hold[] {
+		const taken: Hold[] = [];
+		for (const plan of this.#plans) {
+			if (!("createdAt" in plan.record)) continue;
+			const hold = find(plan.record.id);
+			if (hold === undefined) continue;
+			taken.push(hold);
+			const own = plan.content?.type === "document.change" ? plan.content : undefined;
+			const combined = storeHeld(
+				hold,
+				plan.change?.prepared.ops ?? NO_OPS,
+				plan.change?.prepared.value ?? hold.loaded.tracker.value,
+				hold.loaded.valueVersion,
+			);
+			const content = own?.content.kind === "base" ? own.content : combined.content;
+			const write = { type: "document.change", id: plan.record.id, content } as const;
+			if (own !== undefined) this.#writes[this.#writes.indexOf(own)] = write;
+			else {
+				const at = this.#writes.findIndex((write) => write.type === "document.retire" && write.id === plan.record.id);
+				this.#writes.splice(at < 0 ? this.#writes.length : at, 0, write);
+			}
+			if (!plan.retire) plan.held = { ops: combined.ops, observed: own !== undefined };
+			plan.content = write;
+			if (plan.record.scope.kind === "conversation") plan.conversationId = plan.record.scope.conversationId;
+		}
+		return taken;
+	}
+	writeKeys(): string[] {
+		const keys: string[] = [];
+		tableKeys(this.#writes, keys);
+		for (const plan of this.#plans) {
+			if (plan.content === undefined && !plan.retire) continue;
+			keys.push(documentKey(plan.identity), incarnationKey(plan.record.id));
+			if (plan.retire || !("createdAt" in plan.record)) keys.push(scopeKey(plan.record.scope));
+		}
+		return keys;
+	}
+	adopt(seq: T.Seq): AdoptedDocuments {
+		const changes: T.DocumentCommitChange[] = [];
+		let stored: T.DocumentCommitChange[] | undefined;
 		for (const plan of this.#plans) {
 			const existing = "createdAt" in plan.record;
 			let record: T.DocumentRecord = existing ? plan.record : { ...plan.record, createdAt: seq };
@@ -672,35 +791,43 @@ export class Transaction implements T.Tx {
 						tracker,
 					});
 			}
+			let publication: T.DocumentCommitChange | undefined;
 			if (plan.retire) {
 				if (existing) this.#host.evict(plan.identity, record.id);
-				changes.push({
-					type: "document",
-					record,
-					conversationId: plan.conversationId,
-					version: undefined,
-					value: null,
-					ops: [],
-				});
+				publication = { type: "document", kind: "retire", record, conversationId: plan.conversationId };
 			} else if (plan.content?.type === "document.copy") {
 				if (record.scope.kind !== "conversation") throw new Error("Copied document must belong to a conversation");
-				changes.push({
+				publication = {
 					type: "document.copy",
 					record,
 					conversationId: record.scope.conversationId,
 					source: plan.content.source,
-				});
+				};
 			} else if (change && changesValue(plan))
-				changes.push({
+				publication = {
 					type: "document",
+					kind: "change",
 					record,
 					conversationId: plan.conversationId,
 					version: change.version,
 					value: change.prepared.value,
-					ops: change.loaded ? change.prepared.ops : [],
-				});
+					ops: change.loaded ? change.prepared.ops : NO_OPS,
+				};
+			if (publication === undefined) continue;
+			if (plan.held === undefined) {
+				changes.push(publication);
+				stored?.push(publication);
+			} else {
+				stored ??= [...changes];
+				if (plan.held.observed) changes.push(publication);
+				stored.push(
+					publication.type === "document" && publication.kind === "change"
+						? { ...publication, ops: plan.held.ops }
+						: publication,
+				);
+			}
 		}
-		return changes;
+		return { observed: changes, stored: stored ?? changes };
 	}
 	#open(): void {
 		if (this.#sealed) throw new Error("Transaction has settled");
@@ -716,7 +843,7 @@ export class Transaction implements T.Tx {
 	#read<Value>(method: string, operation: () => Promise<Value>): Promise<Value> {
 		try {
 			this.#open();
-			if (this.#written) throw new ReadAfterWrite(method);
+			if (this.#written) throw new ReadAfterWrite(`Tx.${method}()`);
 			return this.#track(operation());
 		} catch (error) {
 			return Promise.reject(error);
@@ -792,5 +919,20 @@ function documentPlan(edit: DocumentEdit): DocumentPlan | undefined {
 		record: loaded.record,
 		content,
 		change: { tracker: loaded.tracker, prepared, version, loaded, definition },
+	};
+}
+
+export function storeHeld(
+	hold: HeldDocument,
+	operations: readonly Op[],
+	value: T.JsonObject,
+	version: number,
+): { content: T.DocumentContent; ops: readonly Op[] } {
+	hold.pending.push(operations);
+	const batch = hold.pending.take();
+	if (batch.kind === "replace") return { content: { kind: "base", version, value }, ops: [["r", value]] };
+	return {
+		content: hold.base ? { kind: "base", version, value } : { kind: "delta", version, ops: batch.ops },
+		ops: batch.ops,
 	};
 }

@@ -5,7 +5,7 @@ import { once } from "node:events";
 import { test } from "node:test";
 import { spawn, spawnSync, execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 const require = createRequire(import.meta.url);
 const supported = process.platform === "linux" && ["x64", "arm64"].includes(process.arch);
 
@@ -130,11 +130,14 @@ test(
 test(
 	"Linux ARM64 native segments support 64 KiB pages",
 	{
-		skip: process.platform !== "linux" || process.arch !== "arm64",
+		skip:
+			process.arch !== "arm64" &&
+			!existsSync(new URL("./linux/prebuilds/linux-arm64/linux-platform-x11.node", import.meta.url)),
 	},
 	() => {
 		const bytes = readFileSync(new URL("./linux/prebuilds/linux-arm64/linux-platform-x11.node", import.meta.url));
 		assert.equal(bytes.readUInt32LE(0), 0x464c457f);
+		assert.equal(bytes.readUInt16LE(18), 183);
 		const table = Number(bytes.readBigUInt64LE(32));
 		const stride = bytes.readUInt16LE(54),
 			count = bytes.readUInt16LE(56);

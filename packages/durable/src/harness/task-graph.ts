@@ -1,7 +1,9 @@
-import { type Context, type JsonValue, Watch } from "@axi/chord";
-import { BACKGROUND_CONTEXT, withoutAbortSignal } from "@axi/chord/context";
-import { applyImmutable, type Op } from "@axi/chord/delta";
-import { contained, type SessionImpl } from "../session/session.ts";
+import type { Observer as StateObserver, Observation } from "../types.ts";
+import { GuardedObserver } from "../session/observer.ts";
+import { type Context, type JsonValue, Watch, type WatchCall } from "@axi/objects";
+import { BACKGROUND_CONTEXT, withoutAbortSignal } from "@axi/objects/context";
+import { applyImmutable, type Op } from "@axi/objects/delta";
+import { contained, NORMAL_END, sessionObserverEnd, type SessionImpl } from "../session/session.ts";
 import type {
 	CommitPublication,
 	ConversationId,
@@ -39,32 +41,44 @@ export type TaskGraphBlocking = {
 	readonly subscribeBlocked: (listener: () => void) => () => void;
 };
 type StoredTask = TaskRecord<JsonValue, JsonValue, JsonValue>;
-type Observer = Watch<TaskGraph>;
+type Observer = StateObserver<TaskGraph>;
 type Mount = { value: TaskGraph; observers: Set<Observer>; records: Map<string, BlockedSubject> };
 
 export class TaskGraphView {
 	readonly #session: SessionImpl;
-	readonly #storage: Storage;
 	readonly #blocking: TaskGraphBlocking;
 	#mount: Mount | undefined;
 	#closed = false;
-	constructor(session: SessionImpl, storage: Storage, blocking: TaskGraphBlocking) {
+	constructor(session: SessionImpl, blocking: TaskGraphBlocking) {
 		this.#session = session;
-		this.#storage = storage;
 		this.#blocking = blocking;
-		session.observeCommits((publication, context) => {
+		session.followCommits((publication, context) => {
 			if (this.#mount) advance(this.#mount, publication, context, blocking.blocked, (error) => session.report(error));
 		});
 		blocking.subscribeBlocked(() => this.#refresh());
 		session.subscribeClose(() => {
 			this.#closed = true;
+			const observerEnd = sessionObserverEnd(session.failure);
+			const watchEnd = session.failure === undefined ? NORMAL_END : observerEnd;
 			for (const observer of [...(this.#mount?.observers ?? [])])
 				contained(
-					() => observer.end(session.failure),
+					() => observer.end(observer instanceof Watch ? watchEnd : observerEnd),
 					(error) => session.report(error),
 				);
 			this.#mount = undefined;
 		});
+	}
+	async observe(target: Observer, context: Context): Promise<Observation<TaskGraph>> {
+		let value!: TaskGraph;
+		const { observer, detach } = await this.#attach((current, release) => {
+			value = current;
+			return new GuardedObserver(target, release, (error) => this.#session.report(error));
+		}, context);
+		if (context.abortSignal?.aborted) {
+			detach();
+			throw context.abortSignal.reason;
+		}
+		return observedGraph(value, observer);
 	}
 	async watch(context: Context): Promise<TaskGraphWatch> {
 		const { observer } = await this.#attach(
@@ -73,18 +87,18 @@ export class TaskGraphView {
 		);
 		const signal = context.abortSignal;
 		if (signal?.aborted) {
-			observer.cancel();
+			observer.abort();
 			throw signal.reason;
 		}
-		if (signal !== undefined) observer.observeCancellation(signal);
+		if (signal !== undefined) observer.observeAbort(signal);
 		return observer;
 	}
 	#attach<O extends Observer>(
 		create: (value: TaskGraph, release: () => void) => O,
 		context: Context,
 	): Promise<{ observer: O; detach: () => void }> {
-		return this.#session.readOnLine(async () => {
-			const mount = this.#mount ?? { ...(await this.#build(context)), observers: new Set<Observer>() };
+		return this.#session.readOnLine(async (storage) => {
+			const mount = this.#mount ?? { ...(await this.#build(storage, context)), observers: new Set<Observer>() };
 			const detach = () => {
 				mount.observers.delete(observer);
 				if (!mount.observers.size && this.#mount === mount) this.#mount = undefined;
@@ -115,16 +129,16 @@ export class TaskGraphView {
 			})
 			.catch(() => {});
 	}
-	async #build(context: Context): Promise<Omit<Mount, "observers">> {
+	async #build(storage: Storage, context: Context): Promise<Omit<Mount, "observers">> {
 		const tasks: { [key: string]: TaskGraphNode } = {},
 			records = new Map<string, BlockedSubject>(),
 			stored: StoredTask[] = [];
 		for (const status of ["pending", "running", "waiting", "sleeping", "completing"] as const)
-			stored.push(...(await scanAll((cursor) => this.#storage.scanTasks({ status }, 256, cursor, context))));
+			stored.push(...(await scanAll((cursor) => storage.scanTasks({ status }, 256, cursor, context))));
 		stored.sort((left, right) => left.id - right.id);
 		for (const record of stored) {
 			const conversations = (
-					await scanAll((cursor) => this.#storage.scanConversations({ ownerTaskId: record.id }, 256, cursor, context))
+					await scanAll((cursor) => storage.scanConversations({ ownerTaskId: record.id }, 256, cursor, context))
 				)
 					.map((record) => record.id)
 					.sort((left, right) => left - right),
@@ -175,7 +189,7 @@ function node(
 }
 function advance(
 	mount: Mount,
-	publication: CommitPublication,
+	publication: Pick<CommitPublication, "changes">,
 	context: Context,
 	blocked: TaskGraphBlocking["blocked"],
 	report: (error: unknown) => void,
@@ -221,5 +235,11 @@ function publish(mount: Mount, ops: Op[], context: Context, report: (error: unkn
 	if (!ops.length) return;
 	mount.value = applyImmutable(mount.value, ops);
 	const frame = withoutAbortSignal(context);
-	for (const observer of [...mount.observers]) contained(() => observer.advance(mount.value, ops, frame), report);
+	const call: WatchCall<TaskGraph> = { kind: "value", value: mount.value, ops, retired: false };
+	for (const observer of [...mount.observers])
+		contained(() => observer.advance(call, frame), report);
+}
+
+function observedGraph(value: TaskGraph, observer: { detach(): void }): Observation<TaskGraph> {
+	return { value, detach: () => observer.detach() };
 }

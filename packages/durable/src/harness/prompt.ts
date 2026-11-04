@@ -1,4 +1,4 @@
-import type { Context } from "@axi/chord";
+import type { Context } from "@axi/objects";
 import type { Message, SystemMessage, Tool, ToolReference } from "@axi/ai";
 import { declarationsEqual, getCurrentTools, toToolDeclaration } from "@axi/ai/utils/transcript";
 import { SystemEntry } from "../entries.ts";

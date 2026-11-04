@@ -3,7 +3,7 @@ import { Dir, type Dirent } from "node:fs";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { BACKGROUND_CONTEXT, type Context, withAbortSignal } from "@axi/chord/context";
+import { BACKGROUND_CONTEXT, type Context, withAbortSignal } from "@axi/objects/context";
 import { afterEach, expect, it, vi } from "vitest";
 import { type FileError, getOrThrow, ok, type Result } from "../src/env/index.ts";
 import { NodeExecutionEnv } from "../src/env/node.ts";
@@ -308,7 +308,7 @@ it("captures watch exclusions and limits when the watcher opens", async () => {
 		await expect.poll(() => changes, { timeout: 2000 }).toContain(join(cwd, "visible"));
 		expect(errors).toEqual([]);
 	} finally {
-		await watcher.close(BACKGROUND_CONTEXT);
+		await watcher.stop(BACKGROUND_CONTEXT);
 	}
 });
 
@@ -331,7 +331,7 @@ it("reports the first affected target when their shared ancestor changes", async
 		getOrThrow(await env.createDir("parent", undefined, BACKGROUND_CONTEXT));
 		await expect.poll(() => changes, { timeout: 2000 }).toEqual([[join(cwd, "parent/first")]]);
 	} finally {
-		await watcher.close(BACKGROUND_CONTEXT);
+		await watcher.stop(BACKGROUND_CONTEXT);
 	}
 });
 

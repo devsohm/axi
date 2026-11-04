@@ -58,20 +58,23 @@ type Duplicates<S extends readonly TelemetrySchemaDefinition[], Seen extends str
 ]
 	? Extract<keyof Definitions<First>, Seen> | Duplicates<Rest, Seen | (keyof Definitions<First> & string)>
 	: never;
-type Attributes<D extends TelemetryMetricDefinition> = InferRequiredAndOptionalAttributes<D["attributes"]>;
-type Arguments<D extends TelemetryMetricDefinition, A extends Attributes<D>> = {
+type MetricAttributes<D extends TelemetryMetricDefinition> = InferRequiredAndOptionalAttributes<D["attributes"]>;
+type MeasurementArguments<D extends TelemetryMetricDefinition, A extends MetricAttributes<D>> = {
 	[N in keyof D["attributes"]]: D["attributes"][N]["required"] extends true ? N : never;
 }[keyof D["attributes"]] extends never
-	? [attributes?: ExactTelemetryAttributes<Attributes<D>, A>]
-	: [attributes: ExactTelemetryAttributes<Attributes<D>, A>];
+	? [attributes?: ExactTelemetryAttributes<MetricAttributes<D>, A>]
+	: [attributes: ExactTelemetryAttributes<MetricAttributes<D>, A>];
 
 export type SchemaTelemetryCounter<D extends TelemetryMetricDefinition> = {
-	add<const A extends Attributes<D> = Attributes<D>>(value: number, ...args: Arguments<D, A>): void;
+	add<const Attributes extends MetricAttributes<D> = MetricAttributes<D>>(
+		value: number,
+		...args: MeasurementArguments<D, Attributes>
+	): void;
 };
 export type SchemaTelemetryHistogram<D extends TelemetryMetricDefinition> = {
-	record<const A extends Attributes<D> = Attributes<D>>(
+	record<const Attributes extends MetricAttributes<D> = MetricAttributes<D>>(
 		value: number,
-		...args: [...Arguments<D, A>, context?: TelemetryContext]
+		...args: [...MeasurementArguments<D, Attributes>, context?: TelemetryContext]
 	): void;
 };
 export interface TypedTelemetryMetrics<S extends Schemas> {

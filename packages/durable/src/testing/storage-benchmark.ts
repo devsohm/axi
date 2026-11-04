@@ -1,5 +1,6 @@
-import type { JsonValue } from "@axi/chord";
-import { BACKGROUND_CONTEXT as context } from "@axi/chord/context";
+import { commitWrites } from "./commit-writes.ts";
+import type { JsonValue } from "@axi/objects";
+import { BACKGROUND_CONTEXT as context } from "@axi/objects/context";
 import {
 	type ConversationId,
 	type DocumentCreate,
@@ -70,14 +71,14 @@ async function batches(
 	for (let start = 0; start < count; start += 100) {
 		const writes: StorageWrite[] = [];
 		for (let index = start; index < Math.min(start + 100, count); index++) writes.push(await create(index));
-		await storage.commit(writes, () => {}, context);
+		await commitWrites(storage, writes, context);
 	}
 }
 export async function seedStorageBenchmark(
 	storage: Storage,
 	scale: StorageBenchmarkScale = TIMING_SCALE,
 ): Promise<StorageBenchmarkDataset> {
-	await storage.commit([{ type: "conversation", value: { id: ROOT } }], () => {}, context);
+	await commitWrites(storage, [{ type: "conversation", value: { id: ROOT } }], context);
 	let firstEntryId: EntryId | undefined;
 	await batches(scale.entryCount, storage, async (index) => {
 		const id = await storage.mintId<EntryId>();
@@ -108,7 +109,8 @@ export async function seedStorageBenchmark(
 		};
 	});
 	const replay = await Promise.all(tails.map(async (tail) => ({ tail, id: await storage.mintId<DocumentId>() })));
-	await storage.commit(
+	await commitWrites(
+		storage,
 		replay.map(({ tail, id }) => ({
 			type: "document.create",
 			record: {
@@ -121,11 +123,11 @@ export async function seedStorageBenchmark(
 			},
 			content: { kind: "base", version: 1, value: { count: 0, text: "x".repeat(64) } },
 		})),
-		() => {},
 		context,
 	);
 	for (let count = 1; count <= 1024; count++)
-		await storage.commit(
+		await commitWrites(
+			storage,
 			replay
 				.filter(({ tail }) => tail >= count)
 				.map(({ id }) => ({
@@ -133,7 +135,6 @@ export async function seedStorageBenchmark(
 					id,
 					content: { kind: "delta", version: 1, ops: [["s", ["count"], count]] },
 				})),
-			() => {},
 			context,
 		);
 	const historicalDocumentId = await storage.mintId<DocumentId>();
@@ -144,14 +145,15 @@ export async function seedStorageBenchmark(
 		history: "rewindable",
 		fork: "asOf",
 	};
-	await storage.commit(
+	await commitWrites(
+		storage,
 		[{ type: "document.create", record, content: { kind: "base", version: 1, value: { count: 0 } } }],
-		() => {},
 		context,
 	);
 	let ancientAt: Seq | undefined;
 	for (let count = 1; count <= 128; count++)
-		ancientAt = await storage.commit(
+		ancientAt = await commitWrites(
+			storage,
 			[
 				{
 					type: "document.change",
@@ -159,10 +161,10 @@ export async function seedStorageBenchmark(
 					content: { kind: "delta", version: 1, ops: [["s", ["count"], count]] },
 				},
 			],
-			() => {},
 			context,
 		);
-	await storage.commit(
+	await commitWrites(
+		storage,
 		[
 			{
 				type: "document.change",
@@ -170,13 +172,13 @@ export async function seedStorageBenchmark(
 				content: { kind: "base", version: 1, value: { count: 128 } },
 			},
 		],
-		() => {},
 		context,
 	);
 	if (ancientAt === undefined) throw new Error("Benchmark history seed produced no commits");
 	let recentAt = ancientAt;
 	for (let count = 129; count <= 256; count++)
-		recentAt = await storage.commit(
+		recentAt = await commitWrites(
+			storage,
 			[
 				{
 					type: "document.change",
@@ -184,7 +186,6 @@ export async function seedStorageBenchmark(
 					content: { kind: "delta", version: 1, ops: [["s", ["count"], count]] },
 				},
 			],
-			() => {},
 			context,
 		);
 	if (firstEntryId === undefined) throw new Error("Benchmark scale must create entries");
@@ -192,18 +193,18 @@ export async function seedStorageBenchmark(
 	let at = firstEntryId;
 	for (let depth = 0; depth < 8; depth++) {
 		const id = await storage.mintId<ConversationId>();
-		await storage.commit(
+		await commitWrites(
+			storage,
 			[{ type: "conversation", value: { id, parent: { conversationId: deepestConversationId, at } } }],
-			() => {},
 			context,
 		);
 		const ids = await Promise.all(Array.from({ length: 32 }, () => storage.mintId<EntryId>()));
-		await storage.commit(
+		await commitWrites(
+			storage,
 			ids.map((entry, index) => ({
 				type: "entry",
 				value: { id: entry, conversationId: id, kind: "benchmark.fork", data: { depth, index } },
 			})),
-			() => {},
 			context,
 		);
 		deepestConversationId = id;
@@ -307,8 +308,9 @@ export type StorageWriteBenchmark = {
 	run(storage: Storage): Promise<number>;
 };
 export async function seedStorageWriteBenchmark(storage: Storage): Promise<void> {
-	await storage.commit([{ type: "conversation", value: { id: ROOT } }], () => {}, context);
-	await storage.commit(
+	await commitWrites(storage, [{ type: "conversation", value: { id: ROOT } }], context);
+	await commitWrites(
+		storage,
 		await Promise.all(
 			Array.from(
 				{ length: 100 },
@@ -323,7 +325,6 @@ export async function seedStorageWriteBenchmark(storage: Storage): Promise<void>
 				}),
 			),
 		),
-		() => {},
 		context,
 	);
 }
@@ -333,14 +334,14 @@ export const STORAGE_WRITE_BENCHMARKS: readonly StorageWriteBenchmark[] = [
 		expected: 1,
 		async run(storage) {
 			const id = await storage.mintId<EntryId>();
-			await storage.commit(
+			await commitWrites(
+				storage,
 				[
 					{
 						type: "entry",
 						value: { id, conversationId: ROOT, kind: "benchmark.write", data: { text: "x".repeat(128) } },
 					},
 				],
-				() => {},
 				context,
 			);
 			return 1;
@@ -364,7 +365,7 @@ export const STORAGE_WRITE_BENCHMARKS: readonly StorageWriteBenchmark[] = [
 					}),
 				),
 			);
-			await storage.commit(writes, () => {}, context);
+			await commitWrites(storage, writes, context);
 			return writes.length;
 		},
 	},
@@ -396,7 +397,7 @@ export const STORAGE_WRITE_BENCHMARKS: readonly StorageWriteBenchmark[] = [
 					content: { kind: "base", version: 1, value: { entryId, taskId } },
 				},
 			];
-			await storage.commit(writes, () => {}, context);
+			await commitWrites(storage, writes, context);
 			return writes.length;
 		},
 	},

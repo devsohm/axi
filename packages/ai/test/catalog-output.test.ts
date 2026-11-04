@@ -3,10 +3,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { afterEach, expect, it, vi } from "vitest";
-import { writeCatalog } from "../scripts/catalog-output.ts";
+import { writeCatalog } from "../catalog/output.ts";
 import { hydrateModelCatalog } from "../scripts/hydrate-model-catalog.ts";
 import { createHash } from "node:crypto";
-import { validateGeneratedModelData, validateModelDataDirectory } from "../scripts/model-data.ts";
+import { validateGeneratedModelData, validateModelDataDirectory } from "../catalog/data.ts";
 import type { Model } from "../src/types.ts";
 
 const roots: string[] = [];

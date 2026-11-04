@@ -1,5 +1,6 @@
 import { type ChildProcessWithoutNullStreams, spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
+import { stripVTControlCharacters } from "node:util";
 
 export type Json = Record<string, unknown>;
 export class RemoteError extends Error {
@@ -52,6 +53,19 @@ type Pending = { resolve(value: Reply): void; reject(error: Error): void; onEven
 const lost = (message: string) => new RemoteError({ code: "unknown", message, lost: true });
 const closed = () => new RemoteError({ code: "unknown", message: "Connection closed" });
 export const isConnectionLost = (error: unknown): boolean => error instanceof RemoteError && error.fields.lost === true;
+
+function startupDiagnostics(message: string, output: string): string {
+	const text = stripVTControlCharacters(output.replace(/\r\n?/g, "\n")).replace(
+		/[\u0000-\u0008\u000b-\u001f\u007f-\u009f]/g,
+		"",
+	);
+	const lines = text
+		.split("\n")
+		.map((line) => line.trimEnd())
+		.filter((line) => line !== "")
+		.slice(-20);
+	return lines.length ? message + "\nremote stderr:\n" + lines.join("\n") : message;
+}
 
 function wellFormed(_key: string, value: unknown): unknown {
 	return typeof value === "string" ? value.toWellFormed() : value;
@@ -188,19 +202,27 @@ export class Connection {
 		const child = spawn(program, [...args, "serve", "--token", token], { stdio: ["pipe", "pipe", "pipe"] });
 		const session = new DaemonSession(++this.#sessionId, child, token);
 		this.#current = session;
+		let ready = false,
+			stderr = "";
 		let timer: ReturnType<typeof setTimeout> | undefined;
 		const startup = new Promise<never>((_resolve, reject) => {
 			timer = setTimeout(() => reject(lost("Axi environment did not answer within 60 s")), 60000);
 			child.once("error", (error) =>
 				reject(new RemoteError({ code: "spawn_error", message: error.message, lost: true })),
 			);
-			child.once("exit", (code) => reject(lost(`Axi environment exited with code ${code} before it was ready`)));
+			child.once("close", (code) => reject(lost(`Axi environment exited with code ${code} before it was ready`)));
 		});
 		void startup.catch(() => {});
 		child.stdout.on("data", (bytes: Buffer) => this.#receive(session, bytes));
-		child.stderr.on("data", (bytes: Buffer) => this.#options.onLog?.(bytes.toString("utf8")));
+		child.stderr.setEncoding("utf8").on("data", (text: string) => {
+			if (!ready) stderr = (stderr + text).slice(-2000);
+			this.#options.onLog?.(text);
+		});
 		child.on("error", () => this.#stop(session, lost("Axi environment connection lost")));
-		child.on("exit", () => this.#stop(session, lost("Axi environment connection lost")));
+		child.on("exit", () => {
+			if (ready) this.#stop(session, lost("Axi environment connection lost"));
+		});
+		child.on("close", () => this.#stop(session, lost("Axi environment connection lost")));
 		child.stdin.on("error", () => {});
 		session.timer = setInterval(() => {
 			this.#write(session, encode(6, 0, {}));
@@ -210,10 +232,18 @@ export class Connection {
 		try {
 			const reply = await Promise.race([this.#send(session, "hello", { protocol: 1 }, {}), startup]);
 			if (reply.json.protocol !== 1) throw lost(`Unsupported protocol ${reply.json.protocol}`);
+			ready = true;
+			stderr = "";
 			return { info: reply.json as unknown as RemoteInfo, session };
 		} catch (error) {
-			this.#stop(session, error instanceof Error ? error : lost(String(error)));
-			throw error;
+			const failure =
+				error instanceof RemoteError
+					? new RemoteError({ ...error.fields, message: startupDiagnostics(error.message, stderr) })
+					: error instanceof Error
+						? error
+						: lost(String(error));
+			this.#stop(session, failure);
+			throw failure;
 		} finally {
 			clearTimeout(timer);
 		}

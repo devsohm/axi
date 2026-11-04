@@ -1,4 +1,4 @@
-import type { Context } from "@axi/chord";
+import type { Context } from "@axi/objects";
 import { type ExecutionEnv, getOrThrow } from "../env/index.ts";
 
 const tails = new Map<string, Promise<void>>();

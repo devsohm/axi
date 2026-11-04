@@ -30,7 +30,7 @@ function schemaTerms(value: unknown, terms: string[]): void {
 		if (Array.isArray(value[key])) for (const child of value[key]) schemaTerms(child, terms);
 }
 function document(tool: ToolRegistration): { name: string; text: string } {
-	const parts = [tool.name, tool.name.replaceAll("_", " "), tool.description];
+	const parts = [tool.description];
 	schemaTerms(tool.parameters, parts);
 	return { name: tool.name, text: parts.filter((part) => part.trim() !== "").join(" ") };
 }

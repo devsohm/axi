@@ -2,7 +2,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createModels, fauxAssistantMessage, fauxProvider } from "@axi/ai";
-import { BACKGROUND_CONTEXT as context } from "@axi/chord/context";
+import { BACKGROUND_CONTEXT as context } from "@axi/objects/context";
 import { expect, test, vi } from "vitest";
 import {
 	AssistantEntry,
@@ -61,7 +61,9 @@ for (const recover of [true, false])
 			]);
 			expect(f.provider.state.callCount).toBe(2);
 			expect(f.provider.getPendingResponseCount()).toBe(1);
-			expect(await harness.snapshot(LiveDoc, conversation.id, context)).toEqual({});
+			expect(await harness.snapshot(LiveDoc, conversation.id, context)).toEqual(recover ? {} : { runFailure: {
+			taskId: expect.any(Number), inputs: [receipt.id], reason: "model_error", detail: "503 temporarily unavailable", first: entries.items.at(-1)!.id,
+		} });
 		} finally {
 			await harness.close(context);
 		}
@@ -172,9 +174,81 @@ test("aborting a deferred generation cancels the provider receipt and clears the
 			{ provider: f.model.provider, modelId: f.model.modelId },
 		]);
 		expect(f.provider.state.deferredFetchCount).toBe(0);
-		expect(await harness.snapshot(LiveDoc, conversation.id, context)).toEqual({});
+		expect(await harness.snapshot(LiveDoc, conversation.id, context)).toEqual({ runFailure: { taskId: expect.any(Number), inputs: [submission.id], reason: "aborted", first: expect.any(Number) } });
 	} finally {
 		await harness.close(context);
+	}
+});
+
+test.each(["abort", "restart-limit"] as const)("a deferred retry cancels its provider job on %s", async (end) => {
+	const directory = await mkdtemp(join(tmpdir(), "axi-deferred-retry-"));
+	const open = () => openNodeSqliteStorage(join(directory, "session.sqlite"));
+	const f = setup({ stream: { deferred: true }, restartLimit: 2 }, { deferred: { pollAfterMs: 60000 } });
+	f.provider.setResponses([fauxAssistantMessage("Must not finish")]);
+	const options = { ...f.options, now: () => 1000 };
+	let harness = await Harness.open(await open(), options, context);
+	try {
+		const conversation = await harness.root(context, { agent: { model: f.model } });
+		const submission = await conversation.submit({ type: "input", content: "Deferred work" }, context);
+		await vi.waitFor(async () =>
+			expect((await harness.snapshot(LiveDoc, conversation.id, context))?.generation?.deferred).toBeDefined(),
+		);
+		const taskId = (await harness.snapshot(LiveDoc, conversation.id, context))!.run!.taskId;
+		await harness.close(context);
+		const storage = await open();
+		try {
+			const task = await storage.task(taskId, context);
+			if (task?.state.status !== "sleeping") throw new Error("Deferred task was not sleeping");
+			const poll = task.state.checkpoint;
+			if (poll === null || typeof poll !== "object" || Array.isArray(poll) || poll.phase !== "poll")
+				throw new Error("Deferred checkpoint was not persisted");
+			if (poll.handle === undefined || poll.cutoff === undefined) throw new Error("Deferred receipt was lost");
+			const until = 61000;
+			const checkpoint = {
+				phase: "retry",
+				attempt: 1,
+				until,
+				poll: { model: f.model, handle: poll.handle, cutoff: poll.cutoff, thinkingLevel: "off" },
+			};
+			expect(
+				await storage.commit(
+					[
+						[
+							{
+								type: "task",
+								value: {
+									...task,
+									...(end === "restart-limit" ? { restarts: 2 } : {}),
+									state:
+										end === "abort" ? { status: "sleeping", until, checkpoint } : { status: "pending", checkpoint },
+								},
+							},
+						],
+					],
+					() => {},
+					context,
+				),
+			).toEqual({ stored: 1 });
+		} finally {
+			await storage.close(context);
+		}
+		harness = await Harness.open(await open(), options, context);
+		harness.resume();
+		const resumed = await harness.conversation(conversation.id, context);
+		if (!resumed) throw new Error("Conversation was lost");
+		if (end === "abort") await resumed.abort(context);
+		const restored = await harness.submission(submission.id, context);
+		if (!restored) throw new Error("Submission was lost");
+		expect(await restored.wait(context)).toMatchObject({
+			status: "unanswered",
+			reason: end === "abort" ? "aborted" : "restart_limit",
+		});
+		expect(f.provider.state.cancelledDeferred).toHaveLength(1);
+		expect(f.provider.state.deferredFetchCount).toBe(0);
+		expect(f.provider.state.callCount).toBe(1);
+	} finally {
+		await harness.close(context);
+		await rm(directory, { recursive: true, force: true });
 	}
 });
 
@@ -189,7 +263,7 @@ test("an unavailable optional environment is reported without discarding a valid
 			env: async () => {
 				throw new Error("Environment offline");
 			},
-			onReport: (error, info) =>
+			onReport: ({ error, ...info }) =>
 				reports.push({ message: error instanceof Error ? error.message : String(error), info }),
 		},
 		context,
@@ -199,7 +273,7 @@ test("an unavailable optional environment is reported without discarding a valid
 		expect(
 			await (await conversation.submit({ type: "input", content: "Say hello" }, context)).wait(context),
 		).toMatchObject({ status: "done" });
-		expect(reports).toMatchObject([{ message: "Environment offline", info: { type: "host_error", callback: "env" } }]);
+		expect(reports).toMatchObject([{ message: "Environment offline", info: { kind: "host_error", callback: "env" } }]);
 		expect(f.provider.state.callCount).toBe(1);
 	} finally {
 		await harness.close(context);

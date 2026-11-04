@@ -28,6 +28,7 @@ function terminalEnv(values: Record<string, string>) {
 	for (const name of [
 		"TERM",
 		"TERM_PROGRAM",
+		"ORCA_IMAGE_PROTOCOL",
 		"COLORTERM",
 		"TMUX",
 		"KITTY_WINDOW_ID",
@@ -52,6 +53,15 @@ test("terminal capabilities honor terminal families, multiplexers and explicit o
 		[{ TERM_PROGRAM: "vscode" }, { images: null, trueColor: true, hyperlinks: true }],
 		[{ TERM_PROGRAM: "herdr" }, { images: "kitty", trueColor: false, hyperlinks: true }],
 		[{ TERM_PROGRAM: "rex" }, { images: "kitty", trueColor: true, hyperlinks: true }],
+		[
+			{ TERM_PROGRAM: "Orca", ORCA_IMAGE_PROTOCOL: "kitty" },
+			{ images: "kitty", trueColor: true, hyperlinks: true },
+		],
+		[{ TERM_PROGRAM: "Orca" }, { images: null, trueColor: false, hyperlinks: false }],
+		[
+			{ TERM: "screen", TERM_PROGRAM: "Orca", ORCA_IMAGE_PROTOCOL: "kitty" },
+			{ images: null, trueColor: false, hyperlinks: false },
+		],
 		[
 			{ TERM: "screen", TERM_PROGRAM: "kitty", COLORTERM: "truecolor" },
 			{ images: null, trueColor: true, hyperlinks: false },

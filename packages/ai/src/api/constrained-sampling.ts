@@ -92,6 +92,17 @@ export function makeStrictJsonSchema(
 export function getJsonSchemaToolParameters(tool: Tool, strictMode: boolean | undefined): Tool["parameters"] {
 	return strictMode === true ? makeStrictJsonSchema(tool.parameters) : tool.parameters;
 }
+export function prefersJsonSchemaStrictSampling(tool: Tool): boolean {
+	const config = tool.constrainedSampling;
+	return !!config && config.type === "json_schema" && config.strict === "prefer";
+}
+export function isStrictToolLimitErrorMessage(message: string): boolean {
+	return [
+		"The compiled grammar is too large",
+		"Too many strict tools (",
+		"Schemas contains too many parameters with union types (",
+	].some((phrase) => message.includes(phrase));
+}
 export interface GrammarConstrainedSampling {
 	format: "lark" | "regex";
 	definition: string;
@@ -115,22 +126,32 @@ export function getGrammarToolInput(
 export function appendGrammarToolInputJsonDelta(
 	buffer: GrammarToolInputJsonBuffer,
 	inputProperty: string,
-	nextInput: string,
-	close: boolean,
+	delta: string,
 ): string | undefined {
-	if (buffer.closed) {
-		if (close && nextInput === buffer.input) return undefined;
-		throw new Error(`grammar tool input for property "${inputProperty}" changed after it was closed`);
-	}
-	if (!nextInput.startsWith(buffer.input))
-		throw new Error(`grammar tool input for property "${inputProperty}" changed non-monotonically`);
-	const suffix = nextInput.slice(buffer.input.length);
-	if (!close && !suffix.length) return undefined;
+	if (buffer.closed) throw new Error(`grammar tool input for property "${inputProperty}" changed after it was closed`);
+	if (!delta.length) return undefined;
 	const prefix = buffer.started ? "" : `{${JSON.stringify(inputProperty)}:"`;
 	buffer.started = true;
-	buffer.input = nextInput;
-	if (close) buffer.closed = true;
-	return prefix + JSON.stringify(suffix).slice(1, -1) + (close ? '"}' : "");
+	buffer.input += delta;
+	return prefix + JSON.stringify(delta).slice(1, -1);
+}
+export function closeGrammarToolInputJson(
+	buffer: GrammarToolInputJsonBuffer,
+	inputProperty: string,
+	finalInput: string | undefined,
+): string | undefined {
+	if (buffer.closed) {
+		if (finalInput === undefined || finalInput === buffer.input) return undefined;
+		throw new Error(`grammar tool input for property "${inputProperty}" changed after it was closed`);
+	}
+	if (finalInput !== undefined && !finalInput.startsWith(buffer.input))
+		throw new Error(`grammar tool input for property "${inputProperty}" changed non-monotonically`);
+	const rest = finalInput?.slice(buffer.input.length) ?? "";
+	const prefix = buffer.started ? "" : `{${JSON.stringify(inputProperty)}:"`;
+	buffer.started = true;
+	buffer.closed = true;
+	buffer.input = finalInput ?? buffer.input;
+	return prefix + JSON.stringify(rest).slice(1, -1) + '"}';
 }
 export function resolveJsonSchemaStrictSampling(
 	tool: Tool,

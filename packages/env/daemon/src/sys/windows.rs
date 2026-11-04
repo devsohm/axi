@@ -448,6 +448,9 @@ pub fn after_spawn(child: &Child) {
         }
     }
 }
+pub fn on_exit_signal(_callback: impl FnOnce(i32) + Send + 'static) -> io::Result<()> {
+    Ok(())
+}
 pub fn kill_tree(pid: u32) {
     let root = std::env::var("SystemRoot").unwrap_or_else(|_| "C:\\Windows".into());
     let _ = Command::new(format!("{root}\\System32\\taskkill.exe"))

@@ -34,6 +34,8 @@ Column slicing preserves the order of control sequences. Strict slices exclude w
 
 Components render arrays of terminal lines and expose invalidation. Containers concatenate their children and translate mouse coordinates to the receiving child. Boxes add padding and optional backgrounds. Text wraps within its horizontal padding. Truncated text displays only its first line.
 
+`Text.setText()` retains its wrapped output when the supplied text is unchanged.
+
 The single-line input supports grapheme and word navigation, deletion, kill and yank history, undo, bracketed paste, placeholders and horizontal scrolling. Paste removes line breaks and expands tabs to four spaces. Consecutive word typing forms one undo unit. Whitespace, cursor movement and deletion establish separate undo boundaries.
 
 The cursor marker uses Axi's identity. A focused input emits it before the highlighted cursor grapheme. The renderer consumes this marker to position the terminal cursor.
@@ -71,6 +73,8 @@ Completion requests are cancellable. New input invalidates earlier requests. Com
 ## Markdown and mathematical notation
 
 Markdown renders headings, paragraphs, lists, task lists, quotes, fenced code, links and tables. Applications provide theme functions and optional syntax highlighting. Links use terminal hyperlinks when supported and readable destinations otherwise. Streaming partial fences and mathematical expressions remain renderable.
+
+Markdown reuses unchanged top-level blocks while text streams. A resize recalculates wrapping and retains cached code highlighting. Call `invalidate()` after changing theme functions or their output. It clears the block results, highlighting and default style prefix. These caches use weak references and can be collected between renders. Changed reference-link definitions always use the current text.
 
 Emphasis recognizes CJK text next to punctuation. Latin text retains the standard delimiter rules.
 

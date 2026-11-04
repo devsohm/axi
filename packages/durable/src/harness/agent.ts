@@ -1,6 +1,6 @@
-import { copyJson } from "@axi/chord";
+import { copyJson } from "@axi/objects";
 import { defineDoc } from "../documents.ts";
-import { documentRetention } from "../session/session.ts";
+import { documentRetention, persistWithin } from "../session/session.ts";
 import type { ConversationId, ConversationRecord, Tx } from "../types.ts";
 import type {
 	Agent,
@@ -29,7 +29,7 @@ export const DEFAULT_COMPACTION_POLICY: CompactionPolicy = {
 	keepRecentTokens: 20000,
 	backgroundTokens: 32768,
 };
-export const DEFAULT_PROGRESS_POLICY: ProgressPolicy = { partialIntervalMs: 100, outputIntervalMs: 100 };
+export const DEFAULT_PROGRESS_POLICY: ProgressPolicy = { partialIntervalMs: 100, outputIntervalMs: 100, persistWithinMs: 1000 };
 export const DEFAULT_RESTART_LIMIT = 5;
 export const INSTRUCTIONS_KEY = "instructions";
 export const AgentDoc = defineDoc<AgentState>({
@@ -52,6 +52,7 @@ export function resolveSettings(value: HarnessSettings | undefined): Settings {
 		progress: {
 			partialIntervalMs: value?.progress?.partialIntervalMs ?? DEFAULT_PROGRESS_POLICY.partialIntervalMs,
 			outputIntervalMs: value?.progress?.outputIntervalMs ?? DEFAULT_PROGRESS_POLICY.outputIntervalMs,
+			persistWithinMs: persistWithin(value?.progress?.persistWithinMs),
 		},
 		toolExecution: value?.toolExecution ?? "parallel",
 		steeringMode: value?.steeringMode ?? "one-at-a-time",
@@ -108,6 +109,12 @@ export async function configure(tx: Tx, id: ConversationId, change: AgentChange)
 	const cwd = change.cwd;
 	if (cwd === null) delete state.cwd;
 	else if (cwd !== undefined) state.cwd = cwd;
+	const maxTurns = change.maxTurns;
+	if (maxTurns === null) delete state.maxTurns;
+	else if (maxTurns !== undefined) {
+		if (!Number.isSafeInteger(maxTurns) || maxTurns < 1) throw new RangeError(`maxTurns must be an integer 1 or more, got ${String(maxTurns)}`);
+		state.maxTurns = maxTurns;
+	}
 }
 
 export async function addTools(tx: Tx, id: ConversationId, added: readonly string[]): Promise<void> {
@@ -267,5 +274,6 @@ export function resolveAgent<T extends ToolRegistration>(
 		sections: renderedSections,
 		...(instructions === undefined ? {} : { instructions }),
 		...(state?.cwd === undefined ? {} : { cwd: state.cwd }),
+		...(state?.maxTurns === undefined ? {} : { maxTurns: state.maxTurns }),
 	};
 }

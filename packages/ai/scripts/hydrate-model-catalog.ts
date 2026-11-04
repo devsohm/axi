@@ -10,7 +10,7 @@ import {
 	readModelDataProviderIds,
 	record,
 	validateModelDataDirectory,
-} from "./model-data.ts";
+} from "../catalog/data.ts";
 
 export function hydrateModelCatalog(
 	packageRoot: string,

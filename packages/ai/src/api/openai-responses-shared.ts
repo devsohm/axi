@@ -25,12 +25,13 @@ import type {
 } from "../types.ts";
 import type { AssistantMessageEventStream } from "../utils/event-stream.ts";
 import { shortHash } from "../utils/hash.ts";
-import { parseStreamingJson, parseToolCallArguments } from "../utils/json-parse.ts";
+import { ToolCallArgumentsStream } from "../utils/streaming-json.ts";
 import { sanitizeSurrogates } from "../utils/sanitize-unicode.ts";
 import { getSystemMessageText, renderSystemMessageUpdate } from "../utils/text.ts";
 import { resolveTranscript, resolveTranscriptTools, type TranscriptToolSupport } from "../utils/transcript.ts";
 import {
 	appendGrammarToolInputJsonDelta,
+	closeGrammarToolInputJson,
 	type GrammarToolInputJsonBuffer,
 	getGrammarToolInput,
 	getJsonSchemaToolParameters,
@@ -39,13 +40,18 @@ import {
 } from "./constrained-sampling.ts";
 import { transformMessages } from "./transform-messages.ts";
 
-type ServiceTier = ResponseCreateParamsStreaming["service_tier"];
 export interface OpenAIResponsesStreamOptions {
 	onProviderStreamEvent?: StreamOptions["onProviderStreamEvent"];
-	serviceTier?: ServiceTier;
+	serviceTier?: ResponseCreateParamsStreaming["service_tier"];
 	grammarToolInputProperties?: ReadonlyMap<string, string>;
-	resolveServiceTier?: (received: ServiceTier, requested: ServiceTier) => ServiceTier;
-	applyServiceTierPricing?: (usage: Usage, serviceTier: ServiceTier) => void;
+	resolveServiceTier?: (
+		responseServiceTier: ResponseCreateParamsStreaming["service_tier"] | undefined,
+		requestServiceTier: ResponseCreateParamsStreaming["service_tier"] | undefined,
+	) => ResponseCreateParamsStreaming["service_tier"] | undefined;
+	applyServiceTierPricing?: (
+		usage: Usage,
+		serviceTier: ResponseCreateParamsStreaming["service_tier"] | undefined,
+	) => void;
 }
 export interface ConvertResponsesToolsOptions {
 	strict?: boolean | null;
@@ -318,14 +324,11 @@ export function convertResponsesMessages<A extends Api>(
 	return result;
 }
 
-type StreamingCall = ToolCall & {
-	partialJson?: string;
-	customInput?: { property: string; jsonBuffer: GrammarToolInputJsonBuffer };
-};
+type ToolInput = { kind: "json"; arguments: ToolCallArgumentsStream } | { kind: "custom"; property: string; jsonBuffer: GrammarToolInputJsonBuffer; unsent: string };
 type Slot =
 	| { kind: "thinking"; block: ThinkingContent; index: number }
 	| { kind: "text"; block: TextContent; index: number }
-	| { kind: "toolCall"; block: StreamingCall; index: number };
+	| { kind: "toolCall"; block: ToolCall; index: number; input: ToolInput };
 type Terminal = Extract<ResponseStreamEvent, { type: "response.completed" | "response.incomplete" }>["response"];
 export async function processResponsesStream<A extends Api>(
 	events: AsyncIterable<ResponseStreamEvent>,
@@ -335,6 +338,7 @@ export async function processResponsesStream<A extends Api>(
 	options: OpenAIResponsesStreamOptions = {},
 ): Promise<void> {
 	const slots = new Map<number | undefined, Slot>();
+	const unfinished = new Set<ToolCall>();
 	const reasoning = new Map<string, ThinkingContent>();
 	let terminal = false;
 	const phase = (item: ResponseOutputItem) => {
@@ -348,20 +352,26 @@ export async function processResponsesStream<A extends Api>(
 			phase(item);
 			slot = { kind: "text", index, block: { type: "text", text: "" } };
 		} else if (item.type === "function_call" || item.type === "custom_tool_call") {
-			const block: StreamingCall = {
+			const block: ToolCall = {
 				type: "toolCall",
 				id: `${item.call_id}|${item.id}`,
 				name: item.name,
 				arguments: {},
 				...(item.namespace !== undefined ? { namespace: item.namespace } : {}),
 			};
-			if (item.type === "function_call") block.partialJson = item.arguments || "";
-			else {
+			let input: ToolInput;
+			if (item.type === "function_call") {
+				const argumentsStream = new ToolCallArgumentsStream();
+				if (item.arguments) block.arguments = argumentsStream.append(item.arguments);
+				input = { kind: "json", arguments: argumentsStream };
+			} else {
 				const property = options.grammarToolInputProperties?.get(item.name) ?? "input";
+				const jsonBuffer = { input: "", started: false, closed: false };
 				block.arguments = { [property]: item.input || "" };
-				block.customInput = { property, jsonBuffer: { input: "", started: false, closed: false } };
+				input = { kind: "custom", property, jsonBuffer, unsent: appendGrammarToolInputJsonDelta(jsonBuffer, property, item.input || "") ?? "" };
 			}
-			slot = { kind: "toolCall", index, block };
+			slot = { kind: "toolCall", index, block, input };
+			unfinished.add(block);
 		} else return undefined;
 		output.content.push(slot.block);
 		slots.set(position, slot);
@@ -375,15 +385,12 @@ export async function processResponsesStream<A extends Api>(
 	const toolDelta = (slot: Extract<Slot, { kind: "toolCall" }>, delta: string | undefined) => {
 		if (delta !== undefined) stream.push({ type: "toolcall_delta", contentIndex: slot.index, delta, partial: output });
 	};
-	const grammarInput = (block: StreamingCall): string => {
-		const value = block.customInput && block.arguments[block.customInput.property];
-		return typeof value === "string" ? value : "";
-	};
-	const grammarDelta = (slot: Extract<Slot, { kind: "toolCall" }>, value: string, close: boolean) => {
-		const input = slot.block.customInput;
-		if (!input) return;
-		const delta = appendGrammarToolInputJsonDelta(input.jsonBuffer, input.property, value, close);
-		slot.block.arguments = { [input.property]: value };
+	const grammarDelta = (slot: Extract<Slot, { kind: "toolCall" }>, value: string | undefined, close: boolean) => {
+		const input = slot.input;
+		if (input.kind !== "custom") return;
+		let delta = close ? closeGrammarToolInputJson(input.jsonBuffer, input.property, value) : appendGrammarToolInputJsonDelta(input.jsonBuffer, input.property, value ?? "");
+		slot.block.arguments = { [input.property]: input.jsonBuffer.input };
+		if (input.unsent !== "") { delta = input.unsent + (delta ?? ""); input.unsent = ""; }
 		toolDelta(slot, delta);
 	};
 	const finish = (response: Terminal) => {
@@ -478,23 +485,20 @@ export async function processResponsesStream<A extends Api>(
 				}
 				break;
 			case "response.function_call_arguments.delta":
-				if (slot?.kind === "toolCall" && slot.block.partialJson !== undefined) {
-					slot.block.partialJson += event.delta;
-					slot.block.arguments = parseStreamingJson(slot.block.partialJson);
+				if (slot?.kind === "toolCall" && slot.input.kind === "json") {
+					slot.block.arguments = slot.input.arguments.append(event.delta);
 					toolDelta(slot, event.delta);
 				}
 				break;
 			case "response.function_call_arguments.done":
-				if (slot?.kind === "toolCall" && slot.block.partialJson !== undefined) {
-					const before = slot.block.partialJson;
-					slot.block.partialJson = event.arguments;
-					slot.block.arguments = parseStreamingJson(event.arguments);
-					if (event.arguments.startsWith(before) && event.arguments.length > before.length)
-						toolDelta(slot, event.arguments.slice(before.length));
+				if (slot?.kind === "toolCall" && slot.input.kind === "json") {
+					const replaced = slot.input.arguments.replace(event.arguments);
+					slot.block.arguments = replaced.arguments;
+					if (replaced.delta) toolDelta(slot, replaced.delta);
 				}
 				break;
 			case "response.custom_tool_call_input.delta":
-				if (slot?.kind === "toolCall") grammarDelta(slot, grammarInput(slot.block) + event.delta, false);
+				if (slot?.kind === "toolCall") grammarDelta(slot, event.delta, false);
 				break;
 			case "response.custom_tool_call_input.done":
 				if (slot?.kind === "toolCall") grammarDelta(slot, event.input, true);
@@ -528,16 +532,17 @@ export async function processResponsesStream<A extends Api>(
 				} else if (
 					current?.kind === "toolCall" &&
 					item.type === "function_call" &&
-					current.block.partialJson !== undefined
+					current.input.kind === "json"
 				) {
-					Object.assign(current.block, parseToolCallArguments(item.arguments || current.block.partialJson));
+					if (item.arguments) current.input.arguments.replace(item.arguments);
+					Object.assign(current.block, current.input.arguments.finish());
 					if (item.namespace !== undefined) current.block.namespace = item.namespace;
-					delete current.block.partialJson;
+					unfinished.delete(current.block);
 					stream.push({ type: "toolcall_end", contentIndex: current.index, toolCall: current.block, partial: output });
-				} else if (current?.kind === "toolCall" && item.type === "custom_tool_call" && current.block.customInput) {
-					grammarDelta(current, item.input ?? grammarInput(current.block), true);
+				} else if (current?.kind === "toolCall" && item.type === "custom_tool_call" && current.input.kind === "custom") {
+					grammarDelta(current, item.input, true);
 					if (item.namespace !== undefined) current.block.namespace = item.namespace;
-					delete current.block.customInput;
+					unfinished.delete(current.block);
 					stream.push({ type: "toolcall_end", contentIndex: current.index, toolCall: current.block, partial: output });
 				} else break;
 				slots.delete(event.output_index);
@@ -562,14 +567,5 @@ export async function processResponsesStream<A extends Api>(
 		}
 	}
 	if (!terminal) throw new Error("OpenAI Responses stream ended before a terminal response event");
-	if (output.stopReason === "toolUse") {
-		for (const block of output.content) {
-			if (
-				block.type === "toolCall" &&
-				(("partialJson" in block && block.partialJson !== undefined) ||
-					("customInput" in block && block.customInput !== undefined))
-			)
-				throw new Error(`OpenAI Responses stream completed with an unfinished tool call: ${block.name} (${block.id})`);
-		}
-	}
+	if (output.stopReason === "toolUse") for (const call of unfinished) throw new Error(`OpenAI Responses stream completed with an unfinished tool call: ${call.name} (${call.id})`);
 }

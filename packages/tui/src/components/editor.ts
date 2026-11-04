@@ -136,6 +136,9 @@ function scrollBorder(direction: "↑" | "↓", count: number, width: number): s
 	return sliceByColumn(short, 0, width - visibleWidth(ellipsis), true) + ellipsis;
 }
 export class Editor implements Component, Focusable {
+	get capturesViewportInput(): boolean {
+		return this.isShowingAutocomplete();
+	}
 	private state: State = { lines: [""], cursorLine: 0, cursorCol: 0 };
 	focused = false;
 	protected tui: TUI;
@@ -772,7 +775,12 @@ export class Editor implements Component, Focusable {
 				this.cancelAutocomplete();
 				return;
 			}
-			if (keys.matches(data, "tui.select.up") || keys.matches(data, "tui.select.down")) {
+			if (
+				keys.matches(data, "tui.select.up") ||
+				keys.matches(data, "tui.select.down") ||
+				keys.matches(data, "tui.select.pageUp") ||
+				keys.matches(data, "tui.select.pageDown")
+			) {
 				this.#menu.handleInput(data);
 				return;
 			}

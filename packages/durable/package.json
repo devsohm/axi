@@ -19,6 +19,12 @@
 			"import": "./dist/storage/memory.js",
 			"default": "./dist/storage/memory.js"
 		},
+		"./storage/store": {
+			"source": "./src/storage/store/index.ts",
+			"types": "./dist/storage/store/index.d.ts",
+			"import": "./dist/storage/store/index.js",
+			"default": "./dist/storage/store/index.js"
+		},
 		"./env": {
 			"source": "./src/env/index.ts",
 			"types": "./dist/env/index.d.ts",
@@ -120,7 +126,7 @@
 	},
 	"dependencies": {
 		"@axi/ai": "0.1.0-rc.1",
-		"@axi/chord": "0.1.0-rc.1",
+		"@axi/objects": "0.1.0-rc.1",
 		"@axi/codemode": "0.1.0-rc.1",
 		"@axi/telemetry": "0.1.0-rc.1",
 		"@silvia-odwyer/photon": "0.3.3",

@@ -1,5 +1,5 @@
-import type { Context } from "@axi/chord";
-import { FileError, type FileWatcher, type WatchChange, type WatchTarget } from "@axi/durable/env";
+import type { Context } from "@axi/objects";
+import { FileError, type FileWatcher, type FileChange, type WatchTarget } from "@axi/durable/env";
 import { type Connection, isConnectionLost } from "./connection.ts";
 import { toFileError } from "./errors.ts";
 
@@ -8,6 +8,7 @@ export interface RemoteWatchOptions {
 	pollIntervalMs?: number;
 	maxDirectories?: number;
 }
+const overflowChange: FileChange = { kind: "overflow" };
 export class RemoteWatcher implements FileWatcher {
 	#closed = false;
 	#mode: "native" | "polling" = "native";
@@ -16,12 +17,12 @@ export class RemoteWatcher implements FileWatcher {
 	#wake: (() => void) | undefined;
 	readonly #connection: Connection;
 	readonly #targets: readonly WatchTarget[];
-	readonly #notify: (change: WatchChange) => void;
+	readonly #notify: (change: FileChange) => void;
 	readonly #options: RemoteWatchOptions;
 	private constructor(
 		connection: Connection,
 		targets: readonly WatchTarget[],
-		notify: (change: WatchChange) => void,
+		notify: (change: FileChange) => void,
 		options: RemoteWatchOptions,
 	) {
 		this.#connection = connection;
@@ -32,7 +33,7 @@ export class RemoteWatcher implements FileWatcher {
 	static async open(
 		connection: Connection,
 		targets: readonly WatchTarget[],
-		notify: (change: WatchChange) => void,
+		notify: (change: FileChange) => void,
 		options: RemoteWatchOptions = {},
 	): Promise<RemoteWatcher> {
 		const watcher = new RemoteWatcher(connection, targets, notify, options);
@@ -42,14 +43,14 @@ export class RemoteWatcher implements FileWatcher {
 	get mode(): "native" | "polling" {
 		return this.#mode;
 	}
-	async close(_context: Context): Promise<void> {
+	async stop(_context: Context): Promise<void> {
 		if (this.#closed) return;
 		this.#closed = true;
 		this.#wake?.();
 		this.#abort?.abort();
 		await this.#settled;
 	}
-	#deliver(change: WatchChange): void {
+	#deliver(change: FileChange): void {
 		if (!this.#closed) {
 			try {
 				this.#notify(change);
@@ -80,9 +81,10 @@ export class RemoteWatcher implements FileWatcher {
 								resolve();
 							} else if (event.kind === "change") {
 								if (event.mode === "polling") this.#mode = "polling";
-								this.#deliver(event.overflow === true ? { overflow: true } : { paths: event.paths as string[] });
+								this.#deliver(event.overflow === true ? overflowChange : { kind: "paths", paths: event.paths as string[] });
 							} else if (event.kind === "error") {
 								this.#deliver({
+									kind: "failed",
 									error: new FileError(
 										event.code === "permission_denied" ? "permission_denied" : "invalid",
 										String(event.message),
@@ -105,7 +107,7 @@ export class RemoteWatcher implements FileWatcher {
 							void this.#reconnect();
 							return;
 						}
-						this.#deliver({ error: toFileError(error) });
+						this.#deliver({ kind: "failed", error: toFileError(error) });
 						this.#closed = true;
 					},
 				);
@@ -126,11 +128,11 @@ export class RemoteWatcher implements FileWatcher {
 			if (this.#closed) return;
 			try {
 				await this.#start();
-				this.#deliver({ overflow: true });
+				this.#deliver(overflowChange);
 				return;
 			} catch (error) {
 				if (!isConnectionLost(error)) {
-					this.#deliver({ error: toFileError(error) });
+					this.#deliver({ kind: "failed", error: toFileError(error) });
 					this.#closed = true;
 					return;
 				}

@@ -1,9 +1,9 @@
 import { createModels } from "@axi/ai";
-import { BACKGROUND_CONTEXT as context, type Context } from "@axi/chord/context";
+import { BACKGROUND_CONTEXT as context, type Context } from "@axi/objects/context";
 import { expect, it } from "vitest";
-import { createRegistry, Harness, MemoryStorage, watchEvents } from "../src/index.ts";
+import { createRegistry, Harness, MemoryStorage } from "../src/index.ts";
 
-it.each(["conversation", "graph", "events"] as const)(
+it.each(["conversation", "graph"] as const)(
 	"captures the %s watch cancellation signal once after attachment",
 	async (kind) => {
 		const harness = await Harness.open(
@@ -25,16 +25,11 @@ it.each(["conversation", "graph", "events"] as const)(
 				value: context.value.bind(context),
 				toString: () => context.toString(),
 			};
-			const watch =
-				kind === "graph"
-					? await harness.watchTaskGraph(invocation)
-					: kind === "events"
-						? await watchEvents(harness, conversation.id, invocation)
-						: await conversation.watch(invocation);
+			const watch = kind === "graph" ? await harness.watchTaskGraph(invocation) : await conversation.watch(invocation);
 			try {
 				expect(reads).toBe(expectedReads);
 				controller.abort();
-				await expect(watch.closed).resolves.toEqual({ reason: "cancelled" });
+				await expect(watch.closed).resolves.toEqual({ kind: "aborted" });
 			} finally {
 				await watch.stop();
 				await hold.stop();

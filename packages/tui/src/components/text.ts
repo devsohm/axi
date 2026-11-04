@@ -14,6 +14,7 @@ export class Text implements Component {
 		this.#background = customBgFn;
 	}
 	setText(text: string): void {
+		if (text === this.#text) return;
 		this.#text = text;
 		this.#cache = undefined;
 	}

@@ -592,6 +592,7 @@ class Collection implements MutableModels {
 		);
 		if (options?.transformHeaders) headers = await options.transformHeaders(headers ?? {});
 		const env = resolved.env || options?.env ? { ...resolved.env, ...options?.env } : undefined;
+		const identity = mergeClientIdentity(this.#identity, options?.identity);
 		const { transformHeaders: _transform, ...rest } = options ?? {};
 		return {
 			requestModel,
@@ -600,7 +601,7 @@ class Collection implements MutableModels {
 				apiKey,
 				headers,
 				env,
-				identity: mergeClientIdentity(this.#identity, options?.identity),
+				...(identity === undefined ? {} : { identity }),
 			} as Omit<O, "transformHeaders"> & ProviderRequestOptions<M>,
 		};
 	}

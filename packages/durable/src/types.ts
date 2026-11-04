@@ -1,7 +1,7 @@
-import type { WatchHandle } from "@axi/chord";
+import type { WatchHandle, WatchCall, WatchEnd } from "@axi/objects";
 import type { TelemetryCarrier } from "@axi/telemetry";
-import type { Context, Draft, JsonValue } from "@axi/chord";
-import type { Op } from "@axi/chord/delta";
+import type { Context, Draft, JsonValue } from "@axi/objects";
+import type { Op } from "@axi/objects/delta";
 import type { Message, Models } from "@axi/ai";
 import type { ExecutionEnv } from "./env/index.ts";
 import type {
@@ -145,6 +145,7 @@ export interface TaskRuntime<I, S, R, H extends object> extends DocumentObserver
 			current: RunningTask<I, S, R>,
 		) => NextTaskState<S, R> | undefined | Promise<NextTaskState<S, R> | undefined>,
 		context: Context,
+		options?: CommitOptions,
 	): Promise<void>;
 	memo<T extends JsonValue>(name: string, context: Context): Promise<T | undefined>;
 	memo<T extends JsonValue>(name: string, candidate: T, context: Context): Promise<T>;
@@ -156,6 +157,12 @@ export interface TaskRuntime<I, S, R, H extends object> extends DocumentObserver
 	conversation(id: ConversationId, context: Context): Promise<ConversationHandle | undefined>;
 	entry(id: EntryId, context: Context): Promise<EntryRecord | undefined>;
 	entry<D extends JsonValue>(token: Entry<D>, id: EntryId, context: Context): Promise<TypedEntry<D> | undefined>;
+	entries(
+		query: Omit<EntryQuery, "conversationId">,
+		limit: number,
+		cursor: Cursor | undefined,
+		context: Context,
+	): Promise<Page<EntryRecord, Cursor>>;
 	context(conversationId: ConversationId, context: Context, options?: { readonly at?: EntryId }): Promise<ContextView>;
 	now(): number;
 	setTimer(callback: () => void, delayMs: number): () => void;
@@ -214,7 +221,7 @@ export interface Entry<Value extends JsonValue = never> {
 	is(entry: EntryRecord | undefined): entry is TypedEntry<Value>;
 }
 
-type SubmissionIdentity<Kind extends "input" | "write"> = {
+type SubmissionIdentity<Kind extends "input" | "write" | "continue"> = {
 	readonly trace?: TelemetryCarrier;
 	readonly id: SubmissionId;
 	readonly conversationId: ConversationId;
@@ -257,6 +264,10 @@ type WrittenSubmission = {
 	readonly detail?: never;
 };
 export type SubmissionRecord =
+	| (SubmissionIdentity<"continue"> &
+			(Omit<InputPlacement, "entry"> | Omit<AnsweredInput, "entry"> | Omit<UnansweredInput, "entry">) & {
+				readonly entry?: never;
+			})
 	| (SubmissionIdentity<"input"> & (QueuedSubmission | InputPlacement | AnsweredInput | UnansweredInput))
 	| (SubmissionIdentity<"write"> &
 			(QueuedSubmission | WrittenSubmission | (Omit<UnansweredInput, "entry"> & { readonly entry?: never })));
@@ -268,35 +279,42 @@ export type SubmissionSettlement =
 
 export type TaskOutcomeError = { readonly message: string; readonly detail?: JsonValue };
 export type ReportTask = { readonly id: TaskId; readonly kind: string; readonly conversationId: ConversationId };
-export type HostCallback = "now" | "settings" | "registry" | "env" | "models" | "setTimer" | "onWake";
+export type HostCallback = "now" | "settings" | "registry" | "env" | "models" | "setTimer" | "onWake" | "telemetry";
 export type ReportInfo =
-	| { readonly type: "session_failed" }
+	| { readonly kind: "storage_failed" }
 	| {
-			readonly type: "task_faulted";
+			readonly kind: "task_faulted";
 			readonly task: ReportTask;
 			readonly extension?: string;
 			readonly reason: "threw" | "restart_limit";
 	  }
-	| { readonly type: "task_parked"; readonly task: ReportTask; readonly extension?: string }
-	| { readonly type: "migration_failed"; readonly task: ReportTask; readonly extension?: string }
-	| { readonly type: "task_error"; readonly task: ReportTask; readonly extension?: string }
 	| {
-			readonly type: "task_outdated";
+			readonly kind: "task_interrupted";
 			readonly task: ReportTask;
 			readonly extension?: string;
-			readonly reason: "missing_task" | "incompatible_task";
+			readonly reason: "restart_limit" | "interrupted";
+			readonly restarts: number;
+	  }
+	| { readonly kind: "migration_failed"; readonly task: ReportTask; readonly extension?: string }
+	| { readonly kind: "task_error"; readonly task: ReportTask; readonly extension?: string }
+	| {
+			readonly kind: "task_outdated";
+			readonly task: ReportTask;
+			readonly extension?: string;
+			readonly reason: "missing_task" | "task_too_old" | "migration_failed";
 	  }
 	| {
-			readonly type: "extension_error";
+			readonly kind: "extension_error";
 			readonly extension?: string;
 			readonly task?: ReportTask;
 			readonly conversationId?: ConversationId;
 	  }
-	| { readonly type: "host_error"; readonly callback: HostCallback; readonly task?: ReportTask }
-	| { readonly type: "listener_error" };
+	| { readonly kind: "host_error"; readonly callback: HostCallback; readonly task?: ReportTask }
+	| { readonly kind: "listener_error" };
+export type Report = ReportInfo & { readonly error: unknown };
 export type ReportFrom =
-	| { readonly type: "extension"; readonly extension?: string }
-	| { readonly type: "host"; readonly callback: HostCallback };
+	| { readonly kind: "extension"; readonly extension?: string }
+	| { readonly kind: "host"; readonly callback: HostCallback };
 export type SetTimer = (
 	callback: () => void,
 	delayMs: number,
@@ -429,9 +447,15 @@ export type StorageWrite =
 	| { readonly type: "document.change"; readonly id: DocumentId; readonly content: DocumentContent }
 	| { readonly type: "document.retire"; readonly id: DocumentId };
 
+export type CommitResult = { readonly stored: number; readonly refused?: unknown };
 export interface Storage {
-	/** Call adopt synchronously after durability and before the next commit. */
-	commit(writes: readonly StorageWrite[], adopt: (seq: Seq) => void, context: Context): Promise<Seq>;
+	/** Receipts follow durability in batch order. A refused batch leaves its accepted prefix stored. */
+	commit(
+		batches: readonly (readonly StorageWrite[])[],
+		receive: (index: number, seq: Seq) => void,
+		context: Context,
+	): Promise<CommitResult>;
+	publishing?(publish: () => void, context: Context): void;
 	mintId<RecordId extends Id<string>>(): Promise<RecordId>;
 	conversation(id: ConversationId, context: Context): Promise<ConversationRecord | undefined>;
 	scanConversations(
@@ -490,11 +514,18 @@ export interface Storage {
 export type DocumentCommitChange =
 	| {
 			readonly type: "document";
+			readonly kind: "change";
 			readonly record: DocumentRecord;
 			readonly conversationId: ConversationId | undefined;
-			readonly version: number | undefined;
-			readonly value: JsonObject | null;
+			readonly version: number;
+			readonly value: JsonObject;
 			readonly ops: readonly Op[];
+	  }
+	| {
+			readonly type: "document";
+			readonly kind: "retire";
+			readonly record: DocumentRecord;
+			readonly conversationId: ConversationId | undefined;
 	  }
 	| {
 			readonly type: "document.copy";
@@ -508,17 +539,22 @@ export type TableCommitChange = Extract<
 >;
 export type CommitChange = TableCommitChange | DocumentCommitChange;
 export type CommitPublication = { readonly seq: Seq; readonly changes: readonly CommitChange[] };
-export type { WatchEnd, WatchHandle } from "@axi/chord";
-export type DocumentWatch<Value extends JsonObject> = WatchHandle<Readonly<Value> | null>;
-export type SessionEnd = { readonly reason: "closed" } | { readonly reason: "failed"; readonly error: unknown };
+export type { WatchEnd, WatchHandle } from "@axi/objects";
+export type DocumentWatch<Value extends JsonObject> = WatchHandle<Readonly<Value>>;
+export type SessionEnd = { readonly kind: "closed" } | { readonly kind: "failed"; readonly error: unknown };
+export type Observer<Value> = {
+	advance(call: WatchCall<Value>, context: Context): void;
+	end(end: WatchEnd): void;
+};
+export type Observation<Value> = { readonly value: Value; detach(): void };
+export type CommitObserver = {
+	advance(publication: CommitPublication, context: Context): void;
+	end(end: WatchEnd): void;
+};
+export type CommitObservation = { detach(): void };
 export interface DocumentObserver {
 	watchDoc<Value extends JsonObject>(
 		token: SessionDocToken<Value>,
-		context: Context,
-	): Promise<DocumentWatch<Value> | undefined>;
-	watchDoc<Value extends JsonObject, Seed extends JsonValue>(
-		token: SessionDocFamilyToken<Value, Seed>,
-		key: string,
 		context: Context,
 	): Promise<DocumentWatch<Value> | undefined>;
 	watchDoc<Value extends JsonObject>(
@@ -526,15 +562,20 @@ export interface DocumentObserver {
 		conversationId: ConversationId,
 		context: Context,
 	): Promise<DocumentWatch<Value> | undefined>;
+	watchDoc<Value extends JsonObject>(
+		token: TaskDocToken<Value>,
+		taskId: TaskId,
+		context: Context,
+	): Promise<DocumentWatch<Value> | undefined>;
+	watchDoc<Value extends JsonObject, Seed extends JsonValue>(
+		token: SessionDocFamilyToken<Value, Seed>,
+		key: string,
+		context: Context,
+	): Promise<DocumentWatch<Value> | undefined>;
 	watchDoc<Value extends JsonObject, Seed extends JsonValue>(
 		token: ConversationDocFamilyToken<Value, Seed>,
 		conversationId: ConversationId,
 		key: string,
-		context: Context,
-	): Promise<DocumentWatch<Value> | undefined>;
-	watchDoc<Value extends JsonObject>(
-		token: TaskDocToken<Value>,
-		taskId: TaskId,
 		context: Context,
 	): Promise<DocumentWatch<Value> | undefined>;
 	watchDoc<Value extends JsonObject, Seed extends JsonValue>(
@@ -544,19 +585,55 @@ export interface DocumentObserver {
 		context: Context,
 	): Promise<DocumentWatch<Value> | undefined>;
 }
+export type CommitPersistence =
+	| { readonly kind: "immediate" }
+	| { readonly kind: "deferred"; readonly withinMs?: number };
+export type CommitOptions = { readonly persistence?: CommitPersistence };
 export interface Session extends DocumentObserver {
+	observeDoc<Value extends JsonObject>(
+		token: SessionDocToken<Value>,
+		observer: Observer<Readonly<Value>>,
+		context: Context,
+	): Promise<Observation<Readonly<Value>> | undefined>;
+	observeDoc<Value extends JsonObject>(
+		token: ConversationDocToken<Value>,
+		conversationId: ConversationId,
+		observer: Observer<Readonly<Value>>,
+		context: Context,
+	): Promise<Observation<Readonly<Value>> | undefined>;
+	observeDoc<Value extends JsonObject>(
+		token: TaskDocToken<Value>,
+		taskId: TaskId,
+		observer: Observer<Readonly<Value>>,
+		context: Context,
+	): Promise<Observation<Readonly<Value>> | undefined>;
+	observeDoc<Value extends JsonObject, Seed extends JsonValue>(
+		token: SessionDocFamilyToken<Value, Seed>,
+		key: string,
+		observer: Observer<Readonly<Value>>,
+		context: Context,
+	): Promise<Observation<Readonly<Value>> | undefined>;
+	observeDoc<Value extends JsonObject, Seed extends JsonValue>(
+		token: ConversationDocFamilyToken<Value, Seed>,
+		conversationId: ConversationId,
+		key: string,
+		observer: Observer<Readonly<Value>>,
+		context: Context,
+	): Promise<Observation<Readonly<Value>> | undefined>;
+	observeDoc<Value extends JsonObject, Seed extends JsonValue>(
+		token: TaskDocFamilyToken<Value, Seed>,
+		taskId: TaskId,
+		key: string,
+		observer: Observer<Readonly<Value>>,
+		context: Context,
+	): Promise<Observation<Readonly<Value>> | undefined>;
 	readonly closed: Promise<SessionEnd>;
-	commit<Value>(change: (tx: Tx) => Value | Promise<Value>, context: Context): Promise<Value>;
+	commit<Value>(change: (tx: Tx) => Value | Promise<Value>, context: Context, options?: CommitOptions): Promise<Value>;
 	close(context: Context): Promise<void>;
-	subscribeCommits(listener: (publication: CommitPublication, context: Context) => void): () => void;
+	observeCommits(observer: CommitObserver): CommitObservation;
 	subscribeClose(listener: () => void): () => void;
 	snapshot<Value extends JsonObject>(
 		token: SessionDocToken<Value>,
-		context: Context,
-	): Promise<Readonly<Value> | undefined>;
-	snapshot<Value extends JsonObject, Seed extends JsonValue>(
-		token: SessionDocFamilyToken<Value, Seed>,
-		key: string,
 		context: Context,
 	): Promise<Readonly<Value> | undefined>;
 	snapshot<Value extends JsonObject>(
@@ -564,15 +641,20 @@ export interface Session extends DocumentObserver {
 		conversationId: ConversationId,
 		context: Context,
 	): Promise<Readonly<Value> | undefined>;
+	snapshot<Value extends JsonObject>(
+		token: TaskDocToken<Value>,
+		taskId: TaskId,
+		context: Context,
+	): Promise<Readonly<Value> | undefined>;
+	snapshot<Value extends JsonObject, Seed extends JsonValue>(
+		token: SessionDocFamilyToken<Value, Seed>,
+		key: string,
+		context: Context,
+	): Promise<Readonly<Value> | undefined>;
 	snapshot<Value extends JsonObject, Seed extends JsonValue>(
 		token: ConversationDocFamilyToken<Value, Seed>,
 		conversationId: ConversationId,
 		key: string,
-		context: Context,
-	): Promise<Readonly<Value> | undefined>;
-	snapshot<Value extends JsonObject>(
-		token: TaskDocToken<Value>,
-		taskId: TaskId,
 		context: Context,
 	): Promise<Readonly<Value> | undefined>;
 	snapshot<Value extends JsonObject, Seed extends JsonValue>(
@@ -608,6 +690,7 @@ export interface Tx {
 	): Promise<Page<ConversationRecord, Cursor>>;
 	scanEntries(query: EntryQuery, limit: number, cursor?: Cursor): Promise<Page<EntryRecord, Cursor>>;
 	latestHeadMarker(conversationId: ConversationId): Promise<(EntryRecord & { readonly head: EntryId }) | undefined>;
+	latestEntryId(conversationId: ConversationId): Promise<EntryId | undefined>;
 	scanTasks(
 		query: TaskQuery,
 		limit: number,
@@ -635,14 +718,15 @@ export interface Tx {
 	settleSubmission(id: SubmissionId, settlement: SubmissionSettlement): void;
 	placeSubmission(id: SubmissionId, entry: EntryId): void;
 	doc<Value extends JsonObject>(token: SessionDocToken<Value>): Promise<Draft<Value>>;
+	doc<Value extends JsonObject>(
+		token: ConversationDocToken<Value>,
+		conversationId: ConversationId,
+	): Promise<Draft<Value>>;
+	doc<Value extends JsonObject>(token: TaskDocToken<Value>, taskId: TaskId): Promise<Draft<Value>>;
 	doc<Value extends JsonObject, Seed extends JsonValue>(
 		token: SessionDocFamilyToken<Value, Seed>,
 		key: string,
 		seed: Seed,
-	): Promise<Draft<Value>>;
-	doc<Value extends JsonObject>(
-		token: ConversationDocToken<Value>,
-		conversationId: ConversationId,
 	): Promise<Draft<Value>>;
 	doc<Value extends JsonObject, Seed extends JsonValue>(
 		token: ConversationDocFamilyToken<Value, Seed>,
@@ -650,7 +734,6 @@ export interface Tx {
 		key: string,
 		seed: Seed,
 	): Promise<Draft<Value>>;
-	doc<Value extends JsonObject>(token: TaskDocToken<Value>, taskId: TaskId): Promise<Draft<Value>>;
 	doc<Value extends JsonObject, Seed extends JsonValue>(
 		token: TaskDocFamilyToken<Value, Seed>,
 		taskId: TaskId,
@@ -658,20 +741,20 @@ export interface Tx {
 		seed: Seed,
 	): Promise<Draft<Value>>;
 	retireDoc<Value extends JsonObject>(token: SessionDocToken<Value>): Promise<void>;
-	retireDoc<Value extends JsonObject, Seed extends JsonValue>(
-		token: SessionDocFamilyToken<Value, Seed>,
-		key: string,
-	): Promise<void>;
 	retireDoc<Value extends JsonObject>(
 		token: ConversationDocToken<Value>,
 		conversationId: ConversationId,
+	): Promise<void>;
+	retireDoc<Value extends JsonObject>(token: TaskDocToken<Value>, taskId: TaskId): Promise<void>;
+	retireDoc<Value extends JsonObject, Seed extends JsonValue>(
+		token: SessionDocFamilyToken<Value, Seed>,
+		key: string,
 	): Promise<void>;
 	retireDoc<Value extends JsonObject, Seed extends JsonValue>(
 		token: ConversationDocFamilyToken<Value, Seed>,
 		conversationId: ConversationId,
 		key: string,
 	): Promise<void>;
-	retireDoc<Value extends JsonObject>(token: TaskDocToken<Value>, taskId: TaskId): Promise<void>;
 	retireDoc<Value extends JsonObject, Seed extends JsonValue>(
 		token: TaskDocFamilyToken<Value, Seed>,
 		taskId: TaskId,

@@ -1,4 +1,8 @@
 import type { ImageContent, SystemMessage, TextContent, ThinkingContent, ToolCall } from "../types.ts";
+export function ownedSlice(text: string, start: number, end = text.length): string {
+	const excerpt = text.slice(start, end);
+	return excerpt.concat("\0").slice(0, excerpt.length);
+}
 export function contentText(
 	content: string | readonly (TextContent | ImageContent | ThinkingContent | ToolCall)[],
 	separator = "\n",

@@ -1,5 +1,5 @@
 import { fuzzyFilter } from "../fuzzy.ts";
-import { getKeybindings } from "../keybindings.ts";
+import { getKeybindings, getSelectPageIndex } from "../keybindings.ts";
 import type { Component, TuiMouseEvent, TuiMouseEventResult } from "../tui.ts";
 import { truncateToWidth, visibleWidth, wrapTextWithAnsi } from "../utils.ts";
 import { Input } from "./input.ts";
@@ -27,6 +27,7 @@ export interface SettingsListOptions {
 }
 
 export class SettingsList implements Component {
+	readonly capturesViewportInput = true;
 	readonly #items: SettingItem[];
 	#filtered: SettingItem[];
 	readonly #limit: number;
@@ -163,10 +164,13 @@ export class SettingsList implements Component {
 		}
 		const bindings = getKeybindings(),
 			items = this.#display();
+		const page = getSelectPageIndex(bindings, data, this.#selected, items.length, this.#limit);
 		if (bindings.matches(data, "tui.select.up")) {
 			if (items.length) this.#selected = this.#selected === 0 ? items.length - 1 : this.#selected - 1;
 		} else if (bindings.matches(data, "tui.select.down")) {
 			if (items.length) this.#selected = this.#selected === items.length - 1 ? 0 : this.#selected + 1;
+		} else if (page !== undefined) {
+			if (items.length) this.#selected = page;
 		} else if (
 			bindings.matches(data, "tui.select.confirm") ||
 			(data === " " && (!this.#search || this.#search.getValue().length === 0))

@@ -27,6 +27,7 @@ A failed stage stops the command. A native test can skip when its platform or op
 
 ```sh
 npm test
+npm run test:tooling
 npm run test:coverage
 npm run test:coverage:full
 npx vitest run packages/tui/test
@@ -37,7 +38,7 @@ cargo test --locked --manifest-path packages/env/daemon/Cargo.toml
 
 Coverage output is in `coverage/index.html` and `coverage/coverage-summary.json`. It measures the TypeScript code exercised by the local JavaScript suite. It does not measure Rust, C, subprocess internals, visual correctness or provider availability.
 
-The JavaScript runner resolves workspace package exports to their TypeScript source files. Package imports and direct source imports therefore share one module instance. The resolver honors the package's export restrictions before selecting the source file. Installed archive checks run separately with Node's normal package resolution and exercise the built JavaScript.
+The JavaScript runner selects package tests from the root manifest's eight workspaces and integration tests from `test/*.test.ts`. Measured source files come from the eight workspaces. It resolves workspace package exports to their TypeScript source files. Package imports and direct source imports therefore share one module instance. The resolver honors the package's export restrictions before selecting the source file. Installed archive checks run separately with Node's normal package resolution and exercise the built JavaScript.
 
 The regular coverage command enforces minimum execution coverage of 79% lines,
 64% branches, 77% functions and 75% statements. Raise these limits as the suite
@@ -53,7 +54,7 @@ branch locations. The HTML report displays these locations beside the source.
 | Package | Local scenarios | Main test directory |
 | --- | --- | --- |
 | AI | Model registration, catalogs, request encoding, streamed responses, retries, authentication flows and image/classifier adapters | `packages/ai/test` |
-| Chord | Contracts, state changes, replay, connections, host lifecycle, process management, contexts, output and SQLite | `packages/chord/test` |
+| Objects | Contracts, state changes, replay, connections, host lifecycle, process management, contexts, output and SQLite | `packages/objects/test` |
 | Code Mode | Sandbox execution, tools, limits, cancellation, worker execution and remote execution | `packages/codemode/test` |
 | Durable | Documents, conversations, forks, scheduling, recovery, tools, compaction, watches and storage drivers | `packages/durable/test` |
 | Env | Connection framing, daemon lifecycle, files, watches, commands, host keys and environment contracts | `packages/env/test` and `packages/env/daemon/tests` |
@@ -68,6 +69,8 @@ The storage-driver scenarios run against memory, JSONL and SQLite. Terminal rend
 Run `npm run test:coverage`, then open `coverage/test-map.md`. The report counts uncovered paths, ranks modules by uncovered branches, links behavior areas to their owned test files, lists other regression files, and shows line and branch execution for every measured source module.
 
 The area definitions are in [test-coverage.json](test-coverage.json). Keep this map current when adding a new capability. The report uses actual test results and rejects paths that no longer exist. A passed area means its listed scenarios passed; it does not claim every possible case is covered.
+
+The map must list every workspace exactly once. Each area needs test files owned by that package, and each package needs measured source execution. `npm run test:tooling` checks valid reports and rejects missing packages, empty areas, foreign test paths, and packages with no measured source execution. It also checks that the JavaScript runner selects every owned package and integration test.
 
 Use the report to find untested branches and missing behaviors. Add a scenario with explicit expected results. Do not hide untested files or create tests only to increase the percentage.
 

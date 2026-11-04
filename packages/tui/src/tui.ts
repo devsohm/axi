@@ -49,8 +49,9 @@ export interface Component {
 	render(width: number): string[];
 	invalidate(): void;
 	handleInput?(data: string): void;
-	handleMouse?(event: TuiMouseEvent): TuiMouseEventResult | TuiMouseDispatchResult | undefined;
+	handleMouse?(event: TuiMouseEvent): TuiMouseEventResult | undefined;
 	wantsKeyRelease?: boolean;
+	capturesViewportInput?: boolean;
 }
 export interface Focusable {
 	focused: boolean;
@@ -70,7 +71,10 @@ export type TuiInputListener = (data: string) => TuiInputListenerResult;
 export function dispatchMouseEvent(component: Component, event: TuiMouseEvent): TuiMouseDispatchResult | undefined {
 	const result = component.handleMouse?.(event);
 	if (!result) return undefined;
-	if ("target" in result) return result.focus && component.handleInput ? { ...result, focusTarget: component } : result;
+	if ("target" in result) {
+		const forwarded = result as TuiMouseDispatchResult;
+		return forwarded.focus && component.handleInput ? { ...forwarded, focusTarget: component } : forwarded;
+	}
 	if (!result.handled && !result.capture && !result.focus) return undefined;
 	return {
 		...result,

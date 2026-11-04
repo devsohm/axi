@@ -1,4 +1,4 @@
-import type { Context } from "@axi/chord";
+import type { Context } from "@axi/objects";
 import { SessionFailed } from "../errors.ts";
 import type { Cursor, Page } from "../types.ts";
 

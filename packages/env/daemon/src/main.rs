@@ -403,6 +403,12 @@ fn kill_all(groups: &exec::Groups) {
     }
 }
 fn serve(token: &str) -> io::Result<()> {
+    let groups = Arc::new(Mutex::new(Default::default()));
+    let signals = groups.clone();
+    sys::on_exit_signal(move |signal| {
+        kill_all(&signals);
+        std::process::exit(128 + signal);
+    })?;
     {
         let mut stdout = io::stdout().lock();
         writeln!(stdout, "AXI-ENV {token}")?;
@@ -421,7 +427,7 @@ fn serve(token: &str) -> io::Result<()> {
         handles: Mutex::new(HashMap::new()),
         next: AtomicU64::new(1),
         controls: Mutex::new(HashMap::new()),
-        groups: Arc::new(Mutex::new(Default::default())),
+        groups,
         terminals: Arc::new(Mutex::new(HashMap::new())),
     });
     let last = Arc::new(AtomicU64::new(now()));

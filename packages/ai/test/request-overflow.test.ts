@@ -34,3 +34,10 @@ it("does not treat a status code mentioned inside another error as overflow", ()
 	expect(isContextOverflow(response('provider API error (400): {"message":"upstream returned 413"}'))).toBe(false);
 	expect(isContextOverflow(response("4130 unrelated error"))).toBe(false);
 });
+
+it("recognizes a gateway's preflight context-window failure", () => {
+	expect(isContextOverflow(response("400: litellm.BadRequestError: Context Window exceeded for given call."))).toBe(
+		true,
+	);
+	expect(isContextOverflow(response("400: litellm.BadRequestError: invalid model name"))).toBe(false);
+});

@@ -1,7 +1,7 @@
-import { validateSqliteSchemaPrefix } from "@axi/chord/sqlite";
-import { openNodeSqliteDatabase, type NodeSqliteDatabaseOptions } from "@axi/chord/sqlite/node";
+import { validateSqliteSchemaPrefix } from "@axi/objects/sqlite";
+import { openNodeSqliteDatabase, type NodeSqliteDatabaseOptions } from "@axi/objects/sqlite/node";
 import { SqliteStorage, type SqliteStorageOptions } from "./storage.ts";
-export { NodeSqliteDatabase, openNodeSqliteDatabase, type NodeSqliteDatabaseOptions } from "@axi/chord/sqlite/node";
+export { NodeSqliteDatabase, openNodeSqliteDatabase, type NodeSqliteDatabaseOptions } from "@axi/objects/sqlite/node";
 export type NodeSqliteStorageOptions = NodeSqliteDatabaseOptions & SqliteStorageOptions;
 export async function openNodeSqliteStorage(
 	path: string,

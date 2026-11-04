@@ -1,7 +1,7 @@
 import { DurableObject } from "cloudflare:workers";
 import { Buffer } from "node:buffer";
-import { BACKGROUND_CONTEXT as context } from "@axi/chord/context";
-import { DurableObjectSqliteDatabase } from "@axi/chord/sqlite/cloudflare";
+import { BACKGROUND_CONTEXT as context } from "@axi/objects/context";
+import { DurableObjectSqliteDatabase } from "@axi/objects/sqlite/cloudflare";
 import { createSession, defineDoc, Harness, createRegistry, defineTool, ToolResultEntry } from "@axi/durable";
 import { createModels, fauxProvider, fauxAssistantMessage, fauxToolCall, fauxText, Type } from "@axi/ai";
 import { openDurableObjectSqliteStorage } from "@axi/durable/storage/sqlite/cloudflare";
@@ -21,9 +21,10 @@ export class State extends DurableObject {
 		await db.exec("CREATE TABLE IF NOT EXISTS checks (id INTEGER PRIMARY KEY, value TEXT)");
 		await db.run("DELETE FROM checks");
 		let expired;
+		let inserted;
 		await db.transaction(async (tx) => {
 			expired = tx;
-			await tx.run("INSERT INTO checks VALUES (?,?)", 1, "committed");
+			inserted = await tx.runCounted("INSERT INTO checks VALUES (?,?)", 1, "committed");
 		});
 		let rejected = false;
 		try {
@@ -38,6 +39,7 @@ export class State extends DurableObject {
 			});
 		} catch {}
 		const rows = await db.all("SELECT * FROM checks ORDER BY id");
+		const changed = await db.runCounted("UPDATE checks SET value = ? WHERE id = ?", "committed", 1);
 		const bytes = Buffer.alloc(8);
 		bytes.set([9, 8, 1, 2, 3, 7, 6, 5]);
 		const binary = await db.get(
@@ -90,7 +92,7 @@ export class State extends DurableObject {
 		const open = async () =>
 			Harness.open(
 				await openDurableObjectSqliteStorage(this.ctx.storage, { prefix: "agent" }),
-				{ models, registry, onReport: (error) => reports.push(String(error)) },
+				{ models, registry, onReport: ({ error }) => reports.push(String(error)) },
 				context,
 			);
 		let harness = await open();
@@ -115,7 +117,17 @@ export class State extends DurableObject {
 		} finally {
 			await harness.close(context);
 		}
-		return Response.json({ rows, binary, rejected, count, restored, script, remoteScript, agent });
+		return Response.json({
+			rows,
+			binary,
+			rejected,
+			count,
+			restored,
+			script,
+			remoteScript,
+			agent,
+			changedRows: [inserted, changed],
+		});
 	}
 }
 export default { fetch: (_request, env) => env.STATE.get(env.STATE.idFromName("check")).fetch("https://object/") };

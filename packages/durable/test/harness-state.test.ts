@@ -2,7 +2,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createModels } from "@axi/ai";
-import { BACKGROUND_CONTEXT as context, withAbortSignal } from "@axi/chord/context";
+import { BACKGROUND_CONTEXT as context, withAbortSignal } from "@axi/objects/context";
 import { Type } from "typebox";
 import { describe, expect, it } from "vitest";
 import { resolveSettings } from "../src/harness/agent.ts";
@@ -233,13 +233,13 @@ describe("conversation state", () => {
 		const options = {
 			registry,
 			models: createModels(),
-			onReport: (error: unknown) => {
+			onReport: ({ error }: import("../src/types.ts").Report) => {
 				initial.push(error);
 			},
 		};
 		const harness = await Harness.open(new MemoryStorage(), options, context);
 		try {
-			options.onReport = (error) => {
+			options.onReport = ({ error }) => {
 				replacement.push(error);
 			};
 			await (await harness.root(context)).agent(context);
@@ -282,7 +282,7 @@ describe("conversation state", () => {
 		const reports: unknown[] = [];
 		const harness = await Harness.open(
 			new MemoryStorage(),
-			{ registry, models: createModels(), onReport: (error) => reports.push(error) },
+			{ registry, models: createModels(), onReport: ({ error }) => reports.push(error) },
 			context,
 		);
 		try {
@@ -329,7 +329,7 @@ describe("conversation state", () => {
 		const reports: unknown[] = [];
 		const harness = await Harness.open(
 			storage,
-			{ registry, models: createModels(), onReport: (error) => reports.push(error) },
+			{ registry, models: createModels(), onReport: ({ error }) => reports.push(error) },
 			context,
 		);
 		try {
@@ -340,7 +340,7 @@ describe("conversation state", () => {
 			storage.failWrites = true;
 			await harness.close(context);
 			expect(storage.closeCalls).toBe(1);
-			expect(await harness.closed).toEqual({ reason: "failed", error: failure });
+			expect(await harness.closed).toEqual({ kind: "failed", error: failure });
 			expect(reports).toEqual([failure]);
 			await harness.close(context);
 			expect(storage.closeCalls).toBe(1);
@@ -386,7 +386,7 @@ describe("conversation state", () => {
 			keepRecentTokens: 20000,
 			backgroundTokens: 32768,
 		});
-		expect(DEFAULT_PROGRESS_POLICY).toEqual({ partialIntervalMs: 100, outputIntervalMs: 100 });
+		expect(DEFAULT_PROGRESS_POLICY).toEqual({ partialIntervalMs: 100, outputIntervalMs: 100, persistWithinMs: 1000 });
 	});
 	it("publishes the first compaction status in its creating transaction", async () => {
 		const session = createSession(new MemoryStorage());
@@ -397,7 +397,7 @@ describe("conversation state", () => {
 			);
 			const id = await session.commit((tx) => createCompaction(tx, conversation.id, { reason: "manual" }), context);
 			expect((await session.snapshot(LiveDoc, conversation.id, context))?.compactions).toEqual([
-				{ taskId: id, reason: "manual", blocking: false, attempt: 1 },
+				{ taskId: id, trigger: "manual", blocking: false, attempt: 1 },
 			]);
 		} finally {
 			await session.close(context);
@@ -493,7 +493,7 @@ describe("conversation state", () => {
 		storage.scanned = 0;
 		await session.commit((tx) => tx.appendEntry(root.id, { kind: "note", data: 1 }), context);
 		const next = await readContextFrom(session, storage, root.id, context, undefined, first.range);
-		expect(storage.scanned).toBe(2);
+		expect(storage.scanned).toBe(1);
 		expect(first.view.entries).toHaveLength(20);
 		expect(next.view.entries).toHaveLength(21);
 		expect(next.view.messages).toHaveLength(20);

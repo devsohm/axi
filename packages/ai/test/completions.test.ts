@@ -37,7 +37,7 @@ function answer(): Response {
 }
 
 describe("Chat Completions", () => {
-	it("publishes active tool scratch state and removes it from completed calls", async () => {
+	it("publishes tool argument previews without private parser state", async () => {
 		const frames = [
 			chunk({ tool_calls: [{ index: 0, id: "call-1", function: { name: "lookup", arguments: '{"query":"a"}' } }] }),
 			chunk({}, "tool_calls"),
@@ -67,9 +67,6 @@ describe("Chat Completions", () => {
 				id: "call-1",
 				name: "lookup",
 				arguments: { query: "a" },
-				partialArgs: '{"query":"a"}',
-				customInput: undefined,
-				streamIndex: 0,
 			},
 			{ type: "toolCall", id: "call-1", name: "lookup", arguments: { query: "a" } },
 		]);

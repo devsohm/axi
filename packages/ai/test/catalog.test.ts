@@ -1,11 +1,150 @@
 import { expect, expectTypeOf, it } from "vitest";
-import { buildModelsDevCatalog, parseModelsDev } from "../scripts/models-dev-catalog.ts";
-import { assembleCatalog } from "../scripts/catalog-generation.ts";
+import { buildModelsDevCatalog, parseModelsDev } from "../catalog/sources/models-dev.ts";
+import { assembleCatalog } from "../catalog/assemble.ts";
 import { streamSimple } from "../src/api/anthropic-messages.ts";
 import { getSupportedThinkingLevels, hasApi } from "../src/models.ts";
 import { flattenChatModelCatalog, flattenImageModelCatalog } from "../src/model-catalog.ts";
 import { CLASSIFIER_MODELS, IMAGE_MODELS, MODELS } from "../src/models.generated.ts";
 import { normalizeContext } from "../src/utils/transcript.ts";
+import { cpSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { spawnSync } from "node:child_process";
+
+it("can generate again after replacing the catalog with a smaller upstream listing", () => {
+	const root = mkdtempSync(join(tmpdir(), "axi-regenerate-"));
+	const copy = join(root, "ai");
+	const source = fileURLToPath(new URL("..", import.meta.url));
+	cpSync(source, copy, {
+		recursive: true,
+		filter: (path) => !path.split(/[\\/]/).some((part) => part === "dist" || part === "node_modules"),
+	});
+	symlinkSync(fileURLToPath(new URL("../../../node_modules", import.meta.url)), join(copy, "node_modules"), "junction");
+	const preload = join(root, "fetch.mjs");
+	writeFileSync(preload, "globalThis.fetch=async()=>Response.json({});");
+	try {
+		for (let attempt = 0; attempt < 2; attempt++) {
+			const result = spawnSync(process.execPath, ["--import", preload, "catalog/generate.ts"], {
+				cwd: copy,
+				env: { ...process.env, NODE_OPTIONS: "--conditions=source" },
+				encoding: "utf8",
+				timeout: 15000,
+			});
+			expect(result.status, result.stderr).toBe(0);
+		}
+	} finally {
+		rmSync(root, { recursive: true, force: true });
+	}
+});
+
+it("retains only documented fixed models when the upstream catalog has none", () => {
+	const catalog = assembleCatalog(
+		buildModelsDevCatalog({}),
+		{ chat: [], images: [], classifiers: [] },
+		{ chat: [], classifiers: [] },
+		[],
+	);
+	const chats = (provider: string) =>
+		catalog[provider].filter((model) => model.type === "chat").map((model) => model.id);
+	expect(chats("openai")).toEqual(["gpt-5-chat-latest"]);
+	expect(chats("github-copilot")).toEqual(["gpt-6-luna"]);
+	expect(chats("azure")).toEqual(["deepseek-v4-pro", "gpt-5-chat-latest"]);
+});
+
+it("omits Baseten entries without tools and retired entries even when they support tools", () => {
+	const result = buildModelsDevCatalog({
+		baseten: {
+			models: {
+				plain: { tool_call: false },
+				retired: { tool_call: true, status: "deprecated" },
+				active: { tool_call: true },
+			},
+		},
+	});
+	expect(result.models.map((model) => model.id)).toEqual(["active"]);
+});
+
+it("keeps family thinking choices before applying an xAI fallback", () => {
+	const source = buildModelsDevCatalog({
+		xai: {
+			models: {
+				"claude-sonnet-4-6": { tool_call: true, reasoning: true },
+				future: { tool_call: true, reasoning: true },
+			},
+		},
+	});
+	const catalog = assembleCatalog(source, { chat: [], images: [], classifiers: [] }, { chat: [], classifiers: [] }, []);
+	expect(catalog.xai.find((model) => model.id === "claude-sonnet-4-6")).toHaveProperty("thinkingLevelMap", {
+		max: "max",
+	});
+	expect(catalog.xai.find((model) => model.id === "future")).toHaveProperty("thinkingLevelMap", {
+		off: null,
+		minimal: null,
+	});
+});
+
+it("recognizes hosted Claude latest aliases on every Messages endpoint", () => {
+	const id = "~anthropic/claude-opus-latest";
+	const models = { [id]: { tool_call: true, reasoning: true, reasoning_options: [{ type: "toggle" as const }] } };
+	const catalog = assembleCatalog(
+		buildModelsDevCatalog({ anthropic: { models }, minimax: { models }, "fireworks-ai": { models } }),
+		{ chat: [], images: [], classifiers: [] },
+		{ chat: [], classifiers: [] },
+		[],
+	);
+	for (const provider of ["anthropic", "minimax", "fireworks"])
+		expect(catalog[provider].find((model) => model.id === id)).toHaveProperty("compat.forceAdaptiveThinking", true);
+	expect(catalog.fireworks.find((model) => model.id === id)).toHaveProperty("thinkingLevelMap", { off: "none" });
+});
+
+it("limits direct Anthropic context overrides to the listed dashed model identities", () => {
+	const entry = { tool_call: true, limit: { context: 320000 } };
+	const catalog = assembleCatalog(
+		buildModelsDevCatalog({ anthropic: { models: { "claude-sonnet-4-6": entry, "claude-sonnet-4.6": entry } } }),
+		{ chat: [], images: [], classifiers: [] },
+		{ chat: [], classifiers: [] },
+		[],
+	);
+	expect(catalog.anthropic.find((model) => model.id === "claude-sonnet-4-6")).toHaveProperty("contextWindow", 1000000);
+	expect(catalog.anthropic.find((model) => model.id === "claude-sonnet-4.6")).toHaveProperty("contextWindow", 320000);
+});
+
+it("applies Copilot's minimal effort after common Pro-family restrictions", () => {
+	const catalog = assembleCatalog(
+		buildModelsDevCatalog({ "github-copilot": { models: { "gpt-5.5-pro": { tool_call: true, reasoning: true } } } }),
+		{ chat: [], images: [], classifiers: [] },
+		{ chat: [], classifiers: [] },
+		[],
+	);
+	expect(catalog["github-copilot"].find((model) => model.id === "gpt-5.5-pro")).toHaveProperty(
+		"thinkingLevelMap.minimal",
+		"low",
+	);
+});
+
+it("keeps the Kimi latest alias output override specific to OpenRouter", () => {
+	const entry = {
+		id: "~moonshotai/kimi-latest",
+		name: "Kimi latest",
+		provider: "vercel-ai-gateway",
+		api: "anthropic-messages" as const,
+		baseUrl: "https://gateway.invalid",
+		input: ["text" as const],
+		reasoning: true,
+		cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+		contextWindow: 50000,
+		maxTokens: 8000,
+	};
+	const catalog = assembleCatalog(
+		buildModelsDevCatalog({}),
+		{ chat: [{ ...entry, provider: "openrouter", api: "openai-completions" }], images: [], classifiers: [] },
+		{ chat: [entry], classifiers: [] },
+		[],
+	);
+	expect(catalog.openrouter.find((model) => model.id === entry.id)).toHaveProperty("maxTokens", 131072);
+	expect(catalog["vercel-ai-gateway"].find((model) => model.id === entry.id)).toHaveProperty("maxTokens", 8000);
+});
 
 it.each(["minimax", "minimax-cn"])("builds current and future %s effort models", async (provider) => {
 	const entry = { tool_call: true, reasoning: true };
@@ -63,9 +202,20 @@ it.each(["minimax", "minimax-cn"])("builds current and future %s effort models",
 	]);
 });
 
-it("accepts an unspecified SDK in OpenCode catalog entries", () => {
+it("uses the listed protocol and endpoint without requiring an SDK name", () => {
 	const catalog = parseModelsDev({
-		opencode: { models: { fixture: { tool_call: true, provider: { npm: null } } } },
+		opencode: {
+			models: {
+				fixture: {
+					id: "fixture",
+					name: "fixture",
+					type: "chat",
+					modalities: { input: ["text"], output: ["text"] },
+					capabilities: { tools: { supported: true }, reasoning: { supported: false } },
+					api: { "chat-completions": { base_url: "https://example.test/openai/v1" } },
+				},
+			},
+		},
 	});
 	expect(buildModelsDevCatalog(catalog).models).toEqual([
 		{
@@ -73,7 +223,7 @@ it("accepts an unspecified SDK in OpenCode catalog entries", () => {
 			name: "fixture",
 			provider: "opencode",
 			api: "openai-completions",
-			baseUrl: "https://opencode.ai/inference/v1",
+			baseUrl: "https://example.test/openai/v1",
 			reasoning: false,
 			input: ["text"],
 			cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
@@ -104,7 +254,7 @@ it("keeps separate typed model identities across all included providers", () => 
 	for (const table of [MODELS, IMAGE_MODELS, CLASSIFIER_MODELS]) {
 		for (const models of Object.values(table)) count += Object.keys(models).length;
 	}
-	expect(count).toBe(1678);
+	expect(count).toBe(1689);
 	expectTypeOf(MODELS.xai["grok-4.5"].api).toEqualTypeOf<"openai-responses">();
 	expectTypeOf(MODELS.xai["grok-4.5"].provider).toEqualTypeOf<"xai">();
 	expectTypeOf(MODELS.xai["grok-4.5"].id).toEqualTypeOf<"grok-4.5">();

@@ -12,15 +12,15 @@ Extract the archive, open the extracted directory, and run:
 npm install
 ```
 
-The local `package.json` installs all seven Axi archives together. Axi packages do not require an npm registry release. External dependencies download from the npm registry.
+The local `package.json` installs all eight Axi archives together. Axi packages do not require an npm registry release. External dependencies download from the npm registry.
 
-To add Axi to an existing application, copy the `packages` directory into the application. Add the seven `file:./packages/...` dependencies from this release's `package.json` to the application's dependencies. Then run `npm install` in that application.
+To add Axi to an existing application, copy the `packages` directory into the application. Add the eight `file:./packages/...` dependencies from this release's `package.json` to the application's dependencies. Then run `npm install` in that application.
 
 ## Import a package
 
 ```js
 import { createSession, MemoryStorage } from "@axi/durable";
-import { BACKGROUND_CONTEXT } from "@axi/chord/context";
+import { BACKGROUND_CONTEXT } from "@axi/objects/context";
 
 const session = createSession(new MemoryStorage());
 try {
@@ -47,7 +47,7 @@ A local package build contains its host binary. The combined CI archive contains
 Run this command in the application that installed Axi:
 
 ```sh
-npm uninstall @axi/ai @axi/chord @axi/codemode @axi/durable @axi/env @axi/mcp @axi/telemetry
+npm uninstall @axi/ai @axi/objects @axi/codemode @axi/durable @axi/env @axi/mcp @axi/telemetry @axi/tui
 ```
 
 Application-owned session files and credentials remain in place. The toolkit does not choose their location or remove them.

@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
+import manifest from "./package.json" with { type: "json" };
 
 export default defineConfig({
 	plugins: [
@@ -16,9 +17,10 @@ export default defineConfig({
 		},
 	],
 	test: {
+		include: [...manifest.workspaces.map((directory) => `${directory}/test/**/*.test.ts`), "test/*.test.ts"],
 		coverage: {
 			provider: "v8",
-			include: ["packages/*/src/**/*.ts"],
+			include: manifest.workspaces.map((directory) => `${directory}/src/**/*.ts`),
 			exclude: ["**/*.d.ts"],
 			reporter: ["text", "json", "json-summary", "html"],
 			reportsDirectory: "coverage",

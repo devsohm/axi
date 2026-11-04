@@ -68,6 +68,8 @@ Google and Vertex use the Google SDK, with thinking controls, signature replay a
 
 Maintainers can run `npm run generate:models --workspace @axi/ai` to fetch catalog sources and regenerate data and typed indexes. `--strict` rejects failed sources. `--data-only` updates existing data without rewriting types. `--json-only --json-output <directory>` exports catalogs without modifying package source. The build validates catalog structure and content hashes.
 
+The generator lives in `catalog/generate.ts`. It reads models.dev v2, OpenRouter, NVIDIA and Vercel AI Gateway metadata. Protocol-specific endpoints determine routing where a provider lists several APIs. Provider corrections set verified limits, thinking controls and cache behavior. `scripts/hydrate-model-catalog.ts` imports an exported catalog; `catalog/check.ts` validates the generated files.
+
 The [API contracts](docs/spec.md) describe collection methods, events, transcript changes, authentication, catalog publication, and session cleanup.
 
 ## Request telemetry

@@ -14,13 +14,14 @@ import { formatProviderError, normalizeProviderError } from "../utils/error-body
 import { AssistantMessageEventStream } from "../utils/event-stream.ts";
 import { headersToRecord } from "../utils/headers.ts";
 import { applyOpenRouterReportedCost, isOpenRouterModel } from "../utils/openrouter-cost.ts";
-import { parseStreamingJson, parseToolCallArguments } from "../utils/json-parse.ts";
+import { ToolCallArgumentsStream } from "../utils/streaming-json.ts";
 import { getProviderEnvValue } from "../utils/provider-env.ts";
 import { retryProviderRequest } from "../utils/provider-retry.ts";
 import { getDeclaredTools, resolveTranscript } from "../utils/transcript.ts";
 import { getIdentityHeaders } from "../utils/identity.ts";
 import {
 	appendGrammarToolInputJsonDelta,
+	closeGrammarToolInputJson,
 	createGrammarToolInputProperties,
 	type GrammarToolInputJsonBuffer,
 } from "./constrained-sampling.ts";
@@ -42,11 +43,9 @@ type RawUsage = {
 	prompt_tokens_details?: { cached_tokens?: number; cache_write_tokens?: number };
 	completion_tokens_details?: { reasoning_tokens?: number };
 };
-type StreamingTool = ToolCall & {
-	partialArgs?: string;
-	customInput?: { property: string; jsonBuffer: GrammarToolInputJsonBuffer };
-	streamIndex?: number;
-};
+type StreamingTool = ToolCall;
+type ToolInput = { kind: "json"; arguments: ToolCallArgumentsStream } | { kind: "custom"; property: string; jsonBuffer: GrammarToolInputJsonBuffer };
+type ToolState = { streamIndex?: number; input: ToolInput };
 function apiKey(model: Model<"openai-completions">, options: OpenAICompletionsOptions): string {
 	const key = options.apiKey;
 	if (key) return key;
@@ -168,19 +167,23 @@ export const stream: StreamFunction<"openai-completions", OpenAICompletionsOptio
 			events.push({ type: "start", partial: output });
 			let text: TextContent | undefined, thinking: ThinkingContent | undefined;
 			let finished = false;
+			const states = new Map<StreamingTool, ToolState>();
 			const byIndex = new Map<number, StreamingTool>(),
 				byId = new Map<string, StreamingTool>();
 			const blocks: (TextContent | ThinkingContent | StreamingTool)[] = output.content;
 			const position = (block: AssistantMessage["content"][number]) => output.content.indexOf(block);
 			const customText = (block: StreamingTool): string => {
-				const value = block.customInput && block.arguments[block.customInput.property];
+				const input = states.get(block)?.input;
+				const value = input?.kind === "custom" ? block.arguments[input.property] : undefined;
 				return typeof value === "string" ? value : "";
 			};
 			const customDelta = (block: StreamingTool, value: string, close: boolean): string | undefined => {
-				const input = block.customInput;
-				if (!input) return undefined;
-				const delta = appendGrammarToolInputJsonDelta(input.jsonBuffer, input.property, value, close);
-				block.arguments = { [input.property]: value };
+				const input = states.get(block)?.input;
+				if (input?.kind !== "custom") return undefined;
+				const delta = close
+					? closeGrammarToolInputJson(input.jsonBuffer, input.property, value)
+					: appendGrammarToolInputJsonDelta(input.jsonBuffer, input.property, value);
+				block.arguments = { [input.property]: input.jsonBuffer.input };
 				return delta;
 			};
 			const thinkingBlock = (signature: string): ThinkingContent => {
@@ -264,20 +267,16 @@ export const stream: StreamFunction<"openai-completions", OpenAICompletionsOptio
 							id: call.id || "",
 							name,
 							arguments: property === undefined ? {} : { [property]: "" },
-							partialArgs: property === undefined ? "" : undefined,
-							customInput:
-								property === undefined
-									? undefined
-									: { property, jsonBuffer: { input: "", started: false, closed: false } },
-							streamIndex: index,
 						};
+						states.set(block, { streamIndex: index, input: property === undefined ? { kind: "json", arguments: new ToolCallArgumentsStream() } : { kind: "custom", property, jsonBuffer: { input: "", started: false, closed: false } } });
 						if (index !== undefined) byIndex.set(index, block);
 						if (call.id) byId.set(call.id, block);
 						blocks.push(block);
 						events.push({ type: "toolcall_start", contentIndex: position(block), partial: output });
 					}
-					if (index !== undefined && block.streamIndex === undefined) {
-						block.streamIndex = index;
+					const state = states.get(block)!;
+					if (index !== undefined && state.streamIndex === undefined) {
+						state.streamIndex = index;
 						byIndex.set(index, block);
 					}
 					if (call.id) {
@@ -285,22 +284,20 @@ export const stream: StreamFunction<"openai-completions", OpenAICompletionsOptio
 						block.id ||= call.id;
 					}
 					block.name ||= name;
-					if (call.custom && !call.function && !block.customInput) {
+					if (call.custom && !call.function && state.input.kind !== "custom") {
 						const property = grammar.get(block.name) ?? "input";
-						block.customInput = {
-							property,
+						state.input = {
+							kind: "custom", property,
 							jsonBuffer: { input: "", started: false, closed: false },
 						};
 						block.arguments = { [property]: "" };
-						delete block.partialArgs;
 					}
 					let argumentDelta = "";
-					if (call.function?.arguments) {
+					if (call.function?.arguments && state.input.kind === "json") {
 						argumentDelta = call.function.arguments;
-						block.partialArgs = (block.partialArgs ?? "") + argumentDelta;
-						block.arguments = parseStreamingJson(block.partialArgs);
+						block.arguments = state.input.arguments.append(argumentDelta);
 					} else if (call.custom?.input) {
-						argumentDelta = customDelta(block, customText(block) + call.custom.input, false) ?? "";
+						argumentDelta = customDelta(block, call.custom.input, false) ?? "";
 					}
 					events.push({
 						type: "toolcall_delta",
@@ -318,15 +315,13 @@ export const stream: StreamFunction<"openai-completions", OpenAICompletionsOptio
 					saveDetails(block);
 					events.push({ type: "thinking_end", contentIndex, content: block.thinking, partial: output });
 				} else if (block.type === "toolCall") {
-					if (!block.customInput) Object.assign(block, parseToolCallArguments(block.partialArgs));
+					const input = states.get(block)!.input;
+					if (input.kind === "json") Object.assign(block, input.arguments.finish());
 					else {
 						const ending = customDelta(block, customText(block), true);
 						if (ending !== undefined)
 							events.push({ type: "toolcall_delta", contentIndex, delta: ending, partial: output });
 					}
-					delete block.partialArgs;
-					delete block.customInput;
-					delete block.streamIndex;
 					events.push({ type: "toolcall_end", contentIndex, toolCall: block, partial: output });
 				}
 			}
@@ -341,8 +336,6 @@ export const stream: StreamFunction<"openai-completions", OpenAICompletionsOptio
 		} catch (error) {
 			for (const block of output.content) {
 				if (block.type === "thinking") saveDetails(block);
-				for (const field of ["index", "partialArgs", "customInput", "streamIndex"])
-					Reflect.deleteProperty(block, field);
 			}
 			output.stopReason = options.signal?.aborted ? "aborted" : "error";
 			output.errorMessage = formatProviderError(normalizeProviderError(error));

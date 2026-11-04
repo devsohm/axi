@@ -176,10 +176,10 @@ export function isKittyProtocolActive(): boolean {
 	return kittyActive;
 }
 export function isKeyRelease(data: string): boolean {
-	return !data.includes("\x1b[200~") && /:3[u~ABCDHF]/.test(data);
+	return !data.includes("\x1b[200~") && /:3[u~ABCDHFPQS]/.test(data);
 }
 export function isKeyRepeat(data: string): boolean {
-	return !data.includes("\x1b[200~") && /:2[u~ABCDHF]/.test(data);
+	return !data.includes("\x1b[200~") && /:2[u~ABCDHFPQS]/.test(data);
 }
 
 const symbols = new Set("`-=[]\\;',./!@#$%^&*()_+|~{}:<>?");
@@ -202,6 +202,7 @@ const names = new Map<number, string>([
 	[-14, "home"],
 	[-15, "end"],
 ]);
+for (let index = 0; index < 12; index++) names.set(-21 - index, `f${index + 1}`);
 const functional = new Map<number, number>([
 	[2, -11],
 	[3, -10],
@@ -210,6 +211,8 @@ const functional = new Map<number, number>([
 	[7, -14],
 	[8, -15],
 ]);
+for (const [index, code] of [11, 12, 13, 14, 15, 17, 18, 19, 20, 21, 23, 24].entries())
+	functional.set(code, -21 - index);
 const navigationCodes = new Map<string, number>([
 	["A", -1],
 	["B", -2],
@@ -249,6 +252,9 @@ function csi(data: string): Sequence | undefined {
 			shifted: match[2] ? Number(match[2]) : undefined,
 			base: match[3] ? Number(match[3]) : undefined,
 		};
+	match = /^\x1b\[(?:1;(\d+)(?::\d+)?)?([PQS])$/.exec(data);
+	if (match)
+		return { code: match[2] === "P" ? -21 : match[2] === "Q" ? -22 : -24, modifiers: Number(match[1] ?? 1) - 1 };
 	match = /^\x1b\[1;(\d+)(?::\d+)?([ABCDHF])$/.exec(data);
 	if (match) {
 		const code = navigationCodes.get(match[2]);
@@ -422,11 +428,15 @@ export function matchesKey(data: string, keyId: KeyId): boolean {
 	if (canonical === "escape" && modifiers !== 0) return false;
 	if (modifiers === 0 && ((canonical === "home" && data === "\x1b[1~") || (canonical === "end" && data === "\x1b[4~")))
 		return true;
-	if (/^f\d+$/.test(key) || canonical === "clear")
+	if (/^f\d+$/.test(key) || canonical === "clear") {
+		const sequence = csi(data);
+		if (sequence)
+			return (sequence.modifiers & ~192) === modifiers && named(normalize(sequence.code))?.toLowerCase() === canonical;
 		return modifiers === 0
 			? legacy.get(data)?.toLowerCase() === canonical
 			: legacy.get(data)?.toLowerCase() ===
 					`${modifiers === 1 ? "shift" : modifiers === 4 ? "ctrl" : "unsupported"}+${canonical}`;
+	}
 	let expected: number | undefined;
 	for (const [code, name] of names) if (name.toLowerCase() === canonical && code !== 57414) expected = code;
 	if (key.length === 1 && (/[a-z0-9]/.test(key) || symbols.has(key))) expected = key.charCodeAt(0);
@@ -480,7 +490,8 @@ function printable(sequence: Sequence | undefined, useShifted: boolean): string 
 	const code = useShifted
 		? normalize(sequence.modifiers & 1 ? (sequence.shifted ?? sequence.code) : sequence.code)
 		: sequence.code;
-	if (!Number.isInteger(code) || code < 32 || code > 0x10ffff) return undefined;
+	if (!Number.isInteger(code) || code < 32 || code > 0x10ffff || (useShifted && code >= 57344 && code <= 63743))
+		return undefined;
 	return String.fromCodePoint(code);
 }
 export function decodeKittyPrintable(data: string): string | undefined {

@@ -1,7 +1,8 @@
+import { commitWrites } from "../src/testing/commit-writes.ts";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { BACKGROUND_CONTEXT as context } from "@axi/chord/context";
+import { BACKGROUND_CONTEXT as context } from "@axi/objects/context";
 import { describe, expect, it, vi } from "vitest";
 import {
 	defineDoc,
@@ -110,7 +111,7 @@ describe.each(["sqlite", "jsonl"] as const)("%s sleeping checkpoints", (kind) =>
 				: openNodeJsonlStorage(join(directory, "records"), context, { fsync: true });
 		let storage = await open();
 		try {
-			await storage.commit([{ type: "conversation", value: { id: ROOT_CONVERSATION_ID } }], () => {}, context);
+			await commitWrites(storage, [{ type: "conversation", value: { id: ROOT_CONVERSATION_ID } }], context);
 			const id = await storage.mintId<TaskId<string>>();
 			const task: TaskRecord<null, { phase: string }, string> = {
 				id,
@@ -124,7 +125,7 @@ describe.each(["sqlite", "jsonl"] as const)("%s sleeping checkpoints", (kind) =>
 				memos: { receipt: "saved" },
 				state: { status: "sleeping", until: 61_000, checkpoint: { phase: "resume" } },
 			};
-			await storage.commit([{ type: "task", value: task }], () => {}, context);
+			await commitWrites(storage, [{ type: "task", value: task }], context);
 			await storage.close(context);
 			storage = await open();
 			expect(await storage.task(id, context)).toEqual(task);

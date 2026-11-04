@@ -2,9 +2,9 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fauxAssistantMessage, fauxToolCall, Type } from "@axi/ai";
-import { BACKGROUND_CONTEXT as context, awaitWithContext } from "@axi/chord/context";
-import { afterEach, describe, expect, it } from "vitest";
-import { AssistantEntry, defineTask, defineTool, LiveDoc, ToolTask, ToolResultEntry, UsageDoc } from "../src/index.ts";
+import { BACKGROUND_CONTEXT as context, awaitWithContext } from "@axi/objects/context";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { AssistantEntry, defineDoc, defineTask, defineTool, LiveDoc, ToolTask, ToolResultEntry, UsageDoc } from "../src/index.ts";
 import type { ToolTaskResult } from "../src/harness/tool.ts";
 import type { Extension, ToolExecutionApi, ToolRegistration } from "../src/harness/types.ts";
 import { openNodeSqliteStorage } from "../src/storage/sqlite/node.ts";
@@ -64,6 +64,30 @@ async function eventually(check: () => boolean | Promise<boolean>): Promise<void
 }
 
 describe("durable tool execution", () => {
+	it("forwards a tool commit's persistence options and returns its callback value", async () => {
+		const progress = defineDoc({
+			kind: "progress", version: 1, scope: "conversation", history: "latest", fork: "initial",
+			initial: () => ({ value: 0 }), checkpointWhen: () => false,
+		});
+		let observed: { commits: number; value: number } | undefined;
+		const tool = textTool(async (_args, api, ctx) => {
+			const before = commit.mock.calls.length;
+			const value = await api.commit(async tx => {
+				(await tx.doc(progress, api.conversationId)).value++;
+				return 42;
+			}, ctx, { persistence: { kind: "deferred", withinMs: Infinity } });
+			observed = { commits: commit.mock.calls.length - before, value };
+			return { output: [] };
+		});
+		const opened = await openTools([tool]);
+		const commit = vi.spyOn(opened.storage, "commit");
+		await opened.session.commit(async tx => { await tx.doc(progress, opened.conversation); }, context);
+		const id = await call(opened, "echo", { text: "x" });
+		opened.scheduler.resume();
+		await result(opened, id);
+		expect(observed).toEqual({ commits: 0, value: 42 });
+		expect(await opened.session.snapshot(progress, opened.conversation, context)).toEqual({ value: 1 });
+	});
 	it("pins child restart behavior to the caller's replay policy at execution start", async () => {
 		let replay: "safe" | "unsafe" = "unsafe";
 		const worker = defineTask<null, { phase: "run" }, null>({
@@ -207,6 +231,28 @@ describe("durable tool execution", () => {
 			result: { kind: "model", control: { addTools: ["other"] } },
 		});
 	});
+	it("lets result hooks repair rejected calls without executing the tool", async () => {
+		let executions = 0;
+		const observed: string[] = [];
+		const tool = textTool(async () => { executions++; return {}; });
+		for (const kind of ["tool_unavailable", "invalid_arguments", "blocked"]) {
+			const opened = await openTools(kind === "tool_unavailable" ? [] : [tool], { extensions: [{ name: "repair", hooks: [{
+				task: ToolTask.definition.name,
+				handlers: {
+					beforeTool: () => kind === "blocked" ? { block: "policy" } : undefined,
+					afterTool: (_call: unknown, rejected: { diagnostics: { code: string }[] }) => {
+						observed.push(rejected.diagnostics[0]!.code);
+						return { isError: false, output: [{ type: "text", text: "fixed" }] };
+					},
+				},
+			}] }] });
+			const id = await call(opened, "echo", kind === "invalid_arguments" ? {} : { text: "go" });
+			opened.scheduler.resume();
+			expect((await result(opened, id)).message).toMatchObject({ role: "toolResult", isError: false, content: [{ type: "text", text: "fixed" }] });
+		}
+		expect(observed).toEqual(["tool_unavailable", "invalid_arguments", "blocked"]);
+		expect(executions).toBe(0);
+	});
 	it("bounds explicit output and reports malformed structured output to the extension owner", async () => {
 		const tool = textTool(
 			async () => ({ output: [{ type: "text", text: "abcdef" }], structuredOutput: { count: "wrong" } }),
@@ -228,7 +274,7 @@ describe("durable tool execution", () => {
 			],
 		});
 		expect(opened.reports).toHaveLength(1);
-		expect(opened.reports[0]?.info).toMatchObject({ type: "extension_error", extension: "tools" });
+		expect(opened.reports[0]?.info).toMatchObject({ kind: "extension_error", extension: "tools" });
 	});
 	it("reattaches repeated nested keys, returns independent values and rejects conflicting arguments", async () => {
 		let runs = 0;

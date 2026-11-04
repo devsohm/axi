@@ -1,5 +1,5 @@
 import { createModels, fauxAssistantMessage, fauxToolCall } from "@axi/ai";
-import { BACKGROUND_CONTEXT as context } from "@axi/chord/context";
+import { BACKGROUND_CONTEXT as context } from "@axi/objects/context";
 import { expect, it, vi } from "vitest";
 import { NodeExecutionEnv } from "../src/env/node.ts";
 import { AssistantEntry, createRegistry, Harness, MemoryStorage, ToolTask } from "../src/index.ts";

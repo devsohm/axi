@@ -263,6 +263,19 @@ pub fn run(
     groups.lock().unwrap().insert(pid);
     let deadline = request.timeout.map(|t| Instant::now() + t);
     let stop = Arc::new(AtomicBool::new(false));
+    let abandon = |mut child: std::process::Child,
+                   readers: &[&thread::JoinHandle<()>],
+                   error: std::io::Error| {
+        stop.store(true, Ordering::SeqCst);
+        for reader in readers {
+            sys::interrupt_reader(reader);
+        }
+        kill_group(pid);
+        let _ = child.kill();
+        let _ = child.wait();
+        groups.lock().unwrap().remove(&pid);
+        Failure::new("spawn_error", error.to_string())
+    };
     let reader = |index, pipe| {
         read_pipe(
             index,
@@ -276,8 +289,11 @@ pub fn run(
             },
         )
     };
-    let first = reader(0, child.stdout.take().unwrap());
-    let second = read_pipe(
+    let first = match reader(0, child.stdout.take().unwrap()) {
+        Ok(reader) => reader,
+        Err(error) => return Err(abandon(child, &[], error)),
+    };
+    let second = match read_pipe(
         1,
         child.stderr.take().unwrap(),
         sender.clone(),
@@ -287,14 +303,25 @@ pub fn run(
         } else {
             None
         },
-    );
+    ) {
+        Ok(reader) => reader,
+        Err(error) => return Err(abandon(child, &[&first], error)),
+    };
+    let (give, take) = mpsc::channel::<std::process::Child>();
     let waiter = sender.clone();
-    thread::spawn(move || {
+    let waiting = thread::Builder::new().spawn(move || {
+        let Ok(mut child) = take.recv() else {
+            return;
+        };
         let _ = waiter.send(match child.wait() {
             Ok(status) => Message::Exit(status),
             Err(e) => Message::WaitFailed(e.to_string()),
         });
     });
+    if let Err(error) = waiting {
+        return Err(abandon(child, &[&first, &second], error));
+    }
+    let _ = give.send(child);
     drop(sender);
     let mut decoders = [StreamDecoder::new(), StreamDecoder::new()];
     let mut spill = request.spill.map(Spill::new);
@@ -429,8 +456,8 @@ fn read_pipe(
     sender: Sender<Message>,
     stop: Arc<AtomicBool>,
     output: Option<Arc<Output>>,
-) -> thread::JoinHandle<()> {
-    thread::spawn(move || {
+) -> std::io::Result<thread::JoinHandle<()>> {
+    thread::Builder::new().spawn(move || {
         sys::read_pipe(pipe, &stop, |bytes| {
             let live = sender.send(Message::Data(index, bytes.to_vec())).is_ok();
             if let Some(output) = &output {

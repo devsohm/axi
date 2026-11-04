@@ -84,6 +84,17 @@ static bool property(Reader *reader, bool remove, Payload *value) {
     free(data);
     return valid;
 }
+static bool append_payload(Payload *value, const Payload *part) {
+    if (!part->type || (part->format != 8 && part->format != 16 && part->format != 32) ||
+        (uint64_t)part->count * (part->format / 8) != part->size ||
+        (value->type && (value->type != part->type || value->format != part->format)) ||
+        part->count > UINT32_MAX - value->count) return false;
+    if (!append(value, part->bytes, part->size)) return false;
+    value->type = part->type;
+    value->format = part->format;
+    value->count += part->count;
+    return true;
+}
 static bool selection(Reader *reader, xcb_atom_t target, Payload *value) {
     xcb_delete_property(reader->connection, reader->window, reader->property);
     xcb_convert_selection(reader->connection, reader->window, reader->selection,
@@ -111,12 +122,7 @@ static bool selection(Reader *reader, xcb_atom_t target, Payload *value) {
         if (!relevant) continue;
         Payload part = {0};
         bool valid = property(reader, true, &part);
-        valid = valid && part.type && (part.format == 8 || part.format == 16 || part.format == 32) &&
-            (uint64_t)part.count * (part.format / 8) == part.size &&
-            (!value->type || (value->type == part.type && value->format == part.format)) &&
-            part.count <= UINT32_MAX - value->count;
-        if (valid) valid = append(value, part.bytes, part.size);
-        if (valid) { value->type = part.type; value->format = part.format; value->count += part.count; }
+        if (valid) valid = append_payload(value, &part);
         bool done = part.count == 0;
         free(part.bytes);
         if (!valid) return false;

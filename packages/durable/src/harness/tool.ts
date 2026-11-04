@@ -1,7 +1,8 @@
-import { type Context, copyJson, type Draft, type JsonRepresentation, type JsonValue } from "@axi/chord";
-import { awaitWithContext } from "@axi/chord/context";
-import { overlap } from "@axi/chord/delta";
-import { boundOutput, OutputBuffer, type OutputLimits, PROGRESS_BYTES_PER_SECOND, Progress } from "@axi/chord/output";
+import { cutOffTooOften, cutOffCount, salvageable } from "./live.ts";
+import { type Context, copyJson, type Draft, type JsonRepresentation, type JsonValue } from "@axi/objects";
+import { awaitWithContext } from "@axi/objects/context";
+import { overlap } from "@axi/objects/delta";
+import { boundOutput, OutputBuffer, type OutputLimits, PROGRESS_BYTES_PER_SECOND, Progress } from "@axi/objects/output";
 import type { ImageContent, TextContent, ToolCall, ToolResultMessage } from "@axi/ai";
 import { validateToolArguments } from "@axi/ai/utils/validation";
 import { Compile } from "typebox/compile";
@@ -49,7 +50,7 @@ import { recordUsage } from "./usage.ts";
 import { optionalExtension } from "./util.ts";
 
 export type ToolTaskInput =
-	| { kind: "model"; assistant: EntryId; callId: string }
+	| { kind: "model"; assistant: EntryId; callId: string; unoffered?: true }
 	| {
 			kind: "nested";
 			parent: TaskId;
@@ -76,7 +77,9 @@ export const NestedCallDoc = defineDocFamily<NestedCallState, null>({
 });
 type Runtime = TaskRuntime<ToolTaskInput, ToolTaskCheckpoint, ToolTaskResult, ToolHooks>;
 type Content = (TextContent | ImageContent)[];
-type Ending = { readonly status: "completed" | "aborted" } | { readonly status: "failed"; readonly message: string };
+type Ending =
+	| { readonly status: "completed" | "aborted" }
+	| { readonly status: "failed"; readonly message: string; readonly reason?: "restart_limit" | "interrupted" };
 type Reported = {
 	output: OutputBuffer;
 	limits: OutputLimits;
@@ -88,23 +91,42 @@ const completed: Ending = { status: "completed" };
 
 export const ToolTask = defineTask<ToolTaskInput, ToolTaskCheckpoint, ToolTaskResult, ToolHooks>({
 	name: "axi.tool",
-	version: 2,
+	version: 3,
 	initial: () => ({ phase: "call" }),
-	migrate: (input, checkpoint) => ({
-		input: { kind: "model", ...(input as { assistant: EntryId; callId: string }) },
+	migrate: (input, checkpoint, fromVersion) => ({
+		input:
+			fromVersion === 1
+				? { kind: "model", ...(input as { assistant: EntryId; callId: string }) }
+				: (input as ToolTaskInput),
 		checkpoint: checkpoint as ToolTaskCheckpoint,
 	}),
 	phases: {
 		call: async (task, runtime, context) => {
-			const call = await readCall(runtime, task.input, context),
-				tool = await findTool(runtime, task.input, call.name, context);
-			if (tool === undefined)
-				return settle(
+			const call = await readCall(runtime, task.input, context);
+			if (cutOffTooOften(task, runtime)) {
+				const message = `Tool ${call.name} was interrupted ${cutOffCount(task)}; it is not run again`;
+				return settleFromSlot(
 					runtime,
 					task.input,
 					call,
-					completed,
-					() => harnessError("tool_unavailable", `Tool ${call.name} is not available`),
+					{ status: "failed", message, reason: "restart_limit" },
+					"restart_limit",
+					message,
+					context,
+					salvageable(task, runtime),
+				);
+			}
+			const tool =
+				task.input.kind === "model" && task.input.unoffered
+					? undefined
+					: await findTool(runtime, task.input, call.name, context);
+			if (tool === undefined)
+				return reject(
+					runtime,
+					task.input,
+					call,
+					tool,
+					harnessError("tool_unavailable", `Tool ${call.name} is not available`),
 					context,
 				);
 			let checked: { args: JsonObject } | { error: string };
@@ -115,14 +137,7 @@ export const ToolTask = defineTask<ToolTaskInput, ToolTaskCheckpoint, ToolTaskRe
 				checked = { error: errorMessage(error) };
 			}
 			if ("error" in checked)
-				return settle(
-					runtime,
-					task.input,
-					call,
-					completed,
-					() => harnessError("invalid_arguments", checked.error),
-					context,
-				);
+				return reject(runtime, task.input, call, tool, harnessError("invalid_arguments", checked.error), context);
 			let args = checked.args,
 				block: string | undefined;
 			await runtime.hooks.each("beforeTool", async (hook) => {
@@ -137,32 +152,24 @@ export const ToolTask = defineTask<ToolTaskInput, ToolTaskCheckpoint, ToolTaskRe
 				}
 			});
 			if (block !== undefined)
-				return settle(
-					runtime,
-					task.input,
-					call,
-					completed,
-					() => harnessError("blocked", `Tool call blocked: ${block}`),
-					context,
-				);
+				return reject(runtime, task.input, call, tool, harnessError("blocked", `Tool call blocked: ${block}`), context);
 			const final = checkArguments(tool, call, args);
 			if ("error" in final)
-				return settle(
-					runtime,
-					task.input,
-					call,
-					completed,
-					() => harnessError("invalid_arguments", final.error),
-					context,
-				);
+				return reject(runtime, task.input, call, tool, harnessError("invalid_arguments", final.error), context);
 			const prepared = copyJson(final.args, { omitUndefinedProperties: true }) as JsonObject;
-			await runtime.commit(async (tx) => {
-				const slot = toolSlot(await tx.doc(LiveDoc, runtime.conversationId), runtime.taskId);
-				if (slot !== undefined) {
-					slot.status = "running";
-					if (task.input.kind === "nested" && "parentTaskId" in slot && !jsonEqual(task.input.call.arguments, prepared))
-						slot.arguments = prepared;
-				}
+			await runtime.commit(
+				async (tx) => {
+					const slot = toolSlot(await tx.doc(LiveDoc, runtime.conversationId), runtime.taskId);
+					if (slot !== undefined) {
+						slot.status = "running";
+						if ("parentTaskId" in slot) slot.arguments = prepared;
+					}
+					return undefined;
+				},
+				context,
+				{ persistence: { kind: "deferred" } },
+			);
+			await runtime.commit(() => {
 				return {
 					status: "running",
 					checkpoint: { phase: "execute", arguments: prepared, replay: tool.replay ?? "unsafe" },
@@ -171,31 +178,53 @@ export const ToolTask = defineTask<ToolTaskInput, ToolTaskCheckpoint, ToolTaskRe
 			await execute(runtime, task.input, call, tool, prepared, context);
 		},
 		execute: async (task, runtime, context) => {
-			const call = await readCall(runtime, task.input, context),
-				tool = await findTool(runtime, task.input, call.name, context);
+			const call = await readCall(runtime, task.input, context);
+			if (cutOffTooOften(task, runtime)) {
+				const message = `Tool ${call.name} was interrupted ${cutOffCount(task)}; it is not run again`;
+				return settleFromSlot(
+					runtime,
+					task.input,
+					call,
+					{ status: "failed", message, reason: "restart_limit" },
+					"restart_limit",
+					message,
+					context,
+					salvageable(task, runtime),
+				);
+			}
+			const tool = await findTool(runtime, task.input, call.name, context);
 			if (task.state.checkpoint.replay === "safe" && tool?.replay === "safe") {
 				await runtime.commit(async (tx) => {
 					const slot = toolSlot(await tx.doc(LiveDoc, runtime.conversationId), runtime.taskId);
-					if (slot) clearProgress(slot);
+					if (slot) {
+						clearProgress(slot);
+						slot.status = "running";
+						if ("parentTaskId" in slot) slot.arguments = task.state.checkpoint.arguments;
+					}
 					return undefined;
 				}, context);
 				return execute(runtime, task.input, call, tool, task.state.checkpoint.arguments, context);
 			}
 			const message = `Tool ${call.name} was interrupted and may have partially run`;
-			await settle(
+			await settleFromSlot(
 				runtime,
 				task.input,
 				call,
 				{ status: "failed", message },
-				(slot) => interrupted(slot, "interrupted", message),
+				"interrupted",
+				message,
 				context,
+				true,
 			);
 		},
 	},
 	abort: async (task, runtime, context) => {
 		const call = await readCall(runtime, task.input, context);
 		let code: string, text: string;
-		if (task.abortReason !== "restart") {
+		if (task.input.kind === "model" && task.input.unoffered) {
+			code = "tool_unavailable";
+			text = `Tool ${call.name} is not available`;
+		} else if (task.abortReason !== "restart") {
 			code = "aborted";
 			text = `Tool ${call.name} was aborted`;
 		} else if (task.state.checkpoint.phase === "execute") {
@@ -205,10 +234,89 @@ export const ToolTask = defineTask<ToolTaskInput, ToolTaskCheckpoint, ToolTaskRe
 			code = "abandoned";
 			text = `Tool ${call.name} was not started: its caller ended with a restart`;
 		}
-		await settle(runtime, task.input, call, { status: "aborted" }, (slot) => interrupted(slot, code, text), context);
+		await settleFromSlot(
+			runtime,
+			task.input,
+			call,
+			{ status: "aborted" },
+			code,
+			text,
+			context,
+			(task.restarts ?? 0) < runtime.settings.restartLimit - 1,
+		);
 	},
 });
 
+async function reject(
+	runtime: Runtime,
+	input: ToolTaskInput,
+	call: ToolHookCall,
+	tool: ToolRegistration | undefined,
+	result: ToolExecutionResult,
+	context: Context,
+): Promise<void> {
+	const normalized = await afterHarnessResult(runtime, input, call, tool, result, undefined, context);
+	return settle(runtime, input, call, completed, () => normalized, context);
+}
+async function settleFromSlot(
+	runtime: Runtime,
+	input: ToolTaskInput,
+	call: ToolHookCall,
+	ending: Ending,
+	code: string,
+	message: string,
+	context: Context,
+	hooks: boolean,
+): Promise<void> {
+	const live = await runtime.snapshot(LiveDoc, runtime.conversationId, context);
+	const slot = live === undefined ? undefined : toolSlot(live, runtime.taskId);
+	const built = interrupted(slot, code, message);
+	let final = built;
+	if (hooks) {
+		const tool =
+			input.kind === "model" && input.unoffered
+				? undefined
+				: await findTool(runtime, input, call.name, context).catch(() => undefined);
+		const index = slot?.diagnostics?.length ?? 0;
+		const trim = (slot?.droppedBytes ?? 0) > 0 ? built.diagnostics?.[index] : undefined;
+		const base =
+			trim === undefined ? built : { ...built, diagnostics: built.diagnostics?.filter((_, at) => at !== index) };
+		final = await afterHarnessResult(runtime, input, call, tool, base, trim, context);
+	}
+	return settle(runtime, input, call, ending, () => final, context);
+}
+async function afterHarnessResult(
+	runtime: Runtime,
+	input: ToolTaskInput,
+	call: ToolHookCall,
+	tool: ToolRegistration | undefined,
+	result: ToolExecutionResult,
+	retainedTruncation: ToolDiagnostic | undefined,
+	context: Context,
+): Promise<ToolExecutionResult> {
+	let final = result;
+	await runtime.hooks.each("afterTool", async (hook) => {
+		final = (await hook(call, final, runtime, context)) ?? final;
+	});
+	const limits: OutputLimits = {
+		maxBytes: tool?.outputLimits?.maxBytes ?? DEFAULT_MAX_BYTES,
+		maxLines: tool?.outputLimits?.maxLines ?? DEFAULT_MAX_LINES,
+		retain: tool?.outputLimits?.retain ?? "head",
+	};
+	const bounded = boundContent(final.output ?? [], limits);
+	const diagnostics = [...(final.diagnostics ?? [])];
+	if (retainedTruncation !== undefined && final.output === result.output) diagnostics.push(retainedTruncation);
+	if (bounded.droppedBytes) diagnostics.push(truncation(bounded, limits.retain));
+	const { structuredOutput: _discarded, ...rest } = final;
+	return {
+		...rest,
+		...(input.kind === "nested" && final.isError !== true && tool?.structuredOutputSchema === undefined
+			? { structuredOutput: outputValue(bounded.content) as JsonValue }
+			: {}),
+		output: bounded.content,
+		diagnostics,
+	};
+}
 async function findTool(
 	runtime: Runtime,
 	input: ToolTaskInput,
@@ -312,12 +420,12 @@ async function execute(
 			waiting.catch(() => {});
 			return awaitWithContext(waiting, ctx);
 		},
-		commit: async (change, ctx) => {
+		commit: async (change, ctx, options) => {
 			let value: Awaited<ReturnType<typeof change>> | undefined;
 			await runtime.commit(async (tx) => {
 				value = await change(tx);
 				return undefined;
-			}, ctx);
+			}, ctx, options);
 			return value as Awaited<ReturnType<typeof change>>;
 		},
 		memo: runtime.memo,
@@ -426,20 +534,24 @@ function publish(runtime: Runtime, reported: Reported, enabled: boolean, context
 						);
 			if (changed) bytes += utf8ByteLength(JSON.stringify(current.details ?? null));
 			if (added.length) bytes += utf8ByteLength(JSON.stringify(added));
-			await runtime.commit(async (tx) => {
-				const slot = toolSlot(await tx.doc(LiveDoc, runtime.conversationId), runtime.taskId);
-				if (slot === undefined) return undefined;
-				if ((slot.output ?? "") !== output.text) slot.output = output.text;
-				if (output.droppedBytes > 0) slot.droppedBytes = output.droppedBytes;
-				if (output.droppedLines > 0) slot.droppedLines = output.droppedLines;
-				if (changed && current.details !== undefined)
-					assignJson(slot as unknown as JsonObject, "details", current.details);
-				if (added.length) {
-					slot.diagnostics ??= [];
-					for (const diagnostic of added) slot.diagnostics.push(diagnostic);
-				}
-				return undefined;
-			}, context);
+			await runtime.commit(
+				async (tx) => {
+					const slot = toolSlot(await tx.doc(LiveDoc, runtime.conversationId), runtime.taskId);
+					if (slot === undefined) return undefined;
+					if ((slot.output ?? "") !== output.text) slot.output = output.text;
+					if (output.droppedBytes > 0) slot.droppedBytes = output.droppedBytes;
+					if (output.droppedLines > 0) slot.droppedLines = output.droppedLines;
+					if (changed && current.details !== undefined)
+						assignJson(slot as unknown as JsonObject, "details", current.details);
+					if (added.length) {
+						slot.diagnostics ??= [];
+						for (const diagnostic of added) slot.diagnostics.push(diagnostic);
+					}
+					return undefined;
+				},
+				context,
+				{ persistence: { kind: "deferred" } },
+			);
 			written = current;
 			return bytes;
 		},
@@ -517,7 +629,7 @@ async function prepareResult(
 				(agent) => toolExtension(agent, tool.name),
 				() => undefined,
 			);
-			runtime.report(new Error(broken), { type: "extension", ...optionalExtension(extension) });
+			runtime.report(new Error(broken), { kind: "extension", ...optionalExtension(extension) });
 		}
 	}
 	if (input.kind === "nested") {
@@ -595,7 +707,17 @@ async function settle(
 		}
 		if (hadNested) removeNestedSlots(live, runtime.taskId);
 		if (ending.status === "failed")
-			return { status: "terminal", outcome: { status: "failed", error: { message: ending.message }, result: receipt } };
+			return {
+				status: "terminal",
+				outcome: {
+					status: "failed",
+					error: {
+						message: ending.message,
+						...(ending.reason === undefined ? {} : { detail: { reason: ending.reason } }),
+					},
+					result: receipt,
+				},
+			};
 		return { status: "terminal", outcome: { status: ending.status, result: receipt } };
 	}, context);
 }

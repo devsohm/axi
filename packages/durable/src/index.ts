@@ -1,6 +1,7 @@
 export { MemoryStorage } from "./storage/memory.ts";
 export { ReadOnlySession, StorageRequestError } from "./errors.ts";
 export * from "./types.ts";
+export type { NativeWatchCall, WatchCall } from "@axi/objects";
 export { defineDoc, defineDocFamily } from "./documents.ts";
 export {
 	defineEntry,
@@ -14,19 +15,12 @@ export {
 export { createSession } from "./session/session.ts";
 export { ReadAfterWrite, SessionFailed } from "./errors.ts";
 export { defineTask } from "./tasks.ts";
-export { ConversationBusy } from "./errors.ts";
+export { ConversationBusy, ConversationIdle } from "./errors.ts";
 export { createRegistry } from "./harness/registry.ts";
+export { registryReader } from "./harness/registry-reader.ts";
 export { DURABLE_TELEMETRY_SCHEMA } from "./harness/telemetry.ts";
 export { Harness, DEFAULT_HARNESS_IDENTITY } from "./harness/harness.ts";
-export {
-	watchEvents,
-	type AgentEvent,
-	type AgentEventStream,
-	type MessageChange,
-	type SnapshotEvent,
-	type ToolEventCall,
-} from "./harness/events.ts";
-export type { ConversationView } from "./harness/view.ts";
+export type { ConversationView, ConversationWindow } from "./harness/view.ts";
 export type { TaskGraph, TaskGraphNode, TaskGraphState, TaskGraphWatch } from "./harness/task-graph.ts";
 export {
 	GenerationTask,
@@ -41,7 +35,7 @@ export {
 	type SummaryRequest,
 } from "./harness/compaction.ts";
 export type * from "./harness/types.ts";
-export { defineExtension, defineTool, section, hook, wrapTool, wrapSection } from "./harness/define.ts";
+export { defineExtension, defineTool, section, hook, wrapTool, wrapSection, runEndTask } from "./harness/define.ts";
 export {
 	AgentDoc,
 	configure,
@@ -65,9 +59,14 @@ export {
 export {
 	LiveDoc,
 	type LiveState,
+	type LiveRun,
+	type RunFailure,
+	type RunFailureReason,
 	type ToolSlot,
 	type NestedToolSlot,
 	type NestedToolSummary,
 	type CompactionStatus,
 	type CompactionFailure,
 } from "./harness/live.ts";
+
+export { ConversationTranscript, type TranscriptItem, type TranscriptView, type EntryLoader, type ConversationTranscriptOptions } from "./harness/transcript.ts";

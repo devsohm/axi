@@ -18,6 +18,7 @@ import type {
 	Usage,
 } from "../types.ts";
 import { createAssistantMessageEventStream } from "../utils/event-stream.ts";
+import { ToolCallArgumentsStream } from "../utils/streaming-json.ts";
 import { getSystemMessageText } from "../utils/text.ts";
 
 const emptyUsage: Usage = {
@@ -211,7 +212,10 @@ async function emitMessage(
 			const call: ToolCall = { type: "toolCall", id: block.id, name: block.name, arguments: {} };
 			partial.content = [...partial.content, call];
 			output.push({ type: "toolcall_start", contentIndex: index, partial: { ...partial } });
-			if (!(await chunks(JSON.stringify(block.arguments), index, "toolcall", () => {}))) return;
+			const argumentsStream = new ToolCallArgumentsStream();
+			if (!(await chunks(JSON.stringify(block.arguments), index, "toolcall", (part) => {
+				call.arguments = argumentsStream.append(part);
+			}))) return;
 			call.arguments = block.arguments;
 			output.push({ type: "toolcall_end", contentIndex: index, toolCall: block, partial: { ...partial } });
 		} else if (block.type === "text") {

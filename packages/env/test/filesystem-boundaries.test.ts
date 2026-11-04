@@ -2,7 +2,7 @@ import { mkdtemp, rm, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { BACKGROUND_CONTEXT as context } from "@axi/chord/context";
+import { BACKGROUND_CONTEXT as context } from "@axi/objects/context";
 import { getOrThrow } from "@axi/durable/env";
 import { expect, test } from "vitest";
 import { Connection, localDaemon, RemoteExecutionEnv } from "../src/index.ts";

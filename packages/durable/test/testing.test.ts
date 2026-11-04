@@ -3,7 +3,7 @@ import { openNodeSqliteStorage } from "../src/storage/sqlite/node.ts";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { BACKGROUND_CONTEXT as context } from "@axi/chord/context";
+import { BACKGROUND_CONTEXT as context } from "@axi/objects/context";
 import { describe, expect, it, vi } from "vitest";
 import { NodeExecutionEnv } from "../src/env/node.ts";
 import type { BinaryReader } from "../src/env/index.ts";
@@ -60,9 +60,9 @@ it("starts the watcher delivery deadline after a slow write completes", async ()
 	vi.spyOn(env, "watch").mockImplementation(async (_targets, onChange) => {
 		notify = () => {
 			deliveries++;
-			onChange({ paths: [join(tmpdir(), "a/b/c/AGENTS.md")] });
+			onChange({ kind: "paths", paths: [join(tmpdir(), "a/b/c/AGENTS.md")] });
 		};
-		return { ok: true, value: { mode: "native", close: async () => {} } };
+		return { ok: true, value: { mode: "native", stop: async () => {} } };
 	});
 	vi.spyOn(env, "writeFile").mockImplementation(async () => {
 		clock.mockReturnValue(4000);

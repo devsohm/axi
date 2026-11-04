@@ -85,6 +85,7 @@ export {
 export {
 	visibleWidth,
 	stripTerminalSequences,
+	replaceControlCharacters,
 	sliceByColumn,
 	truncateToWidth,
 	wrapTextWithAnsi,
@@ -112,6 +113,7 @@ export {
 	KeybindingsManager,
 	TUI_KEYBINDINGS,
 	getKeybindings,
+	getSelectPageIndex,
 	setKeybindings,
 	type Keybinding,
 	type KeybindingDefinition,

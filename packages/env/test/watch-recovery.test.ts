@@ -1,8 +1,8 @@
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { BACKGROUND_CONTEXT as context } from "@axi/chord/context";
-import { getOrThrow, type WatchChange } from "@axi/durable/env";
+import { BACKGROUND_CONTEXT as context } from "@axi/objects/context";
+import { getOrThrow, type FileChange } from "@axi/durable/env";
 import { expect, test, vi } from "vitest";
 import { Connection, localDaemon, RemoteExecutionEnv } from "../src/index.ts";
 
@@ -17,7 +17,7 @@ test.skipIf(process.platform === "win32")(
 			cwd: directory,
 			watch: { mode: "polling", pollIntervalMs: 20 },
 		});
-		const changes: WatchChange[] = [];
+		const changes: FileChange[] = [];
 		const watcher = getOrThrow(
 			await env.watch(
 				[{ path: ".", recursive: true }],
@@ -38,7 +38,7 @@ test.skipIf(process.platform === "win32")(
 			);
 			const daemon = await connection.info();
 			process.kill(daemon.pid, "SIGKILL");
-			await vi.waitFor(() => expect(changes.some((change) => "overflow" in change && change.overflow)).toBe(true), {
+			await vi.waitFor(() => expect(changes.some((change) => change.kind === "overflow")).toBe(true), {
 				timeout: 6000,
 			});
 			expect((await connection.info()).pid).not.toBe(daemon.pid);
@@ -51,13 +51,13 @@ test.skipIf(process.platform === "win32")(
 				{ timeout: 3000 },
 			);
 			expect(changes.filter((change) => "error" in change)).toEqual([]);
-			await watcher.close(context);
+			await watcher.stop(context);
 			const count = changes.length;
 			await writeFile(join(directory, "closed.txt"), "closed");
 			await new Promise((resolve) => setTimeout(resolve, 100));
 			expect(changes.length).toBe(count);
 		} finally {
-			await watcher.close(context);
+			await watcher.stop(context);
 			await env.cleanup(context);
 			connection.close();
 			await rm(directory, { recursive: true, force: true });

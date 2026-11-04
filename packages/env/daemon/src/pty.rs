@@ -167,7 +167,7 @@ pub fn run(
             format!("Working directory does not exist: {}", request.cwd),
         ));
     }
-    let (master, mut child) =
+    let (master, child) =
         unix::spawn(&request).map_err(|error| Failure::new("spawn_error", error.to_string()))?;
     let master = Arc::new(master);
     let pid = child.id();
@@ -183,12 +183,20 @@ pub fn run(
     );
     output.control(Frame::new(EVENT, id, json!({"kind":"started","pid":pid})));
     let stop = Arc::new(AtomicBool::new(false));
-    let reader = {
+    let abandon = |mut child: std::process::Child, error: std::io::Error| {
+        stop.store(true, Ordering::SeqCst);
+        kill_group(pid);
+        let _ = child.wait();
+        terminals.lock().unwrap().remove(&id);
+        groups.lock().unwrap().remove(&pid);
+        Failure::new("spawn_error", error.to_string())
+    };
+    let reading = {
         let master = master.clone();
         let sender = sender.clone();
         let stop = stop.clone();
         let output = output.clone();
-        thread::spawn(move || {
+        thread::Builder::new().spawn(move || {
             unix::read(&master, &stop, |bytes| {
                 let live = sender.send(Message::Data(0, bytes.to_vec())).is_ok();
                 output.wait_for_room(&stop);
@@ -197,24 +205,39 @@ pub fn run(
             let _ = sender.send(Message::Eof(0));
         })
     };
-    {
+    let reader = match reading {
+        Ok(reader) => reader,
+        Err(error) => return Err(abandon(child, error)),
+    };
+    let writing = {
         let master = master.clone();
         let stop = stop.clone();
-        thread::spawn(move || {
+        thread::Builder::new().spawn(move || {
             for bytes in inputs {
                 if !unix::write(&master, &stop, &bytes) {
                     return;
                 }
             }
-        });
+        })
+    };
+    if let Err(error) = writing {
+        return Err(abandon(child, error));
     }
+    let (give, take) = mpsc::channel::<std::process::Child>();
     let waiter = sender.clone();
-    thread::spawn(move || {
+    let waiting = thread::Builder::new().spawn(move || {
+        let Ok(mut child) = take.recv() else {
+            return;
+        };
         let _ = waiter.send(match child.wait() {
             Ok(exit) => Message::Exit(exit),
             Err(error) => Message::WaitFailed(error.to_string()),
         });
     });
+    if let Err(error) = waiting {
+        return Err(abandon(child, error));
+    }
+    let _ = give.send(child);
     drop(sender);
     let mut status = None;
     let mut ended = false;

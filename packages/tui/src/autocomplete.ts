@@ -9,11 +9,13 @@ export interface AutocompleteItem {
 	label: string;
 	description?: string;
 }
+type Awaitable<T> = T | Promise<T>;
+
 export interface SlashCommand {
 	name: string;
 	description?: string;
 	argumentHint?: string;
-	getArgumentCompletions?(argumentPrefix: string): AutocompleteItem[] | null | Promise<AutocompleteItem[] | null>;
+	getArgumentCompletions?(argumentPrefix: string): Awaitable<AutocompleteItem[] | null>;
 }
 export interface AutocompleteSuggestions {
 	items: AutocompleteItem[];

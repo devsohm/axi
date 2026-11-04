@@ -1,6 +1,6 @@
-import type { Context, JsonValue } from "@axi/chord";
-import { apply, type Op } from "@axi/chord/delta";
-import type { SqliteDatabase, SqliteExecutor, SqliteValue } from "@axi/chord/sqlite";
+import type { Context, JsonValue } from "@axi/objects";
+import { apply, type Op } from "@axi/objects/delta";
+import type { SqliteDatabase, SqliteExecutor, SqliteValue } from "@axi/objects/sqlite";
 import { StorageRequestError } from "../../errors.ts";
 import { idFromNumber, seqFromNumber } from "../../ids.ts";
 import type * as T from "../../types.ts";
@@ -85,34 +85,72 @@ export class SqliteStorage implements T.Storage {
 		if (!Number.isSafeInteger(this.#nextId)) throw new Error("ID space is exhausted");
 		return idFromNumber<RecordId>(this.#nextId++);
 	}
-	async commit(writes: readonly T.StorageWrite[], adopt: (seq: T.Seq) => void, _context: Context): Promise<T.Seq> {
+	async commit(
+		batches: readonly (readonly T.StorageWrite[])[],
+		receive: (index: number, seq: T.Seq) => void,
+		_context: Context,
+	): Promise<T.CommitResult> {
 		this.#open();
-		const actions = this.#actions(writes);
 		let nextId = this.#nextId;
-		for (const write of writes) {
-			const id = "value" in write ? write.value.id : "record" in write ? write.record.id : undefined;
-			if (id !== undefined) nextId = Math.max(nextId, id + 1);
-		}
-		const seq = await this.#db.transaction(async (tx) => {
+		const seqs: T.Seq[] = [];
+		let refusal: { error: unknown } | undefined;
+		await this.#db.transaction(async (tx) => {
 			const metadata = await tx.get<Metadata>(
 				`SELECT next_id,next_seq FROM ${this.#schema.tables.durableMetadata} WHERE singleton = 1`,
 			);
 			if (!metadata) throw new Error("Durable SQLite metadata is missing");
-			const seq = seqFromNumber(metadata.next_seq);
-			await this.#validateIds(tx, writes);
-			await this.#validateDocuments(tx, actions);
-			for (const write of writes) await this.#writeRecord(tx, write, seq);
-			await this.#writeDocuments(tx, actions, seq);
-			await tx.run(
-				`UPDATE ${this.#schema.tables.durableMetadata} SET next_id = ?, next_seq = ? WHERE singleton = 1`,
-				String(Math.max(Number(metadata.next_id), nextId)),
-				seq + 1,
-			);
-			return seq;
+			let next = metadata.next_seq,
+				failed = false;
+			const check = async <Value>(call: () => Promise<Value>): Promise<Value> => {
+				try {
+					return await call();
+				} catch (error) {
+					failed = true;
+					throw error;
+				}
+			};
+			const reader: SqliteExecutor = {
+				exec: (sql) => check(() => tx.exec(sql)),
+				run: (sql, ...params) => check(() => tx.run(sql, ...params)),
+				runCounted: (sql, ...params) => check(() => tx.runCounted(sql, ...params)),
+				get: <Value extends object>(sql: string, ...params: SqliteValue[]) =>
+					check(() => tx.get<Value>(sql, ...params)),
+				all: <Value extends object>(sql: string, ...params: SqliteValue[]) =>
+					check(() => tx.all<Value>(sql, ...params)),
+			};
+			for (const writes of batches) {
+				let actions: Map<T.DocumentId, Action>;
+				failed = false;
+				try {
+					actions = this.#actions(writes);
+					await this.#validateIds(reader, writes);
+					await this.#validateDocuments(reader, actions);
+					await this.#resolveCopies(reader, actions);
+				} catch (error) {
+					if (failed) throw error;
+					refusal = { error };
+					break;
+				}
+				const seq = seqFromNumber(next++);
+				for (const write of writes) await this.#writeRecord(tx, write, seq);
+				await this.#writeDocuments(tx, actions, seq);
+				seqs.push(seq);
+				nextId = Math.max(nextId, this.#nextId);
+				for (const write of writes) {
+					const id = "value" in write ? write.value.id : "record" in write ? write.record.id : undefined;
+					if (id !== undefined) nextId = Math.max(nextId, id + 1);
+				}
+			}
+			if (seqs.length)
+				await tx.run(
+					`UPDATE ${this.#schema.tables.durableMetadata} SET next_id = ?, next_seq = ? WHERE singleton = 1`,
+					String(Math.max(Number(metadata.next_id), nextId)),
+					next,
+				);
 		});
 		this.#nextId = Math.max(this.#nextId, nextId);
-		adopt(seq);
-		return seq;
+		for (const [index, seq] of seqs.entries()) receive(index, seq);
+		return refusal ? { stored: seqs.length, refused: refusal.error } : { stored: seqs.length };
 	}
 	async #record<Value>(db: SqliteExecutor, table: string, id: number): Promise<Value | undefined> {
 		const row = await db.get<Row>(`SELECT record FROM ${table} WHERE id = ?`, id);
@@ -567,10 +605,8 @@ export class SqliteStorage implements T.Storage {
 				break;
 		}
 	}
-	async #writeDocuments(tx: SqliteExecutor, actions: ReadonlyMap<T.DocumentId, Action>, seq: T.Seq): Promise<void> {
-		const tables = this.#schema.tables;
+	async #resolveCopies(tx: SqliteExecutor, actions: Map<T.DocumentId, Action>): Promise<void> {
 		for (const [id, action] of actions) {
-			let content = action.content;
 			if (action.copy) {
 				try {
 					const stored = await this.#materialize(tx, action.copy.id, action.copy.at);
@@ -585,11 +621,17 @@ export class SqliteStorage implements T.Storage {
 						stored.record.fork !== create.fork
 					)
 						throw new Error(`Fork source document ${action.copy.id} does not match the copied record`);
-					content = { kind: "base", version: stored.version, value: stored.value };
+					action.content = { kind: "base", version: stored.version, value: stored.value };
 				} catch (cause) {
 					throw new Error(`Document copy ${id} was rejected`, { cause });
 				}
 			}
+		}
+	}
+	async #writeDocuments(tx: SqliteExecutor, actions: ReadonlyMap<T.DocumentId, Action>, seq: T.Seq): Promise<void> {
+		const tables = this.#schema.tables;
+		for (const [id, action] of actions) {
+			const content = action.content;
 			let record: T.DocumentRecord;
 			if (action.create) {
 				record = { ...action.create, createdAt: seq, ...(action.retire ? { retiredAt: seq } : {}) };

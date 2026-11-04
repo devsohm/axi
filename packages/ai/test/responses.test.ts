@@ -1,7 +1,11 @@
 import type { ResponseStreamEvent } from "openai/resources/responses/responses.js";
 import { Type } from "typebox";
 import { describe, expect, it } from "vitest";
-import { appendGrammarToolInputJsonDelta, makeStrictJsonSchema } from "../src/api/constrained-sampling.ts";
+import {
+	appendGrammarToolInputJsonDelta,
+	closeGrammarToolInputJson,
+	makeStrictJsonSchema,
+} from "../src/api/constrained-sampling.ts";
 import { clampOpenAIPromptCacheKey } from "../src/api/openai-prompt-cache.ts";
 import type { OpenAIResponsesOptions } from "../src/api/openai-responses.ts";
 import { stream, streamSimple } from "../src/api/openai-responses.ts";
@@ -442,10 +446,10 @@ describe("tool declarations and replay", () => {
 	});
 	it("escapes grammar input as append-only JSON and rejects edits after closing", () => {
 		const buffer = { input: "", started: false, closed: false };
-		const a = appendGrammarToolInputJsonDelta(buffer, "source", 'x"', false);
-		const b = appendGrammarToolInputJsonDelta(buffer, "source", 'x"\n\ty', true);
+		const a = appendGrammarToolInputJsonDelta(buffer, "source", 'x"');
+		const b = closeGrammarToolInputJson(buffer, "source", 'x"\n\ty');
 		expect(JSON.parse(`${a}${b}`)).toEqual({ source: 'x"\n\ty' });
-		expect(() => appendGrammarToolInputJsonDelta(buffer, "source", "other", true)).toThrow(
+		expect(() => closeGrammarToolInputJson(buffer, "source", "other")).toThrow(
 			'grammar tool input for property "source" changed after it was closed',
 		);
 	});

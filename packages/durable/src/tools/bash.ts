@@ -1,4 +1,4 @@
-import type { Context } from "@axi/chord";
+import type { Context } from "@axi/objects";
 import { type Static, Type } from "typebox";
 import { defineTool } from "../harness/define.ts";
 import type { ToolExecutionApi, ToolExecutionResult } from "../harness/types.ts";

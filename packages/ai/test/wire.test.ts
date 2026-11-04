@@ -34,6 +34,40 @@ function response(events: AxiMessagesEvent[]): Response {
 }
 
 describe("Remote message protocol", () => {
+	it("preserves a completed call when a late argument chunk arrives", async () => {
+		const toolCall = { type: "toolCall", id: "finished", name: "lookup", arguments: { value: 7 } } as const;
+		const source = stream(model, context, {
+			apiKey: "test",
+			fetch: async () =>
+				response([
+					{ type: "toolcall_start", contentIndex: 0, id: toolCall.id, toolName: toolCall.name },
+					{ type: "toolcall_end", contentIndex: 0, toolCall },
+					{ type: "toolcall_delta", contentIndex: 0, delta: "late" },
+					{ type: "done", reason: "toolUse", usage },
+				]),
+		});
+		const types: string[] = [];
+		for await (const event of source) types.push(event.type);
+		expect(types).toEqual(["toolcall_start", "toolcall_end", "toolcall_delta", "done"]);
+		expect(await source.result()).toMatchObject({ stopReason: "toolUse", usage, content: [toolCall] });
+	});
+	it("rejects invalid block addresses before indexing the public content array", async () => {
+		for (const event of [
+			{ type: "text_start", contentIndex: "__proto__" },
+			{ type: "text_start", contentIndex: 4294967000 },
+			{ type: "text_start", contentIndex: -1 },
+			{ type: "text_start", contentIndex: 0.5 },
+			{ type: "text_delta", contentIndex: 0, delta: "late" },
+		]) {
+			const result = await stream(model, context, {
+				apiKey: "test",
+				fetch: async () =>
+					new Response(`data: ${JSON.stringify(event)}\n\n`, { headers: { "content-type": "text/event-stream" } }),
+			}).result();
+			expect(result).toMatchObject({ stopReason: "error", content: [] });
+			expect(result.errorMessage).toContain("Invalid contentIndex");
+		}
+	});
 	it("keeps the selected credential when the payload callback changes options", async () => {
 		let authorization: string | null = null;
 		const options: AxiMessagesOptions = {

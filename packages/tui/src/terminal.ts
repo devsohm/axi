@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { setKittyProtocolActive } from "./keys.ts";
 import { StdinBuffer } from "./stdin-buffer.ts";
+import { replaceControlCharacters } from "./utils.ts";
 import {
 	formatProgramStatus,
 	isProgramStatusReply,
@@ -48,8 +49,11 @@ function isNegotiationPrefix(data: string): boolean {
 export function isAppleTerminalSession(): boolean {
 	return process.platform === "darwin" && process.env.TERM_PROGRAM === "Apple_Terminal";
 }
+function isNativeReturn(data: string): boolean {
+	return data === "\r" || data === "\x1b\r";
+}
 export function normalizeNativeShiftEnterInput(data: string, detect: boolean, shifted: boolean): string {
-	return detect && shifted && data === "\r" ? "\x1b[13;2u" : data;
+	return detect && shifted && isNativeReturn(data) ? "\x1b[13;2u" : data;
 }
 export function normalizeAppleTerminalInput(data: string, appleTerminal: boolean, shifted: boolean): string {
 	return normalizeNativeShiftEnterInput(data, appleTerminal, shifted);
@@ -156,7 +160,7 @@ export class ProcessTerminal implements Terminal {
 
 	#forward(data: string): void {
 		if (!this.inputHandler) return;
-		const detect = data === "\r" && (isAppleTerminalSession() || process.platform === "win32");
+		const detect = isNativeReturn(data) && (isAppleTerminalSession() || process.platform === "win32");
 		this.inputHandler(normalizeNativeShiftEnterInput(data, detect, detect && isNativeModifierPressed("shift")));
 	}
 	#clearNegotiation(): void {
@@ -310,7 +314,7 @@ export class ProcessTerminal implements Terminal {
 		process.stdout.write("\x1b[2J\x1b[H");
 	}
 	setTitle(title: string): void {
-		process.stdout.write(`\x1b]0;${title}\x07`);
+		process.stdout.write(`\x1b]0;${replaceControlCharacters(title)}\x07`);
 	}
 	setProgramStatus(status: ProgramStatus): void {
 		this.#status = status.state === "clear" ? undefined : status;

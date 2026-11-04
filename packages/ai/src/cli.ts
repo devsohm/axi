@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { randomUUID } from "node:crypto";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { createInterface } from "node:readline";
 import type { AuthPrompt } from "./auth/types.ts";
 import { builtinProviders } from "./providers/all.ts";
@@ -78,7 +78,11 @@ async function main(args: string[]): Promise<void> {
 			},
 			{ getDeviceId: randomUUID },
 		);
-		writeFileSync("auth.json", JSON.stringify({ ...credentials(), [id]: credential }, null, 2), "utf8");
+		if (existsSync("auth.json")) chmodSync("auth.json", 0o600);
+		writeFileSync("auth.json", JSON.stringify({ ...credentials(), [id]: credential }, null, 2), {
+			encoding: "utf8",
+			mode: 0o600,
+		});
 		process.stdout.write("\nCredentials saved to auth.json\n");
 	} finally {
 		terminal.close();

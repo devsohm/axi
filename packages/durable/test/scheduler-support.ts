@@ -1,11 +1,12 @@
 import { createModels } from "@axi/ai";
-import { BACKGROUND_CONTEXT as context } from "@axi/chord/context";
+import { BACKGROUND_CONTEXT as context } from "@axi/objects/context";
 import { MemoryStorage } from "../src/index.ts";
 import { resolveSettings } from "../src/harness/agent.ts";
 import { TaskScheduler, type TaskSchedulerOptions } from "../src/harness/scheduler.ts";
 import type { Agent, AnyTask, HarnessSettings, RegistryReader, RegistrySnapshot } from "../src/harness/types.ts";
 import { settleSchedulerOutcome } from "../src/harness/live.ts";
 import { withdrawQueuedInputs } from "../src/harness/inbox.ts";
+import type { Transaction } from "../src/session/transaction.ts";
 import { SessionImpl } from "../src/session/session.ts";
 import { hostTimers } from "../src/timers.ts";
 import type { ConversationId, ReportInfo, Storage } from "../src/types.ts";
@@ -39,6 +40,9 @@ export class Definitions implements RegistryReader {
 	}
 }
 export class ScheduledSession extends SessionImpl {
+	protected override membershipKeys(tx: Transaction): readonly string[] | Promise<readonly string[]> {
+		return this.#scheduler?.membershipKeys(tx) ?? [];
+	}
 	#scheduler: TaskScheduler | undefined;
 	attach(options: Omit<TaskSchedulerOptions, "session" | "storage" | "writeAtClose">): TaskScheduler {
 		const scheduler = new TaskScheduler({

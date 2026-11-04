@@ -1,4 +1,4 @@
-import { BACKGROUND_CONTEXT as context } from "@axi/chord/context";
+import { BACKGROUND_CONTEXT as context } from "@axi/objects/context";
 import { expect, test } from "vitest";
 import { CodemodeJournalDoc, CodemodeRunDoc, CodemodeStoreDoc } from "../src/codemode/codemode.ts";
 import { NestedCallDoc } from "../src/harness/tool.ts";

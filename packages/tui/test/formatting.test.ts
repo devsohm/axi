@@ -1,5 +1,6 @@
-import { afterEach, expect, test } from "vitest";
+import { afterEach, expect, test, vi } from "vitest";
 import { Markdown, type MarkdownTheme } from "../src/components/markdown.ts";
+import { Text } from "../src/components/text.ts";
 import { renderLatex } from "../src/latex.ts";
 import {
 	backgroundAnsi,
@@ -17,6 +18,8 @@ import { Image, setImageTranscoder } from "../src/components/image.ts";
 import { getImageDimensions, resetCapabilitiesCache, setCapabilities } from "../src/terminal-image.ts";
 import {
 	extractSegments,
+	getGraphemeSegmenter,
+	normalizeTerminalOutput,
 	stripTerminalSequences,
 	visibleWidth,
 	sliceByColumn,
@@ -40,9 +43,68 @@ const theme: MarkdownTheme = {
 	strikethrough: plain,
 	underline: plain,
 };
+
+test("a list followed by an HTML block keeps each block at its own indentation", () => {
+	expect(new Markdown("- a\n<b>", 0, 0, theme).render(20).map((line) => line.trimEnd())).toEqual(["- a", "<b>"]);
+});
+
+test("unassigned code points keep their configured terminal-cell width", () => {
+	const text = "\u{18cd6}";
+	expect(visibleWidth(text)).toBe(1);
+	expect(wrapTextWithAnsi(text + "X", 2)).toEqual([text + "X"]);
+});
+
+test("setting unchanged text retains the previous wrapped output", () => {
+	const text = new Text("one two", 0, 0);
+	const rendered = text.render(4);
+	text.setText("one two");
+	expect(text.render(4)).toBe(rendered);
+	text.setText("three");
+	expect(text.render(4)).not.toEqual(rendered);
+});
+
+test("streaming and resizing reuse code highlighting until the theme is invalidated", () => {
+	const calls: string[] = [];
+	const markdown = new Markdown("```js\nsum()\n```", 0, 0, {
+		...theme,
+		highlightCode: (code) => {
+			calls.push(code);
+			return [code];
+		},
+	});
+	markdown.render(30);
+	markdown.setText("```js\nsum()\n```\n\nready");
+	expect(markdown.render(12).some((line) => line.trim() === "ready")).toBe(true);
+	expect(calls).toEqual(["sum()"]);
+	markdown.invalidate();
+	markdown.render(12);
+	expect(calls).toEqual(["sum()", "sum()"]);
+});
+
+test("reused Markdown follows new block spacing and changed reference links", () => {
+	setCapabilities({ images: null, trueColor: false, hyperlinks: false });
+	const markdown = new Markdown("# Before", 0, 0, theme);
+	markdown.render(30);
+	markdown.setText("# Before\nafter");
+	expect(markdown.render(30).map((line) => line.trimEnd())).toEqual(["Before", "", "after"]);
+	markdown.setText("[item][target]\n\n[target]: https://one.example");
+	markdown.render(80);
+	markdown.setText("[item][target]\n\n[target]: https://two.example");
+	expect(markdown.render(80).join("\n")).toContain("https://two.example");
+});
+
 afterEach(() => {
 	resetCapabilitiesCache();
 	setImageTranscoder(undefined);
+});
+
+test("wrapping retains an over-wide plain indent while discarding styled whitespace", () => {
+	for (const width of [1, 4, 80]) {
+		const spaces = " ".repeat(width + 1);
+		expect(wrapTextWithAnsi(spaces + "m", width)).toEqual(["", "m"]);
+		expect(new Text(spaces + "m", 0, 0).render(width)).toEqual([" ".repeat(width), "m" + " ".repeat(width - 1)]);
+		expect(wrapTextWithAnsi("\x1b[31m" + spaces + "\x1b[0mm", width).map(stripTerminalSequences)).toEqual(["m"]);
+	}
 });
 
 test("Markdown applies emphasis beside CJK punctuation without changing Latin delimiter rules", () => {
@@ -62,6 +124,22 @@ test("Markdown applies emphasis beside CJK punctuation without changing Latin de
 			new Markdown(input!, 0, 0, emphasisTheme).render(80).map((line) => stripTerminalSequences(line).trimEnd()),
 		).toEqual([expected]);
 	}
+});
+
+test("bare links stop at CJK punctuation while explicit link destinations retain it", () => {
+	setCapabilities({ images: null, trueColor: true, hyperlinks: true });
+	const bare = new Markdown("https://example.com。后续", 0, 0, theme).render(70).join("");
+	expect(bare).toContain("\x1b]8;;https://example.com\x1b\\");
+	expect(bare).toContain("\x1b]8;;\x1b\\。后续");
+	const explicit = new Markdown("[文档](https://example.com/中文，路径)", 0, 0, theme).render(70).join("");
+	expect(explicit).toContain("\x1b]8;;https://example.com/中文，路径\x1b\\");
+});
+
+test("display math keeps its source delimiters when the rendered formula does not fit", () => {
+	const text = "\\[\n\\frac{a}{b}+\\frac{c}{d}+\\frac{e}{f}\n\\]";
+	const lines = new Markdown(text, 0, 0, theme).render(5).map((line) => stripTerminalSequences(line).trimEnd());
+	expect(lines[0]).toBe("\\[");
+	expect(lines).toContain("\\]");
 });
 
 test("Markdown renders structured text, invokes highlighting and invalidates streamed content", () => {
@@ -195,4 +273,26 @@ test("truncation measures graphemes independently across styling boundaries", ()
 	expect(truncateToWidth("🇦\x1b[31m🇦", 2, "")).toBe("🇦\x1b[0m");
 	expect(truncateToWidth("x🇦\x1b[31m🇦", 3, "")).toBe("x🇦\x1b[0m");
 	expect(truncateToWidth("🇦\x1b[31m🇦", 4, "")).toBe("🇦\x1b[31m🇦");
+});
+
+test("ASCII formatting does not perform Unicode segmentation", () => {
+	const segmentation = vi.spyOn(getGraphemeSegmenter(), "segment");
+	try {
+		const text = "ordinary words ".repeat(20);
+		const lines = wrapTextWithAnsi(`\x1b[31m${text}\x1b[39m`, 40);
+		expect(lines.every((line) => visibleWidth(line) <= 40)).toBe(true);
+		expect(stripTerminalSequences("\x1b[31mplain text\x1b[39m")).toBe("plain text");
+		expect(normalizeTerminalOutput("\x1b[31mplain text\x1b[39m")).toBe("\x1b[31mplain text\x1b[39m");
+		expect(segmentation).not.toHaveBeenCalled();
+	} finally {
+		segmentation.mockRestore();
+	}
+});
+
+test("fast formatting preserves combining clusters and tabs inside control sequences", () => {
+	expect(sliceByColumn("a\u0301z", 0, 1, true)).toBe("a\u0301");
+	expect(wrapTextWithAnsi("a\u0301界", 2)).toEqual(["a\u0301", "界"]);
+	expect(normalizeTerminalOutput("\x1b]8;;https://example.com/\t\x07x\t")).toBe(
+		"\x1b]8;;https://example.com/\t\x07x   ",
+	);
 });

@@ -5,6 +5,18 @@ import { join, relative } from "node:path";
 const root = fileURLToPath(new URL("..", import.meta.url));
 const read = (path) => JSON.parse(readFileSync(join(root, path), "utf8"));
 const map = read("docs/test-coverage.json");
+const workspaces = new Map(
+	read("package.json").workspaces.map((directory) => [directory, read(join(directory, "package.json")).name]),
+);
+if (map.packages.length !== workspaces.size || new Set(map.packages.map((pkg) => pkg.directory)).size !== workspaces.size)
+	throw new Error("The behavior map must list every workspace exactly once.");
+for (const pkg of map.packages) {
+	if (workspaces.get(pkg.directory) !== pkg.name || pkg.areas.length === 0)
+		throw new Error(`Invalid behavior-map package: ${pkg.directory}`);
+	for (const area of pkg.areas)
+		if (area.tests.length === 0 || area.tests.some((file) => !file.startsWith(`${pkg.directory}/test/`)))
+			throw new Error(`Behavior area needs owned package tests: ${pkg.name}: ${area.behavior}`);
+}
 const coverage = read("coverage/coverage-summary.json");
 const results = read("coverage/test-results.json");
 const files = new Map(results.testResults.map((file) => [relative(root, file.name).replaceAll("\\", "/"), file]));
@@ -19,6 +31,11 @@ const lines = [
 	"",
 ];
 const measured = Object.entries(coverage).filter(([file]) => file !== "total");
+for (const pkg of map.packages)
+	if (!measured.some(([file, metrics]) =>
+		metrics.lines.covered > 0 && relative(root, file).replaceAll("\\", "/").startsWith(`${pkg.directory}/src/`),
+	))
+		throw new Error(`No measured source execution for ${pkg.name}`);
 lines.push(
 	"## Remaining execution coverage",
 	"",

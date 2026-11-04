@@ -1,10 +1,12 @@
-import type { ConversationView } from "./view.ts";
-import type { Context, JsonValue } from "@axi/chord";
+import type { ConversationView, ConversationWindow } from "./view.ts";
+import type { Context, JsonValue } from "@axi/objects";
 import type {
+	Api,
 	AssistantMessage,
 	CacheRetention,
 	ClientIdentity,
 	Message,
+	Model,
 	Models,
 	ModelThinkingLevel,
 	Static,
@@ -19,19 +21,23 @@ import type {
 import type { TelemetryContext } from "@axi/telemetry";
 import type { ExecutionEnv, ShellOutputSkip, ShellOutputWindow } from "../env/index.ts";
 import type {
+	CommitOptions,
 	ConversationId,
 	ConversationOwnership,
 	ConversationRecord,
 	Cursor,
 	DocumentObserver,
+	Observation,
+	Observer,
 	DocumentReader,
+	Entry,
 	EntryDraft,
 	EntryId,
 	EntryQuery,
 	EntryRecord,
 	JsonObject,
 	Page,
-	ReportInfo,
+	Report,
 	Session,
 	SetTimer,
 	SubmissionId,
@@ -41,10 +47,11 @@ import type {
 	TaskOptions,
 	TaskRecord,
 	TaskState,
+	TypedEntry,
 	Tx,
 	WatchHandle,
 } from "../types.ts";
-import type { TaskGraphWatch } from "./task-graph.ts";
+import type { TaskGraph, TaskGraphWatch } from "./task-graph.ts";
 import type { UsageState } from "./usage.ts";
 
 export type ModelRef = { readonly provider: string; readonly modelId: string };
@@ -55,9 +62,11 @@ export type SubmissionDraft = { readonly requestId?: string } & (
 			readonly type: "input";
 			readonly content: UserInput;
 			readonly whenBusy?: "steer" | "followUp" | "reject";
+			readonly whenIdle?: "reject";
 			readonly entry?: InputEntry;
 	  }
-	| { readonly type: "write"; readonly entry: EntryDraft; readonly content?: never; readonly whenBusy?: never }
+	| { readonly type: "continue"; readonly content?: never; readonly entry?: never; readonly whenBusy?: never; readonly whenIdle?: never }
+	| { readonly type: "write"; readonly entry: EntryDraft; readonly content?: never; readonly whenBusy?: never; readonly whenIdle?: never }
 );
 export type InputSubmissionDraft = Extract<SubmissionDraft, { readonly type: "input" }>;
 export type SettledSubmissionRecord = SubmissionRecord & { readonly status: "done" | "unanswered" };
@@ -85,7 +94,8 @@ export type ConversationAbortOptions = { readonly background?: boolean };
 export type HooksOf<K> = K extends Task<infer _I, infer _S, infer _R, infer H> ? H : never;
 export interface ConversationHandle {
 	readonly id: ConversationId;
-	submit(submission: InputSubmissionDraft, context: Context): Promise<Submission>;
+	submit(submission: SubmissionDraft, context: Context): Promise<Submission>;
+	submit(tx: Tx, submission: SubmissionDraft): Promise<SubmissionId>;
 	abort(context: Context, options?: ConversationAbortOptions): Promise<void>;
 	waitForIdle(context: Context): Promise<void>;
 }
@@ -133,7 +143,7 @@ export interface ToolExecutionApi<D extends JsonValue = JsonValue> extends Docum
 	retainedOutput(): { readonly text: string; readonly truncated: boolean };
 	diagnostic(diagnostic: ToolDiagnostic): void;
 	details(value: D, context: Context): Promise<void>;
-	commit<T>(change: (tx: Tx) => T | Promise<T>, context: Context): Promise<T>;
+	commit<T>(change: (tx: Tx) => T | Promise<T>, context: Context, options?: CommitOptions): Promise<T>;
 	memo<T extends JsonValue>(name: string, context: Context): Promise<T | undefined>;
 	memo<T extends JsonValue>(name: string, candidate: T, context: Context): Promise<T>;
 	createTask<I, S extends { phase: string }, R, H extends object>(
@@ -210,6 +220,7 @@ export type AgentState = {
 	modelTools?: string[] | { remove?: string[]; add?: string[] };
 	instructions?: string;
 	cwd?: string;
+	maxTurns?: number;
 };
 export type AgentChange = {
 	readonly model?: ModelRef | null;
@@ -225,6 +236,7 @@ export type AgentChange = {
 		| null;
 	readonly instructions?: string | null;
 	readonly cwd?: string | null;
+	readonly maxTurns?: number | null;
 };
 export type Agent<T extends ToolRegistration = ToolRegistration> = {
 	readonly model?: ModelRef;
@@ -236,6 +248,7 @@ export type Agent<T extends ToolRegistration = ToolRegistration> = {
 	readonly sections: readonly PromptSection<T>[];
 	readonly instructions?: string;
 	readonly cwd?: string;
+	readonly maxTurns?: number;
 };
 export type ConversationStreamOptions = {
 	transport?: Transport;
@@ -262,7 +275,7 @@ export type CompactionPolicy = {
 export type CompactionSettings = Partial<CompactionPolicy> & {
 	readonly modelOverrides?: Readonly<Record<string, Partial<CompactionPolicy>>>;
 };
-export type ProgressPolicy = { partialIntervalMs: number; outputIntervalMs: number };
+export type ProgressPolicy = { partialIntervalMs: number; outputIntervalMs: number; persistWithinMs: number };
 export type AfterFailedRun = "keep" | "continue" | "withdraw";
 export type HarnessSettings = {
 	readonly extensions?: readonly Extension[];
@@ -306,13 +319,13 @@ export type TaskInspection = {
 	readonly record: TaskRecord<JsonValue, JsonValue, JsonValue>;
 	readonly state:
 		| { readonly kind: "running" }
-		| { readonly kind: "ready"; readonly migrates: boolean }
+		| { readonly kind: "pending"; readonly migrates: boolean }
 		| { readonly kind: "waiting"; readonly on: readonly TaskId[] }
 		| { readonly kind: "sleeping"; readonly until: number }
 		| { readonly kind: "completing" }
 		| {
 				readonly kind: "blocked";
-				readonly reason: "missing_task" | "task_too_old" | "migration_failed" | "restart_limit";
+				readonly reason: "missing_task" | "task_too_old" | "migration_failed";
 				readonly error?: unknown;
 		  };
 };
@@ -323,12 +336,22 @@ export type HarnessInspection = {
 };
 
 export interface HookApi extends DocumentReader {
+	entry(id: EntryId, context: Context): Promise<EntryRecord | undefined>;
+	entry<D extends JsonValue>(token: Entry<D>, id: EntryId, context: Context): Promise<TypedEntry<D> | undefined>;
+	entries(
+		query: Omit<EntryQuery, "conversationId">,
+		limit: number,
+		cursor: Cursor | undefined,
+		context: Context,
+	): Promise<Page<EntryRecord, Cursor>>;
 	readonly taskId: TaskId;
 	readonly conversationId: ConversationId;
 	readonly models: Models;
 	memo<T extends JsonValue>(name: string, context: Context): Promise<T | undefined>;
 	memo<T extends JsonValue>(name: string, candidate: T, context: Context): Promise<T>;
 }
+export type RunSummary = { readonly reason: "answer" | "terminate"; readonly first: EntryId; readonly answer: EntryId; readonly last: EntryId };
+export type RunEndTask = { readonly task: AnyTask; readonly input: JsonValue };
 export type HookResult<T> = T | undefined | Promise<T | undefined>;
 export interface GenerationHooks {
 	beforeRequest(
@@ -336,9 +359,15 @@ export interface GenerationHooks {
 		api: HookApi,
 		context: Context,
 	): HookResult<{ readonly messages: readonly Message[] }>;
+	beforeProviderRequest(
+		request: { readonly model: Model<Api>; readonly payload: unknown },
+		api: HookApi,
+		context: Context,
+	): HookResult<{ readonly payload: unknown }>;
 	afterResponse(message: AssistantMessage, api: HookApi, context: Context): void | Promise<void>;
 	onYield(answer: AssistantMessage, api: HookApi, context: Context): HookResult<{ readonly continue: UserInput }>;
 	afterTools(assistant: EntryId, results: readonly EntryId[], api: HookApi, context: Context): void | Promise<void>;
+	afterRun(run: RunSummary, api: HookApi, context: Context): HookResult<{ readonly tasks: readonly RunEndTask[] }>;
 }
 export type ToolHookCall = ToolCall & { readonly parent?: { readonly taskId: TaskId; readonly callId: string } };
 export interface ToolHooks {
@@ -393,7 +422,7 @@ export type HarnessOptions<T extends ToolRegistration = ToolRegistration> = {
 	readonly now?: () => number;
 	readonly setTimer?: SetTimer;
 	readonly onWake?: (wake: Wake) => void;
-	readonly onReport?: (error: unknown, info: ReportInfo) => void;
+	readonly onReport?: (report: Report) => void;
 };
 export type ConversationWatch = WatchHandle<ConversationView>;
 export interface Conversation {
@@ -401,9 +430,10 @@ export interface Conversation {
 	agent(context: Context): Promise<Agent>;
 	configure(change: AgentChange, context: Context): Promise<void>;
 	submit(submission: SubmissionDraft, context: Context): Promise<Submission>;
+	submit(tx: Tx, submission: SubmissionDraft): Promise<SubmissionId>;
 	reset(handoff: string | undefined, context: Context): Promise<void>;
 	compact(instructions: string | undefined, context: Context): Promise<TaskId<CompactionResult>>;
-	commit<T>(change: (tx: Tx) => T | Promise<T>, context: Context): Promise<T>;
+	commit<T>(change: (tx: Tx) => T | Promise<T>, context: Context, options?: CommitOptions): Promise<T>;
 	context(context: Context, options?: { readonly at?: EntryId }): Promise<ContextView>;
 	entries(
 		query: Omit<EntryQuery, "conversationId">,
@@ -414,9 +444,11 @@ export interface Conversation {
 	fork(at: EntryId, options: ConversationCreateOptions, context: Context): Promise<Conversation>;
 	abort(context: Context, options?: ConversationAbortOptions): Promise<void>;
 	waitForIdle(context: Context): Promise<void>;
-	watch(context: Context): Promise<ConversationWatch>;
+	watch(context: Context, window?: ConversationWindow): Promise<ConversationWatch>;
 }
 export interface Harness extends Session {
+	observeConversation(id: ConversationId, observer: Observer<ConversationView>, context: Context, window?: ConversationWindow): Promise<Observation<ConversationView>>;
+	observeTaskGraph(observer: Observer<TaskGraph>, context: Context): Promise<Observation<TaskGraph>>;
 	resume(): void;
 	wake(): Wake;
 	root(
@@ -434,7 +466,6 @@ export interface Harness extends Session {
 		conversationId?: ConversationId,
 	): Promise<"aborted" | "already_placed" | "settled" | "not_found">;
 	abortTask(id: TaskId, context: Context): Promise<"marked" | "terminal">;
-	retryTask(id: TaskId, context: Context): Promise<void>;
 	waitForTask<R>(id: TaskId<R>, context: Context): Promise<SettledTask<R>>;
 	waitForIdle(context: Context): Promise<void>;
 	usage(context: Context): Promise<UsageState>;

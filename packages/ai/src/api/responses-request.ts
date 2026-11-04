@@ -74,8 +74,6 @@ export function createResponsesRequest<A extends Api>({
 				throw new Error(output.errorMessage || "An unknown error occurred");
 			events.push({ type: "done", reason: output.stopReason, message: output });
 		} catch (error) {
-			for (const block of output.content)
-				for (const field of ["index", "partialJson", "customInput"]) Reflect.deleteProperty(block, field);
 			output.stopReason = options.signal?.aborted ? "aborted" : "error";
 			const message = formatProviderError(normalizeProviderError(error), errorPrefix);
 			output.errorMessage = formatError ? formatError(message) : message;

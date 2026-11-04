@@ -2,8 +2,8 @@ import { createHash } from "node:crypto";
 import { type FSWatcher, watch } from "node:fs";
 import { lstat, readdir, readFile, stat, statfs } from "node:fs/promises";
 import { dirname, join, relative, sep } from "node:path";
-import type { Context } from "@axi/chord";
-import { FileError, type FileWatcher, type WatchChange, type WatchTarget } from "./index.ts";
+import type { Context } from "@axi/objects";
+import { FileError, type FileWatcher, type FileChange, type WatchTarget } from "./index.ts";
 import { fileError } from "./node-files.ts";
 
 export interface NodeWatchOptions {
@@ -65,7 +65,7 @@ async function preferredMode(targets: readonly Target[]): Promise<"polling" | "n
 
 export class NodeFileWatcher implements FileWatcher {
 	readonly #targets: readonly Target[];
-	readonly #callback: (change: WatchChange) => void;
+	readonly #callback: (change: FileChange) => void;
 	readonly #options: NodeWatchOptions;
 	readonly #handles = new Map<string, { identity: string; handle: FSWatcher }>();
 	readonly #eventPaths = new Set<string>();
@@ -78,7 +78,7 @@ export class NodeFileWatcher implements FileWatcher {
 	#settleTimer: ReturnType<typeof setTimeout> | undefined;
 	private constructor(
 		targets: readonly Target[],
-		callback: (change: WatchChange) => void,
+		callback: (change: FileChange) => void,
 		options: NodeWatchOptions,
 		mode: "native" | "polling",
 	) {
@@ -96,7 +96,7 @@ export class NodeFileWatcher implements FileWatcher {
 	static async open(
 		targets: readonly WatchTarget[],
 		resolve: (path: string) => string,
-		callback: (change: WatchChange) => void,
+		callback: (change: FileChange) => void,
 		options: NodeWatchOptions,
 	): Promise<NodeFileWatcher> {
 		const resolved = targets.map((target) => ({
@@ -114,7 +114,7 @@ export class NodeFileWatcher implements FileWatcher {
 		watcher.#poll();
 		return watcher;
 	}
-	#emit(change: WatchChange): void {
+	#emit(change: FileChange): void {
 		if (this.#closed) return;
 		try {
 			this.#callback(change);
@@ -127,7 +127,8 @@ export class NodeFileWatcher implements FileWatcher {
 		for (const { handle } of this.#handles.values()) handle.close();
 		this.#handles.clear();
 	}
-	async close(_context: Context): Promise<void> {
+	async stop(_context: Context): Promise<void> {
+		if (this.#closed) return;
 		this.#stop();
 		await this.#running;
 	}
@@ -148,6 +149,7 @@ export class NodeFileWatcher implements FileWatcher {
 				}
 			} catch (error) {
 				this.#emit({
+					kind: "failed",
 					error:
 						error instanceof FileError
 							? error
@@ -319,7 +321,7 @@ export class NodeFileWatcher implements FileWatcher {
 		this.#mode = "polling";
 		for (const { handle } of this.#handles.values()) handle.close();
 		this.#handles.clear();
-		this.#emit({ overflow: true });
+		this.#emit({ kind: "overflow" });
 		return true;
 	}
 	async #synchronize(publish: boolean): Promise<void> {
@@ -340,6 +342,6 @@ export class NodeFileWatcher implements FileWatcher {
 			if (!this.#install(next)) break;
 			publish = true;
 		}
-		if (deliver && changed.size) this.#emit({ paths: [...changed].sort() });
+		if (deliver && changed.size) this.#emit({ kind: "paths", paths: [...changed].sort() });
 	}
 }

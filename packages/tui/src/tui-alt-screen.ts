@@ -478,7 +478,11 @@ export class TuiAltScreen extends TuiBase implements ViewportTUI {
 			if (keys.matches(data, "tui.altScreen.searchPrevious")) return consume(() => this.navigateSearch(-1));
 			if (keys.matches(data, "tui.altScreen.searchClose")) return consume(() => this.closeSearch());
 		}
-		if (this.isOverlayFocused() && this.#search?.overlay?.isFocused() !== true) return;
+		if (
+			this.getFocusedComponent()?.capturesViewportInput ||
+			(this.isOverlayFocused() && this.#search?.overlay?.isFocused() !== true)
+		)
+			return;
 		const page = Math.max(1, this.primary().viewportHeight - 4),
 			half = Math.max(1, Math.floor(this.primary().viewportHeight / 2));
 		const actions = {

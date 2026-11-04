@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { BACKGROUND_CONTEXT, type Context } from "@axi/chord/context";
+import { BACKGROUND_CONTEXT, type Context } from "@axi/objects/context";
 import { err, FileError, type FileInfo, type Result } from "@axi/durable/env";
 import { Connection, RemoteError, type RemoteInfo } from "../src/connection.ts";
 import { toFileError } from "../src/errors.ts";

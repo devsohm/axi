@@ -1,11 +1,11 @@
-import { BACKGROUND_CONTEXT as context, withAbortSignal } from "@axi/chord/context";
+import { BACKGROUND_CONTEXT as context, withAbortSignal } from "@axi/objects/context";
 import {
 	type ExecutionEnv,
 	type FileInfo,
 	getOrThrow,
 	type ListFilesOptions,
 	type Result,
-	type WatchChange,
+	type FileChange,
 	type WatchTarget,
 } from "../env/index.ts";
 import type { EnvConformanceCase, EnvConformanceOptions } from "./types.ts";
@@ -53,12 +53,12 @@ async function watching(
 	env: ExecutionEnv,
 	targets: readonly WatchTarget[],
 	run: (helpers: {
-		changes: WatchChange[];
+		changes: FileChange[];
 		absolute(path: string): Promise<string>;
 		change(path: string, write: () => Promise<void>): Promise<void>;
 	}) => Promise<void>,
 ): Promise<void> {
-	const changes: WatchChange[] = [];
+	const changes: FileChange[] = [];
 	const watch = getOrThrow(await env.watch(targets, (value) => changes.push(value), context));
 	const absolute = async (path: string) => getOrThrow(await env.absolutePath(path, context));
 	try {
@@ -75,7 +75,7 @@ async function watching(
 						.slice(start)
 						.some(
 							(value) =>
-								"overflow" in value ||
+								value.kind === "overflow" ||
 								("paths" in value &&
 									value.paths.some(
 										(parent) => full === parent || full.startsWith(`${parent}/`) || full.startsWith(`${parent}\\`),
@@ -89,7 +89,7 @@ async function watching(
 			},
 		});
 	} finally {
-		await watch.close(context);
+		await watch.stop(context);
 	}
 }
 
@@ -331,11 +331,11 @@ export function createEnvConformance(options: EnvConformanceOptions): readonly E
 		});
 	});
 	watchCase("watch stops reporting once closed", async (env) => {
-		const changes: WatchChange[] = [];
+		const changes: FileChange[] = [];
 		const watch = getOrThrow(await env.watch([{ path: "file" }], (event) => changes.push(event), context));
 		a.ok(watch.mode === "native" || watch.mode === "polling");
-		await watch.close(context);
-		await watch.close(context);
+		await watch.stop(context);
+		await watch.stop(context);
 		getOrThrow(await env.writeFile("file", "x", context));
 		await pause(300);
 		a.deepEqual(changes, []);

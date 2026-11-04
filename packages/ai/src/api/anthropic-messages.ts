@@ -18,12 +18,13 @@ import { appendAssistantMessageDiagnostic } from "../utils/diagnostics.ts";
 import { AssistantMessageEventStream } from "../utils/event-stream.ts";
 import { headersToRecord } from "../utils/headers.ts";
 import { applyOpenRouterReportedCost, isOpenRouterModel } from "../utils/openrouter-cost.ts";
-import { parseStreamingJson, parseToolCallArguments } from "../utils/json-parse.ts";
+import { ToolCallArgumentsStream } from "../utils/streaming-json.ts";
 import { retryProviderRequest } from "../utils/provider-retry.ts";
 import { getCurrentTools, resolveTranscript } from "../utils/transcript.ts";
 import { anthropicClient, anthropicCompat, anthropicFederation, assertAnthropicAuth } from "./anthropic-client.ts";
 import { anthropicRequest } from "./anthropic-request.ts";
 import { anthropicEvents } from "./anthropic-sse.ts";
+import { isStrictToolLimitErrorMessage } from "./constrained-sampling.ts";
 import type { AnthropicEffort, AnthropicOptions } from "./options.ts";
 import { adjustMaxTokensForThinking, buildBaseOptions, clampMaxTokensToContext } from "./simple-options.ts";
 
@@ -37,7 +38,7 @@ type WireUsage = {
 	cache_creation?: { ephemeral_1h_input_tokens?: number | null } | null;
 	output_tokens_details?: { thinking_tokens?: number | null } | null;
 };
-type StreamingBlock = (TextContent | ThinkingContent | (ToolCall & { partialJson?: string })) & { index?: number };
+type StreamingBlock = TextContent | ThinkingContent | ToolCall;
 function updateUsage(usage: Usage, raw: WireUsage, initial: boolean): void {
 	for (const [field, value] of [
 		["input", raw.input_tokens],
@@ -56,11 +57,7 @@ function mayDowngrade(error: unknown): boolean {
 		error instanceof Anthropic.APIError &&
 		error.status === 400 &&
 		error.type === "invalid_request_error" &&
-		[
-			"The compiled grammar is too large",
-			"Too many strict tools (",
-			"Schemas contains too many parameters with union types (",
-		].some((message) => error.message.includes(message))
+		isStrictToolLimitErrorMessage(error.message)
 	);
 }
 export const stream: StreamFunction<"anthropic-messages", AnthropicOptions> = (model, context, options = {}) => {
@@ -123,7 +120,7 @@ export const stream: StreamFunction<"anthropic-messages", AnthropicOptions> = (m
 			}
 			await options.onResponse?.({ status: response.status, headers: headersToRecord(response.headers) }, model);
 			events.push({ type: "start", partial: output });
-			const blocks = output.content as StreamingBlock[];
+			const open = new Map<number, { block: StreamingBlock; contentIndex: number; arguments?: ToolCallArgumentsStream }>();
 			let pricingModel = model;
 			let transformations: BetaInputTransformation[] | undefined;
 			for await (const event of anthropicEvents(response, options.signal)) {
@@ -181,14 +178,13 @@ export const stream: StreamFunction<"anthropic-messages", AnthropicOptions> = (m
 											incoming.name)
 										: incoming.name,
 									arguments: (incoming.input as ToolCall["arguments"]) ?? {},
-									partialJson: "",
 								};
 								break;
 							default:
 								continue;
 						}
 						const position = output.content.length;
-						block.index = event.index;
+						open.set(event.index, { block, contentIndex: position, arguments: block.type === "toolCall" ? new ToolCallArgumentsStream() : undefined });
 						output.content.push(block);
 						const type =
 							block.type === "toolCall"
@@ -200,9 +196,9 @@ export const stream: StreamFunction<"anthropic-messages", AnthropicOptions> = (m
 						break;
 					}
 					case "content_block_delta": {
-						const contentIndex = blocks.findIndex((block) => block.index === event.index);
-						const block = blocks[contentIndex],
-							delta = event.delta;
+						const slot = open.get(event.index);
+						const contentIndex = slot?.contentIndex ?? -1;
+						const block = slot?.block, delta = event.delta;
 						if (!block) break;
 						if (delta.type === "text_delta" && block.type === "text") {
 							block.text += delta.text;
@@ -213,24 +209,23 @@ export const stream: StreamFunction<"anthropic-messages", AnthropicOptions> = (m
 						} else if (delta.type === "signature_delta" && block.type === "thinking")
 							block.thinkingSignature = (block.thinkingSignature || "") + delta.signature;
 						else if (delta.type === "input_json_delta" && block.type === "toolCall") {
-							block.partialJson = (block.partialJson ?? "") + delta.partial_json;
-							block.arguments = parseStreamingJson(block.partialJson);
+							block.arguments = slot!.arguments!.append(delta.partial_json);
 							events.push({ type: "toolcall_delta", contentIndex, delta: delta.partial_json, partial: output });
 						}
 						break;
 					}
 					case "content_block_stop": {
-						const contentIndex = blocks.findIndex((block) => block.index === event.index);
-						const block = blocks[contentIndex];
+						const slot = open.get(event.index);
+						open.delete(event.index);
+						const contentIndex = slot?.contentIndex ?? -1;
+						const block = slot?.block;
 						if (!block) break;
-						delete block.index;
 						if (block.type === "text")
 							events.push({ type: "text_end", contentIndex, content: block.text, partial: output });
 						else if (block.type === "thinking")
 							events.push({ type: "thinking_end", contentIndex, content: block.thinking, partial: output });
 						else if (block.type === "toolCall") {
-							Object.assign(block, parseToolCallArguments(block.partialJson));
-							delete block.partialJson;
+							Object.assign(block, slot!.arguments!.finish());
 							events.push({ type: "toolcall_end", contentIndex, toolCall: block, partial: output });
 						}
 						break;
@@ -290,10 +285,6 @@ export const stream: StreamFunction<"anthropic-messages", AnthropicOptions> = (m
 				});
 			events.push({ type: "done", reason: output.stopReason, message: output });
 		} catch (error) {
-			for (const block of output.content) {
-				Reflect.deleteProperty(block, "index");
-				Reflect.deleteProperty(block, "partialJson");
-			}
 			output.stopReason = options.signal?.aborted ? "aborted" : "error";
 			output.errorMessage = error instanceof Error ? error.message : JSON.stringify(error);
 			events.push({ type: "error", reason: output.stopReason, error: output });

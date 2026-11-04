@@ -1,17 +1,48 @@
+import { commitWrites } from "../src/testing/commit-writes.ts";
 import { IDBObjectStore, IDBKeyRange, IDBFactory } from "fake-indexeddb";
 import { describe, expect, it, vi } from "vitest";
-import { BACKGROUND_CONTEXT as context } from "@axi/chord/context";
+import { BACKGROUND_CONTEXT as context } from "@axi/objects/context";
 import { IndexedDbStorage } from "../src/storage/indexeddb.ts";
 import { registerStorageConformance } from "../src/testing/index.ts";
-import type { Storage, EntryId, DocumentId } from "../src/types.ts";
+import type { Storage, EntryId, DocumentId, ConversationId, ScanOrder } from "../src/types.ts";
 import { ROOT_CONVERSATION_ID } from "../src/types.ts";
 
 Object.defineProperty(globalThis, "IDBKeyRange", { configurable: true, value: IDBKeyRange });
 
+it("captures scan order once before the asynchronous database read", async () => {
+	const storage = await IndexedDbStorage.open("scan-order", { indexedDB: new IDBFactory() });
+	try {
+		const first = await storage.mintId<ConversationId>();
+		const second = await storage.mintId<ConversationId>();
+		await commitWrites(
+			storage,
+			[first, second].map((id) => ({ type: "conversation", value: { id } })),
+			context,
+		);
+		for (const [method, expected] of [
+			["scanConversations", [second]],
+			["scanTasks", []],
+			["scanSubmissions", []],
+		] as const) {
+			let reads = 0;
+			const query = {
+				get order(): ScanOrder {
+					return ++reads === 1 ? "descending" : "ascending";
+				},
+			};
+			const page = await storage[method](query, 1, undefined, context);
+			expect(page.items.map(({ id }) => id)).toEqual(expected);
+			expect(reads).toBe(1);
+		}
+	} finally {
+		await storage.close(context);
+	}
+});
+
 it("persists the database stores, metadata and indexed record envelope", async () => {
 	const indexedDB = new IDBFactory();
 	const storage = await IndexedDbStorage.open("schema", { indexedDB });
-	await storage.commit([{ type: "conversation", value: { id: ROOT_CONVERSATION_ID } }], () => {}, context);
+	await commitWrites(storage, [{ type: "conversation", value: { id: ROOT_CONVERSATION_ID } }], context);
 	await storage.close(context);
 	const database = await new Promise<IDBDatabase>((resolve, reject) => {
 		const request = indexedDB.open("schema");
@@ -105,7 +136,7 @@ it("allocates unique IDs across clients, preserves counters after reopening and 
 		const ids = await Promise.all(Array.from({ length: 40 }, (_, index) => (index % 2 ? one : two).mintId<EntryId>()));
 		expect(new Set(ids).size).toBe(40);
 		expect([...ids].sort((a, b) => a - b)).toEqual(Array.from({ length: 40 }, (_, index) => index + 2));
-		await one.commit([{ type: "conversation", value: { id: ROOT_CONVERSATION_ID } }], () => {}, context);
+		await commitWrites(one, [{ type: "conversation", value: { id: ROOT_CONVERSATION_ID } }], context);
 		expect(await two.conversation(ROOT_CONVERSATION_ID, context)).toEqual({ id: ROOT_CONVERSATION_ID });
 	} finally {
 		await one.close(context);
@@ -125,19 +156,19 @@ it("rolls back early writes and the sequence when a later document command fails
 		const id = await storage.mintId<EntryId>(),
 			absent = await storage.mintId<DocumentId>();
 		await expect(
-			storage.commit(
+			commitWrites(
+				storage,
 				[
 					{ type: "entry", value: { id, conversationId: ROOT_CONVERSATION_ID, kind: "text" } },
 					{ type: "document.retire", id: absent },
 				],
-				() => {},
 				context,
 			),
 		).rejects.toThrow();
 		expect(await storage.entry(id, context)).toBeUndefined();
-		expect(
-			await storage.commit([{ type: "conversation", value: { id: ROOT_CONVERSATION_ID } }], () => {}, context),
-		).toBe(1);
+		expect(await commitWrites(storage, [{ type: "conversation", value: { id: ROOT_CONVERSATION_ID } }], context)).toBe(
+			1,
+		);
 	} finally {
 		await storage.close(context);
 	}
@@ -147,26 +178,26 @@ it("returns a descending page without reading every fork ancestor", async () => 
 	const storage = await IndexedDbStorage.open("paged-ancestry", { indexedDB: new IDBFactory() });
 	try {
 		let conversation = ROOT_CONVERSATION_ID;
-		await storage.commit([{ type: "conversation", value: { id: conversation } }], () => {}, context);
+		await commitWrites(storage, [{ type: "conversation", value: { id: conversation } }], context);
 		for (let index = 0; index < 20; index++) {
 			const at = await storage.mintId<EntryId>();
-			await storage.commit(
+			await commitWrites(
+				storage,
 				[{ type: "entry", value: { id: at, conversationId: conversation, kind: "point" } }],
-				() => {},
 				context,
 			);
 			const next = await storage.mintId<import("../src/types.ts").ConversationId>();
-			await storage.commit(
+			await commitWrites(
+				storage,
 				[{ type: "conversation", value: { id: next, parent: { conversationId: conversation, at } } }],
-				() => {},
 				context,
 			);
 			conversation = next;
 		}
 		const ids = await Promise.all(Array.from({ length: 3 }, () => storage.mintId<EntryId>()));
-		await storage.commit(
+		await commitWrites(
+			storage,
 			ids.map((id) => ({ type: "entry", value: { id, conversationId: conversation, kind: "recent" } })),
-			() => {},
 			context,
 		);
 		const reads = vi.spyOn(IDBObjectStore.prototype, "get");

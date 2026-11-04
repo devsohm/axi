@@ -49,3 +49,5 @@ export { uuidv7 } from "./utils/uuid.ts";
 
 export * from "./utils/identity.ts";
 export { AXI_AI_VERSION } from "./utils/version.ts";
+
+export { StreamingJsonParser, ToolCallArgumentsStream, type JsonChange, type JsonPath } from "./utils/streaming-json.ts";

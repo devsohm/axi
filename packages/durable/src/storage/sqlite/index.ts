@@ -1,4 +1,4 @@
-export type { SqliteDatabase, SqliteExecutor, SqliteValue } from "@axi/chord/sqlite";
+export type { SqliteDatabase, SqliteExecutor, SqliteValue } from "@axi/objects/sqlite";
 export {
 	applySqliteMigrations,
 	CURRENT_SQLITE_SCHEMA_VERSION,

@@ -1,5 +1,5 @@
-import type { Context } from "@axi/chord";
-import { characterEnd } from "@axi/chord/output";
+import type { Context } from "@axi/objects";
+import { characterEnd } from "@axi/objects/output";
 import { type Static, Type } from "typebox";
 import { type BinaryReader, type FileInfo, getOrThrow, rangeDecoder, startsWithBom } from "../env/index.ts";
 import { defineTool } from "../harness/define.ts";
@@ -29,6 +29,10 @@ const parameters = Type.Object({
 	offset: Type.Optional(Type.Number({ description: "Line number to start reading from (1-indexed)" })),
 	limit: Type.Optional(Type.Number({ description: "Maximum number of lines to read" })),
 });
+const structuredResult = Type.Union([
+	Type.String(),
+	Type.Object({ type: Type.Literal("image"), data: Type.String(), mimeType: Type.String() }),
+]);
 export type ReadToolInput = Static<typeof parameters>;
 export type ReadToolDetails = { truncation?: Omit<TruncationResult, "content"> };
 export type ReadToolOptions = { readonly images?: ImageProcessor };
@@ -118,11 +122,12 @@ async function readText(
 	} else if (userLimit !== undefined && start + userLimit < count) {
 		diagnostics.push({
 			severity: "info",
-			message: `${count - start - userLimit} more lines in file. Use offset=${start + userLimit + 1} to continue.`,
+			message: `${count - (start + userLimit)} more lines in file. Use offset=${start + userLimit + 1} to continue.`,
 		});
 	}
 	return {
 		output: text === "" ? [] : [{ type: "text", text }],
+		structuredOutput: text,
 		...(details === undefined ? {} : { details }),
 		diagnostics,
 	};
@@ -183,8 +188,10 @@ async function readImage(
 		image = { data: toBase64(bytes), mimeType };
 	}
 	if (!vision) notes.push("The current model does not support images; it sees a placeholder instead.");
+	const block = { type: "image" as const, data: image.data, mimeType: image.mimeType };
 	return {
-		output: [{ type: "image", data: image.data, mimeType: image.mimeType }],
+		output: [block],
+		structuredOutput: block,
 		diagnostics: [
 			{ severity: "info", code: "image", message: [`Read image file [${image.mimeType}].`, ...notes].join(" ") },
 		],
@@ -197,6 +204,7 @@ export function createReadTool(options: ReadToolOptions = {}) {
 		name: "read",
 		description: `Read the contents of a file. Supports text files and images (${formats}). Images are sent as attachments. For text files, output is truncated to ${DEFAULT_MAX_LINES} lines or ${DEFAULT_MAX_BYTES / 1024}KB (whichever is hit first). Use offset/limit for large files. When you need the full file, continue with offset until complete.`,
 		parameters,
+		structuredOutputSchema: structuredResult,
 		async execute(args, api, context) {
 			const { path: requestedPath, offset, limit } = args;
 			const env = requireEnv(api);

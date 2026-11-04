@@ -4,6 +4,25 @@ import { expect, test } from "vitest";
 import { McpClient, StreamableHttpTransport, LATEST_PROTOCOL_VERSION } from "../src/index.ts";
 import { consumeSseStream, type SseEvent } from "../src/transports/streamable-http.ts";
 
+test("HTTP errors preserve the bounded UTF-16 excerpt when its end splits a character", async () => {
+	const text = "a" + "🙂".repeat(8192);
+	for (const status of [401, 503]) {
+		const transport = new StreamableHttpTransport({
+			url: "https://example.invalid/mcp",
+			openGetStream: false,
+			fetch: async () => new Response(text, { status }),
+		});
+		await transport.start();
+		try {
+			await expect(transport.send({ jsonrpc: "2.0", id: 1, method: "ping" })).rejects.toMatchObject({
+				status, body: text.slice(0, 8192),
+			});
+		} finally {
+			await transport.close();
+		}
+	}
+});
+
 test("HTTP sessions negotiate, read streamed tools, call them and terminate with session headers", async () => {
 	const observed: { method: string; session: string | undefined; version: string | undefined; body: unknown }[] = [];
 	let expired = false;

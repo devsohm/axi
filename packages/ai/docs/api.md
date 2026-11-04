@@ -5,6 +5,10 @@ Project exports from `@axi/ai`. Open the linked declarations for exact types. Su
 | Export | Kind | Declaration |
 | --- | --- | --- |
 | `AI_TELEMETRY_SCHEMA` | export | [`models.d.ts`](../dist/models.d.ts) |
+| `JsonChange` | typealias | [`utils/streaming-json.d.ts`](../dist/utils/streaming-json.d.ts) |
+| `JsonPath` | typealias | [`utils/streaming-json.d.ts`](../dist/utils/streaming-json.d.ts) |
+| `StreamingJsonParser` | class | [`utils/streaming-json.d.ts`](../dist/utils/streaming-json.d.ts) |
+| `ToolCallArgumentsStream` | class | [`utils/streaming-json.d.ts`](../dist/utils/streaming-json.d.ts) |
 | `AnthropicAllowedFallbackModel` | export | [`types.d.ts`](../dist/types.d.ts) |
 | `AnthropicEffort` | export | [`index.d.ts`](../dist/index.d.ts) |
 | `AnthropicMessagesCompat` | export | [`types.d.ts`](../dist/types.d.ts) |

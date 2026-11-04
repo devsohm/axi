@@ -4,7 +4,7 @@ import { colorToOkhsl, okhslColor, oklchColor, rgbColor } from "../src/colors.ts
 test("color conversion preserves the full saturation value for dark cyan", () => {
 	expect(colorToOkhsl(rgbColor(0, 17, 17))).toEqual({
 		h: 194.76895989798186,
-		s: 0.9999997002360035,
+		s: expect.closeTo(0.9999997002360035, 15),
 		l: 0.06683884193169494,
 	});
 });

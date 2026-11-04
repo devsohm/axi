@@ -1,6 +1,6 @@
 import { afterEach, expect, test, vi } from "vitest";
-import { openNodeSqliteDatabase } from "@axi/chord/sqlite/node";
-import { createSqliteTelemetry } from "@axi/chord/telemetry-sqlite";
+import { openNodeSqliteDatabase } from "@axi/objects/sqlite/node";
+import { createSqliteTelemetry } from "@axi/objects/telemetry-sqlite";
 import { InMemoryTelemetryContext, type TelemetryContext, type TelemetryStore } from "../src/index.ts";
 
 afterEach(() => vi.restoreAllMocks());

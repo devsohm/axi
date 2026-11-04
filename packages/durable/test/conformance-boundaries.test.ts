@@ -1,6 +1,7 @@
-import type { JsonValue } from "@axi/chord";
-import { BACKGROUND_CONTEXT as context } from "@axi/chord/context";
+import type { JsonValue } from "@axi/objects";
+import { BACKGROUND_CONTEXT as context } from "@axi/objects/context";
 import { expect, it, vi } from "vitest";
+import { seqFromNumber } from "../src/ids.ts";
 import { MemoryStorage } from "../src/storage/memory.ts";
 import { createExpectAssertions, createStorageConformance } from "../src/testing/index.ts";
 import type { DocumentId, JsonObject, Seq, StoredDocument } from "../src/types.ts";
@@ -11,10 +12,10 @@ it.each(["never", "twice"] as const)("rejects a storage driver that adopts %s", 
 	vi.spyOn(storage, "commit").mockImplementation((writes, adopt, ctx) =>
 		commit(
 			writes,
-			(seq) => {
+			(index, seq) => {
 				if (defect === "twice") {
-					adopt(seq);
-					adopt(seq);
+					adopt(index, seq);
+					adopt(index, seq);
 				}
 			},
 			ctx,
@@ -62,6 +63,42 @@ it("rejects a driver that retains old row fields after a root replacement", asyn
 		await storage.close(context);
 	}
 });
+
+it.each(["sequence after batches", "copy source changed in batch"] as const)(
+	"rejects a storage driver that violates %s",
+	async (defect) => {
+		const storage = new MemoryStorage();
+		const commit = storage.commit.bind(storage);
+		let afterSeries = false;
+		vi.spyOn(storage, "commit").mockImplementation(async (batches, receive, ctx) => {
+			const writes =
+				defect === "copy source changed in batch"
+					? batches.map((batch) =>
+							batch.filter(
+								(write) =>
+									write.type !== "document.change" ||
+									!batch.some((other) => other.type === "document.copy" && other.source.id === write.id),
+							),
+						)
+					: batches;
+			const result = await commit(writes, (index, seq) => receive(index, afterSeries ? seqFromNumber(1) : seq), ctx);
+			if (defect === "sequence after batches" && batches.length > 1) afterSeries = true;
+			return result;
+		});
+		try {
+			const check = createStorageConformance({
+				assertions: createExpectAssertions(expect),
+				withStorage: (use) => use(storage),
+			}).find((check) =>
+				check.name.startsWith(defect === "sequence after batches" ? "stores ordered batches" : "copies the state left"),
+			);
+			if (!check) throw new Error("Missing batch conformance check");
+			await expect(check.run()).rejects.toThrow();
+		} finally {
+			await storage.close(context);
+		}
+	},
+);
 
 it.each([
 	"checkpoint attempt",
@@ -116,14 +153,24 @@ it.each([
 			const changes = new Map<DocumentId, { at: Seq; inserted: readonly JsonValue[] }>();
 			const reads = new Map<string, StoredDocument>();
 			vi.spyOn(storage, "commit").mockImplementation(async (...args) => {
-				const at = await commit(...args);
-				for (const write of args[0]) {
-					if (write.type === "document.create") bases.set(write.record.id, { at, value: write.content.value });
-					if (write.type === "document.change" && write.content.kind === "delta")
-						for (const op of write.content.ops)
-							if (op[0] === "p" && op[1][0] === "items") changes.set(write.id, { at, inserted: op[4] });
-				}
-				return at;
+				const receipts = new Map<number, Seq>();
+				const result = await commit(
+					args[0],
+					(index, seq) => {
+						receipts.set(index, seq);
+						args[1](index, seq);
+					},
+					args[2],
+				);
+				for (const [index, batch] of args[0].entries())
+					for (const write of batch) {
+						const at = receipts.get(index)!;
+						if (write.type === "document.create") bases.set(write.record.id, { at, value: write.content.value });
+						if (write.type === "document.change" && write.content.kind === "delta")
+							for (const op of write.content.ops)
+								if (op[0] === "p" && op[1][0] === "items") changes.set(write.id, { at, inserted: op[4] });
+					}
+				return result;
 			});
 			vi.spyOn(storage, "document").mockImplementation(async (...args) => {
 				const value = await document(...args);

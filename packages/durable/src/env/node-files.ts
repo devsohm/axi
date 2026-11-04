@@ -1,7 +1,7 @@
 import { constants, type Dir, type Stats } from "node:fs";
 import { lstat, open, opendir, type FileHandle } from "node:fs/promises";
 import { basename, join } from "node:path";
-import type { Context } from "@axi/chord";
+import type { Context } from "@axi/objects";
 import { StreamDecoder } from "./decode.ts";
 import {
 	err,

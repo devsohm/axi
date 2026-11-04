@@ -170,6 +170,33 @@ describe("Provider login flows", () => {
 		).rejects.toThrow("Invalid Kimi Code device authorization response");
 		expect(notify).not.toHaveBeenCalled();
 	});
+	it("normalizes a Kimi verification address before handing it to the UI", async () => {
+		vi.stubGlobal("fetch", async () =>
+			Response.json({
+				device_code: "device",
+				user_code: "user",
+				verification_uri: "https://example.invalid",
+				verification_uri_complete: " https://EXAMPLE.invalid/verify code ",
+				interval: 1,
+				expires_in: 60,
+			}),
+		);
+		const abort = new AbortController();
+		let uri: string | undefined;
+		await expect(
+			kimiCodingOAuth.login({
+				signal: abort.signal,
+				prompt: async () => "",
+				notify(event) {
+					if (event.type === "device_code") {
+						uri = event.verificationUri;
+						abort.abort();
+					}
+				},
+			}),
+		).rejects.toThrow("Login cancelled");
+		expect(uri).toBe("https://example.invalid/verify%20code");
+	});
 	it("does not retry expired Meta identities or expose unsafe setup URLs", async () => {
 		const send = vi.fn(async () => Response.json({ message: "expired" }, { status: 403 }));
 		vi.stubGlobal("fetch", send);

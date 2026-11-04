@@ -9,13 +9,10 @@ import type { AssistantMessage, JsonObject, Model, TextContent, ThinkingContent,
 import { appendAssistantMessageDiagnostic } from "../utils/diagnostics.ts";
 import { normalizeProviderError } from "../utils/error-body.ts";
 import { AssistantMessageEventStream } from "../utils/event-stream.ts";
-import { parseStreamingJson, parseToolCallArguments } from "../utils/json-parse.ts";
+import { ToolCallArgumentsStream } from "../utils/streaming-json.ts";
 import type { BedrockOptions } from "./options.ts";
-type StreamingBlock = (TextContent | ThinkingContent | ToolCall) & {
-	index?: number;
-	partialJson?: string;
-	redactedChunks?: Uint8Array[];
-};
+type StreamingBlock = TextContent | ThinkingContent | ToolCall;
+type OpenBlock = { block: StreamingBlock; arguments?: ToolCallArgumentsStream; redactedChunks?: Uint8Array[] };
 function bounded(value: unknown): string | undefined {
 	return typeof value === "string" && value.trim().length > 0 && value.trim().length <= 200 ? value.trim() : undefined;
 }
@@ -67,24 +64,20 @@ function usage(
 	});
 	calculateCost(model, output.usage);
 }
-function flush(block: StreamingBlock): void {
-	if (block.type !== "thinking" || !block.redactedChunks) return;
+function flush(slot: OpenBlock): void {
+	const block = slot.block;
+	if (block.type !== "thinking" || !slot.redactedChunks) return;
 	let binary = "";
-	for (const bytes of block.redactedChunks)
+	for (const bytes of slot.redactedChunks)
 		for (let offset = 0; offset < bytes.length; offset += 0x8000)
 			binary += String.fromCharCode(...bytes.subarray(offset, offset + 0x8000));
 	block.thinkingSignature = btoa(binary);
-	delete block.redactedChunks;
-}
-function finishBlock(block: StreamingBlock): void {
-	delete block.index;
-	delete block.partialJson;
-	flush(block);
+	delete slot.redactedChunks;
 }
 export function bedrockStream(
 	model: Model<"bedrock-converse-stream">,
 	options: BedrockOptions,
-	setup: () => Promise<{ response: ConverseStreamCommandOutput; observed: boolean }>,
+	setup: (output: AssistantMessage) => Promise<{ response: ConverseStreamCommandOutput; observed: boolean }>,
 ): AssistantMessageEventStream {
 	const events = new AssistantMessageEventStream();
 	const output: AssistantMessage = {
@@ -106,9 +99,10 @@ export function bedrockStream(
 	};
 	void (async () => {
 		const blocks: StreamingBlock[] = output.content;
+		const open = new Map<number | undefined, OpenBlock>();
 		let requestId: string | undefined;
 		const add = (index: number | undefined, block: StreamingBlock): StreamingBlock => {
-			block.index = index;
+			open.set(index, { block, arguments: block.type === "toolCall" ? new ToolCallArgumentsStream() : undefined });
 			blocks.push(block);
 			const contentIndex = output.content.length - 1;
 			events.push({
@@ -119,7 +113,7 @@ export function bedrockStream(
 			return block;
 		};
 		try {
-			const { response, observed } = await setup();
+			const { response, observed } = await setup(output);
 			requestId = bounded(response.$metadata.requestId);
 			if (!observed && response.$metadata.httpStatusCode !== undefined)
 				await options.onResponse?.(
@@ -143,11 +137,11 @@ export function bedrockStream(
 							id: tool.toolUseId || "",
 							name: tool.name || "",
 							arguments: {},
-							partialJson: "",
 						});
 				} else if (item.contentBlockDelta) {
 					const { delta, contentBlockIndex } = item.contentBlockDelta;
-					let block = blocks.find((block) => block.index === contentBlockIndex);
+					let slot = open.get(contentBlockIndex);
+					let block = slot?.block;
 					if (delta?.text !== undefined) {
 						block ??= add(contentBlockIndex, { type: "text", text: "" });
 						if (block.type === "text") {
@@ -160,8 +154,7 @@ export function bedrockStream(
 							});
 						}
 					} else if (delta?.toolUse && block?.type === "toolCall") {
-						block.partialJson = (block.partialJson || "") + (delta.toolUse.input || "");
-						block.arguments = parseStreamingJson(block.partialJson);
+						block.arguments = slot!.arguments!.append(delta.toolUse.input || "");
 						events.push({
 							type: "toolcall_delta",
 							contentIndex: blocks.indexOf(block),
@@ -170,6 +163,7 @@ export function bedrockStream(
 						});
 					} else if (delta?.reasoningContent) {
 						block ??= add(contentBlockIndex, { type: "thinking", thinking: "", thinkingSignature: "" });
+						slot = open.get(contentBlockIndex)!;
 						const contentIndex = blocks.indexOf(block),
 							reasoning = delta.reasoningContent;
 						if (block.type !== "thinking") continue;
@@ -186,24 +180,24 @@ export function bedrockStream(
 								block.thinking += "[Reasoning redacted]";
 								events.push({ type: "thinking_delta", contentIndex, delta: "[Reasoning redacted]", partial: output });
 							}
-							block.redactedChunks ??= [];
-							block.redactedChunks.push(reasoning.redactedContent);
+							slot!.redactedChunks ??= [];
+							slot!.redactedChunks.push(reasoning.redactedContent);
 						}
 					}
 				} else if (item.contentBlockStop) {
 					const target = item.contentBlockStop.contentBlockIndex;
-					const contentIndex = blocks.findIndex((block) => block.index === target);
-					const block = blocks[contentIndex];
+					const slot = open.get(target);
+					open.delete(target);
+					const block = slot?.block;
+					const contentIndex = block === undefined ? -1 : blocks.indexOf(block);
 					if (!block) continue;
-					delete block.index;
 					if (block.type === "text")
 						events.push({ type: "text_end", contentIndex, content: block.text, partial: output });
 					else if (block.type === "thinking") {
-						flush(block);
+						flush(slot!);
 						events.push({ type: "thinking_end", contentIndex, content: block.thinking, partial: output });
 					} else {
-						Object.assign(block, parseToolCallArguments(block.partialJson));
-						delete block.partialJson;
+						Object.assign(block, slot!.arguments!.finish());
 						events.push({ type: "toolcall_end", contentIndex, toolCall: block, partial: output });
 					}
 				} else if (item.messageStop) {
@@ -233,10 +227,12 @@ export function bedrockStream(
 			if (output.stopReason === "pending") throw new Error("Bedrock stream ended without a stop reason");
 			if (output.stopReason === "error" || output.stopReason === "aborted")
 				throw new Error(output.errorMessage || "An unknown error occurred");
-			for (const block of blocks) finishBlock(block);
+			for (const slot of open.values()) flush(slot);
+			open.clear();
 			events.push({ type: "done", reason: output.stopReason, message: output });
 		} catch (error) {
-			for (const block of blocks) finishBlock(block);
+			for (const slot of open.values()) flush(slot);
+			open.clear();
 			output.stopReason = options.signal?.aborted ? "aborted" : "error";
 			failure(output, error, requestId);
 			events.push({ type: "error", reason: output.stopReason, error: output });

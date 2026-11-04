@@ -74,6 +74,7 @@ export function extractAnsiCode(text: string, offset: number): { code: string; l
 }
 
 type Unit = { kind: "ansi"; text: string } | { kind: "text"; text: string; width: number };
+const plainCells = /^[\t\x20-\x7e]*$/;
 function* units(text: string): Generator<Unit> {
 	let offset = 0;
 	while (offset < text.length) {
@@ -85,13 +86,19 @@ function* units(text: string): Generator<Unit> {
 		}
 		let end = offset + 1;
 		while (end < text.length && !extractAnsiCode(text, end)) end++;
-		for (const { segment } of graphemes.segment(text.slice(offset, end)))
-			yield { kind: "text", text: segment, width: cellWidth(segment) };
+		const content = text.slice(offset, end);
+		if (plainCells.test(content)) {
+			for (const char of content) yield { kind: "text", text: char, width: char === "\t" ? 3 : 1 };
+		} else {
+			for (const { segment } of graphemes.segment(content))
+				yield { kind: "text", text: segment, width: cellWidth(segment) };
+		}
 		offset = end;
 	}
 }
 
 export function stripTerminalSequences(text: string): string {
+	if (!text.includes("\x1b")) return text;
 	let output = "";
 	for (const unit of units(text)) if (unit.kind === "text") output += unit.text;
 	return output;
@@ -151,9 +158,15 @@ export function getOsc8LinkAtColumn(text: string, column: number): string | unde
 }
 export function normalizeTerminalOutput(text: string): string {
 	const normalized = text.replace(/[\u0e33\u0eb3]/g, (char) => (char === "\u0e33" ? "\u0e4d\u0e32" : "\u0ecd\u0eb2"));
+	if (!normalized.includes("\t")) return normalized;
+	if (!normalized.includes("\x1b")) return normalized.replace(/\t/g, "   ");
 	let result = "";
 	for (const unit of units(normalized)) result += unit.kind === "text" ? unit.text.replace(/\t/g, "   ") : unit.text;
 	return result;
+}
+
+export function replaceControlCharacters(text: string): string {
+	return text.replace(/[\u0000-\u001f\u007f-\u009f]+/g, " ");
 }
 
 class StyleState {
@@ -197,7 +210,12 @@ class StyleState {
 		}
 	}
 	update(text: string): void {
-		for (const unit of units(text)) if (unit.kind === "ansi") this.process(unit.text);
+		let offset = text.indexOf("\x1b");
+		while (offset >= 0) {
+			const control = extractAnsiCode(text, offset);
+			if (control) this.process(control.code);
+			offset = text.indexOf("\x1b", offset + (control?.length ?? 1));
+		}
 	}
 	active(): string {
 		const attributes = [...this.#attributes].sort((left, right) => left - right).map(String);
@@ -209,7 +227,7 @@ class StyleState {
 		return this.#background ? `\x1b[${this.#background}m` : "";
 	}
 	lineEnd(): string {
-		return (this.#attributes.has(4) ? "\x1b[24m" : "") + this.closeLink();
+		return (this.#attributes.has(4) ? "\x1b[24m" : "") + (this.#attributes.has(9) ? "\x1b[29m" : "") + this.closeLink();
 	}
 	closeLink(): string {
 		return this.#link?.close ?? "";
@@ -364,6 +382,7 @@ export function extractSegments(
 }
 
 function tokens(text: string): string[] {
+	if (plainCells.test(text)) return text.match(/ +|[^ ]+/g) ?? [];
 	const output: string[] = [];
 	let current = "",
 		pending = "",
@@ -426,10 +445,18 @@ function wrapLine(text: string, width: number): string[] {
 	let line = "",
 		used = 0;
 	for (const token of tokens(text)) {
-		const size = visibleWidth(token),
-			space = token.trim() === "";
+		const size = visibleWidth(token);
+		let space = token.trim() === "",
+			controls = "";
+		if (token.includes("\x1b")) {
+			space = true;
+			for (const unit of units(token)) {
+				if (unit.kind === "ansi") controls += unit.text;
+				else if (unit.text.trim() !== "") space = false;
+			}
+		}
 		if (size > width && !space) {
-			if (line) lines.push(line + style.lineEnd());
+			if (line) lines.push(line.trimEnd() + style.lineEnd());
 			const fragments = breakToken(token, width, style);
 			lines.push(...fragments.slice(0, -1));
 			line = fragments.at(-1) ?? "";
@@ -437,9 +464,12 @@ function wrapLine(text: string, width: number): string[] {
 			continue;
 		}
 		if (used + size > width && used > 0) {
-			lines.push(line.trimEnd() + style.lineEnd());
+			if (space) style.update(token);
+			lines.push(line.trimEnd() + (space ? controls : "") + style.lineEnd());
 			line = style.active() + (space ? "" : token);
 			used = space ? 0 : size;
+		} else if (space && used + size > width && token.includes("\x1b")) {
+			line += controls;
 		} else {
 			line += token;
 			used += size;

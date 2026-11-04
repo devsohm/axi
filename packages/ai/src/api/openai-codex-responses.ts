@@ -378,10 +378,6 @@ export const stream: StreamFunction<"openai-codex-responses", OpenAICodexRespons
 			if (options.signal?.aborted) throw new Error("Request was aborted");
 			finish();
 		} catch (error) {
-			for (const block of output.content) {
-				Reflect.deleteProperty(block, "partialJson");
-				Reflect.deleteProperty(block, "customInput");
-			}
 			output.stopReason = options.signal?.aborted ? "aborted" : "error";
 			output.errorMessage = formatProviderError(normalizeProviderError(error));
 			events.push({ type: "error", reason: output.stopReason, error: output });

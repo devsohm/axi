@@ -1,7 +1,7 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { BACKGROUND_CONTEXT } from "@axi/chord/context";
+import { BACKGROUND_CONTEXT } from "@axi/objects/context";
 import { expect, it, vi } from "vitest";
 import { getOrThrow } from "../src/env/index.ts";
 import { NodeExecutionEnv } from "../src/env/node.ts";
@@ -49,7 +49,7 @@ it("checks an ancestor filesystem when the target filesystem query fails", async
 		try {
 			expect(watcher.mode).toBe("polling");
 		} finally {
-			await watcher.close(BACKGROUND_CONTEXT);
+			await watcher.stop(BACKGROUND_CONTEXT);
 		}
 	} finally {
 		watching.filesystemTarget = "";
@@ -77,7 +77,7 @@ it("selects recursive native handles according to the platform", async () => {
 				expect.soft(watching.options.get(cwd)).toBe(platform === "darwin");
 				expect.soft(watching.options.has(nested)).toBe(platform === "linux");
 			} finally {
-				await watcher.close(BACKGROUND_CONTEXT);
+				await watcher.stop(BACKGROUND_CONTEXT);
 			}
 		}
 	} finally {
@@ -102,7 +102,7 @@ it("keeps native watching when a handle fails without an operating-system error 
 		try {
 			expect(watcher.mode).toBe("native");
 		} finally {
-			await watcher.close(BACKGROUND_CONTEXT);
+			await watcher.stop(BACKGROUND_CONTEXT);
 		}
 	} finally {
 		watching.install = () => {};
@@ -124,7 +124,7 @@ it("stops acquiring native handles when watch capacity forces polling", async ()
 			await new NodeExecutionEnv({ cwd, watch: { mode: "native", pollIntervalMs: 10 } }).watch(
 				[{ path: ".", recursive: true }],
 				(change) => {
-					if ("overflow" in change) overflows++;
+					if (change.kind === "overflow") overflows++;
 					if ("paths" in change) changes.push(...change.paths);
 				},
 				BACKGROUND_CONTEXT,
@@ -138,7 +138,7 @@ it("stops acquiring native handles when watch capacity forces polling", async ()
 			writeFileSync(path, "value");
 			await expect.poll(() => changes, { timeout: 2000 }).toContain(path);
 		} finally {
-			await watcher.close(BACKGROUND_CONTEXT);
+			await watcher.stop(BACKGROUND_CONTEXT);
 		}
 	} finally {
 		watching.install = () => {};
@@ -173,7 +173,7 @@ it.skipIf(process.platform !== "linux")(
 			await expect.poll(() => changes, { timeout: 2000 }).toContain(transient);
 		} finally {
 			watching.install = () => {};
-			await watcher.close(BACKGROUND_CONTEXT);
+			await watcher.stop(BACKGROUND_CONTEXT);
 			rmSync(cwd, { recursive: true, force: true });
 		}
 	},

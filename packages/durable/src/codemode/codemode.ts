@@ -1,13 +1,13 @@
-import { type Context, copyJson, type JsonValue } from "@axi/chord";
-import {
-	type CodemodeHostCall,
-	type CodemodeOutcome,
-	type CodemodeResult,
-	type CodemodeRun,
-	type CodemodeSandboxBase,
-	toCodemodeIdentifier,
+import { toCodemodeIdentifier } from "@axi/codemode/declarations";
+import type {
+	CodemodeHostCall,
+	CodemodeOutcome,
+	CodemodeResult,
+	CodemodeRun,
+	CodemodeSandboxBase,
 } from "@axi/codemode/portable";
 import { CODEMODE_SOURCE_GRAMMAR, parseCodemodeSource } from "@axi/codemode/source";
+import { type Context, copyJson, type JsonValue } from "@axi/objects";
 import { type Static, Type } from "typebox";
 import { defineDoc } from "../documents.ts";
 import { errorMessage } from "../errors.ts";
@@ -713,13 +713,8 @@ class ScriptCall {
 			return [
 				{
 					name: tool.name,
-					text: [
-						tool.name,
-						tool.name.replaceAll("_", " "),
-						tool.description,
-						own?.name ?? "",
-						own?.description ?? "",
-					].join(" "),
+					text: tool.description,
+					namespaceText: own === undefined ? "" : [own.name, own.description ?? "", own.instructions ?? ""].join(" "),
 				},
 			];
 		});

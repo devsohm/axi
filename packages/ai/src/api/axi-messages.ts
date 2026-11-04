@@ -12,7 +12,7 @@ import type {
 import { appendAssistantMessageDiagnostic, createAssistantMessageDiagnostic } from "../utils/diagnostics.ts";
 import { AssistantMessageEventStream } from "../utils/event-stream.ts";
 import { headersToRecord, providerHeadersToRecord } from "../utils/headers.ts";
-import { parseStreamingJson } from "../utils/json-parse.ts";
+import { ToolCallArgumentsStream } from "../utils/streaming-json.ts";
 import { getProviderEnvValue } from "../utils/provider-env.ts";
 import type { AxiMessagesOptions } from "./options.ts";
 
@@ -108,8 +108,19 @@ function failure(model: Model<"axi-messages">, url: URL, response: Response, bod
 }
 function converter(model: Model<"axi-messages">): (event: AxiMessagesEvent) => AssistantMessageEvent {
 	const partial = empty(model),
-		argumentsByIndex = new Map<number, string>();
+		argumentsByIndex = new Map<number, ToolCallArgumentsStream>();
 	return (event) => {
+		if ("contentIndex" in event) {
+			const index: unknown = event.contentIndex;
+			const count = partial.content.length;
+			if (
+				typeof index !== "number" ||
+				!Number.isInteger(index) ||
+				index < 0 ||
+				index >= count + (event.type.endsWith("_start") ? 1 : 0)
+			)
+				throw new Error(`Invalid contentIndex ${JSON.stringify(index)} in axi-messages ${event.type} event`);
+		}
 		switch (event.type) {
 			case "done":
 			case "error": {
@@ -156,12 +167,12 @@ function converter(model: Model<"axi-messages">): (event: AxiMessagesEvent) => A
 				break;
 			case "toolcall_start":
 				partial.content[event.contentIndex] = { type: "toolCall", id: event.id, name: event.toolName, arguments: {} };
-				argumentsByIndex.set(event.contentIndex, "");
+				argumentsByIndex.set(event.contentIndex, new ToolCallArgumentsStream());
 				break;
 			case "toolcall_delta": {
-				const json = (argumentsByIndex.get(event.contentIndex) ?? "") + event.delta;
-				argumentsByIndex.set(event.contentIndex, json);
-				(partial.content[event.contentIndex] as ToolCall).arguments = parseStreamingJson(json);
+				const argumentsStream = argumentsByIndex.get(event.contentIndex);
+				if (argumentsStream !== undefined)
+					(partial.content[event.contentIndex] as ToolCall).arguments = argumentsStream.append(event.delta);
 				break;
 			}
 			case "toolcall_end": {

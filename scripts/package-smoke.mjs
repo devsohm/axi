@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { BACKGROUND_CONTEXT as context, traceIn, withTelemetry } from "@axi/chord/context";
+import { BACKGROUND_CONTEXT as context, traceIn, withTelemetry } from "@axi/objects/context";
 import { InMemoryTelemetryContext } from "@axi/telemetry";
 import { renderTrace } from "@axi/telemetry/render";
 import {
@@ -16,8 +16,32 @@ import {
 	DEFAULT_PROGRESS_POLICY,
 	DEFAULT_RESTART_LIMIT,
 	DEFAULT_RETRY_POLICY,
+	ROOT_CONVERSATION_ID,
 } from "@axi/durable";
-import { createModels, Type, fauxProvider, fauxAssistantMessage, fauxText, fauxToolCall } from "@axi/ai";
+import {
+	createModels,
+	Type,
+	fauxProvider,
+	fauxAssistantMessage,
+	fauxText,
+	fauxToolCall,
+	StreamingJsonParser,
+} from "@axi/ai";
+import {
+	constant,
+	createHost,
+	defineFacet,
+	defineState,
+	obj,
+	local,
+	int,
+	method,
+	memoryLinkPair,
+	openStore,
+	sqliteBackend,
+} from "@axi/objects/next";
+import { openNodeSqliteDatabase } from "@axi/objects/sqlite/node";
+import { StoreStorage } from "@axi/durable/storage/store";
 import { openNodeSqliteStorage } from "@axi/durable/storage/sqlite/node";
 import { Connection, RemoteExecutionEnv, localDaemon } from "@axi/env";
 import { CodingTools } from "@axi/durable/tools";
@@ -62,6 +86,63 @@ assert.deepEqual(
 );
 assert.equal(tui.oklabToOkhslLightness(0), 0);
 
+const parser = new StreamingJsonParser();
+parser.append('{"text":"one');
+const partial = parser.snapshot();
+assert.deepEqual(partial, { text: "one" });
+parser.append(' two"}');
+assert.deepEqual(parser.snapshot(), { text: "one two" });
+assert.deepEqual(partial, { text: "one" });
+const contract = local("installed.counter", {
+	version: 1,
+	params: {},
+	members: { count: int(), ping: method() },
+});
+assert.equal(contract.version, 1);
+assert.match(contract.fingerprint, /^[0-9a-f]{16}$/);
+const storedCounter = defineState("counter", {
+	version: 1,
+	schema: obj({ count: int() }),
+	initial: () => ({ count: 0 }),
+	persist: true,
+});
+async function openInstalledObject(store) {
+	const errors = [];
+	const host = createHost({ store, onError: (error) => errors.push(error) });
+	await host.load(
+		[
+			{
+				name: "installed",
+				facet: defineFacet((h) =>
+					h.serve(contract, (_, self) => {
+						const state = self.state(storedCounter);
+						return {
+							count: self.derive([state], ([value]) => value.count),
+							ping: (ctx) =>
+								self.tx(async (tx) => {
+									(await tx.draft(state)).count++;
+									return null;
+								}, ctx),
+						};
+					}),
+				),
+			},
+		],
+		context,
+	);
+	return { host, errors };
+}
+
+const fixed = constant({ value: 1 });
+const fixedWatch = await fixed.watch(context);
+assert.equal(fixedWatch.value, fixed.value);
+assert.deepEqual(await fixedWatch.stop(), { kind: "stopped" });
+const [linkSender, linkReceiver] = memoryLinkPair();
+const receivedBytes = new Promise((resolve) => linkReceiver.onMessage(resolve));
+linkSender.send(new Uint8Array([1, 2, 3]));
+assert.deepEqual(await receivedBytes, new Uint8Array([1, 2, 3]));
+linkSender.close();
+
 const telemetry = new InMemoryTelemetryContext();
 assert.equal(
 	renderTrace([
@@ -80,12 +161,16 @@ assert.equal(
 	"archive (3ms)",
 );
 const receiver = new InMemoryTelemetryContext();
-await traceIn({ name: "installed" }, async (child) => {
-	telemetry.counter("requests").add(1, { mode: "installed" }, child.telemetry);
-	const carrier = telemetry.inject(child.telemetry);
-	assert.ok(carrier);
-	await receiver.extract(JSON.parse(JSON.stringify(carrier))).startSpan({ name: "received" }, () => 42);
-}, withTelemetry(telemetry, context));
+await traceIn(
+	{ name: "installed" },
+	async (child) => {
+		telemetry.counter("requests").add(1, { mode: "installed" }, child.telemetry);
+		const carrier = telemetry.inject(child.telemetry);
+		assert.ok(carrier);
+		await receiver.extract(JSON.parse(JSON.stringify(carrier))).startSpan({ name: "received" }, () => 42);
+	},
+	withTelemetry(telemetry, context),
+);
 assert.deepEqual(
 	telemetry.getSpans().map((span) => [span.name, span.settled]),
 	[["installed", true]],
@@ -108,7 +193,9 @@ assert.equal("classifierJson" in (await import("@axi/ai/api/classifier-shared"))
 assert.equal("openRouterModelSchema" in (await import("@axi/ai/providers/openrouter-api")), false);
 assert.equal("isOpenRouterModel" in (await import("@axi/ai/providers/openrouter-api")), false);
 for (const subpath of ["api/anthropic-request", "api/bedrock-client", "providers/builtin"])
-	assert.throws(() => import.meta.resolve(`@axi/ai/${subpath}`), { code: "ERR_PACKAGE_PATH_NOT_EXPORTED" });
+	assert.throws(() => import.meta.resolve(`@axi/ai/${subpath}`), {
+		code: "ERR_PACKAGE_PATH_NOT_EXPORTED",
+	});
 const cwd = await mkdtemp(join(tmpdir(), "axi-public-"));
 const envConnection = new Connection({ command: [localDaemon()] });
 const Counter = defineDoc({
@@ -134,12 +221,57 @@ const openHarness = async () =>
 		{
 			models,
 			registry,
-			env: () => new RemoteExecutionEnv({ connection: envConnection, id: "installed:remote", cwd }),
-			onReport: (error) => reports.push(error),
+			env: () =>
+				new RemoteExecutionEnv({
+					connection: envConnection,
+					id: "installed:remote",
+					cwd,
+				}),
+			onReport: ({ error }) => reports.push(error),
 		},
 		context,
 	);
 try {
+	const sharedFile = join(cwd, "shared.sqlite");
+	let store = await openStore(sqliteBackend(await openNodeSqliteDatabase(sharedFile)), context);
+	let storage = await StoreStorage.open(store, "installed", context);
+	let objects = await openInstalledObject(store);
+	try {
+		const reference = await objects.host.get(contract, {}, context);
+		await reference.ping(context);
+		assert.equal(reference.count.value, 1);
+		reference.release();
+		let receipt;
+		const stored = await storage.commit(
+			[[{ type: "conversation", value: { id: ROOT_CONVERSATION_ID } }]],
+			(index, seq) => {
+				assert.equal(index, 0);
+				receipt = seq;
+			},
+			context,
+		);
+		assert.deepEqual(stored, { stored: 1 });
+		assert.equal(typeof receipt, "number");
+	} finally {
+		await objects.host.close(context);
+		assert.deepEqual(objects.errors, []);
+		await storage.close(context);
+		await store.close(context);
+	}
+	store = await openStore(sqliteBackend(await openNodeSqliteDatabase(sharedFile)), context);
+	try {
+		objects = await openInstalledObject(store);
+		const reference = await objects.host.get(contract, {}, context);
+		assert.equal(reference.count.value, 1);
+		reference.release();
+		storage = await StoreStorage.open(store, "installed", context);
+		assert.deepEqual(await storage.conversation(ROOT_CONVERSATION_ID, context), { id: ROOT_CONVERSATION_ID });
+		await storage.close(context);
+	} finally {
+		await objects.host.close(context);
+		assert.deepEqual(objects.errors, []);
+		await store.close(context);
+	}
 	pair.server.onMessage(async (message) => {
 		if (!("id" in message)) return;
 		let result;
@@ -154,7 +286,11 @@ try {
 				tools: [
 					{
 						name: "increment",
-						inputSchema: { type: "object", properties: { by: { type: "number" } }, required: ["by"] },
+						inputSchema: {
+							type: "object",
+							properties: { by: { type: "number" } },
+							required: ["by"],
+						},
 					},
 				],
 			};
@@ -181,15 +317,21 @@ try {
 				description: "Increment the persisted counter through MCP",
 				parameters: Type.Object({ by: Type.Number() }),
 				structuredOutputSchema: Type.Object({ count: Type.Number() }),
-				execute: async (args) => ({ structuredOutput: (await client.callTool("increment", args)).structuredContent }),
+				execute: async (args) => ({
+					structuredOutput: (await client.callTool("increment", args)).structuredContent,
+				}),
 			}),
 		],
 	});
 	harness = await openHarness();
-	let root = await harness.root(context, { agent: { model: { provider: "faux", modelId: "faux-1" } } });
+	let root = await harness.root(context, {
+		agent: { model: { provider: "faux", modelId: "faux-1" } },
+	});
 	const identity = (await harness.snapshot(ProviderDoc, root.id, context)).sessionId;
 	const view = await root.watch(context);
-	view.start((value) => events.push(value.entries.length));
+	view.start((call) => {
+		if (call.kind === "value") events.push(call.value.entries.length);
+	});
 	subscription = () => view.stop();
 	faux.setResponses([
 		fauxAssistantMessage(

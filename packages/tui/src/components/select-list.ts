@@ -1,4 +1,4 @@
-import { getKeybindings } from "../keybindings.ts";
+import { getKeybindings, getSelectPageIndex } from "../keybindings.ts";
 import type { Component, TuiMouseEvent, TuiMouseEventResult } from "../tui.ts";
 import { truncateToWidth, visibleWidth } from "../utils.ts";
 
@@ -28,6 +28,7 @@ export interface SelectListLayoutOptions {
 }
 
 export class SelectList implements Component {
+	readonly capturesViewportInput = true;
 	readonly #items: SelectItem[];
 	#filtered: SelectItem[];
 	#selected = 0;
@@ -123,12 +124,18 @@ export class SelectList implements Component {
 	}
 	handleInput(data: string): void {
 		const bindings = getKeybindings();
+		const page = getSelectPageIndex(bindings, data, this.#selected, this.#filtered.length, this.#limit);
 		if (bindings.matches(data, "tui.select.up")) {
 			this.#selected = this.#selected === 0 ? this.#filtered.length - 1 : this.#selected - 1;
 			this.#notify();
 		} else if (bindings.matches(data, "tui.select.down")) {
 			this.#selected = this.#selected === this.#filtered.length - 1 ? 0 : this.#selected + 1;
 			this.#notify();
+		} else if (page !== undefined) {
+			if (this.#filtered.length && page !== this.#selected) {
+				this.#selected = page;
+				this.#notify();
+			}
 		} else if (bindings.matches(data, "tui.select.confirm")) {
 			const item = this.getSelectedItem();
 			if (item) this.onSelect?.(item);

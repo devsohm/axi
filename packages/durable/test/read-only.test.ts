@@ -1,5 +1,6 @@
+import { commitWrites } from "../src/testing/commit-writes.ts";
 import { createModels } from "@axi/ai";
-import { BACKGROUND_CONTEXT as context } from "@axi/chord/context";
+import { BACKGROUND_CONTEXT as context } from "@axi/objects/context";
 import { expect, it } from "vitest";
 import {
 	createRegistry,
@@ -14,7 +15,8 @@ import { idFromNumber } from "../src/ids.ts";
 it("reads live records without recovering, writing or emitting scheduling notifications", async () => {
 	const storage = new MemoryStorage();
 	const id = idFromNumber<TaskId<null>>(2);
-	await storage.commit(
+	await commitWrites(
+		storage,
 		[
 			{ type: "conversation", value: { id: ROOT_CONVERSATION_ID } },
 			{
@@ -32,7 +34,6 @@ it("reads live records without recovering, writing or emitting scheduling notifi
 				},
 			},
 		],
-		() => {},
 		context,
 	);
 	const wakes: unknown[] = [],
@@ -44,7 +45,7 @@ it("reads live records without recovering, writing or emitting scheduling notifi
 			registry: createRegistry(),
 			readOnly: true,
 			onWake: (value) => wakes.push(value),
-			onReport: (error) => reports.push(error),
+			onReport: ({ error }) => reports.push(error),
 		},
 		context,
 	);

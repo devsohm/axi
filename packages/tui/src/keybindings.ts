@@ -154,3 +154,18 @@ export function setKeybindings(manager: KeybindingsManager): void {
 export function getKeybindings(): KeybindingsManager {
 	return (current ??= new KeybindingsManager(TUI_KEYBINDINGS));
 }
+
+export function getSelectPageIndex(
+	keybindings: KeybindingsManager,
+	data: string,
+	selectedIndex: number,
+	itemCount: number,
+	pageSize: number,
+): number | undefined {
+	const delta = keybindings.matches(data, "tui.select.pageUp")
+		? -pageSize
+		: keybindings.matches(data, "tui.select.pageDown")
+			? pageSize
+			: undefined;
+	return delta === undefined ? undefined : Math.max(0, Math.min(itemCount - 1, selectedIndex + delta));
+}

@@ -1,6 +1,6 @@
 import { createModels, createProvider, fauxAssistantMessage, fauxProvider, fauxToolCall, type Usage } from "@axi/ai";
-import { BACKGROUND_CONTEXT as context } from "@axi/chord/context";
 import { CodemodeSandbox } from "@axi/codemode";
+import { BACKGROUND_CONTEXT as context } from "@axi/objects/context";
 import { Type } from "typebox";
 import { expect, test } from "vitest";
 import { createCodemodeExtension } from "../src/codemode/index.ts";
@@ -95,7 +95,7 @@ async function scripts(paused = false) {
 	registry.install(
 		createCodemodeExtension({
 			sandbox,
-			namespaces: [{ name: "weather", prefix: "weather_", description: "Local forecasts" }],
+			namespaces: [{ name: "weather", prefix: "weather_", description: "Local forecasts", instructions: "季節の予報" }],
 			globals: [
 				{
 					name: "lookup",
@@ -187,6 +187,13 @@ test("scripts discover and invoke a deferred namespaced tool", async () => {
 	expect(text).toContain(
 		'{"found":["weather_daily"],"description":"Local forecasts","output":"sunny","missing":null,"listed":true}',
 	);
+});
+
+test("script discovery searches the namespace instructions using Unicode words", async () => {
+	await using f = await scripts();
+	const { text, result } = await f.run('return (await searchTools("季節", {limit: 1})).map(tool => tool.name);');
+	expect(result.isError).toBe(false);
+	expect(text).toContain('["weather_daily"]');
 });
 
 test("script discovery validates arguments and keeps missing namespaces absent", async () => {

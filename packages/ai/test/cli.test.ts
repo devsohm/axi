@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -51,7 +51,7 @@ it.each(["0", "-1", "invalid"])("rejects provider selection %s without starting 
 	}
 });
 
-it("preserves other stored entries when login saves a credential", () => {
+it.each([false, true])("saves credentials privately and preserves stored entries, existing: %s", (existing) => {
 	const directory = mkdtempSync(path.join(tmpdir(), "axi-login-"));
 	const retained = { type: "api_key", key: "fixture-existing" };
 	const credential = { type: "oauth", access: "fixture-access", refresh: "fixture-refresh", expires: 123 };
@@ -59,21 +59,25 @@ it("preserves other stored entries when login saves a credential", () => {
 	const providers = pathToFileURL(path.resolve(import.meta.dirname, "../src/providers/all.ts")).href;
 	const fixture = `export const builtinProviders=()=>[{id:"fixture",name:"Fixture",auth:{oauth:{login:async()=>(${JSON.stringify(credential)})}}}];`;
 	try {
-		writeFileSync(path.join(directory, "auth.json"), JSON.stringify({ retained }));
+		if (existing) {
+			writeFileSync(path.join(directory, "auth.json"), JSON.stringify({ retained }));
+			chmodSync(path.join(directory, "auth.json"), 0o666);
+		}
 		const child = spawnSync(
 			process.execPath,
 			[
 				"--input-type=module",
 				"-e",
-				`import {registerHooks} from "node:module";registerHooks({load(url,context,next){return url===${JSON.stringify(providers)}?{format:"module",shortCircuit:true,source:${JSON.stringify(fixture)}}:next(url,context);}});process.argv=[process.execPath,${JSON.stringify(cli)},"login","fixture"];await import(${JSON.stringify(cli)});`,
+				`import {registerHooks} from "node:module";registerHooks({load(url,context,next){return url===${JSON.stringify(providers)}?{format:"module",shortCircuit:true,source:${JSON.stringify(fixture)}}:next(url,context);}});process.umask(0o022);process.argv=[process.execPath,${JSON.stringify(cli)},"login","fixture"];await import(${JSON.stringify(cli)});`,
 			],
 			{ cwd: directory, encoding: "utf8", timeout: 10000 },
 		);
 		expect(child.status, child.stderr).toBe(0);
 		expect(JSON.parse(readFileSync(path.join(directory, "auth.json"), "utf8"))).toEqual({
-			retained,
+			...(existing ? { retained } : {}),
 			fixture: credential,
 		});
+		if (process.platform !== "win32") expect(statSync(path.join(directory, "auth.json")).mode & 0o777).toBe(0o600);
 	} finally {
 		rmSync(directory, { recursive: true, force: true });
 	}

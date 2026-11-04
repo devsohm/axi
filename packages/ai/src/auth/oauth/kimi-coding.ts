@@ -29,16 +29,9 @@ async function login(interaction: ProviderAuthInteraction): Promise<OAuthCredent
 	const device = await oauthJson(response),
 		code = device?.device_code,
 		user = device?.user_code,
-		verification = device?.verification_uri,
-		complete = device?.verification_uri_complete;
-	if (
-		typeof code !== "string" ||
-		typeof user !== "string" ||
-		typeof verification !== "string" ||
-		typeof complete !== "string" ||
-		!trustedOAuthUrl(complete) ||
-		!trustedOAuthUrl(verification)
-	)
+		verification = trustedOAuthUrl(device?.verification_uri),
+		complete = trustedOAuthUrl(device?.verification_uri_complete);
+	if (typeof code !== "string" || typeof user !== "string" || !verification || !complete)
 		throw new Error(`Invalid Kimi Code device authorization response: ${JSON.stringify(device)}`);
 	const intervalSeconds = positiveOAuthNumber(device?.interval) ?? 5,
 		expiresInSeconds = positiveOAuthNumber(device?.expires_in) ?? 900;

@@ -56,6 +56,8 @@ The event types are `start`, `text_start`, `text_delta`, `text_end`, `thinking_s
 
 Read partial content when handling the event. Providers can mutate the same message and content blocks later.
 
+`ToolCallArgumentsStream` consumes argument fragments without reparsing the complete string on each fragment. It exposes immutable previews and incremental `set` or `append` changes. `StreamingJsonParser` provides the lower-level parser. Completed calls still pass through final JSON parsing and tool validation.
+
 Final chat reasons are `stop`, `length`, `toolUse`, `error`, `aborted`, and `deferred`. An error result can retain partial content. Inspect the final reason before treating a response as successful. The assistant message also carries usage, cost estimates, provider identity, and optional response diagnostics.
 
 ## Transcripts and tools

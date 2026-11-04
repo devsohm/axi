@@ -2,7 +2,7 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createModels, fauxAssistantMessage, fauxProvider, fauxToolCall } from "@axi/ai";
-import { BACKGROUND_CONTEXT as context } from "@axi/chord/context";
+import { BACKGROUND_CONTEXT as context } from "@axi/objects/context";
 import { expect, test } from "vitest";
 import { NodeExecutionEnv } from "../src/env/node.ts";
 import { createRegistry, Harness, MemoryStorage, ToolResultEntry } from "../src/index.ts";
@@ -16,7 +16,17 @@ async function fixture() {
 		provider = fauxProvider(),
 		registry = createRegistry();
 	models.setProvider(provider.provider);
-	registry.install({ name: "files", tools: [createReadTool(), createEditTool()] });
+	const read = createReadTool(),
+		results = new Map<string, Awaited<ReturnType<typeof read.execute>>>();
+	const recordedRead: typeof read = {
+		...read,
+		execute: async (args, api, ctx) => {
+			const result = await read.execute(args, api, ctx);
+			results.set(api.callId, result);
+			return result;
+		},
+	};
+	registry.install({ name: "files", tools: [recordedRead, createEditTool()] });
 	const storage = new MemoryStorage();
 	const harness = await Harness.open(storage, { models, registry, env: () => env }, context);
 	const root = await harness.root(context, { agent: { model: { provider: provider.provider.id, modelId: "faux-1" } } });
@@ -34,7 +44,8 @@ async function fixture() {
 			const entries = await storage.scanEntries({ conversationId: root.id }, 100, undefined, context);
 			for (const entry of entries.items.filter(ToolResultEntry.is)) {
 				const message = entry.model?.find((message) => message.role === "toolResult" && message.toolCallId === id);
-				if (message?.role === "toolResult") return { message, diagnostics: entry.data?.diagnostics };
+				if (message?.role === "toolResult")
+					return { message, diagnostics: entry.data?.diagnostics, structuredOutput: results.get(id)?.structuredOutput };
 			}
 			throw new Error(`Missing result for ${id}`);
 		},
@@ -50,6 +61,7 @@ test("read selects complete UTF-8 lines, strips the initial BOM and reports cont
 	await using files = await fixture();
 	await writeFile(join(files.cwd, "notes"), "\ufefffirst\n界🙂\nlast\n");
 	const first = await files.invoke("read", { path: "notes", limit: 1 });
+	expect(first.structuredOutput).toBe("first");
 	expect(first.message).toMatchObject({
 		isError: false,
 		content: [
@@ -58,11 +70,35 @@ test("read selects complete UTF-8 lines, strips the initial BOM and reports cont
 		],
 	});
 	const later = await files.invoke("read", { path: "notes", offset: 2, limit: 1 });
+	expect(later.structuredOutput).toBe("界🙂");
 	expect(later.message.content[0]).toEqual({ type: "text", text: "界🙂" });
 	expect(later.diagnostics).toEqual([{ severity: "info", message: "2 more lines in file. Use offset=3 to continue." }]);
 	const empty = await files.invoke("read", { path: "notes", limit: 0 });
+	expect(empty.structuredOutput).toBe("");
 	expect(empty.message).toMatchObject({ isError: false });
 	expect(empty.diagnostics).toEqual([{ severity: "info", message: "4 more lines in file. Use offset=1 to continue." }]);
+});
+
+test("read returns an image block to callers as well as the model", async () => {
+	await using files = await fixture();
+	await writeFile(
+		join(files.cwd, "pixel.png"),
+		Buffer.from("89504e470d0a1a0a0000000d4948445200000001000000010806000000", "hex"),
+	);
+	const result = await files.invoke("read", { path: "pixel.png" });
+	expect(result.message.isError).toBe(false);
+	expect(result.structuredOutput).toMatchObject({ type: "image", mimeType: "image/png", data: expect.any(String) });
+	expect(result.message.content).toContainEqual(result.structuredOutput);
+});
+
+test("read reports the remaining lines consistently for fractional selections", async () => {
+	await using files = await fixture();
+	await writeFile(join(files.cwd, "notes"), "a\nb\nc");
+	const result = await files.invoke("read", { path: "notes", offset: 1.01, limit: 0.3 });
+	expect(result.structuredOutput).toBe("");
+	expect(result.diagnostics).toEqual([
+		{ severity: "info", message: "2.69 more lines in file. Use offset=1.31 to continue." },
+	]);
 });
 
 test("read keeps its initial line selection while the environment opens the file", async () => {

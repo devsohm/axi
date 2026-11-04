@@ -1,4 +1,4 @@
-import type { Context } from "@axi/chord";
+import type { Context } from "@axi/objects";
 import { uuidv7 } from "@axi/ai/utils/uuid";
 import { defineDoc } from "../documents.ts";
 import type { TaskRuntime } from "../types.ts";

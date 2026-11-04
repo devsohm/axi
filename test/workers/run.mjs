@@ -49,6 +49,7 @@ try {
 		assert.equal(response.status, 200, text);
 		const body = JSON.parse(text);
 		assert.deepEqual(body.rows, [{ id: 1, value: "committed" }]);
+		assert.deepEqual(body.changedRows, [1, 1]);
 		assert.deepEqual(body.binary, { typed: "010203", buffer: "0908010203070605" });
 		assert.equal(body.rejected, true);
 		assert.equal(body.count, expected);

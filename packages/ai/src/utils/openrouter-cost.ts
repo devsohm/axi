@@ -18,6 +18,8 @@ export function isOpenRouterModel(model: { provider: string; baseUrl: string }):
 	return model.provider === "openrouter" || model.baseUrl.includes("openrouter.ai");
 }
 export function applyOpenRouterReportedCost(usage: Usage, reported: unknown): void {
+	if (reported === null || reported === undefined)
+		throw new TypeError(`Cannot read properties of ${reported} (reading 'cost')`);
 	if (!reported || typeof reported !== "object" || !("cost" in reported) || !amount(reported.cost)) return;
 	if (!("is_byok" in reported)) return;
 	let total = reported.cost;

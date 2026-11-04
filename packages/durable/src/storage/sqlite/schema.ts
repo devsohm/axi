@@ -1,4 +1,4 @@
-import { validateSqliteSchemaPrefix } from "@axi/chord/sqlite";
+import { validateSqliteSchemaPrefix } from "@axi/objects/sqlite";
 const tableNames = {
 	durableSchema: "durable_schema",
 	durableMetadata: "durable_metadata",

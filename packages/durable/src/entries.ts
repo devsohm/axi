@@ -1,4 +1,4 @@
-import type { JsonValue } from "@axi/chord";
+import type { JsonValue } from "@axi/objects";
 import type { Entry, EntryRecord, TypedEntry } from "./types.ts";
 import type { CompactionReason, ToolDiagnostic } from "./harness/types.ts";
 

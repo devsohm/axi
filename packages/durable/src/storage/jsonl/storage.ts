@@ -1,8 +1,9 @@
-import type { Context } from "@axi/chord";
+import type { Context } from "@axi/objects";
 import type { FileError, FileSystem } from "../../env/index.ts";
 import { StorageRequestError } from "../../errors.ts";
 import { idFromNumber } from "../../ids.ts";
 import type {
+	CommitResult,
 	ConversationId,
 	DocumentContent,
 	DocumentId,
@@ -45,6 +46,7 @@ export class JsonlStorage implements Storage {
 	readonly #liveTasks = new Set<TaskId>();
 	#closed = false;
 	#failure: JsonlStoragePoisonedError | undefined;
+	#writing: Promise<void> | undefined;
 	private readonly fs: FileSystem;
 	private readonly directory: string;
 	private readonly mainPath: string;
@@ -85,12 +87,59 @@ export class JsonlStorage implements Storage {
 		if (!result.ok) throw fileError("path join", result.error);
 		return result.value;
 	}
-	async commit(writes: readonly StorageWrite[], adopt: (seq: Seq) => void, context: Context): Promise<Seq> {
-		const pending = this.#view.prepareCommit(writes);
-		const encoded = this.#encode(pending);
-		const replacements = this.#replacements(pending.writes, encoded);
+	async commit(
+		batches: readonly (readonly StorageWrite[])[],
+		receive: (index: number, seq: Seq) => void,
+		context: Context,
+	): Promise<CommitResult> {
+		void this.#view;
+		const seqs: Seq[] = [],
+			commits: Encoded[] = [];
+		const replacements = new Map<string, string>();
+		let refusal: { error: unknown } | undefined;
+		const writing = Promise.withResolvers<void>();
+		this.#writing = writing.promise;
+		try {
+			for (const writes of batches) {
+				let pending: PreparedMemoryCommit;
+				try {
+					pending = this.#memory.prepareCommit(writes);
+				} catch (error) {
+					refusal = { error };
+					break;
+				}
+				const encoded = this.#encode(pending);
+				for (const [file, content] of encoded.sidecars)
+					if (replacements.has(file)) replacements.set(file, replacements.get(file) + content);
+				for (const [file, content] of this.#replacements(pending.writes, encoded)) replacements.set(file, content);
+				seqs.push(pending.apply());
+				for (const write of pending.writes) {
+					if (write.type === "document.create" && currentOnly(write.record)) this.#currentOnly.add(write.record.id);
+					if (write.type === "task") {
+						if (write.value.state.status === "terminal") this.#liveTasks.delete(write.value.id);
+						else this.#liveTasks.add(write.value.id);
+					}
+				}
+				commits.push(encoded);
+			}
+			if (commits.length) await this.#append(commits, context);
+		} catch (error) {
+			if (seqs.length === 0) throw error;
+			throw this.#poison(error instanceof Error ? error : new Error("JSONL commit failed", { cause: error }));
+		} finally {
+			this.#writing = undefined;
+			writing.resolve();
+		}
+		for (const [index, seq] of seqs.entries()) receive(index, seq);
+		await this.#reclaim(replacements, context);
+		return refusal ? { stored: seqs.length, refused: refusal.error } : { stored: seqs.length };
+	}
+	async #append(commits: readonly Encoded[], context: Context): Promise<void> {
+		const contents = new Map<string, string>();
+		for (const commit of commits)
+			for (const [file, content] of commit.sidecars) contents.set(file, (contents.get(file) ?? "") + content);
 		const sidecars = await Promise.all(
-			[...encoded.sidecars].map(async ([file, content]) => ({ file, content, path: await this.#path(file, context) })),
+			[...contents].map(async ([file, content]) => ({ file, content, path: await this.#path(file, context) })),
 		);
 		for (const { file, content, path } of sidecars) {
 			const appended = await this.fs.appendFile(path, content, context);
@@ -102,19 +151,8 @@ export class JsonlStorage implements Storage {
 				if (!flushed.ok) throw this.#poison(fileError(`flush of ${file}`, flushed.error));
 			}
 		}
-		const published = await this.fs.appendFile(this.mainPath, encoded.marker, context);
+		const published = await this.fs.appendFile(this.mainPath, commits.map((commit) => commit.marker).join(""), context);
 		if (!published.ok) throw this.#poison(fileError("append to main.jsonl", published.error));
-		const seq = pending.apply();
-		for (const write of pending.writes) {
-			if (write.type === "document.create" && currentOnly(write.record)) this.#currentOnly.add(write.record.id);
-			if (write.type === "task") {
-				if (write.value.state.status === "terminal") this.#liveTasks.delete(write.value.id);
-				else this.#liveTasks.add(write.value.id);
-			}
-		}
-		adopt(seq);
-		await this.#reclaim(replacements, context);
-		return seq;
 	}
 	#encode(pending: PreparedMemoryCommit): Encoded {
 		const writes: MainWrite[] = [];
@@ -387,26 +425,33 @@ export class JsonlStorage implements Storage {
 	}
 
 	mintId: Storage["mintId"] = async () => this.#view.mintId();
-	conversation: Storage["conversation"] = async (...args) => this.#view.conversation(...args);
-	scanConversations: Storage["scanConversations"] = async (...args) => this.#view.scanConversations(...args);
+	async #readable(): Promise<MemoryStorage> {
+		while (this.#writing) await this.#writing;
+		return this.#view;
+	}
+	conversation: Storage["conversation"] = async (...args) => (await this.#readable()).conversation(...args);
+	scanConversations: Storage["scanConversations"] = async (...args) =>
+		(await this.#readable()).scanConversations(...args);
 	entry(id: EntryId, context: Context): ReturnType<Storage["entry"]>;
 	entry(conversationId: ConversationId, id: EntryId, context: Context): ReturnType<Storage["entry"]>;
 	async entry(id: EntryId | ConversationId, next: EntryId | Context, context?: Context): ReturnType<Storage["entry"]> {
-		const memory = this.#view;
+		const memory = await this.#readable();
 		if (context === undefined) return memory.entry(idFromNumber<EntryId>(id), next as Context);
 		if (typeof next !== "number") throw new StorageRequestError("Storage.entry() requires an entry ID");
 		return memory.entry(idFromNumber<ConversationId>(id), next, context);
 	}
-	findLatestHeadMarker: Storage["findLatestHeadMarker"] = async (...args) => this.#view.findLatestHeadMarker(...args);
-	scanEntries: Storage["scanEntries"] = async (...args) => this.#view.scanEntries(...args);
-	task: Storage["task"] = async (...args) => this.#view.task(...args);
-	scanTasks: Storage["scanTasks"] = async (...args) => this.#view.scanTasks(...args);
-	submission: Storage["submission"] = async (...args) => this.#view.submission(...args);
-	scanSubmissions: Storage["scanSubmissions"] = async (...args) => this.#view.scanSubmissions(...args);
-	submissionByRequest: Storage["submissionByRequest"] = async (...args) => this.#view.submissionByRequest(...args);
-	findDocument: Storage["findDocument"] = async (...args) => this.#view.findDocument(...args);
-	document: Storage["document"] = async (...args) => this.#view.document(...args);
-	scanDocuments: Storage["scanDocuments"] = async (...args) => this.#view.scanDocuments(...args);
+	findLatestHeadMarker: Storage["findLatestHeadMarker"] = async (...args) =>
+		(await this.#readable()).findLatestHeadMarker(...args);
+	scanEntries: Storage["scanEntries"] = async (...args) => (await this.#readable()).scanEntries(...args);
+	task: Storage["task"] = async (...args) => (await this.#readable()).task(...args);
+	scanTasks: Storage["scanTasks"] = async (...args) => (await this.#readable()).scanTasks(...args);
+	submission: Storage["submission"] = async (...args) => (await this.#readable()).submission(...args);
+	scanSubmissions: Storage["scanSubmissions"] = async (...args) => (await this.#readable()).scanSubmissions(...args);
+	submissionByRequest: Storage["submissionByRequest"] = async (...args) =>
+		(await this.#readable()).submissionByRequest(...args);
+	findDocument: Storage["findDocument"] = async (...args) => (await this.#readable()).findDocument(...args);
+	document: Storage["document"] = async (...args) => (await this.#readable()).document(...args);
+	scanDocuments: Storage["scanDocuments"] = async (...args) => (await this.#readable()).scanDocuments(...args);
 	async close(context: Context): Promise<void> {
 		if (this.#closed) return;
 		this.#closed = true;

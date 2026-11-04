@@ -160,7 +160,7 @@ describe("Anthropic messages", () => {
 		}
 	});
 
-	it("exposes active tool JSON and removes streaming fields at block completion", async () => {
+	it("streams tool arguments without exposing private parser state", async () => {
 		const frames = await Promise.all(
 			[
 				start,
@@ -195,8 +195,8 @@ describe("Anthropic messages", () => {
 			if (event.type === "toolcall_start" || event.type === "toolcall_delta" || event.type === "toolcall_end")
 				snapshots.push(structuredClone(event.partial.content[0]));
 		expect(snapshots).toEqual([
-			{ type: "toolCall", id: "a", name: "read", arguments: {}, partialJson: "", index: 0 },
-			{ type: "toolCall", id: "a", name: "read", arguments: { path: "a" }, partialJson: '{"path":"a"}', index: 0 },
+			{ type: "toolCall", id: "a", name: "read", arguments: {} },
+			{ type: "toolCall", id: "a", name: "read", arguments: { path: "a" } },
 			{ type: "toolCall", id: "a", name: "read", arguments: { path: "a" } },
 		]);
 		expect((await events.result()).content).toEqual([

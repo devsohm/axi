@@ -1,6 +1,13 @@
-import type { Context, JsonValue } from "@axi/chord";
+import type { Context, JsonValue } from "@axi/objects";
 import type { ConversationId, Storage, TaskId, TaskRecord } from "../types.ts";
 import type { Transaction } from "../session/transaction.ts";
+import { conversationKey, ownedKey, ROOTS_KEY, taskKey } from "../session/keys.ts";
+type Coordination = {
+	read(key: string): void;
+	onEnd(end: () => void): void;
+	released(): void;
+	resolved(): void;
+};
 
 export type StoredTask = TaskRecord<JsonValue, JsonValue, JsonValue>;
 type TaskLink = Pick<StoredTask, "owner" | "conversationId" | "background">;
@@ -31,9 +38,12 @@ export class OwnershipTree {
 	readonly #roots = new Set<ConversationId>();
 	readonly #unknown = new Set<TaskId>();
 	readonly #garbage = new Set<OwnershipNode>();
+	readonly #pins = new Map<OwnershipNode, number>();
+	readonly #coordination: Coordination;
 	readonly storage: Storage;
 	readonly context: Context;
-	constructor(storage: Storage, context: Context) {
+	constructor(storage: Storage, context: Context, coordination: Coordination) {
+		this.#coordination = coordination;
 		this.storage = storage;
 		this.context = context;
 	}
@@ -70,6 +80,7 @@ export class OwnershipTree {
 			return task === undefined ? undefined : taskParent(task);
 		}
 		const id = conversationId(node);
+		this.#coordination.read(conversationKey(id));
 		return overlay?.conversations.has(id) ? overlay.conversations.get(id) : this.#conversations.get(id);
 	}
 	known(node: OwnershipNode): boolean {
@@ -80,38 +91,53 @@ export class OwnershipTree {
 
 	async load(start: OwnershipNode, overlay?: OwnershipOverlay): Promise<void> {
 		const passed: TaskId[] = [];
+		let installed = false;
 		let node: OwnershipNode | null | undefined = start;
-		while (node !== undefined && node !== null) {
-			if (typeof node === "number") {
-				let task = this.#task(node);
-				if (task === undefined && overlay?.tasks.has(node)) break;
-				if (task !== undefined && !this.#unknown.has(node)) break;
-				if (task === undefined) {
-					const stored = await this.storage.task(node, this.context);
-					if (stored === undefined) return;
-					task = {
-						conversationId: stored.conversationId,
-						background: stored.background,
-						...(stored.owner === undefined ? {} : { owner: stored.owner }),
-					};
-					this.#ended.set(node, task);
-					this.#unknown.add(node);
-					this.#relink(node);
-					this.#queueDrop(node);
+		try {
+			while (node !== undefined && node !== null) {
+				if (typeof node === "number") {
+					let task = this.#task(node);
+					if (task === undefined && overlay?.tasks.has(node)) break;
+					if (task !== undefined && !this.#unknown.has(node)) break;
+					if (task === undefined) {
+						const stored = await this.storage.task(node, this.context);
+						if (stored === undefined) return;
+						task = {
+							conversationId: stored.conversationId,
+								background: stored.background,
+								...(stored.owner === undefined ? {} : { owner: stored.owner }),
+						};
+						this.#ended.set(node, task);
+						this.#pin(node);
+						this.#unknown.add(node);
+						this.#relink(node);
+						this.#queueDrop(node);
+						installed = true;
+					}
+					passed.push(node);
+					node = taskParent(task);
+				} else {
+					let owner = this.#parent(node, overlay);
+					if (owner === undefined) {
+						const id = conversationId(node);
+						owner = (await this.storage.conversation(id, this.context))?.owner?.taskId ?? null;
+						this.conversation(id, owner);
+						this.#pin(node);
+						installed = true;
+					}
+					node = owner;
 				}
-				passed.push(node);
-				node = taskParent(task);
-			} else {
-				let owner = this.#parent(node, overlay);
-				if (owner === undefined) {
-					const id = conversationId(node);
-					owner = (await this.storage.conversation(id, this.context))?.owner?.taskId ?? null;
-					this.conversation(id, owner);
-				}
-				node = owner;
+			}
+		} finally {
+			if (passed.some((id) => this.live.has(id)) || (installed && this.#hasUnknownLive())) {
+				this.#coordination.resolved();
 			}
 		}
 		for (const id of passed) this.#unknown.delete(id);
+	}
+	#hasUnknownLive(): boolean {
+		for (const id of this.#unknown) if (this.live.has(id)) return true;
+		return false;
 	}
 	async loadAll(): Promise<void> {
 		for (const id of this.#unknown) await this.load(id);
@@ -153,7 +179,7 @@ export class OwnershipTree {
 	}
 	prune(): void {
 		for (const node of this.#garbage) {
-			if (this.#children.has(node)) continue;
+			if (this.#children.has(node) || this.#pins.has(node)) continue;
 			if (typeof node === "string") {
 				this.#conversations.delete(conversationId(node));
 				this.#roots.delete(conversationId(node));
@@ -163,6 +189,22 @@ export class OwnershipTree {
 			}
 		}
 		this.#garbage.clear();
+	}
+	#pin(node: OwnershipNode): void {
+		this.#pins.set(node, (this.#pins.get(node) ?? 0) + 1);
+		this.#coordination.onEnd(() => {
+			const remaining = this.#pins.get(node)! - 1;
+			if (remaining > 0) this.#pins.set(node, remaining);
+			else {
+				this.#pins.delete(node);
+				this.#queueDrop(node);
+				this.#coordination.released();
+			}
+		});
+	}
+	readTask(id: TaskId): StoredTask | undefined {
+		this.#coordination.read(taskKey(id));
+		return this.live.get(id);
 	}
 	get hasGarbage(): boolean {
 		return this.#garbage.size > 0;
@@ -200,13 +242,14 @@ export class OwnershipTree {
 		const extra = options.overlay === undefined ? undefined : this.#extraChildren(options.overlay);
 		const stack = [start];
 		for (let parent = stack.pop(); parent !== undefined; parent = stack.pop()) {
+			this.#coordination.read(ownedKey(parent));
 			for (const children of [this.#children.get(parent), extra?.get(parent)]) {
 				for (const child of children ?? []) {
 					if (typeof child === "string") {
 						stack.push(child);
 						continue;
 					}
-					const record = options.overlay?.tasks.get(child) ?? this.live.get(child);
+					const record = options.overlay?.tasks.get(child) ?? this.readTask(child);
 					const node = record ?? this.#ended.get(child);
 					if (node === undefined) continue;
 					yield { id: child, node, live: record?.state.status === "terminal" ? undefined : record };
@@ -215,7 +258,7 @@ export class OwnershipTree {
 			}
 		}
 	}
-	owned(owner: TaskId, overlay?: OwnershipOverlay, first = false, skip?: ReadonlySet<TaskId>): TaskId[] {
+	owned(owner: TaskId, overlay?: OwnershipOverlay, first = false, skip?: Pick<ReadonlySet<TaskId>, "has">): TaskId[] {
 		const result: TaskId[] = [];
 		for (const child of this.descendants(owner, {
 			...(overlay === undefined ? {} : { overlay }),
@@ -254,7 +297,7 @@ export class OwnershipTree {
 		for (const step of this.ancestors(taskParent(task), overlay)) {
 			if (step.kind === "unknown") return;
 			if (step.kind !== "task") continue;
-			const record = overlay?.tasks.get(step.id) ?? this.live.get(step.id);
+			const record = overlay?.tasks.get(step.id) ?? this.readTask(step.id);
 			if (record !== undefined && record.state.status !== "terminal") return record;
 			if (step.node.background) return;
 		}
@@ -268,6 +311,7 @@ export class OwnershipTree {
 		return scope === undefined;
 	}
 	idle(scope: ConversationId | undefined): boolean {
+		if (scope === undefined) this.#coordination.read(ROOTS_KEY);
 		for (const id of this.#unknown) {
 			const record = this.live.get(id);
 			if (record && !record.background && this.inScope(taskParent(record), scope) !== false) return false;
@@ -280,9 +324,10 @@ export class OwnershipTree {
 		return true;
 	}
 	direct(owner: TaskId): StoredTask[] {
+		this.#coordination.read(ownedKey(owner));
 		const tasks: StoredTask[] = [];
 		for (const id of this.#children.get(owner) ?? []) {
-			const task = typeof id === "number" ? this.live.get(id) : undefined;
+			const task = typeof id === "number" ? this.readTask(id) : undefined;
 			if (task?.owner === owner) tasks.push(task);
 		}
 		return tasks.sort((left, right) => left.id - right.id);
@@ -298,6 +343,7 @@ export class OwnershipTree {
 			roots: this.#roots.size,
 			unloaded: this.#unknown.size,
 			dropQueue: this.#garbage.size,
+			pins: this.#pins.size,
 		};
 	}
 }

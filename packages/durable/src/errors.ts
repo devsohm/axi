@@ -16,6 +16,15 @@ export class ConversationBusy extends Error {
 	}
 }
 
+export class ConversationIdle extends Error {
+	readonly conversationId: ConversationId;
+	constructor(conversationId: ConversationId) {
+		super(`Conversation ${conversationId} is idle`);
+			this.name = "ConversationIdle";
+			this.conversationId = conversationId;
+	}
+}
+
 export class StorageRequestError extends Error {
 	constructor(message: string) {
 		super(message);
@@ -25,7 +34,7 @@ export class StorageRequestError extends Error {
 
 export class ReadAfterWrite extends Error {
 	constructor(method: string) {
-		super(`Tx.${method}() cannot read tables after the first table write`);
+		super(`${method} cannot read tables after the first table write`);
 		this.name = "ReadAfterWrite";
 	}
 }

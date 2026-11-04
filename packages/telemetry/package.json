@@ -9,6 +9,7 @@
 	"types": "./dist/index.d.ts",
 	"exports": {
 		".": {
+			"source": "./src/index.ts",
 			"types": "./dist/index.d.ts",
 			"import": "./dist/index.js"
 		},
@@ -18,6 +19,7 @@
 			"import": "./dist/render.js"
 		},
 		"./testing": {
+			"source": "./src/testing/index.ts",
 			"types": "./dist/testing/index.d.ts",
 			"import": "./dist/testing/index.js"
 		}

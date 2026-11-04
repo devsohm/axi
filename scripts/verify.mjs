@@ -20,6 +20,7 @@ script("build");
 script("build:daemon", "--workspace", "@axi/env");
 script("build:native", "--workspace", "@axi/tui");
 script("check");
+script("test:tooling");
 script("test:coverage");
 run("cargo", ["test", "--locked", "--manifest-path", "packages/env/daemon/Cargo.toml"]);
 script("test:native", "--workspace", "@axi/tui");

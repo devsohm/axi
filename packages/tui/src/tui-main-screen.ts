@@ -150,7 +150,9 @@ export class TuiMainScreen extends TuiBase {
 			: state.previousViewportTop;
 		let viewportTop = previousTop,
 			hardwareRow = state.hardwareCursorRow;
-		let lines = this.resolveFakeCursors(this.render(width));
+		let lines = this.resolveFakeCursors(
+			this.render(width).map((line) => line.replace(/^(?:\x1b\]133;[ABC](?:\x07|\x1b\\))+/, "")),
+		);
 		if (this.hasOverlayEntries) lines = this.compositeOverlays(lines, width, height);
 		const cursor = this.extractCursorPosition(lines, height);
 		lines = this.applyLineResets(lines);

@@ -4,7 +4,7 @@ import { access, stat } from "node:fs/promises";
 import { constants } from "node:os";
 import { join, win32 } from "node:path";
 import type { Readable, Writable } from "node:stream";
-import type { Context } from "@axi/chord";
+import type { Context } from "@axi/objects";
 import { StreamDecoder } from "./decode.ts";
 import {
 	err,

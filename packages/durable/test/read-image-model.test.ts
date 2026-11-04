@@ -2,7 +2,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createModels, fauxAssistantMessage, fauxProvider, fauxToolCall } from "@axi/ai";
-import { BACKGROUND_CONTEXT as context } from "@axi/chord/context";
+import { BACKGROUND_CONTEXT as context } from "@axi/objects/context";
 import { expect, it } from "vitest";
 import { NodeExecutionEnv } from "../src/env/node.ts";
 import { createRegistry, defineExtension, Harness, MemoryStorage, ToolResultEntry } from "../src/index.ts";

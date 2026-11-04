@@ -83,7 +83,45 @@ async function payload(m = model, options: BedrockOptions = {}): Promise<Convers
 	return captured;
 }
 describe("Bedrock adapter", () => {
-	it("exposes active tool input and removes scratch fields at block completion", async () => {
+	it("retries a strict-schema capacity rejection once while preserving required constraints", async () => {
+		const failure = new BedrockRuntimeServiceException({
+			name: "ValidationException",
+			message: "The compiled grammar is too large",
+			$fault: "client",
+			$metadata: { httpStatusCode: 400 },
+		});
+		sdk.send.mockRejectedValueOnce(failure);
+		const parameters = Type.Object({ text: Type.String(), limit: Type.Optional(Type.Number()) });
+		const result = await stream(
+			model,
+			normalizeContext({
+				tools: [
+					{
+						name: "flexible",
+						description: "Read",
+						parameters,
+						constrainedSampling: { type: "json_schema", strict: "prefer" },
+					},
+					{
+						name: "required",
+						description: "Write",
+						parameters,
+						constrainedSampling: { type: "json_schema", strict: "require" },
+					},
+				],
+				messages: [{ role: "user", content: "work", timestamp: 0 }],
+			}),
+		).result();
+		expect(result.stopReason).toBe("stop");
+		const requests = sdk.requests as ConverseStreamCommandInput[];
+		expect(requests).toHaveLength(2);
+		expect(requests[0].toolConfig?.tools?.[0]).toMatchObject({ toolSpec: { strict: true } });
+		expect(requests[1].toolConfig?.tools?.[0]).toMatchObject({ toolSpec: { inputSchema: { json: parameters } } });
+		expect(requests[1].toolConfig?.tools?.[0]).not.toHaveProperty("toolSpec.strict");
+		expect(requests[1].toolConfig?.tools?.[1]).toMatchObject({ toolSpec: { strict: true } });
+		expect(result.diagnostics?.[0].type).toBe("bedrock_strict_tools_fallback");
+	});
+	it("streams tool input without exposing private parser state", async () => {
 		const frames = [
 			{ messageStart: { role: "assistant" } },
 			{ contentBlockStart: { contentBlockIndex: 7, start: { toolUse: { toolUseId: "call-1", name: "read" } } } },
@@ -105,14 +143,12 @@ describe("Bedrock adapter", () => {
 			if (event.type === "toolcall_start" || event.type === "toolcall_delta" || event.type === "toolcall_end")
 				snapshots.push(structuredClone(event.partial.content[0]));
 		expect(snapshots).toEqual([
-			{ type: "toolCall", id: "call-1", name: "read", arguments: {}, partialJson: "", index: 7 },
+			{ type: "toolCall", id: "call-1", name: "read", arguments: {} },
 			{
 				type: "toolCall",
 				id: "call-1",
 				name: "read",
 				arguments: { path: "file" },
-				partialJson: '{"path":"file"}',
-				index: 7,
 			},
 			{ type: "toolCall", id: "call-1", name: "read", arguments: { path: "file" } },
 		]);

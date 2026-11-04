@@ -31,6 +31,20 @@ describe("keyboard identity", () => {
 		expect(decodePrintableKey("\x1b[27;2;65~")).toBe("A");
 		expect(decodePrintableKey("\x1b[97;5u")).toBeUndefined();
 	});
+
+	it("keeps unmapped private-use key IDs separate from function-key escape sequences", () => {
+		const functionKeys = ["f1", "f2", "f3", "f4", "f5", "f6", "f7", "f8", "f9", "f10", "f11", "f12"] as const;
+		for (const [index, key] of functionKeys.entries()) {
+			const sequence = `\x1b[${57364 + index}u`;
+			expect(parseKey(sequence)).toBeUndefined();
+			expect(matchesKey(sequence, key)).toBe(false);
+		}
+		expect(parseKey("\x1b[11~")).toBe("f1");
+		expect(matchesKey("\x1b[1;5P", "ctrl+f1")).toBe(true);
+		expect(parseKey("\x1b[57364::97;5u")).toBe("ctrl+a");
+		expect(matchesKey("\x1b[57364::97;5u", "ctrl+a")).toBe(true);
+		expect(matchesKey("\x1b[57364::97;5u", "ctrl+f1")).toBe(false);
+	});
 });
 
 describe("terminal negotiation", () => {

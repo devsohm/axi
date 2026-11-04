@@ -4,6 +4,20 @@ import { InMemoryTelemetryContext, NOOP_TELEMETRY_CONTEXT, type TelemetrySpan } 
 import { createTelemetryAdapterConformance } from "../src/testing/index.ts";
 
 describe("telemetry capture", () => {
+	it("runs the disabled callback immediately and adopts its promise before settling the span", async () => {
+		const order: string[] = [];
+		const operation = Promise.resolve(42);
+		const span = NOOP_TELEMETRY_CONTEXT.startSpan({ name: "operation" }, () => {
+			order.push("entered");
+			return operation;
+		});
+		span.then(() => order.push("span"));
+		operation.then(() => order.push("operation"));
+		queueMicrotask(() => order.push("microtask"));
+		expect(order).toEqual(["entered"]);
+		expect(await span).toBe(42);
+		expect(order).toEqual(["entered", "operation", "microtask", "span"]);
+	});
 	it("rejects an adapter that loses the names of failed operations", async () => {
 		const cases = createTelemetryAdapterConformance(async () => {
 			const context = new InMemoryTelemetryContext();

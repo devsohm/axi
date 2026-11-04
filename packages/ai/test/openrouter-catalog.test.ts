@@ -1,5 +1,5 @@
 import { afterEach, expect, expectTypeOf, it, vi } from "vitest";
-import { fetchCatalog } from "../scripts/catalog-sources.ts";
+import { fetchCatalog } from "../catalog/sources.ts";
 import { personalizeOpenRouterCatalog } from "../src/providers/openrouter.ts";
 import type { OpenRouterModel, OpenRouterPricing } from "../src/providers/openrouter-api.ts";
 import type { Model } from "../src/types.ts";

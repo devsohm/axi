@@ -1,6 +1,7 @@
-import type { Context, JsonValue } from "@axi/chord";
+import type { Context, JsonValue } from "@axi/objects";
 import { SessionFailed, StorageRequestError } from "../errors.ts";
 import type * as T from "../types.ts";
+import { scopeOf } from "./cached-storage.ts";
 type FailureOwner = { readonly failure: { readonly error: unknown } | undefined; fail(error: unknown): void };
 export class GuardedStorage implements T.Storage {
 	readonly #backend: T.Storage;
@@ -33,8 +34,23 @@ export class GuardedStorage implements T.Storage {
 		const failure = this.#owner.failure;
 		if (failure !== undefined) throw new SessionFailed(failure.error);
 	}
-	commit(writes: readonly T.StorageWrite[], adopt: (seq: T.Seq) => void, context: Context) {
-		return this.#call(undefined, () => this.#backend.commit(writes, adopt, context));
+	get publishing(): T.Storage["publishing"] {
+		return scopeOf(this.#backend);
+	}
+	async commit(
+		batches: readonly (readonly T.StorageWrite[])[],
+		receive: (index: number, seq: T.Seq) => void,
+		context: Context,
+	): Promise<T.CommitResult> {
+		this.#healthy();
+		if (this.#closing) throw new Error("Session is closed");
+		const pending = (async () => this.#backend.commit(batches, receive, context))();
+		this.#pending.add(pending);
+		try {
+			return await pending;
+		} finally {
+			this.#pending.delete(pending);
+		}
 	}
 	mintId<RecordId extends T.Id<string>>(): Promise<RecordId> {
 		return this.#call(undefined, () => this.#backend.mintId<RecordId>());

@@ -1,7 +1,9 @@
+import { commitWrites } from "../src/testing/commit-writes.ts";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { BACKGROUND_CONTEXT as context } from "@axi/chord/context";
+import { BACKGROUND_CONTEXT as context } from "@axi/objects/context";
+import type { SqliteExecutor } from "@axi/objects/sqlite";
 import { describe, expect, it, vi } from "vitest";
 import {
 	createSession,
@@ -25,11 +27,46 @@ const State = defineDoc({
 	initial: () => ({ count: 0, items: [] as string[] }),
 });
 describe("SQLite-backed Session", () => {
+	it("preserves IDs minted during a commit when reopening storage", async () => {
+		const directory = await mkdtemp(join(tmpdir(), "axi-id-allocation-"));
+		const path = join(directory, "session.sqlite");
+		const database = await openNodeSqliteDatabase(path);
+		let storage = await SqliteStorage.open(database);
+		const transaction = database.transaction.bind(database);
+		vi.spyOn(database, "transaction").mockImplementation(
+			<Value>(callback: (executor: SqliteExecutor) => Promise<Value>) =>
+				transaction(async (executor) => {
+					const run = executor.run.bind(executor);
+					executor.run = async (sql, ...params) => {
+						await run(sql, ...params);
+						if (/INSERT INTO entries\b/.test(sql)) {
+							for (let index = 0; index < 3; index++) await storage.mintId<EntryId>();
+						}
+					};
+					return callback(executor);
+				}),
+		);
+		try {
+			const id = await storage.mintId<EntryId>();
+			await commitWrites(
+				storage,
+				[{ type: "entry", value: { id, conversationId: ROOT_CONVERSATION_ID, kind: "note" } }],
+				context,
+			);
+			await storage.close(context);
+			storage = await openNodeSqliteStorage(path);
+			expect(await storage.mintId<EntryId>()).toBe(id + 4);
+		} finally {
+			await storage.close(context);
+			await rm(directory, { recursive: true, force: true });
+		}
+	});
 	it("preserves initialization errors when closing the database throws synchronously", async () => {
 		const failure = new Error("initialization failed");
 		const database = {
 			exec: vi.fn(async () => {}),
 			run: vi.fn(async () => {}),
+			runCounted: vi.fn(async () => 0),
 			get: vi.fn(async () => undefined),
 			all: vi.fn(async () => []),
 			transaction: vi.fn(async () => {
@@ -62,7 +99,7 @@ describe("SQLite-backed Session", () => {
 			}
 			const leaf = idFromNumber<ConversationId>(42);
 			writes.push({ type: "entry", value: { id: idFromNumber<EntryId>(44), conversationId: leaf, kind: "note" } });
-			await storage.commit(writes, () => {}, context);
+			await commitWrites(storage, writes, context);
 			const reads = vi.spyOn(database, "get");
 			const page = await storage.scanEntries({ conversationId: leaf }, 1, undefined, context);
 			expect(page.items.map((item) => item.id)).toEqual([44]);
@@ -122,20 +159,20 @@ describe("SQLite-backed Session", () => {
 		try {
 			const id = 100 as EntryId;
 			await expect(
-				storage.commit(
+				commitWrites(
+					storage,
 					[
 						{ type: "entry", value: { id, conversationId: ROOT_CONVERSATION_ID, kind: "a" } },
 						{ type: "entry", value: { id, conversationId: ROOT_CONVERSATION_ID, kind: "b" } },
 					],
-					() => {},
 					context,
 				),
 			).rejects.toThrow("written more than once");
 			expect(await storage.mintId<EntryId>()).toBe(2);
 			expect(
-				await storage.commit(
+				await commitWrites(
+					storage,
 					[{ type: "entry", value: { id, conversationId: ROOT_CONVERSATION_ID, kind: "kept" } }],
-					() => {},
 					context,
 				),
 			).toBe(1);

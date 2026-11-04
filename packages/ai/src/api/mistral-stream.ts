@@ -1,7 +1,7 @@
 import { calculateCost } from "../models.ts";
 import type { AssistantMessage, Model, StreamOptions, TextContent, ThinkingContent, ToolCall } from "../types.ts";
 import type { AssistantMessageEventStream } from "../utils/event-stream.ts";
-import { parseStreamingJson, parseToolCallArguments } from "../utils/json-parse.ts";
+import { ToolCallArgumentsStream } from "../utils/streaming-json.ts";
 import { sanitizeSurrogates } from "../utils/sanitize-unicode.ts";
 import type { MistralChunk } from "./mistral-http.ts";
 import { mistralToolId } from "./mistral-request.ts";
@@ -32,7 +32,8 @@ export async function consumeMistral(
 	observer: StreamOptions["onProviderStreamEvent"],
 ): Promise<void> {
 	let current: TextContent | ThinkingContent | undefined;
-	type StreamingCall = ToolCall & { partialArgs?: string };
+	type StreamingCall = ToolCall;
+	const argumentsByCall = new Map<StreamingCall, ToolCallArgumentsStream>();
 	const blocks: (TextContent | ThinkingContent | StreamingCall)[] = output.content;
 	const tools = new Map<string | number, number>();
 	const index = () => output.content.length - 1;
@@ -118,7 +119,8 @@ export async function consumeMistral(
 			const position = tools.get(key);
 			let block = position === undefined ? undefined : blocks[position];
 			if (block?.type !== "toolCall") {
-				block = { type: "toolCall", id, name: call.function.name, arguments: {}, partialArgs: "" };
+				block = { type: "toolCall", id, name: call.function.name, arguments: {} };
+				argumentsByCall.set(block, new ToolCallArgumentsStream());
 				blocks.push(block);
 				tools.set(key, index());
 				events.push({ type: "toolcall_start", contentIndex: index(), partial: output });
@@ -127,8 +129,7 @@ export async function consumeMistral(
 				typeof call.function.arguments === "string"
 					? call.function.arguments
 					: JSON.stringify(call.function.arguments || {});
-			block.partialArgs = (block.partialArgs || "") + text;
-			block.arguments = parseStreamingJson<ToolCall["arguments"]>(block.partialArgs);
+			block.arguments = argumentsByCall.get(block)!.append(text);
 			events.push({
 				type: "toolcall_delta",
 				contentIndex: tools.get(key)!,
@@ -141,8 +142,7 @@ export async function consumeMistral(
 	for (const position of tools.values()) {
 		const block = blocks[position];
 		if (block.type !== "toolCall") continue;
-		Object.assign(block, parseToolCallArguments(block.partialArgs));
-		delete block.partialArgs;
+		Object.assign(block, argumentsByCall.get(block)!.finish());
 		events.push({
 			type: "toolcall_end",
 			contentIndex: position,

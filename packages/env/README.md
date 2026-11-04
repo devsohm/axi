@@ -18,7 +18,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Connection, localDaemon, RemoteExecutionEnv } from "@axi/env";
-import { BACKGROUND_CONTEXT } from "@axi/chord/context";
+import { BACKGROUND_CONTEXT } from "@axi/objects/context";
 
 const cwd = await mkdtemp(join(tmpdir(), "axi-env-example-"));
 await writeFile(join(cwd, "sample.txt"), "ready");

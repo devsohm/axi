@@ -1,4 +1,4 @@
-import { copyJson, type Draft, type JsonRepresentation } from "@axi/chord";
+import { copyJson, type Draft, type JsonRepresentation } from "@axi/objects";
 import { defineDoc } from "../documents.ts";
 import { UserEntry } from "../entries.ts";
 import type { ConversationId, EntryDraft, EntryId, EntryRecord, JsonObject, SubmissionId, Tx } from "../types.ts";
@@ -30,7 +30,7 @@ export type Boundary = {
 	readonly followUpMode: QueueMode;
 	head: EntryId | undefined;
 };
-export type BoundaryResult = { readonly users: SubmissionId[]; readonly reset: boolean };
+export type BoundaryResult = { readonly users: SubmissionId[]; readonly reset: boolean; readonly first: EntryId | undefined };
 
 export async function prepareBoundary(tx: Tx, conversationId: ConversationId, modes: QueueModes): Promise<Boundary> {
 	const head = (await tx.latestHeadMarker(conversationId))?.head;
@@ -63,6 +63,7 @@ export async function applyBoundary(
 			if (boundary.followUpMode === "all" || followUps++ === 0) users.push(index);
 		}
 	}
+	let first: EntryId | undefined;
 	for (const index of writes) {
 		const item = inbox.items[index]!;
 		if (item.mode !== "write") continue;
@@ -72,6 +73,7 @@ export async function applyBoundary(
 			const entry = await tx.appendEntry(conversationId, draft);
 			if (draft.head !== undefined) boundary.head = draft.head === "self" ? entry.id : draft.head;
 			tx.placeSubmission(item.id, entry.id);
+			first ??= entry.id;
 		}
 	}
 	const placed: SubmissionId[] = [];
@@ -87,9 +89,10 @@ export async function applyBoundary(
 		);
 		tx.placeSubmission(item.id, entry.id);
 		placed.push(item.id);
+		first ??= entry.id;
 	}
 	for (const index of [...writes, ...users].sort((a, b) => b - a)) inbox.items.splice(index, 1);
-	return { users: placed, reset };
+	return { users: placed, reset, first };
 }
 export function appendInput(
 	tx: Tx,

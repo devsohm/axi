@@ -16,7 +16,7 @@ import {
 import { homedir, tmpdir } from "node:os";
 import { dirname, join, normalize, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { Context } from "@axi/chord";
+import type { Context } from "@axi/objects";
 import {
 	type BinaryReader,
 	type DirReader,
@@ -31,7 +31,7 @@ import {
 	type ShellExecOptions,
 	type ShellExecResult,
 	type TextLineReader,
-	type WatchChange,
+	type FileChange,
 	type WatchTarget,
 } from "./index.ts";
 import { checkFileContext, describeFile, fileOperation, openBytes, openDirectory, openLines } from "./node-files.ts";
@@ -185,7 +185,7 @@ export class NodeExecutionEnv implements ExecutionEnv {
 	}
 	watch(
 		targets: readonly WatchTarget[],
-		onChange: (change: WatchChange) => void,
+		onChange: (change: FileChange) => void,
 		context: Context,
 	): Promise<Result<FileWatcher, FileError>> {
 		return fileOperation(undefined, context, async () => {
@@ -196,7 +196,7 @@ export class NodeExecutionEnv implements ExecutionEnv {
 				this.watchOptions,
 			);
 			if (context.abortSignal?.aborted) {
-				await watcher.close(context);
+				await watcher.stop(context);
 				checkFileContext(context, undefined);
 			}
 			return watcher;

@@ -1,3 +1,5 @@
+import { ownedSlice } from "./text.ts";
+
 export const MAX_PROVIDER_ERROR_BODY_CHARS = 4000;
 export interface NormalizedProviderError {
 	status?: number;
@@ -21,7 +23,9 @@ export function safeJsonStringify(value: unknown): string {
 	}
 }
 export function truncateErrorText(text: string, maxChars: number): string {
-	return text.length <= maxChars ? text : `${text.slice(0, maxChars)}... [truncated ${text.length - maxChars} chars]`;
+	return text.length <= maxChars
+		? text
+		: `${ownedSlice(text, 0, maxChars)}... [truncated ${text.length - maxChars} chars]`;
 }
 export function normalizeProviderError(error: unknown): NormalizedProviderError {
 	if (!(error instanceof Error)) return { message: safeJsonStringify(error), messageCarriesBody: false };

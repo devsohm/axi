@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { posix, win32 } from "node:path";
 import { StringDecoder } from "node:string_decoder";
 import { fileURLToPath } from "node:url";
-import type { Context } from "@axi/chord";
+import type { Context } from "@axi/objects";
 import {
 	err,
 	ExecutionError,
@@ -21,7 +21,7 @@ import {
 	type ShellOutputInfo,
 	type ShellOutputSkip,
 	type TextLineReader,
-	type WatchChange,
+	type FileChange,
 	type WatchTarget,
 } from "@axi/durable/env";
 import { type Connection, type Json, nodePlatform, RemoteError } from "./connection.ts";
@@ -469,7 +469,7 @@ export class RemoteExecutionEnv implements ExecutionEnv {
 	}
 	async watch(
 		targets: readonly WatchTarget[],
-		notify: (change: WatchChange) => void,
+		notify: (change: FileChange) => void,
 		context: Context,
 	): Promise<Result<FileWatcher, FileError>> {
 		const before = abortResult<FileWatcher>(context.abortSignal);
@@ -483,7 +483,7 @@ export class RemoteExecutionEnv implements ExecutionEnv {
 			const watcher = await RemoteWatcher.open(this.connection, resolved, notify, this.#watchOptions);
 			const cancelled = abortResult<FileWatcher>(context.abortSignal);
 			if (cancelled) {
-				await watcher.close(context);
+				await watcher.stop(context);
 				return cancelled;
 			}
 			return ok(watcher);

@@ -78,7 +78,8 @@ export function detectCapabilities(tmuxForwardsHyperlink: () => boolean = tmuxLi
 	if (env.TMUX || term.startsWith("tmux")) result.hyperlinks = links ?? tmuxForwardsHyperlink();
 	else if (!term.startsWith("screen")) {
 		if (program === "herdr") result = { images: "kitty", trueColor: hint, hyperlinks: true };
-		else if (program === "rex") result = { images: "kitty", trueColor: true, hyperlinks: true };
+		else if (program === "rex" || (program === "orca" && env.ORCA_IMAGE_PROTOCOL === "kitty"))
+			result = { images: "kitty", trueColor: true, hyperlinks: true };
 		else if (
 			env.KITTY_WINDOW_ID ||
 			program === "kitty" ||

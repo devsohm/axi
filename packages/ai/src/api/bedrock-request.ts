@@ -22,7 +22,11 @@ import { getProviderEnvValue } from "../utils/provider-env.ts";
 import { sanitizeSurrogates } from "../utils/sanitize-unicode.ts";
 import { getSystemMessageText } from "../utils/text.ts";
 import { getCurrentTools, getInitialSystemMessage, withoutInitialSystemMessage } from "../utils/transcript.ts";
-import { getJsonSchemaToolParameters, resolveJsonSchemaStrictSampling } from "./constrained-sampling.ts";
+import {
+	getJsonSchemaToolParameters,
+	prefersJsonSchemaStrictSampling,
+	resolveJsonSchemaStrictSampling,
+} from "./constrained-sampling.ts";
 import type { BedrockOptions } from "./options.ts";
 import {
 	adjustMaxTokensForThinking,
@@ -221,6 +225,7 @@ export function bedrockRequest(
 	model: BedrockModel,
 	context: TranscriptContext,
 	options: BedrockOptions,
+	disablePreferredStrict = false,
 ): ConverseStreamCommandInput {
 	const retention =
 		options.cacheRetention || (getProviderEnvValue("AXI_CACHE_RETENTION", options.env) === "long" ? "long" : "short");
@@ -236,7 +241,10 @@ export function bedrockRequest(
 		const choice = options.toolChoice;
 		toolConfig = {
 			tools: tools.map((tool) => {
-				const strict = resolveJsonSchemaStrictSampling(tool, model.compat?.supportsStrictMode ?? false);
+				const strict =
+					disablePreferredStrict && prefersJsonSchemaStrictSampling(tool)
+						? undefined
+						: resolveJsonSchemaStrictSampling(tool, model.compat?.supportsStrictMode ?? false);
 				return {
 					toolSpec: {
 						name: tool.name,

@@ -9,6 +9,10 @@ it.each([
 	["Request id a503b failed", false],
 	["Input has 150000 bytes", false],
 	["429 subscription_sharing_workplace_individual_usage_limit_exceeded", false],
+	['HTTP 429: {"error":{"code":"1308","message":"Usage exhausted"}}', false],
+	['HTTP 429: {"error":{"code": 1308}}', false],
+	['HTTP 429: {"error":{"code":"13080"}}', true],
+	['HTTP 429: {"message":"Request 1308 was throttled"}', true],
 ] as const)("classifies retries for %s", (errorMessage, expected) => {
 	expect(isRetryableAssistantError(fauxAssistantMessage([], { stopReason: "error", errorMessage }))).toBe(expected);
 });

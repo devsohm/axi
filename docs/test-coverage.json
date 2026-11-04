@@ -25,43 +25,126 @@
 			]
 		},
 		{
-			"name": "@axi/chord",
-			"directory": "packages/chord",
+			"name": "@axi/objects",
+			"directory": "packages/objects",
 			"areas": [
 				{
 					"behavior": "declarations, contracts, state and delta replay",
 					"tests": [
-						"packages/chord/test/contract.test.ts",
-						"packages/chord/test/cell.test.ts",
-						"packages/chord/test/state.test.ts",
-						"packages/chord/test/delta.test.ts",
-						"packages/chord/test/replay-model.test.ts",
-						"packages/chord/test/state-delivery.test.ts"
+						"packages/objects/test/contract.test.ts",
+						"packages/objects/test/cell.test.ts",
+						"packages/objects/test/state.test.ts",
+						"packages/objects/test/delta.test.ts",
+						"packages/objects/test/replay-model.test.ts",
+						"packages/objects/test/state-delivery.test.ts"
 					]
 				},
 				{
 					"behavior": "object routing, links and host lifecycle",
 					"tests": [
-						"packages/chord/test/runtime.test.ts",
-						"packages/chord/test/link.test.ts",
-						"packages/chord/test/remote-lifecycle.test.ts",
-						"packages/chord/test/routed-hosts.test.ts",
-						"packages/chord/test/object-lifecycle.test.ts"
+						"packages/objects/test/runtime.test.ts",
+						"packages/objects/test/link.test.ts",
+						"packages/objects/test/remote-lifecycle.test.ts",
+						"packages/objects/test/routed-hosts.test.ts",
+						"packages/objects/test/object-lifecycle.test.ts",
+						"packages/objects/test/route-controls.test.ts"
 					]
 				},
 				{
 					"behavior": "cluster reload, retirement and rollback",
-					"tests": ["packages/chord/test/cluster-lifecycle.test.ts"]
+					"tests": ["packages/objects/test/cluster-lifecycle.test.ts"]
 				},
 				{
 					"behavior": "processes, cancellation, output and SQLite",
 					"tests": [
-						"packages/chord/test/manager.test.ts",
-						"packages/chord/test/context.test.ts",
-						"packages/chord/test/output.test.ts",
-						"packages/chord/test/sqlite.test.ts",
-						"packages/chord/test/telemetry-store.test.ts"
+						"packages/objects/test/manager.test.ts",
+						"packages/objects/test/context.test.ts",
+						"packages/objects/test/output.test.ts",
+						"packages/objects/test/sqlite.test.ts",
+						"packages/objects/test/telemetry-store.test.ts"
 					]
+				},
+				{
+					"behavior": "experimental contracts, version mappings, errors, principal keys and bounded link parts",
+					"tests": ["packages/objects/test/next-contracts.test.ts"]
+				},
+				{
+					"behavior": "shared Store table declarations, queries, document history, commit failures, outbox and export lifecycle and replication/import validation",
+					"tests": [
+						"packages/objects/test/store-rows.test.ts",
+						"packages/objects/test/store-schema.test.ts",
+						"packages/objects/test/store-table.test.ts",
+						"packages/objects/test/store-query.test.ts",
+						"packages/objects/test/store-engine.test.ts",
+						"packages/objects/test/store-runtime.test.ts",
+						"packages/objects/test/store-replication.test.ts"
+					]
+				},
+				{
+					"behavior": "object-owned document transactions, handles, persistence and pinned keys",
+					"tests": [
+						"packages/objects/test/document-definition.test.ts",
+						"packages/objects/test/document-persistence.test.ts",
+						"packages/objects/test/object-documents.test.ts",
+						"packages/objects/test/keyed-members.test.ts"
+					]
+				},
+				{
+					"behavior": "object references, scoped calls, cancellation, members and dependency checks",
+					"tests": [
+						"packages/objects/test/host-support.test.ts",
+						"packages/objects/test/object-members.test.ts",
+						"packages/objects/test/object-references.test.ts",
+						"packages/objects/test/object-implementation.test.ts",
+						"packages/objects/test/object-dependencies.test.ts",
+						"packages/objects/test/object-identifiers.test.ts",
+						"packages/objects/test/object-presence.test.ts"
+					]
+				},
+				{
+					"behavior": "persisted job records, restart recovery, state, abort and finish lifecycle",
+					"tests": [
+						"packages/objects/test/job-definition.test.ts",
+						"packages/objects/test/job-run.test.ts",
+						"packages/objects/test/job-state-persistence.test.ts",
+						"packages/objects/test/job-records.test.ts",
+						"packages/objects/test/job-record-lifecycle.test.ts",
+						"packages/objects/test/job-execution.test.ts"
+					]
+				},
+				{
+					"behavior": "followed runtime sources and object routines",
+					"tests": ["packages/objects/test/follow-source.test.ts", "packages/objects/test/object-routines.test.ts"]
+				},
+				{
+					"behavior": "wire message validation, codecs and channel ordering",
+					"tests": [
+						"packages/objects/test/link-messages.test.ts",
+						"packages/objects/test/text-codec.test.ts",
+						"packages/objects/test/binary-codec.test.ts",
+						"packages/objects/test/channel.test.ts"
+					]
+				},
+				{
+					"behavior": "experimental host activation, remote reconnection, interrupted calls and report retention",
+					"tests": [
+						"packages/objects/test/object-host.test.ts",
+						"packages/objects/test/object-attempt.test.ts",
+						"packages/objects/test/object-runtime.test.ts",
+						"packages/objects/test/remote-state.test.ts"
+					]
+				},
+				{
+					"behavior": "experimental facet staging, replacement, resource restart and job/version handover",
+					"tests": ["packages/objects/test/object-reload.test.ts"]
+				},
+				{
+					"behavior": "HTTP routes, admission, bodies, files, authentication and sockets",
+					"tests": ["packages/objects/test/http-server.test.ts"]
+				},
+				{
+					"behavior": "worker processes, recovery, rollout, idle cleanup and locks",
+					"tests": ["packages/objects/test/workers.test.ts"]
 				}
 			]
 		},
@@ -181,6 +264,7 @@
 					"behavior": "records, documents, forks, transactions and backend recovery",
 					"tests": [
 						"packages/durable/test/session.test.ts",
+						"packages/durable/test/grouped-commits.test.ts",
 						"packages/durable/test/session-tasks.test.ts",
 						"packages/durable/test/storage.test.ts",
 						"packages/durable/test/testing.test.ts",
@@ -200,7 +284,7 @@
 				{
 					"behavior": "agent events, configuration and compaction",
 					"tests": [
-						"packages/durable/test/harness-events.test.ts",
+						"packages/durable/test/conversation-watch.test.ts",
 						"packages/durable/test/harness-state.test.ts",
 						"packages/durable/test/recovery-settings.test.ts",
 						"packages/durable/test/compaction-lifecycle.test.ts",
@@ -223,6 +307,20 @@
 						"packages/durable/test/script-services.test.ts",
 						"packages/durable/test/script-recovery.test.ts"
 					]
+				},
+				{
+					"behavior": "atomic admission, run settlement, session observers, conversation windows and registry observation",
+					"tests": [
+						"packages/durable/test/atomic-submission.test.ts",
+						"packages/durable/test/run-lifecycle.test.ts",
+						"packages/durable/test/session-observers.test.ts",
+						"packages/durable/test/conversation-window.test.ts",
+						"packages/durable/test/registry-reader.test.ts"
+					]
+				},
+				{
+					"behavior": "shared Store storage conformance, reopening, ownership and request errors",
+					"tests": ["packages/durable/test/store-storage.test.ts"]
 				}
 			]
 		},
@@ -300,6 +398,10 @@
 		}
 	],
 	"separateChecks": [
+		{
+			"name": "Behavior report validation",
+			"command": "npm run test:tooling"
+		},
 		{
 			"name": "Rust daemon",
 			"command": "cargo test --locked --manifest-path packages/env/daemon/Cargo.toml"

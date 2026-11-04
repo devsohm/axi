@@ -2,7 +2,7 @@
 
 Typed libraries for agent applications.
 
-`@axi/chord` provides typed object contracts, state, resources, registries, reloads and communication between hosts. It includes memory, IPC and WebSocket transports, a Node process manager, invocation contexts, bounded output and SQLite adapters.
+`@axi/objects` provides typed object contracts, state, resources, registries, reloads and communication between hosts. It includes memory, IPC and WebSocket transports, a Node process manager, invocation contexts, bounded output and SQLite adapters.
 
 ```sh
 npm ci
@@ -12,7 +12,7 @@ npm run build:daemon --workspace @axi/env
 npm test
 ```
 
-The package exports its root, `context`, `delta`, `node`, `output`, `sqlite`, `sqlite/node`, `sqlite/cloudflare` and `package.json` entries.
+The package exports its root, `context`, `delta`, `node`, `output`, `sqlite`, `sqlite/node`, `sqlite/cloudflare`, `telemetry-sqlite`, `next` and `package.json` entries. The experimental Node plugin, HTTP and worker components remain internal.
 
 `@axi/telemetry` provides explicit callback spans, typed schemas, local recording and adapter conformance cases.
 
@@ -36,4 +36,4 @@ GitHub releases contain local package archives. See [installation](docs/install.
 
 Run `npm run verify` for builds, local tests, native checks, worker checks and installed-package verification. See [testing](docs/testing.md) for prerequisites, focused commands and coverage limits.
 
-[Package API reference](docs/api.md)
+[Package documentation](docs/api.md) · [Contributing](docs/contributing.md)

@@ -1,4 +1,4 @@
-import type { Context } from "@axi/chord";
+import type { Context } from "@axi/objects";
 import type { Message, ToolCall, ToolResultMessage } from "@axi/ai";
 import { SystemEntry } from "../entries.ts";
 import { idFromNumber } from "../ids.ts";
@@ -11,6 +11,7 @@ export type ContextBounds = {
 	readonly tail: EntryId;
 };
 export type ContextRange = {
+	readonly current: boolean;
 	readonly bounds: ContextBounds;
 	readonly entries: readonly EntryRecord[];
 	readonly view: ContextView;
@@ -31,16 +32,18 @@ function freeze<T>(value: T): T {
 const empty = (): ContextView => ({ head: undefined, entries: [], contributions: [], messages: [] });
 
 export async function captureContextBounds(
+	session: SessionImpl,
 	storage: Storage,
 	id: ConversationId,
 	context: Context,
 	at?: EntryId,
+	visible = false,
 ): Promise<ContextBounds | undefined> {
 	let tail = at;
-	if (at === undefined) tail = (await storage.scanEntries({ conversationId: id }, 1, undefined, context)).items[0]?.id;
-	else if ((await storage.entry(id, at, context)) === undefined)
+	if (at === undefined) tail = await session.latestEntryId(id, context);
+	else if (!visible && (await storage.entry(id, at, context)) === undefined)
 		throw new Error(`Entry ${at} is not visible from conversation ${id}`);
-	return tail === undefined ? undefined : { tail, head: await storage.findLatestHeadMarker(id, tail, context) };
+	return tail === undefined ? undefined : { tail, head: await session.latestHeadMarker(id, tail, context) };
 }
 async function scan(
 	storage: Storage,
@@ -62,14 +65,6 @@ function query(bounds: ContextBounds): Omit<EntryQuery, "conversationId"> {
 }
 function select(bounds: ContextBounds, items: readonly EntryRecord[]): readonly EntryRecord[] {
 	return bounds.head ? [bounds.head, ...items.filter((item) => item.head === undefined)] : items;
-}
-export async function activeEntries(
-	storage: Storage,
-	id: ConversationId,
-	bounds: ContextBounds | undefined,
-	context: Context,
-): Promise<readonly EntryRecord[]> {
-	return bounds === undefined ? [] : select(bounds, await scan(storage, id, query(bounds), context));
 }
 function contribution(entry: EntryRecord, edit: ContextEdit | undefined): readonly Message[] {
 	const messages = edit?.action === "omit" ? [] : edit?.action === "replace" ? edit.messages : (entry.model ?? []);
@@ -114,7 +109,7 @@ function settled(
 				open: pending.slice(last),
 			};
 }
-function derive(bounds: ContextBounds, entries: readonly EntryRecord[]): ContextRange {
+function derive(bounds: ContextBounds, entries: readonly EntryRecord[], current = false): ContextRange {
 	const edits = new Map<EntryId, ContextEdit>();
 	for (const entry of entries) for (const edit of entry.edits ?? []) edits.set(edit.target, edit);
 	const active = select(bounds, entries);
@@ -122,6 +117,7 @@ function derive(bounds: ContextBounds, entries: readonly EntryRecord[]): Context
 	const parts = settled([], contributions.flat());
 	const base = baseline(bounds.head, active);
 	return {
+		current,
 		bounds,
 		entries,
 		edited: new Set(edits.keys()),
@@ -135,14 +131,20 @@ function derive(bounds: ContextBounds, entries: readonly EntryRecord[]): Context
 		},
 	};
 }
-function extend(previous: ContextRange, bounds: ContextBounds, added: readonly EntryRecord[]): ContextRange {
+function extend(
+	previous: ContextRange,
+	bounds: ContextBounds,
+	added: readonly EntryRecord[],
+	current: boolean,
+): ContextRange {
 	const entries = [...previous.entries, ...added];
 	if (added.some((item) => item.edits !== undefined || item.head !== undefined || previous.edited.has(item.id)))
-		return derive(bounds, entries);
+		return derive(bounds, entries, current);
 	const contributions = added.map((item) => contribution(item, undefined));
 	const parts = settled(previous.settled, [...previous.open, ...contributions.flat()]);
 	const base = previous.baseline === undefined ? baseline(bounds.head, added) : previous.baseline;
 	return {
+		current,
 		bounds,
 		entries,
 		edited: previous.edited,
@@ -174,7 +176,7 @@ export async function readContext(
 	return deriveContext(
 		storage,
 		id,
-		await session.readOnLine(() => captureContextBounds(storage, id, context, at)),
+		await session.readOnLine((line) => captureContextBounds(session, line, id, context, at)),
 		context,
 	);
 }
@@ -186,12 +188,13 @@ export async function readContextFrom(
 	at: EntryId | undefined,
 	previous: ContextRange | undefined,
 ): Promise<{ readonly view: ContextView; readonly range: ContextRange | undefined }> {
-	const bounds = await session.readOnLine(() => captureContextBounds(storage, id, context, at));
+	const visible = at !== undefined && previous !== undefined && rangeEntry(previous, at) !== undefined;
+	const bounds = await session.readOnLine((line) => captureContextBounds(session, line, id, context, at, visible));
 	if (bounds === undefined) return { view: empty(), range: undefined };
 	freeze(bounds.head);
 	let range: ContextRange;
 	if (!previous || previous.bounds.head?.id !== bounds.head?.id)
-		range = derive(bounds, freeze(await scan(storage, id, query(bounds), context)));
+		range = derive(bounds, freeze(await scan(storage, id, query(bounds), context)), at === undefined);
 	else if (bounds.tail === previous.bounds.tail) range = previous;
 	else if (bounds.tail < previous.bounds.tail)
 		range = derive(
@@ -213,7 +216,9 @@ export async function readContextFrom(
 					context,
 				),
 			),
+			at === undefined,
 		);
+	if (range.current && session.knownLatestEntryId(id) !== range.bounds.tail) range = { ...range, current: false };
 	return {
 		range,
 		view: {
@@ -223,6 +228,35 @@ export async function readContextFrom(
 			messages: [...range.view.messages],
 		},
 	};
+}
+
+export function rangeEntry(range: ContextRange, id: EntryId): EntryRecord | undefined {
+	let start = 0,
+		end = range.entries.length;
+	while (start < end) {
+		const middle = Math.floor((start + end) / 2),
+			item = range.entries[middle]!;
+		if (item.id < id) start = middle + 1;
+		else end = middle;
+	}
+	const item = range.entries[start];
+	return item?.id === id ? item : undefined;
+}
+
+export function advanceRange(range: ContextRange, appended: readonly EntryRecord[]): ContextRange | undefined {
+	if (!appended.length || !range.current) return range;
+	const added = freeze(appended),
+		last = added.at(-1)!;
+	const marker = added.findLast((item) => item.head !== undefined);
+	const head = marker === undefined ? range.bounds.head : (marker as NonNullable<ContextBounds["head"]>);
+	const bounds = { head, tail: last.id };
+	if (head?.id === range.bounds.head?.id) return extend(range, bounds, added, true);
+	if (range.bounds.head !== undefined && head!.head < range.bounds.head.head) return undefined;
+	return derive(
+		bounds,
+		[...range.entries, ...added].filter((item) => item.id >= head!.head),
+		true,
+	);
 }
 
 export function orderToolResults(messages: readonly Message[]): Message[] {

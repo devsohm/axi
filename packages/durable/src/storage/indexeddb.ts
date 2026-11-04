@@ -1,6 +1,6 @@
 /// <reference lib="dom" />
-import type { Context, JsonValue } from "@axi/chord";
-import { apply, type Op } from "@axi/chord/delta";
+import type { Context, JsonValue } from "@axi/objects";
+import { apply, type Op } from "@axi/objects/delta";
 import { StorageRequestError } from "../errors.ts";
 import { idFromNumber, seqFromNumber } from "../ids.ts";
 import type * as T from "../types.ts";
@@ -67,10 +67,20 @@ const stores = [
 export interface IndexedDbStorageOptions {
 	readonly indexedDB?: IDBFactory;
 }
+class IndexedDbFailure extends Error {}
+function databaseFailure(error: unknown): boolean {
+	const seen = new Set<object>();
+	while (error !== null && typeof error === "object" && !seen.has(error)) {
+		if (error instanceof DOMException || error instanceof IndexedDbFailure) return true;
+		seen.add(error);
+		error = "cause" in error ? error.cause : undefined;
+	}
+	return false;
+}
 function result<Value>(request: IDBRequest<Value>): Promise<Value> {
 	return new Promise((resolve, reject) => {
 		request.addEventListener("success", () => resolve(request.result), { once: true });
-		request.addEventListener("error", () => reject(request.error ?? new Error("IndexedDB request failed")), {
+		request.addEventListener("error", () => reject(request.error ?? new IndexedDbFailure("IndexedDB request failed")), {
 			once: true,
 		});
 	});
@@ -78,17 +88,19 @@ function result<Value>(request: IDBRequest<Value>): Promise<Value> {
 function finished(tx: IDBTransaction): Promise<void> {
 	return new Promise((resolve, reject) => {
 		tx.addEventListener("complete", () => resolve(), { once: true });
-		tx.addEventListener("abort", () => reject(tx.error ?? new Error("IndexedDB transaction was aborted")), {
+		tx.addEventListener("abort", () => reject(tx.error ?? new IndexedDbFailure("IndexedDB transaction was aborted")), {
 			once: true,
 		});
-		tx.addEventListener("error", () => reject(tx.error ?? new Error("IndexedDB transaction failed")), { once: true });
+		tx.addEventListener("error", () => reject(tx.error ?? new IndexedDbFailure("IndexedDB transaction failed")), {
+			once: true,
+		});
 	});
 }
 function get<Value>(tx: IDBTransaction, store: string, key: IDBValidKey): Promise<Value | undefined> {
 	return result(tx.objectStore(store).get(key));
 }
 function keyRanges(): typeof IDBKeyRange {
-	if (typeof IDBKeyRange === "undefined") throw new Error("IndexedDB key ranges are not available");
+	if (typeof IDBKeyRange === "undefined") throw new IndexedDbFailure("IndexedDB key ranges are not available");
 	return IDBKeyRange;
 }
 function range(prefix: readonly IDBValidKey[], lower = 0, upper = maximum, lowerOpen = false, upperOpen = false) {
@@ -104,7 +116,7 @@ function values<Row>(
 	return new Promise((resolve, reject) => {
 		const request = source.openCursor(range, direction),
 			rows: Row[] = [];
-		request.addEventListener("error", () => reject(request.error ?? new Error("IndexedDB cursor failed")), {
+		request.addEventListener("error", () => reject(request.error ?? new IndexedDbFailure("IndexedDB cursor failed")), {
 			once: true,
 		});
 		request.addEventListener("success", () => {
@@ -256,7 +268,7 @@ export class IndexedDbStorage implements T.Storage {
 	}
 	static async open(name: string, options: IndexedDbStorageOptions = {}): Promise<IndexedDbStorage> {
 		const factory = options.indexedDB ?? globalThis.indexedDB;
-		if (factory === undefined) throw new Error("IndexedDB is not available");
+		if (factory === undefined) throw new IndexedDbFailure("IndexedDB is not available");
 		const request = factory.open(name, 1);
 		request.addEventListener("upgradeneeded", (event) => {
 			if (event.oldVersion === 0) schema(request.result);
@@ -276,7 +288,7 @@ export class IndexedDbStorage implements T.Storage {
 	}
 	static async delete(name: string, options: IndexedDbStorageOptions = {}): Promise<void> {
 		const factory = options.indexedDB ?? globalThis.indexedDB;
-		if (factory === undefined) throw new Error("IndexedDB is not available");
+		if (factory === undefined) throw new IndexedDbFailure("IndexedDB is not available");
 		await result(factory.deleteDatabase(name));
 	}
 	#assertOpen() {
@@ -319,173 +331,208 @@ export class IndexedDbStorage implements T.Storage {
 			return idFromNumber<Id>(state.nextId);
 		});
 	}
-	async commit(writes: readonly T.StorageWrite[], adopt: (seq: T.Seq) => void, _context: Context): Promise<T.Seq> {
+	async commit(
+		batches: readonly (readonly T.StorageWrite[])[],
+		receive: (index: number, seq: T.Seq) => void,
+		_context: Context,
+	): Promise<T.CommitResult> {
 		this.#assertOpen();
-		const edits = mutations(writes);
-		const seq = await this.#transaction(stores, "readwrite", async (tx) => {
+		const seqs: T.Seq[] = [];
+		let refusal: { error: unknown } | undefined;
+		await this.#transaction(stores, "readwrite", async (tx) => {
 			const state = await get<Metadata>(tx, "meta", "state");
 			if (!state) throw new Error("Durable IndexedDB metadata is missing");
-			const seq = seqFromNumber(state.nextSeq);
-			const claimed = new Map<number, Table>();
-			for (const write of writes) {
-				if (write.type === "document.change" || write.type === "document.retire") continue;
-				const document = write.type === "document.create" || write.type === "document.copy";
-				const table: Table = document ? "document" : write.type,
-					id = document ? write.record.id : write.value.id;
-				const previous = (await get<{ id: number; recordType: Table }>(tx, "record_ids", id))?.recordType,
-					earlier = claimed.get(id);
-				if (table === "conversation" || table === "entry" || table === "document") {
-					if (previous !== undefined) throw new Error(`ID ${id} already belongs to ${previous}`);
-					if (earlier !== undefined) throw new Error(`ID ${id} is written more than once`);
-				} else {
-					if (previous !== undefined && previous !== table) throw new Error(`ID ${id} already belongs to ${previous}`);
-					if (earlier !== undefined && earlier !== table) throw new Error(`ID ${id} is written as two record types`);
+			let next = state.nextSeq,
+				nextId = state.nextId;
+			for (const writes of batches) {
+				let edits: Map<T.DocumentId, Mutation>;
+				try {
+					edits = mutations(writes);
+					await this.#checkBatch(tx, writes, edits);
+					await this.#resolveCopies(tx, edits);
+				} catch (error) {
+					if (databaseFailure(error)) throw error;
+					refusal = { error };
+					break;
 				}
-				claimed.set(id, table);
-			}
-			const live = new Map<string, number>();
-			for (const [id, edit] of edits) {
-				if (edit.copy && edits.has(edit.copy.id))
-					throw new Error(`Document copy ${id} source is changed in the copy batch`);
-				const old = (await get<DocumentRow>(tx, "documents", id))?.record;
-				if (!edit.create && !old) throw new Error(`Unknown document: ${id}`);
-				if (edit.create && old) throw new Error(`Document ${id} already exists`);
-				if (old?.retiredAt !== undefined) throw new Error(`Document ${id} is retired`);
-				if (edit.content?.kind === "delta") {
-					const previous = await first<Revision>(tx.objectStore("document_revisions"), range([id]), "prev");
-					if (!previous) throw new Error(`Document ${id} delta has no base`);
-					if (previous.version !== edit.content.version)
-						throw new Error(`Document ${id} version transition requires a base`);
-				}
-				const record = edit.create ?? old!;
-				const key = JSON.stringify(addressPrefix(record));
-				let count = live.get(key);
-				if (count === undefined) count = (await this.#findDocument(tx, record, "current")) ? 1 : 0;
-				if (edit.retire && old) count--;
-				if (edit.create && !edit.retire) count++;
-				live.set(key, count);
-			}
-			for (const count of live.values())
-				if (count > 1) throw new Error("Document address already has a current incarnation");
-			const claim = async (id: number, recordType: Table) => {
-				await result(tx.objectStore("record_ids").put({ id, recordType }));
-			};
-			for (const write of writes) {
-				switch (write.type) {
-					case "conversation":
-						await claim(write.value.id, write.type);
-						await result(
-							tx.objectStore("conversations").add({
-								id: write.value.id,
-								...(write.value.owner
-									? { ownerConversationId: write.value.owner.conversationId, ownerTaskId: write.value.owner.taskId }
-									: {}),
-								record: write.value,
-							} satisfies ConversationRow),
-						);
-						break;
-					case "entry":
-						await claim(write.value.id, write.type);
-						await result(
-							tx.objectStore("entries").add({
-								id: write.value.id,
-								conversationId: write.value.conversationId,
-								...(write.value.head === undefined ? {} : { headConversationId: write.value.conversationId }),
-								commitSeq: seq,
-								record: write.value,
-							} satisfies EntryRow),
-						);
-						break;
-					case "task":
-						await claim(write.value.id, write.type);
-						await result(
-							tx.objectStore("tasks").put({
-								id: write.value.id,
-								conversationId: write.value.conversationId,
-								kind: write.value.kind,
-								status: write.value.state.status,
-								abortRequested: write.value.abortRequested ? 1 : 0,
-								background: write.value.background ? 1 : 0,
-								record: write.value,
-							} satisfies TaskRow),
-						);
-						break;
-					case "submission":
-						await claim(write.value.id, write.type);
-						await result(
-							tx.objectStore("submissions").put({
-								id: write.value.id,
-								conversationId: write.value.conversationId,
-								...(write.value.requestId === undefined ? {} : { requestId: write.value.requestId }),
-								status: write.value.status,
-								record: write.value,
-							} satisfies SubmissionRow),
-						);
-						break;
+				const seq = seqFromNumber(next++);
+				await this.#writeBatch(tx, writes, edits, seq);
+				seqs.push(seq);
+				for (const write of writes) {
+					const id = "value" in write ? write.value.id : "record" in write ? write.record.id : undefined;
+					if (id !== undefined) nextId = Math.max(nextId, id + 1);
 				}
 			}
-			for (const [id, edit] of edits) {
-				let content = edit.content;
-				if (edit.copy) {
-					try {
-						const source = await this.#document(tx, edit.copy.id, edit.copy.at),
-							target = edit.create!;
-						if (!source) throw new Error(`Fork source document ${edit.copy.id} cannot be read`);
-						if (
-							source.record.scope.kind !== "conversation" ||
-							target.scope.kind !== "conversation" ||
-							source.record.kind !== target.kind ||
-							source.record.key !== target.key ||
-							source.record.history !== target.history ||
-							source.record.fork !== target.fork
-						)
-							throw new Error(`Fork source document ${edit.copy.id} does not match the copied record`);
-						content = { kind: "base", version: source.version, value: source.value };
-					} catch (cause) {
-						throw new Error(`Document copy ${id} was rejected`, { cause });
-					}
+			if (seqs.length)
+				await result(tx.objectStore("meta").put({ key: "state", nextId, nextSeq: next } satisfies Metadata));
+		});
+		for (const [index, seq] of seqs.entries()) receive(index, seq);
+		return refusal ? { stored: seqs.length, refused: refusal.error } : { stored: seqs.length };
+	}
+	async #checkBatch(
+		tx: IDBTransaction,
+		writes: readonly T.StorageWrite[],
+		edits: ReadonlyMap<T.DocumentId, Mutation>,
+	): Promise<void> {
+		const claimed = new Map<number, Table>();
+		for (const write of writes) {
+			if (write.type === "document.change" || write.type === "document.retire") continue;
+			const document = write.type === "document.create" || write.type === "document.copy";
+			const table: Table = document ? "document" : write.type,
+				id = document ? write.record.id : write.value.id;
+			const previous = (await get<{ id: number; recordType: Table }>(tx, "record_ids", id))?.recordType,
+				earlier = claimed.get(id);
+			if (table === "conversation" || table === "entry" || table === "document") {
+				if (previous !== undefined) throw new Error(`ID ${id} already belongs to ${previous}`);
+				if (earlier !== undefined) throw new Error(`ID ${id} is written more than once`);
+			} else {
+				if (previous !== undefined && previous !== table) throw new Error(`ID ${id} already belongs to ${previous}`);
+				if (earlier !== undefined && earlier !== table) throw new Error(`ID ${id} is written as two record types`);
+			}
+			claimed.set(id, table);
+		}
+		const live = new Map<string, number>();
+		for (const [id, edit] of edits) {
+			if (edit.copy && edits.has(edit.copy.id))
+				throw new Error(`Document copy ${id} source is changed in the copy batch`);
+			const old = (await get<DocumentRow>(tx, "documents", id))?.record;
+			if (!edit.create && !old) throw new Error(`Unknown document: ${id}`);
+			if (edit.create && old) throw new Error(`Document ${id} already exists`);
+			if (old?.retiredAt !== undefined) throw new Error(`Document ${id} is retired`);
+			if (edit.content?.kind === "delta") {
+				const previous = await first<Revision>(tx.objectStore("document_revisions"), range([id]), "prev");
+				if (!previous) throw new Error(`Document ${id} delta has no base`);
+				if (previous.version !== edit.content.version)
+					throw new Error(`Document ${id} version transition requires a base`);
+			}
+			const record = edit.create ?? old!;
+			const key = JSON.stringify(addressPrefix(record));
+			let count = live.get(key);
+			if (count === undefined) count = (await this.#findDocument(tx, record, "current")) ? 1 : 0;
+			if (edit.retire && old) count--;
+			if (edit.create && !edit.retire) count++;
+			live.set(key, count);
+		}
+		for (const count of live.values())
+			if (count > 1) throw new Error("Document address already has a current incarnation");
+	}
+	async #resolveCopies(tx: IDBTransaction, edits: Map<T.DocumentId, Mutation>): Promise<void> {
+		for (const [id, edit] of edits) {
+			if (edit.copy) {
+				try {
+					const source = await this.#document(tx, edit.copy.id, edit.copy.at),
+						target = edit.create!;
+					if (!source) throw new Error(`Fork source document ${edit.copy.id} cannot be read`);
+					if (
+						source.record.scope.kind !== "conversation" ||
+						target.scope.kind !== "conversation" ||
+						source.record.kind !== target.kind ||
+						source.record.key !== target.key ||
+						source.record.history !== target.history ||
+						source.record.fork !== target.fork
+					)
+						throw new Error(`Fork source document ${edit.copy.id} does not match the copied record`);
+					edit.content = { kind: "base", version: source.version, value: source.value };
+				} catch (cause) {
+					throw new Error(`Document copy ${id} was rejected`, { cause });
 				}
-				let record: T.DocumentRecord;
-				if (edit.create) {
-					record = { ...edit.create, createdAt: seq, ...(edit.retire ? { retiredAt: seq } : {}) };
-					await claim(id, "document");
-					await result(tx.objectStore("documents").add(this.#documentRow(record)));
-				} else record = (await get<DocumentRow>(tx, "documents", id))!.record;
-				if (content) {
-					if (content.kind === "base" && currentOnly(record))
-						await result(tx.objectStore("document_revisions").delete(range([id])));
+			}
+		}
+	}
+	async #writeBatch(
+		tx: IDBTransaction,
+		writes: readonly T.StorageWrite[],
+		edits: ReadonlyMap<T.DocumentId, Mutation>,
+		seq: T.Seq,
+	): Promise<void> {
+		const claim = async (id: number, recordType: Table) => {
+			await result(tx.objectStore("record_ids").put({ id, recordType }));
+		};
+		for (const write of writes) {
+			switch (write.type) {
+				case "conversation":
+					await claim(write.value.id, write.type);
 					await result(
-						tx.objectStore("document_revisions").add({
-							documentId: id,
-							seq,
-							kind: content.kind,
-							version: content.version,
-							content: content.kind === "base" ? content.value : content.ops,
-						} satisfies Revision),
+						tx.objectStore("conversations").add({
+							id: write.value.id,
+							...(write.value.owner
+								? { ownerConversationId: write.value.owner.conversationId, ownerTaskId: write.value.owner.taskId }
+								: {}),
+							record: write.value,
+						} satisfies ConversationRow),
 					);
-				}
-				if (edit.retire) {
-					if (!edit.create) {
-						record = { ...record, retiredAt: seq };
-						await result(tx.objectStore("documents").put(this.#documentRow(record)));
-					}
-					if (currentOnly(record)) await result(tx.objectStore("document_revisions").delete(range([id])));
-				}
+					break;
+				case "entry":
+					await claim(write.value.id, write.type);
+					await result(
+						tx.objectStore("entries").add({
+							id: write.value.id,
+							conversationId: write.value.conversationId,
+							...(write.value.head === undefined ? {} : { headConversationId: write.value.conversationId }),
+							commitSeq: seq,
+							record: write.value,
+						} satisfies EntryRow),
+					);
+					break;
+				case "task":
+					await claim(write.value.id, write.type);
+					await result(
+						tx.objectStore("tasks").put({
+							id: write.value.id,
+							conversationId: write.value.conversationId,
+							kind: write.value.kind,
+							status: write.value.state.status,
+							abortRequested: write.value.abortRequested ? 1 : 0,
+							background: write.value.background ? 1 : 0,
+							record: write.value,
+						} satisfies TaskRow),
+					);
+					break;
+				case "submission":
+					await claim(write.value.id, write.type);
+					await result(
+						tx.objectStore("submissions").put({
+							id: write.value.id,
+							conversationId: write.value.conversationId,
+							...(write.value.requestId === undefined ? {} : { requestId: write.value.requestId }),
+							status: write.value.status,
+							record: write.value,
+						} satisfies SubmissionRow),
+					);
+					break;
 			}
-			let nextId = state.nextId;
-			for (const write of writes) {
-				if (write.type === "document.change" || write.type === "document.retire") continue;
-				nextId = Math.max(
-					nextId,
-					(write.type === "document.create" || write.type === "document.copy" ? write.record.id : write.value.id) + 1,
+		}
+		for (const [id, edit] of edits) {
+			const content = edit.content;
+			let record: T.DocumentRecord;
+			if (edit.create) {
+				record = { ...edit.create, createdAt: seq, ...(edit.retire ? { retiredAt: seq } : {}) };
+				await claim(id, "document");
+				await result(tx.objectStore("documents").add(this.#documentRow(record)));
+			} else record = (await get<DocumentRow>(tx, "documents", id))!.record;
+			if (content) {
+				if (content.kind === "base" && currentOnly(record))
+					await result(tx.objectStore("document_revisions").delete(range([id])));
+				await result(
+					tx.objectStore("document_revisions").add({
+						documentId: id,
+						seq,
+						kind: content.kind,
+						version: content.version,
+						content: content.kind === "base" ? content.value : content.ops,
+					} satisfies Revision),
 				);
 			}
-			await result(tx.objectStore("meta").put({ key: "state", nextId, nextSeq: seq + 1 } satisfies Metadata));
-			return seq;
-		});
-		adopt(seq);
-		return seq;
+			if (edit.retire) {
+				if (!edit.create) {
+					record = { ...record, retiredAt: seq };
+					await result(tx.objectStore("documents").put(this.#documentRow(record)));
+				}
+				if (currentOnly(record)) await result(tx.objectStore("document_revisions").delete(range([id])));
+			}
+		}
 	}
+
 	#documentRow(record: T.DocumentRecord): DocumentRow {
 		return {
 			id: record.id,
@@ -506,13 +553,11 @@ export class IndexedDbStorage implements T.Storage {
 		store: string,
 		index: string | undefined,
 		prefix: readonly IDBValidKey[] | undefined,
-		order: T.ScanOrder | undefined,
-		cursor: T.Cursor | undefined,
+		start: ReturnType<typeof scanPosition>,
 		limit: number,
 		accept: (row: Row) => boolean,
 	): Promise<Row[]> {
-		const start = scanPosition(order, cursor, "ascending"),
-			direction = start.order === "ascending" ? "next" : "prev";
+		const direction = start.order === "ascending" ? "next" : "prev";
 		const source = index ? tx.objectStore(store).index(index) : tx.objectStore(store);
 		const keys = prefix
 			? range(
@@ -544,8 +589,7 @@ export class IndexedDbStorage implements T.Storage {
 				"conversations",
 				index,
 				owner === undefined ? undefined : [owner],
-				query.order,
-				cursor,
+				start,
 				limit,
 				(row) => query.ownerConversationId === undefined || row.ownerConversationId === query.ownerConversationId,
 			);
@@ -694,8 +738,7 @@ export class IndexedDbStorage implements T.Storage {
 				"tasks",
 				index,
 				prefix,
-				query.order,
-				cursor,
+				start,
 				limit,
 				(row) =>
 					(query.conversationId === undefined || row.conversationId === query.conversationId) &&
@@ -733,8 +776,7 @@ export class IndexedDbStorage implements T.Storage {
 				"submissions",
 				index,
 				value === undefined ? undefined : [value],
-				query.order,
-				cursor,
+				start,
 				limit,
 				(row) => query.conversationId === undefined || row.conversationId === query.conversationId,
 			);

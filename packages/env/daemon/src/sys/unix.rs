@@ -262,6 +262,29 @@ pub fn configure(
     }
 }
 pub fn after_spawn(_child: &Child) {}
+pub fn on_exit_signal(callback: impl FnOnce(i32) + Send + 'static) -> io::Result<()> {
+    // Block before creating workers. A dedicated thread can then clean up outside a signal handler.
+    let mut signals: libc::sigset_t = unsafe { std::mem::zeroed() };
+    unsafe {
+        libc::sigemptyset(&mut signals);
+        for signal in [libc::SIGINT, libc::SIGTERM, libc::SIGHUP] {
+            libc::sigaddset(&mut signals, signal);
+        }
+        let error = libc::pthread_sigmask(libc::SIG_BLOCK, &signals, std::ptr::null_mut());
+        if error != 0 {
+            return Err(io::Error::from_raw_os_error(error));
+        }
+    }
+    std::thread::Builder::new()
+        .name("exit-signals".into())
+        .spawn(move || {
+            let mut received = 0;
+            if unsafe { libc::sigwait(&signals, &mut received) } == 0 {
+                callback(received);
+            }
+        })?;
+    Ok(())
+}
 pub fn kill_tree(pid: u32) {
     unsafe {
         if libc::kill(-(pid as i32), libc::SIGKILL) != 0 {

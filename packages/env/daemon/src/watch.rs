@@ -1,7 +1,7 @@
 use crate::{
     errors::Failure,
     exec::Control,
-    frame::{EVENT, Frame},
+    frame::{EVENT, Frame, MAX_PAYLOAD},
     output::Output,
     sys,
 };
@@ -537,7 +537,7 @@ impl Session<'_> {
                 if !changed.is_empty() && !self.cancelled() {
                     let mut paths: Vec<_> = changed.into_iter().collect();
                     paths.sort_by(|a, b| a.encode_utf16().cmp(b.encode_utf16()));
-                    self.send(json!({"kind":"change","paths":paths}));
+                    self.send(change_event(paths));
                 }
                 true
             }
@@ -548,6 +548,34 @@ impl Session<'_> {
                 false
             }
         }
+    }
+}
+fn change_event(paths: Vec<String>) -> Value {
+    let event = json!({"kind":"change","paths":paths});
+    match serde_json::to_vec(&event) {
+        Ok(encoded) if encoded.len() <= MAX_PAYLOAD => event,
+        _ => json!({"kind":"change","overflow":true}),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn ordinary_changes_keep_their_paths() {
+        assert_eq!(
+            change_event(vec!["/a".into(), "/b".into()]),
+            json!({"kind":"change","paths":["/a","/b"]})
+        );
+    }
+
+    #[test]
+    fn escaped_paths_that_exceed_the_frame_limit_report_overflow() {
+        assert_eq!(
+            change_event(vec!["\"".repeat(MAX_PAYLOAD / 2)]),
+            json!({"kind":"change","overflow":true})
+        );
     }
 }
 pub fn run(id: u32, value: &Value, output: &Output, control: &Control) -> Result<Value, Failure> {

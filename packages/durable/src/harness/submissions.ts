@@ -1,14 +1,14 @@
-import { type Context, copyJson, type JsonRepresentation } from "@axi/chord";
-import { withTelemetry } from "@axi/chord/context";
+import { type Context, copyJson, type JsonRepresentation } from "@axi/objects";
+import { withTelemetry } from "@axi/objects/context";
 import {
 	createTypedSpanStarter,
 	NOOP_TELEMETRY_CONTEXT,
 	type TelemetryContext,
 	type TelemetrySpan,
 } from "@axi/telemetry";
-import { ConversationBusy } from "../errors.ts";
+import { ConversationBusy, ConversationIdle, ReadAfterWrite } from "../errors.ts";
 import type { SessionImpl } from "../session/session.ts";
-import type { ConversationId, JsonObject, Storage, SubmissionId, SubmissionRecord, Tx } from "../types.ts";
+import type { ConversationId, JsonObject, SubmissionId, SubmissionRecord, Tx } from "../types.ts";
 import { startRun } from "./generation.ts";
 import {
 	appendInput,
@@ -34,7 +34,6 @@ const settled = (record: SubmissionRecord): record is SettledSubmissionRecord =>
 export class Submissions {
 	readonly #telemetry: TelemetryContext;
 	readonly #session: SessionImpl;
-	readonly #storage: Storage;
 	readonly #now: () => number;
 	readonly #modes: () => QueueModes;
 	readonly #resume: () => void;
@@ -42,7 +41,6 @@ export class Submissions {
 	#closed = false;
 	constructor(
 		session: SessionImpl,
-		storage: Storage,
 		now: () => number,
 		queueModes: () => QueueModes,
 		resume: () => void,
@@ -50,11 +48,10 @@ export class Submissions {
 	) {
 		this.#telemetry = telemetry;
 		this.#session = session;
-		this.#storage = storage;
 		this.#now = now;
 		this.#modes = queueModes;
 		this.#resume = resume;
-		session.observeCommits((publication) => {
+		session.followCommits((publication) => {
 			for (const change of publication.changes)
 				if (change.type === "submission" && settled(change.value)) this.#waiters.resolve(change.value.id, change.value);
 		});
@@ -64,8 +61,31 @@ export class Submissions {
 		});
 	}
 	async submit(id: ConversationId, draft: SubmissionDraft, context: Context): Promise<Submission> {
+		const result = await this.#trace(id, draft, context, (span) =>
+			this.#session.commitWith(
+				(tx) => admitSubmission(tx, id, draft, this.#now(), this.#modes(), span),
+				withTelemetry(span, context),
+			),
+		);
+		return this.#handle(result.id);
+	}
+	async admit(tx: Tx, id: ConversationId, draft: SubmissionDraft): Promise<SubmissionId> {
+		if (!this.#session.ownsTransaction(tx)) throw new Error("The transaction belongs to another Session");
+		if (tx.hasTableWrite) throw new ReadAfterWrite("submit(tx, draft)");
+		return (
+			await this.#trace(id, draft, tx.context, (span) =>
+				admitSubmission(tx, id, draft, this.#now(), this.#modes(), span),
+			)
+		).id;
+	}
+	#trace(
+		id: ConversationId,
+		draft: SubmissionDraft,
+		context: Context,
+		admit: (span: TelemetrySpan) => Promise<Admission>,
+	): Promise<Admission> {
 		this.#resume();
-		const parent = draft.type === "input" ? this.#telemetry : context.telemetry;
+		const parent = draft.type !== "write" ? this.#telemetry : context.telemetry;
 		return createTypedSpanStarter(parent, [DURABLE_TELEMETRY_SCHEMA])(
 			"axi.durable.submit",
 			{
@@ -73,14 +93,11 @@ export class Submissions {
 				"conversation.id": id,
 			},
 			async (span) => {
-				if (draft.type === "input") span.addLink({ context: context.telemetry });
+				if (draft.type !== "write") span.addLink({ context: context.telemetry });
 				try {
-					const admitted = await this.#session.commitWith(
-						(tx) => admitSubmission(tx, id, draft, this.#now(), this.#modes(), span),
-						withTelemetry(span, context),
-					);
-					span.setAttributes({ "submission.id": admitted.id, result: admitted.status });
-					return this.#handle(admitted.id);
+					const result = await admit(span);
+					span.setAttributes({ "submission.id": result.id, result: result.status });
+					return result;
 				} catch (error) {
 					span.setStatus({ status: "error" });
 					throw error;
@@ -89,19 +106,19 @@ export class Submissions {
 		);
 	}
 	async get(id: SubmissionId, context: Context): Promise<Submission | undefined> {
-		return (await this.#session.readOnLine(() => this.#storage.submission(id, context))) === undefined
+		return (await this.#session.readOnLine((storage) => storage.submission(id, context))) === undefined
 			? undefined
 			: this.#handle(id);
 	}
 	async status(id: SubmissionId, context: Context): Promise<SubmissionRecord> {
-		const record = await this.#session.readOnLine(() => this.#storage.submission(id, context));
+		const record = await this.#session.readOnLine((storage) => storage.submission(id, context));
 		if (record === undefined) throw new Error(`Submission ${id} does not exist`);
 		return record;
 	}
 	async wait(id: SubmissionId, context: Context): Promise<SettledSubmissionRecord> {
 		this.#resume();
-		const result = await this.#session.readOnLine(async () => {
-			const record = await this.#storage.submission(id, context);
+		const result = await this.#session.readOnLine(async (storage) => {
+			const record = await storage.submission(id, context);
 			if (record === undefined) throw new Error(`Submission ${id} does not exist`);
 			if (settled(record)) return { promise: Promise.resolve(record) };
 			if (this.#closed) throw closedError(this.#session);
@@ -167,6 +184,7 @@ export async function admitSubmission(
 	}
 	const live = await tx.doc(LiveDoc, id),
 		busy = live.run !== undefined;
+	if (!busy && draft.type === "input" && draft.whenIdle === "reject") throw new ConversationIdle(id);
 	if (
 		draft.type === "input" &&
 		draft.whenBusy === "steer" &&
@@ -177,6 +195,14 @@ export async function admitSubmission(
 		if (run?.trace !== undefined) span.addLink({ context: span.propagation.extract(run.trace) });
 	}
 	if (busy && draft.type === "input" && draft.whenBusy === "reject") throw new ConversationBusy(id);
+	if (draft.type === "continue") {
+		if (busy) throw new ConversationBusy(id);
+		const boundary = await prepareBoundary(tx, id, modes);
+		const submission = await tx.createSubmission({ ...fields, type: "continue", status: "placed" });
+		const { users, first } = await applyBoundary(tx, boundary, "final", now);
+		await startRun(tx, id, live, [...users, submission.id], live.runFailure?.first ?? first);
+		return { id: submission.id, status: "placed" };
+	}
 	const boundary = busy ? undefined : await prepareBoundary(tx, id, modes);
 	if (boundary === undefined || boundary.inbox.items.length > 0) {
 		const submission = await tx.createSubmission({
@@ -195,8 +221,8 @@ export async function admitSubmission(
 				...(draft.entry === undefined ? {} : { entry: pickInputEntry(draft.entry) }),
 			});
 		if (boundary !== undefined) {
-			const { users } = await applyBoundary(tx, boundary, "final", now);
-			if (users.length) await startRun(tx, id, live, users);
+			const { users, first } = await applyBoundary(tx, boundary, "final", now);
+			if (users.length) await startRun(tx, id, live, users, first);
 			return {
 				id: submission.id,
 				status: draft.type === "write" ? "done" : users.at(-1) === submission.id ? "placed" : "queued",
@@ -230,6 +256,6 @@ export async function admitSubmission(
 		status: "placed",
 		entry: entry.id,
 	});
-	await startRun(tx, id, live, [submission.id]);
+	await startRun(tx, id, live, [submission.id], entry.id);
 	return { id: submission.id, status: "placed" };
 }

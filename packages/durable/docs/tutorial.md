@@ -8,7 +8,7 @@ Create a Session, write a conversation document, and read its committed value.
 
 ```ts
 import assert from "node:assert/strict";
-import { BACKGROUND_CONTEXT } from "@axi/chord/context";
+import { BACKGROUND_CONTEXT } from "@axi/objects/context";
 import { createSession, defineDoc, MemoryStorage } from "@axi/durable";
 
 const context = BACKGROUND_CONTEXT;
@@ -19,6 +19,7 @@ const Notes = defineDoc<{ lines: string[] }>({
 	history: "rewindable",
 	fork: "asOf",
 	initial: () => ({ lines: [] }),
+	checkpointWhen: () => false,
 });
 const session = createSession(new MemoryStorage());
 try {
@@ -43,7 +44,7 @@ Install an extension, open a Harness, and submit an input. The scripted model re
 
 ```ts
 import assert from "node:assert/strict";
-import { BACKGROUND_CONTEXT } from "@axi/chord/context";
+import { BACKGROUND_CONTEXT } from "@axi/objects/context";
 import { createModels, fauxAssistantMessage, fauxProvider, fauxToolCall, Type } from "@axi/ai";
 import { createRegistry, defineExtension, defineTool, Harness, MemoryStorage } from "@axi/durable";
 
@@ -87,7 +88,7 @@ Define a task with two phases. The first saves a checkpoint. The second saves a 
 
 ```ts
 import assert from "node:assert/strict";
-import { BACKGROUND_CONTEXT } from "@axi/chord/context";
+import { BACKGROUND_CONTEXT } from "@axi/objects/context";
 import { createModels } from "@axi/ai";
 import { createRegistry, defineExtension, defineTask, Harness, MemoryStorage } from "@axi/durable";
 

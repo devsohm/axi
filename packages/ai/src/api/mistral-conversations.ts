@@ -49,7 +49,6 @@ export const stream: StreamFunction<"mistral-conversations", MistralOptions> = (
 				throw new Error(output.errorMessage || "An unknown error occurred");
 			events.push({ type: "done", reason: output.stopReason, message: output });
 		} catch (error) {
-			for (const block of output.content) Reflect.deleteProperty(block, "partialArgs");
 			output.stopReason = options.signal?.aborted ? "aborted" : "error";
 			output.errorMessage = mistralError(error);
 			events.push({ type: "error", reason: output.stopReason, error: output });

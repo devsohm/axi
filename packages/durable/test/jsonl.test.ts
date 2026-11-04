@@ -1,8 +1,9 @@
+import { commitWrites } from "../src/testing/commit-writes.ts";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { Context } from "@axi/chord";
-import { BACKGROUND_CONTEXT as context } from "@axi/chord/context";
+import type { Context } from "@axi/objects";
+import { BACKGROUND_CONTEXT as context } from "@axi/objects/context";
 import { describe, expect, it } from "vitest";
 import { err, FileError, type Result } from "../src/env/index.ts";
 import { NodeExecutionEnv } from "../src/env/node.ts";
@@ -126,13 +127,13 @@ describe("JSONL storage", () => {
 		const files = new Files({ cwd: directory });
 		const storage = await JsonlStorage.open(directory, files, context);
 		try {
-			await storage.commit([{ type: "conversation", value: { id: ROOT_CONVERSATION_ID } }], () => {}, context);
+			await commitWrites(storage, [{ type: "conversation", value: { id: ROOT_CONVERSATION_ID } }], context);
 			const id = await storage.mintId<EntryId>();
 			files.fail = true;
 			await expect(
-				storage.commit(
+				commitWrites(
+					storage,
 					[{ type: "entry", value: { id, conversationId: ROOT_CONVERSATION_ID, kind: "saved" } }],
-					() => {},
 					context,
 				),
 			).rejects.toBeInstanceOf(JsonlStoragePoisonedError);
@@ -145,7 +146,7 @@ describe("JSONL storage", () => {
 					conversationId: ROOT_CONVERSATION_ID,
 					kind: "saved",
 				});
-				expect(await reopened.commit([], () => {}, context)).toBe(3);
+				expect(await commitWrites(reopened, [], context)).toBe(3);
 			} finally {
 				await reopened.close(context);
 			}

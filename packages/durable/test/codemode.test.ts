@@ -1,5 +1,5 @@
 import { createModels, createProvider, fauxAssistantMessage, fauxProvider, fauxText, fauxToolCall } from "@axi/ai";
-import { BACKGROUND_CONTEXT as context } from "@axi/chord/context";
+import { BACKGROUND_CONTEXT as context } from "@axi/objects/context";
 import { CodemodeSandbox } from "@axi/codemode";
 import { expect, it } from "vitest";
 import { CodemodeStoreDoc, createCodemodeExtension } from "../src/codemode/index.ts";

@@ -1,6 +1,7 @@
-import type { JsonValue } from "@axi/chord";
+import type { JsonValue } from "@axi/objects";
+import type { Task } from "../types.ts";
 import type { TSchema } from "@axi/ai";
-import type { AnyTask, Extension, HookRegistration, HooksOf, PromptSection, ToolRegistration, Wrap } from "./types.ts";
+import type { AnyTask, Extension, HookRegistration, HooksOf, PromptSection, RunEndTask, ToolRegistration, Wrap } from "./types.ts";
 
 export function defineExtension<T extends ToolRegistration = ToolRegistration>(extension: Extension<T>): Extension<T> {
 	return extension;
@@ -28,4 +29,8 @@ export function wrapSection<T extends ToolRegistration = ToolRegistration>(
 	wrap: (section: PromptSection<T>) => PromptSection<T>,
 ): Wrap<T> {
 	return { section: key, wrap };
+}
+
+export function runEndTask<I extends JsonValue, S extends { phase: string }, R, H extends object>(task: Task<I, S, R, H>, input: I): RunEndTask {
+	return { task, input };
 }

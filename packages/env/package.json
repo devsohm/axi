@@ -24,7 +24,7 @@
 		"build:daemon": "node scripts/build-daemon.mjs"
 	},
 	"dependencies": {
-		"@axi/chord": "0.1.0-rc.1",
+		"@axi/objects": "0.1.0-rc.1",
 		"@axi/durable": "0.1.0-rc.1"
 	},
 	"engines": {

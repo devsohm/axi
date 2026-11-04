@@ -1,4 +1,4 @@
-import type { Context, Draft } from "@axi/chord";
+import type { Context, Draft } from "@axi/objects";
 import type { AssistantMessage, Message, ModelThinkingLevel, SimpleStreamOptions } from "@axi/ai";
 import { calculateContextTokens, estimateMessageTokens } from "@axi/ai/utils/estimate";
 import { isRetryableAssistantError, retryDelayMs } from "@axi/ai/utils/retry";
@@ -16,6 +16,8 @@ import type {
 } from "../types.ts";
 import { orderToolResults } from "./context.ts";
 import {
+	cutOffTooOften,
+	cutOffCount,
 	addCompactionStatus,
 	compactionStatus,
 	failCompactionStatus,
@@ -95,6 +97,7 @@ export const CompactionTask = defineTask<CompactionInput, CompactionCheckpoint, 
 	initial: () => ({ phase: "select" }),
 	phases: {
 		select: async (task, runtime, context) => {
+			if (cutOffTooOften(task, runtime)) return failCutOff(runtime, task, context);
 			const agent = await runtime.agent(context),
 				settings = runtime.settings,
 				ref = agent.model;
@@ -137,6 +140,7 @@ export const CompactionTask = defineTask<CompactionInput, CompactionCheckpoint, 
 			await runtime.commit(() => ({ status: "running", checkpoint: { phase: "summarize", ...request } }), context);
 		},
 		summarize: async (task, runtime, context) => {
+			if (cutOffTooOften(task, runtime)) return failCutOff(runtime, task, context);
 			const { phase: _, ...request } = task.state.checkpoint,
 				{ model: ref, thinkingLevel, streamOptions, maxTokens, tail, firstKept, attempt } = request;
 			const model = runtime.models.getModel(ref.provider, ref.modelId);
@@ -195,6 +199,7 @@ export const CompactionTask = defineTask<CompactionInput, CompactionCheckpoint, 
 			}, context);
 		},
 		retry: async (task, runtime, context) => {
+			if (cutOffTooOften(task, runtime)) return failCutOff(runtime, task, context);
 			const { phase: _, until, ...request } = task.state.checkpoint;
 			if (until > runtime.now()) return runtime.sleepUntil(until, task.state.checkpoint, context);
 			const attempt = request.attempt + 1;
@@ -229,7 +234,7 @@ export async function createCompaction(
 	});
 	addCompactionStatus(await tx.doc(LiveDoc, id), {
 		taskId,
-		reason: input.reason,
+		trigger: input.reason,
 		blocking: owner !== undefined,
 		attempt: 1,
 	});
@@ -399,5 +404,13 @@ async function noModel(runtime: Runtime, ref: ModelRef | undefined, context: Con
 	await runtime.commit(async (tx) => {
 		failCompactionStatus(await tx.doc(LiveDoc, runtime.conversationId), runtime.taskId, message);
 		return { status: "terminal", outcome: { status: "failed", error: { message, detail: { reason: "no_model" } } } };
+	}, context);
+}
+
+async function failCutOff(runtime: Runtime, task: { readonly restarts?: number }, context: Context): Promise<void> {
+	const message = `Compaction was interrupted ${cutOffCount(task)}`;
+	await runtime.commit(async (tx) => {
+		failCompactionStatus(await tx.doc(LiveDoc, runtime.conversationId), runtime.taskId, message);
+		return { status: "terminal", outcome: { status: "failed", error: { message, detail: { reason: "restart_limit" } } } };
 	}, context);
 }

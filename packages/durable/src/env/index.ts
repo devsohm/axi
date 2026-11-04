@@ -1,4 +1,4 @@
-import type { Context } from "@axi/chord";
+import type { Context } from "@axi/objects";
 
 export type Result<TValue, TError> = { ok: true; value: TValue } | { ok: false; error: TError };
 export const ok = <TValue, TError>(value: TValue): Result<TValue, TError> => ({ ok: true, value });
@@ -94,10 +94,13 @@ export interface WatchTarget {
 	recursive?: boolean;
 	exclude?: { hidden?: boolean; names?: readonly string[] };
 }
-export type WatchChange = { paths: string[] } | { overflow: true } | { error: FileError };
+export type FileChange =
+	| { readonly kind: "paths"; readonly paths: string[] }
+	| { readonly kind: "overflow" }
+	| { readonly kind: "failed"; readonly error: FileError };
 export interface FileWatcher {
 	readonly mode: "native" | "polling";
-	close(context: Context): Promise<void>;
+	stop(context: Context): Promise<void>;
 }
 export interface ListFilesOptions {
 	hidden?: boolean;
@@ -148,7 +151,7 @@ export interface FileSystem {
 	openDirReader(path: string, context: Context): Promise<Result<DirReader, FileError>>;
 	watch(
 		targets: readonly WatchTarget[],
-		onChange: (change: WatchChange) => void,
+		onChange: (change: FileChange) => void,
 		context: Context,
 	): Promise<Result<FileWatcher, FileError>>;
 	canonicalPath(path: string, context: Context): Promise<Result<string, FileError>>;

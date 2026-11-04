@@ -1,10 +1,13 @@
-import { Marked, Tokenizer, type Token, type Tokens, type TokenizerExtension } from "marked";
+import { Marked, Tokenizer, type Token, type Tokens, type TokensList, type TokenizerExtension } from "marked";
 import markedCjkFriendly from "marked-cjk-friendly";
 import { renderLatex } from "../latex.ts";
 import { getCapabilities, hyperlink, isImageLine } from "../terminal-image.ts";
 import type { Component } from "../tui.ts";
-import { applyBackgroundToLine, flattenLines, visibleWidth, wrapTextWithAnsi } from "../utils.ts";
+import { applyBackgroundToLine, cjkPunctuationRegex, flattenLines, visibleWidth, wrapTextWithAnsi } from "../utils.ts";
 class StrictTokenizer extends Tokenizer {
+	override url(source: string): Tokens.Link | undefined {
+		return super.url(source.split(cjkPunctuationRegex, 1)[0] ?? "");
+	}
 	override del(source: string): Tokens.Del | undefined {
 		const match = /^(~~)(?=[^\s~])((?:\\.|[^\\])*?(?:\\.|[^\s~\\]))\1(?=[^~]|$)/.exec(source);
 		return match
@@ -150,6 +153,7 @@ export interface MarkdownTheme {
 	italic: (text: string) => string;
 	strikethrough: (text: string) => string;
 	underline: (text: string) => string;
+	/** Call Markdown.invalidate() after changing the theme or its highlighter. */
 	highlightCode?: (code: string, lang?: string) => string[];
 	codeBlockIndent?: string;
 }
@@ -160,6 +164,10 @@ export interface MarkdownOptions {
 	renderLatex?: boolean;
 }
 type Style = { applyText: (text: string) => string; stylePrefix: string };
+type BlockFrame = {
+	readonly code: Map<string, string[]>;
+	layout?: { width: number; following: string | undefined; lines: string[] };
+};
 function prefix(style: (text: string) => string): string {
 	const value = style("\0"),
 		index = value.indexOf("\0");
@@ -174,7 +182,8 @@ export class Markdown implements Component {
 	readonly #options: MarkdownOptions;
 	#prefix: string | undefined;
 	#cache: { text: string; width: number; lines: string[] } | undefined;
-	#tokens: WeakRef<{ source: string; tokens: Token[] }> | undefined;
+	#tokens: WeakRef<{ source: string; tokens: TokensList }> | undefined;
+	#blocks: WeakRef<Map<string, BlockFrame>> | undefined;
 	constructor(
 		text: string,
 		paddingX: number,
@@ -192,10 +201,12 @@ export class Markdown implements Component {
 	}
 	setText(text: string): void {
 		this.#text = text;
-		this.invalidate();
+		this.#cache = undefined;
 	}
 	invalidate(): void {
 		this.#cache = undefined;
+		this.#blocks = undefined;
+		this.#prefix = undefined;
 	}
 	private defaultStyle(text: string): string {
 		let result = this.#default?.color?.(text) ?? text;
@@ -212,6 +223,7 @@ export class Markdown implements Component {
 		const contentWidth = Math.max(1, width - this.#paddingX * 2),
 			text = this.#options.transform?.(this.#text, contentWidth) ?? this.#text;
 		if (!text.trim()) {
+			this.#blocks = undefined;
 			const lines: string[] = [];
 			this.#cache = { text: this.#text, width, lines };
 			return lines;
@@ -224,25 +236,55 @@ export class Markdown implements Component {
 			trimFences(tokens);
 			this.#tokens = new WeakRef({ source, tokens });
 		}
-		const rendered = tokens.flatMap((token, index) => this.block(token, contentWidth, tokens[index + 1]?.type));
-		const lines = rendered.flatMap((line) => (isImageLine(line) ? [line] : wrapTextWithAnsi(line, contentWidth)));
-		const margin = " ".repeat(this.#paddingX),
-			bg = this.#default?.bgColor;
-		const content = lines.map((line) => {
-			if (isImageLine(line)) return line;
-			const value = margin + line + margin;
-			return bg
-				? applyBackgroundToLine(value, width, bg)
-				: value + " ".repeat(Math.max(0, width - visibleWidth(value)));
-		});
+		const reusable = Object.keys(tokens.links).length === 0,
+			previous = this.#blocks?.deref(),
+			current = new Map<string, BlockFrame>(),
+			content: string[] = [];
+		this.#blocks = new WeakRef(current);
+		for (const [index, token] of tokens.entries()) {
+			const following = tokens[index + 1]?.type;
+			const frame: BlockFrame = (reusable && (current.get(token.raw) ?? previous?.get(token.raw))) || {
+				code: new Map(),
+			};
+			if (frame.layout?.width !== width || frame.layout.following !== following)
+				frame.layout = {
+					width,
+					following,
+					lines: this.renderBlock(token, width, contentWidth, following, frame.code),
+				};
+			if (reusable) current.set(token.raw, frame);
+			content.push(...frame.layout.lines);
+		}
+		const bg = this.#default?.bgColor;
 		const empty = " ".repeat(width),
 			padding = Array.from({ length: Math.ceil(this.#paddingY) }, () =>
 				bg ? applyBackgroundToLine(empty, width, bg) : empty,
-			),
-			result = [...padding, ...content, ...padding];
-		flattenLines(result);
+			);
+		flattenLines(padding);
+		const result = [...padding, ...content, ...padding];
 		this.#cache = { text: this.#text, width, lines: result };
 		return result.length ? result : [""];
+	}
+	private renderBlock(
+		token: Token,
+		width: number,
+		contentWidth: number,
+		following: string | undefined,
+		highlights: Map<string, string[]>,
+	): string[] {
+		const margin = " ".repeat(this.#paddingX),
+			bg = this.#default?.bgColor;
+		const lines = this.block(token, contentWidth, following, undefined, highlights)
+			.flatMap((line) => (isImageLine(line) ? [line] : wrapTextWithAnsi(line, contentWidth)))
+			.map((line) => {
+				if (isImageLine(line)) return line;
+				const value = margin + line + margin;
+				return bg
+					? applyBackgroundToLine(value, width, bg)
+					: value + " ".repeat(Math.max(0, width - visibleWidth(value)));
+			});
+		flattenLines(lines);
+		return lines;
 	}
 	private inline(tokens: Token[], context = this.context()): string {
 		let result = "";
@@ -305,7 +347,13 @@ export class Markdown implements Component {
 			result = result.slice(0, -context.stylePrefix.length);
 		return result;
 	}
-	private block(token: Token, width: number, next?: string, context?: Style): string[] {
+	private block(
+		token: Token,
+		width: number,
+		next?: string,
+		context?: Style,
+		highlights?: Map<string, string[]>,
+	): string[] {
 		const theme = this.#theme,
 			space = next && next !== "space" ? [""] : [];
 		switch (token.type) {
@@ -323,37 +371,52 @@ export class Markdown implements Component {
 				return [this.inline([token], context)];
 			case "latexBlock": {
 				const math = token as MathToken,
-					value =
+					rendered =
 						!math.pending && this.#options.renderLatex !== false
-							? (renderLatex(math.text, { display: true }) ?? math.raw.trim())
-							: math.raw.trim();
+							? renderLatex(math.text, { display: true })
+							: undefined;
+				const value =
+					rendered !== undefined && rendered.split("\n").every((line) => visibleWidth(line) <= width)
+						? rendered
+						: math.raw.trim();
 				return [...value.split("\n").map((line) => this.defaultStyle(line)), ...space];
 			}
 			case "code": {
-				const indent = theme.codeBlockIndent ?? "  ",
-					body =
-						theme.highlightCode?.(token.text, token.lang) ??
-						token.text.split("\n").map((line: string) => theme.codeBlock(line));
+				const indent = theme.codeBlockIndent ?? "  ";
+				let body: string[] | undefined;
+				if (theme.highlightCode) {
+					const key = `${token.lang ?? ""}\0${token.text}`;
+					body = highlights?.get(key);
+					if (body === undefined) {
+						body = theme.highlightCode(token.text, token.lang);
+						highlights?.set(key, body);
+					}
+				}
+				const codeLines: string[] = body ?? token.text.split("\n").map((line: string) => theme.codeBlock(line));
 				return [
 					theme.codeBlockBorder("```" + (token.lang ?? "")),
-					...body.map((line: string) => indent + line),
+					...codeLines.map((line) => indent + line),
 					theme.codeBlockBorder("```"),
 					...space,
 				];
 			}
 			case "list":
-				return this.list(token as Tokens.List, 0, width, context);
+				return this.list(token as Tokens.List, 0, width, context, highlights);
 			case "table":
 				return this.table(token as Tokens.Table, width, next, context);
 			case "blockquote": {
 				const tokens: Token[] = token.tokens ?? [];
 				if (width < 3)
-					return tokens.flatMap((child, index) => this.block(child, width, tokens[index + 1]?.type, context));
+					return tokens.flatMap((child, index) =>
+						this.block(child, width, tokens[index + 1]?.type, context, highlights),
+					);
 				const style = (text: string) => theme.quote(theme.italic(text)),
 					start = prefix(style),
 					ctx = { applyText: (text: string) => text, stylePrefix: start },
 					innerWidth = width - 2;
-				const lines = tokens.flatMap((child, index) => this.block(child, innerWidth, tokens[index + 1]?.type, ctx));
+				const lines = tokens.flatMap((child, index) =>
+					this.block(child, innerWidth, tokens[index + 1]?.type, ctx, highlights),
+				);
 				while (lines.at(-1) === "") lines.pop();
 				return [
 					...lines.flatMap((line) =>
@@ -374,7 +437,13 @@ export class Markdown implements Component {
 				return "text" in token && typeof token.text === "string" ? [token.text] : [];
 		}
 	}
-	private list(token: Tokens.List, depth: number, width: number, context?: Style): string[] {
+	private list(
+		token: Tokens.List,
+		depth: number,
+		width: number,
+		context?: Style,
+		highlights?: Map<string, string[]>,
+	): string[] {
 		const lines: string[] = [],
 			indent = "    ".repeat(depth),
 			start = typeof token.start === "number" ? token.start : 1;
@@ -393,11 +462,11 @@ export class Markdown implements Component {
 			let any = false;
 			for (const child of item.tokens) {
 				if (child.type === "list") {
-					lines.push(...this.list(child as Tokens.List, depth + 1, width, context));
+					lines.push(...this.list(child as Tokens.List, depth + 1, width, context, highlights));
 					any = true;
 					continue;
 				}
-				for (const line of this.block(child, innerWidth, undefined, context))
+				for (const line of this.block(child, innerWidth, undefined, context, highlights))
 					for (const wrapped of wrapTextWithAnsi(line, innerWidth)) {
 						lines.push((any ? rest : first) + wrapped);
 						any = true;

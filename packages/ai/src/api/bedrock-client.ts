@@ -94,7 +94,7 @@ export function bedrockClient(
 			}
 			return result;
 		};
-		client.middlewareStack.add(middleware, { step: "deserialize", name: "axi-response-headers" });
+		client.middlewareStack.add(middleware, { step: "deserialize", name: "axi-ai-response-headers" });
 	}
 	const headers = providerHeadersToRecord(options.headers);
 	if (headers) {
@@ -106,7 +106,7 @@ export function bedrockClient(
 			}
 			return next(args);
 		};
-		client.middlewareStack.add(middleware, { step: "build", name: "axi-custom-headers", priority: "low" });
+		client.middlewareStack.add(middleware, { step: "build", name: "axi-ai-custom-headers", priority: "low" });
 	}
 	return { client, observedResponse: () => observed };
 }

@@ -1,8 +1,8 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { type Context } from "@axi/chord";
-import { BACKGROUND_CONTEXT as context, awaitWithContext } from "@axi/chord/context";
+import { type Context } from "@axi/objects";
+import { BACKGROUND_CONTEXT as context, awaitWithContext } from "@axi/objects/context";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { defineDoc, defineTask, MemoryStorage } from "../src/index.ts";
 import type { Agent } from "../src/harness/types.ts";
@@ -53,6 +53,28 @@ const Counter = defineTask<number, { phase: "first" } | { phase: "second"; key: 
 });
 
 describe("task scheduler", () => {
+	it("finishes healthy work without scanning queued inputs for cancellation", async () => {
+		class CountingStorage extends MemoryStorage {
+			scans = 0;
+			override scanSubmissions(...args: Parameters<MemoryStorage["scanSubmissions"]>) {
+				this.scans++;
+				return super.scanSubmissions(...args);
+			}
+		}
+		const storage = new CountingStorage();
+		const { session, scheduler } = await open([Counter], { storage });
+		const conversationId = await root(session);
+		await scheduler.waitForIdle(undefined, context);
+		storage.scans = 0;
+		const id = await session.commit(
+			(tx) => tx.createTask(Counter, 4, { ownership: { kind: "conversation" }, conversationId }),
+			context,
+		);
+		scheduler.resume();
+		expect((await scheduler.waitForTask(id, context)).state).toEqual(completed(5));
+		await scheduler.waitForIdle(undefined, context);
+		expect(storage.scans).toBe(0);
+	});
 	it("reports registry lookup failures once across temporary recovery", async () => {
 		const opened = await open([Counter]);
 		const conversationId = await root(opened.session);
@@ -74,7 +96,7 @@ describe("task scheduler", () => {
 			fail = true;
 			opened.scheduler.blockedReason(subject);
 			expect(
-				opened.reports.filter(({ info }) => info.type === "host_error" && info.callback === "registry"),
+				opened.reports.filter(({ info }) => info.kind === "host_error" && info.callback === "registry"),
 			).toHaveLength(1);
 			spy.mockReturnValue({
 				...snapshot,
@@ -143,12 +165,16 @@ describe("task scheduler", () => {
 		class HeldMarks extends MemoryStorage {
 			target: TaskId | undefined;
 			override async commit(
-				writes: readonly StorageWrite[],
+				writes: readonly (readonly StorageWrite[])[],
 				adopt: Parameters<MemoryStorage["commit"]>[1],
 				ctx: Context,
 			) {
 				if (
-					writes.some((write) => write.type === "task" && write.value.id === this.target && write.value.abortRequested)
+					writes.some((batch) =>
+						batch.some(
+							(write) => write.type === "task" && write.value.id === this.target && write.value.abortRequested,
+						),
+					)
 				) {
 					entered.resolve();
 					await release.promise;
@@ -303,7 +329,7 @@ describe("task scheduler", () => {
 			error: { message: "Task stuck phase start returned without durable progress" },
 		});
 		expect(late?.state).toEqual(completed());
-		expect(reports.filter((r) => r.info.type === "task_faulted")).toHaveLength(1);
+		expect(reports.filter((r) => r.info.kind === "task_faulted")).toHaveLength(1);
 	});
 	it("holds the owner's result until its child ends and keeps documents until finalization", async () => {
 		const gate = Promise.withResolvers<void>();
@@ -544,11 +570,11 @@ describe("task scheduler", () => {
 		scheduler.resume();
 		await scheduler.waitForTask(id, context);
 		await eventually(() => runtimeAfter?.signal.aborted === true);
-		expect(await watch!.closed).toEqual({ reason: "stopped" });
+		expect(await watch!.closed).toEqual({ kind: "stopped" });
 		await expect(runtimeAfter!.memo("late", 1, context)).rejects.toThrow("invocation has ended");
 		expect(() => runtimeAfter!.now()).toThrow("invocation has ended");
 	});
-	it("parks crash-recovered running work and retries from its persisted checkpoint", async () => {
+	it("faults crash-recovered work at the restart limit without running its checkpoint", async () => {
 		const directory = await mkdtemp(join(tmpdir(), "axi-scheduler-"));
 		directories.push(directory);
 		const path = join(directory, "session.sqlite");
@@ -567,12 +593,17 @@ describe("task scheduler", () => {
 		}, context);
 		await session.close(context);
 		const opened = await open([Counter], { storage: await openNodeSqliteStorage(path) });
-		expect((await opened.scheduler.inspect(opened.registry.snapshot())).tasks[0]?.state).toEqual({
-			kind: "blocked",
-			reason: "restart_limit",
-		});
 		expect((await opened.storage.task(id, context))?.restarts).toBe(5);
-		await opened.scheduler.retry(id, context);
-		expect((await opened.scheduler.waitForTask(id, context)).state).toEqual(completed(11));
+		opened.scheduler.resume();
+		expect((await opened.scheduler.waitForTask(id, context)).state).toEqual({
+			status: "terminal",
+			outcome: {
+				status: "faulted",
+				error: {
+					message: `Task ${id} (counter) was cut off 5 times without progress`,
+					detail: { reason: "restart_limit" },
+				},
+			},
+		});
 	});
 });

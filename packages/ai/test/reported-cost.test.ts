@@ -57,7 +57,6 @@ it.each([
 	expect(value.cost.total).toBeCloseTo(0.00001);
 });
 it.each([
-	null,
 	{},
 	{ cost: -1, is_byok: false },
 	{ cost: Infinity, is_byok: false },
@@ -87,4 +86,8 @@ it.each([
 	const value = usage();
 	applyOpenRouterReportedCost(value, reported);
 	expect(value.cost).toEqual({ input: 2, output: 8, cacheRead: 0, cacheWrite: 0, total: 10 });
+});
+
+it.each([null, undefined])("rejects missing reported accounting: %s", (reported) => {
+	expect(() => applyOpenRouterReportedCost(usage(), reported)).toThrow(TypeError);
 });

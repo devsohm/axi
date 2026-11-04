@@ -1,5 +1,5 @@
-import { copyJson, type JsonValue } from "@axi/chord";
-import type { Op } from "@axi/chord/delta";
+import { copyJson, type JsonValue } from "@axi/objects";
+import type { Op } from "@axi/objects/delta";
 import { idFromNumber } from "./ids.ts";
 import type {
 	CheckpointInfo,
