@@ -10,6 +10,7 @@
 | `RemoteExecutionEnv` | Durable file, command and watch operations on the remote machine |
 | `LocalExecutionEnv` | Durable Node operations with native daemon file listing |
 | `RemoteTerminal` | Raw terminal bytes, ordered input, resize, foreground job and exit |
+| `RemoteProcess` | Separate binary input and output pipes, ordered writes, stdin close and process-group lifetime |
 | `RemoteWatcher` | Watch establishment, loss recovery and gap notification |
 | SSH helpers | Host-key trust, platform detection and verified binary deployment |
 
@@ -22,6 +23,8 @@ The caller owns a connection and closes it explicitly. Several environments may 
 Readers, writers, watchers and terminals own their request or handle lifetime. File handles belong to the exact daemon session that created them. Requests using a handle from a lost session fail instead of reaching a replacement daemon. Close readers, stop watchers and close terminals when their owner finishes.
 
 Connection close is terminal. Unplanned connection loss rejects pending work, marks the loss and permits a later operation to start a fresh daemon. A lost mutation or command response does not prove that its operation never executed. The library does not automatically replay unknown external effects.
+
+`openProcess()` requires the daemon's `process` feature. It resolves after the `started` event and exposes the request's eventual exit separately. Input writes target the original daemon session. Closing stdin follows queued writes; later input is dropped by the client and rejected with `EBADF` by the daemon. A completed process ends its process group before reporting its exit. Output bytes from each stream are delivered before the exit result.
 
 ## Failure and cancellation
 

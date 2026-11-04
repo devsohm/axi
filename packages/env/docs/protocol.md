@@ -46,7 +46,7 @@ Control replies precede queued output. Command results follow command output. Re
 
 Both sides send a ping every five seconds. After 30 seconds without incoming bytes, the daemon kills its process groups and exits. EOF also triggers cleanup. The client rejects requests from a lost connection with `code: "unknown"` and `lost: true`. A later operation starts a new daemon. File and terminal handles remain tied to the session that created them.
 
-A cancel kills an `exec` or `pty` process group and returns `aborted`. A cancel with `{ mode: "kill" }` kills without marking the request aborted. Line scans and tree listings check cancellation between chunks or entries. A cancelled watch completes with `{}`. Short file operations finish normally.
+A cancel kills an `exec`, `pty` or `process` process group and returns `aborted`. A cancel with `{ mode: "kill" }` kills without marking the request aborted. Line scans and tree listings check cancellation between chunks or entries. A cancelled watch completes with `{}`. Short file operations finish normally.
 
 ## Files
 
@@ -109,3 +109,9 @@ Coverage starts with `{ kind: "ready", mode }`. Later events contain `{ kind: "c
 The first event is `{ kind: "started", pid }`. Output events contain `{ kind: "output" }` and raw payload bytes. The result is `{ exitCode }`. Output drains until the terminal closes or remains idle for 100 milliseconds after the program exits. Windows returns `ENOTSUP`.
 
 `ptyWrite { target }` sends payload bytes to the active terminal. `ptyResize { target, cols, rows }` changes its cell size. Both return `{}`. `ptyForeground { target }` returns `{ foreground: { pid, name } }` for a foreground job, or `{ foreground: null }` for the terminal's own program. An unknown process name is `null`. Operations on an ended terminal return `EBADF`.
+
+## Process pipes
+
+A daemon with the `process` handshake feature accepts `process { cwd, argv, env?, inheritEnv? }`. `argv` is a non-empty program and argument list, executed without a shell. The request remains open until the program ends. It first emits `{ kind: "started", pid }`, then `{ kind: "output", stream: "stdout" | "stderr" }` events whose payloads are raw bytes. The result is `{ exitCode }` after output delivery.
+
+`processWrite { target }` queues its payload for stdin. `processCloseStdin { target }` closes stdin after earlier writes. Both return `{}`; a missing or ended process, or closed stdin, reports `EBADF`. The receive loop handles these operations in arrival order. The process group ends on cancellation, connection loss or the program's exit. A blocked input writer stops when the process settles, even if a descendant retains stdin.

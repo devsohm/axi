@@ -5,6 +5,7 @@ pub mod frame;
 pub mod fs;
 pub mod list;
 pub mod output;
+pub mod process;
 pub mod pty;
 pub mod scan;
 pub mod sys;

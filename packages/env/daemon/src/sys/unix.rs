@@ -262,6 +262,74 @@ pub fn configure(
     }
 }
 pub fn after_spawn(_child: &Child) {}
+
+pub struct ProcessGroup(u32);
+pub fn process_group(child: &Child) -> io::Result<ProcessGroup> {
+    Ok(ProcessGroup(child.id()))
+}
+impl ProcessGroup {
+    pub fn terminate(&self) {
+        kill_tree(self.0);
+    }
+}
+pub fn wait_process(child: &mut Child) -> io::Result<()> {
+    loop {
+        let mut info: libc::siginfo_t = unsafe { std::mem::zeroed() };
+        // WNOWAIT keeps the child's PID reserved until its process group has been terminated.
+        if unsafe {
+            libc::waitid(
+                libc::P_PID,
+                child.id(),
+                &mut info,
+                libc::WEXITED | libc::WNOWAIT,
+            )
+        } == 0
+        {
+            return Ok(());
+        }
+        let error = io::Error::last_os_error();
+        if error.kind() != io::ErrorKind::Interrupted {
+            return Err(error);
+        }
+    }
+}
+pub fn write_process_input(
+    pipe: &mut std::process::ChildStdin,
+    bytes: &[u8],
+    stop: &AtomicBool,
+) -> bool {
+    use std::io::Write;
+    use std::os::fd::AsRawFd;
+    let fd = pipe.as_raw_fd();
+    unsafe {
+        let flags = libc::fcntl(fd, libc::F_GETFL);
+        if flags < 0 || libc::fcntl(fd, libc::F_SETFL, flags | libc::O_NONBLOCK) < 0 {
+            return false;
+        }
+    }
+    let mut written = 0;
+    while written < bytes.len() && !stop.load(Ordering::SeqCst) {
+        match pipe.write(&bytes[written..]) {
+            Ok(0) => return false,
+            Ok(count) => written += count,
+            Err(error) if error.kind() == io::ErrorKind::Interrupted => {}
+            Err(error) if error.kind() == io::ErrorKind::WouldBlock => {
+                let mut descriptor = libc::pollfd {
+                    fd,
+                    events: libc::POLLOUT,
+                    revents: 0,
+                };
+                if unsafe { libc::poll(&mut descriptor, 1, 100) } < 0
+                    && io::Error::last_os_error().kind() != io::ErrorKind::Interrupted
+                {
+                    return false;
+                }
+            }
+            Err(_) => return false,
+        }
+    }
+    written == bytes.len()
+}
 pub fn on_exit_signal(callback: impl FnOnce(i32) + Send + 'static) -> io::Result<()> {
     // Block before creating workers. A dedicated thread can then clean up outside a signal handler.
     let mut signals: libc::sigset_t = unsafe { std::mem::zeroed() };

@@ -450,7 +450,7 @@ pub fn run(
     }
     Ok(result)
 }
-fn read_pipe(
+pub(crate) fn read_pipe(
     index: usize,
     pipe: impl sys::Pipe + Send + 'static,
     sender: Sender<Message>,

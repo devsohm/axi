@@ -2,6 +2,10 @@
 
 Remote files, processes and terminals for Durable applications.
 
+`openProcess(connection, options)` runs a program directly with separate binary stdin, stdout and stderr. It returns a `RemoteProcess` with a PID, an `exited` promise, `write()`, `closeStdin()` and `close()`. Writes stay ordered, including input larger than a protocol frame. Closing stdin preserves earlier writes. Closing the handle or connection terminates the process group. A program's descendants are also terminated when the program exits. An older daemon without the `process` feature reports `not_supported`.
+
+Use process pipes for structured protocols such as MCP. Use `openTerminal()` for an interactive terminal and `RemoteExecutionEnv.exec()` for a command with collected output.
+
 Build the client and the daemon for the current machine:
 
 ```sh

@@ -448,6 +448,55 @@ pub fn after_spawn(child: &Child) {
         }
     }
 }
+
+pub struct ProcessGroup(isize);
+pub fn process_group(child: &Child) -> io::Result<ProcessGroup> {
+    unsafe {
+        let handle = CreateJobObjectW(std::ptr::null(), std::ptr::null());
+        if handle.is_null() {
+            return Err(io::Error::last_os_error());
+        }
+        let mut limits: JOBOBJECT_EXTENDED_LIMIT_INFORMATION = std::mem::zeroed();
+        limits.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+        let configured = SetInformationJobObject(
+            handle,
+            JobObjectExtendedLimitInformation,
+            (&limits as *const JOBOBJECT_EXTENDED_LIMIT_INFORMATION).cast(),
+            std::mem::size_of_val(&limits) as u32,
+        );
+        if configured == 0 || AssignProcessToJobObject(handle, child.as_raw_handle() as _) == 0 {
+            let error = io::Error::last_os_error();
+            CloseHandle(handle);
+            return Err(error);
+        }
+        Ok(ProcessGroup(handle as isize))
+    }
+}
+impl ProcessGroup {
+    pub fn terminate(&self) {
+        unsafe {
+            TerminateJobObject(self.0 as _, 1);
+        }
+    }
+}
+impl Drop for ProcessGroup {
+    fn drop(&mut self) {
+        unsafe {
+            CloseHandle(self.0 as _);
+        }
+    }
+}
+pub fn wait_process(child: &mut Child) -> io::Result<()> {
+    child.wait().map(|_| ())
+}
+pub fn write_process_input(
+    pipe: &mut std::process::ChildStdin,
+    bytes: &[u8],
+    stop: &AtomicBool,
+) -> bool {
+    use std::io::Write;
+    !stop.load(Ordering::SeqCst) && pipe.write_all(bytes).is_ok()
+}
 pub fn on_exit_signal(_callback: impl FnOnce(i32) + Send + 'static) -> io::Result<()> {
     Ok(())
 }

@@ -11,6 +11,7 @@ export {
 export { LocalExecutionEnv, type LocalExecutionEnvOptions } from "./list-files.ts";
 export { RemoteExecutionEnv, type RemoteExecutionEnvOptions } from "./remote-env.ts";
 export { openTerminal, RemoteTerminal, type TerminalForeground, type TerminalOptions } from "./terminal.ts";
+export { openProcess, RemoteProcess, type ProcessOptions } from "./process.ts";
 export { RemoteWatcher, type RemoteWatchOptions } from "./watch.ts";
 export {
 	acceptHostKey,

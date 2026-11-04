@@ -4,7 +4,7 @@ use axi_env::{
     frame::{self, CANCEL, ERROR, Frame, PING, REQUEST, RESULT},
     fs, list,
     output::Output,
-    pty, scan, sys, watch,
+    process, pty, scan, sys, watch,
 };
 use serde_json::{Value, json};
 use std::{
@@ -49,6 +49,7 @@ struct Server {
     controls: Mutex<HashMap<u32, Arc<Control>>>,
     groups: exec::Groups,
     terminals: pty::Terminals,
+    processes: process::Processes,
 }
 fn text<'a>(value: &'a Value, key: &str) -> Result<&'a str, Failure> {
     value[key]
@@ -123,7 +124,7 @@ impl Server {
         let empty = |result: Result<Value, Failure>| result.map(|value| (value, Vec::new()));
         match op {
             "hello" => empty(Ok(
-                json!({"protocol":1,"version":env!("AXI_ENV_VERSION"),"os":env::consts::OS,"arch":env::consts::ARCH,"home":sys::home(),"separator":sys::PATH_SEPARATOR,"tmpdir":self.tmp,"cwd":sys::cwd(),"driveCwds":sys::drive_cwds(),"pid":std::process::id(),"features":["listFiles"]}),
+                json!({"protocol":1,"version":env!("AXI_ENV_VERSION"),"os":env::consts::OS,"arch":env::consts::ARCH,"home":sys::home(),"separator":sys::PATH_SEPARATOR,"tmpdir":self.tmp,"cwd":sys::cwd(),"driveCwds":sys::drive_cwds(),"pid":std::process::id(),"features":["listFiles", "process"]}),
             )),
             "lstat" => empty(fs::lstat(text(value, "path")?)),
             "realpath" => empty(fs::realpath(text(value, "path")?)),
@@ -248,6 +249,14 @@ impl Server {
                 &self.groups,
             )),
             "watch" => empty(watch::run(id, value, &self.output, control)),
+            "process" => empty(process::run(
+                id,
+                process::ProcessRequest::from_json(value)?,
+                &self.output,
+                control,
+                &self.groups,
+                &self.processes,
+            )),
             "pty" => empty(pty::run(
                 id,
                 pty::PtyRequest::from_json(value)?,
@@ -261,7 +270,10 @@ impl Server {
     }
     fn respond(&self, request: Frame, control: Arc<Control>) {
         let id = request.id;
-        let command = matches!(request.json["op"].as_str(), Some("exec" | "pty"));
+        let command = matches!(
+            request.json["op"].as_str(),
+            Some("exec" | "pty" | "process")
+        );
         let reply = match self.dispatch(id, &request.json, request.payload, &control) {
             Ok((json, payload)) => Frame::with_payload(RESULT, id, json, payload),
             Err(failure) => Frame::new(ERROR, id, failure.to_json()),
@@ -322,10 +334,23 @@ fn receive(server: &Arc<Server>, input: &mut impl Read) -> io::Result<()> {
         match request.kind {
             REQUEST => {
                 let op = request.json["op"].as_str().unwrap_or("");
-                if matches!(op, "ptyWrite" | "ptyResize" | "ptyForeground") {
+                if matches!(
+                    op,
+                    "ptyWrite"
+                        | "ptyResize"
+                        | "ptyForeground"
+                        | "processWrite"
+                        | "processCloseStdin"
+                ) {
                     let result = match op {
                         "ptyWrite" => pty::write(&server.terminals, &request.json, request.payload),
                         "ptyResize" => pty::resize(&server.terminals, &request.json),
+                        "processWrite" => {
+                            process::write(&server.processes, &request.json, request.payload)
+                        }
+                        "processCloseStdin" => {
+                            process::close_stdin(&server.processes, &request.json)
+                        }
                         _ => pty::foreground(&server.terminals, &request.json),
                     };
                     server.output.control(match result {
@@ -338,7 +363,7 @@ fn receive(server: &Arc<Server>, input: &mut impl Read) -> io::Result<()> {
                 let control = Arc::new(Control::default());
                 server.controls.lock().unwrap().insert(id, control.clone());
                 let worker = server.clone();
-                if matches!(op, "exec" | "watch" | "pty") {
+                if matches!(op, "exec" | "watch" | "pty" | "process") {
                     if let Err(error) = thread::Builder::new()
                         .stack_size(16 * 1024 * 1024)
                         .spawn(move || worker.respond(request, control))
@@ -429,6 +454,7 @@ fn serve(token: &str) -> io::Result<()> {
         controls: Mutex::new(HashMap::new()),
         groups,
         terminals: Arc::new(Mutex::new(HashMap::new())),
+        processes: Arc::new(Mutex::new(HashMap::new())),
     });
     let last = Arc::new(AtomicU64::new(now()));
     {
