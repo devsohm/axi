@@ -4,7 +4,8 @@ import { DatabaseSync, type StatementSync } from "node:sqlite";
 import type { SqliteDatabase, SqliteExecutor, SqliteValue } from "./database.ts";
 import { OperationQueue } from "./queue.ts";
 
-export type NodeSqliteDatabaseOptions = { readonly walAutoCheckpointPages?: number; readonly busyTimeoutMs?: number };
+export type NodeSqliteMode = "read-write" | "read-only";
+export type NodeSqliteDatabaseOptions = { readonly mode?: NodeSqliteMode; readonly walAutoCheckpointPages?: number; readonly busyTimeoutMs?: number };
 type TransactionScope = { active: boolean };
 
 abstract class Statements implements SqliteExecutor {
@@ -70,15 +71,17 @@ class TransactionStatements extends Statements {
 
 export class NodeSqliteDatabase extends Statements implements SqliteDatabase {
 	readonly #queue = new OperationQueue();
+	readonly #mode: NodeSqliteMode;
 	#closed = false;
 
-	constructor(database: DatabaseSync) {
+	constructor(database: DatabaseSync, mode: NodeSqliteMode = "read-write") {
 		super(database, new Map());
+		this.#mode = mode;
 	}
 
 	transaction<T>(callback: (transaction: SqliteExecutor) => Promise<T>): Promise<T> {
 		return this.#queue.runAsync(async () => {
-			this.database.exec("BEGIN IMMEDIATE");
+			this.database.exec(this.#mode === "read-only" ? "BEGIN" : "BEGIN IMMEDIATE");
 			const scope = { active: true };
 			try {
 				const result = await callback(new TransactionStatements(this.database, this.statements, scope));
@@ -103,7 +106,7 @@ export class NodeSqliteDatabase extends Statements implements SqliteDatabase {
 			this.#closed = true;
 			this.statements.clear();
 			try {
-				this.database.exec("PRAGMA wal_checkpoint(TRUNCATE)");
+				if (this.#mode === "read-write") this.database.exec("PRAGMA wal_checkpoint(TRUNCATE)");
 			} finally {
 				this.database.close();
 			}
@@ -120,6 +123,7 @@ export async function openNodeSqliteDatabase(
 ): Promise<NodeSqliteDatabase> {
 	const checkpoint = options.walAutoCheckpointPages ?? 1000;
 	const timeout = options.busyTimeoutMs ?? 5000;
+	if (options.mode === "read-only") return new NodeSqliteDatabase(new DatabaseSync(path, { timeout, readOnly: true }), "read-only");
 	if (path !== ":memory:") await mkdir(dirname(path), { recursive: true });
 	const adapter = new NodeSqliteDatabase(new DatabaseSync(path, { timeout }));
 	try {

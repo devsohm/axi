@@ -59,6 +59,11 @@
 			"source": "./src/next/index.ts",
 			"types": "./dist/next/index.d.ts",
 			"import": "./dist/next/index.js"
+		},
+		"./telemetry-sqlite/node": {
+			"source": "./src/telemetry-sqlite/node.ts",
+			"types": "./dist/telemetry-sqlite/node.d.ts",
+			"import": "./dist/telemetry-sqlite/node.js"
 		}
 	},
 	"files": [

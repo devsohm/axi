@@ -6,8 +6,8 @@ type Row = {
 	trace_id: string;
 	parent_id: string | null;
 	name: string;
-	started_ms: number;
-	ended_ms: number;
+	started_us: number;
+	ended_us: number;
 	attributes: string;
 	events: string;
 	links: string;
@@ -21,8 +21,8 @@ function decode(row: Row): StoredSpan {
 		traceId: row.trace_id,
 		...(row.parent_id === null ? {} : { parentId: row.parent_id }),
 		name: row.name,
-		startedMs: row.started_ms,
-		endedMs: row.ended_ms,
+		startedMs: row.started_us / 1000,
+		endedMs: row.ended_us / 1000,
 		attributes: JSON.parse(row.attributes),
 		status: JSON.parse(row.status),
 		events: events.map((event) => ({ name: event.name, timeMs: event.time_ms, attributes: event.attributes })),
@@ -48,7 +48,7 @@ function equalities(filter: TraceQuery["attributes"], column: string, parameters
 	return clauses.join(" AND ") || "1";
 }
 export async function getTrace(db: SqliteDatabase, traceId: string): Promise<StoredTrace | undefined> {
-	const rows = await db.all<Row>("SELECT * FROM telemetry_spans WHERE trace_id = ? ORDER BY started_ms, id", traceId);
+	const rows = await db.all<Row>("SELECT * FROM telemetry_spans WHERE trace_id = ? ORDER BY started_us, length(id), id", traceId);
 	return rows.length ? { traceId, spans: rows.map(decode) } : undefined;
 }
 export async function findTraces(
@@ -59,17 +59,17 @@ export async function findTraces(
 		parameters: SqliteValue[] = [];
 	if (query.name !== undefined) {
 		clauses.push(
-			"(SELECT name FROM telemetry_spans s WHERE s.trace_id = heads.trace_id ORDER BY started_ms, id LIMIT 1) = ?",
+			"(SELECT name FROM telemetry_spans s WHERE s.trace_id = heads.trace_id ORDER BY started_us, length(id), id LIMIT 1) = ?",
 		);
 		parameters.push(query.name);
 	}
 	if (query.startMin !== undefined) {
-		clauses.push("started_ms >= ?");
-		parameters.push(query.startMin);
+		clauses.push("started_us >= ?");
+		parameters.push(query.startMin * 1000);
 	}
 	if (query.startMax !== undefined) {
-		clauses.push("started_ms <= ?");
-		parameters.push(query.startMax);
+		clauses.push("started_us <= ?");
+		parameters.push(query.startMax * 1000);
 	}
 	if (query.errors)
 		clauses.push(
@@ -81,14 +81,14 @@ export async function findTraces(
 		);
 	if (query.cursor !== undefined) {
 		const cursor = JSON.parse(query.cursor);
-		clauses.push("(started_ms < ? OR (started_ms = ? AND trace_id > ?))");
+		clauses.push("(started_us < ? OR (started_us = ? AND trace_id > ?))");
 		parameters.push(cursor[0], cursor[0], cursor[1]);
 	}
 	const limit = query.limit ?? 20;
 	return db.transaction(async (tx) => {
-		const heads = await tx.all<{ trace_id: string; started_ms: number }>(
-			`WITH heads AS (SELECT trace_id, min(started_ms) AS started_ms FROM telemetry_spans GROUP BY trace_id)
-   SELECT * FROM heads WHERE ${clauses.join(" AND ") || "1"} ORDER BY started_ms DESC, trace_id LIMIT ?`,
+		const heads = await tx.all<{ trace_id: string; started_us: number }>(
+			`WITH heads AS (SELECT trace_id, min(started_us) AS started_us FROM telemetry_spans GROUP BY trace_id)
+   SELECT * FROM heads WHERE ${clauses.join(" AND ") || "1"} ORDER BY started_us DESC, trace_id LIMIT ?`,
 			...parameters,
 			limit + 1,
 		);
@@ -96,7 +96,7 @@ export async function findTraces(
 		const selected = heads.slice(0, limit);
 		if (!selected.length) return { traces: [] };
 		const rows = await tx.all<Row>(
-			"SELECT * FROM telemetry_spans WHERE trace_id IN (SELECT value FROM json_each(?)) ORDER BY started_ms, id",
+			"SELECT * FROM telemetry_spans WHERE trace_id IN (SELECT value FROM json_each(?)) ORDER BY started_us, length(id), id",
 			JSON.stringify(selected.map((head) => head.trace_id)),
 		);
 		const grouped = new Map<string, StoredSpan[]>();
@@ -108,7 +108,7 @@ export async function findTraces(
 		const last = selected.at(-1)!;
 		return {
 			traces: selected.map((head) => ({ traceId: head.trace_id, spans: grouped.get(head.trace_id)! })),
-			...(more ? { cursor: JSON.stringify([last.started_ms, last.trace_id]) } : {}),
+			...(more ? { cursor: JSON.stringify([last.started_us, last.trace_id]) } : {}),
 		};
 	});
 }

@@ -11,9 +11,11 @@ export function payloadPart(
 ): { readonly json: string; readonly segments: Uint8Array[] | undefined } {
 	if (!bytes) return { json: jsonPart(value), segments: undefined };
 	const segments: Uint8Array[] = [];
-	const json = JSON.stringify(value, (_, value: unknown) => {
-		if (value instanceof Uint8Array) {
-			segments.push(value);
+	const json = JSON.stringify(value, function (this: Record<string, unknown>, key: string, value: unknown) {
+		if (typeof value !== "object" || value === null) return value;
+		const bytes = this[key];
+		if (bytes instanceof Uint8Array) {
+			segments.push(bytes);
 			return { $bytes: segments.length - 1 };
 		}
 		if (
