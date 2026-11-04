@@ -95,7 +95,12 @@ export function detectCapabilities(tmuxForwardsHyperlink: () => boolean = tmuxLi
 			result = { images: "kitty", trueColor: true, hyperlinks: true };
 		else if (env.ITERM_SESSION_ID || program === "iterm.app")
 			result = { images: "iterm2", trueColor: true, hyperlinks: true };
-		else if (env.WT_SESSION || ["alacritty", "vscode", "zed"].includes(program))
+		else if (
+			env.WT_SESSION ||
+			term.startsWith("alacritty") ||
+			env.ALACRITTY_WINDOW_ID ||
+			["alacritty", "vscode", "zed"].includes(program)
+		)
 			result = { images: null, trueColor: true, hyperlinks: true };
 		else if (env.TERMINAL_EMULATOR?.toLowerCase() === "jetbrains-jediterm" || process.platform === "win32")
 			result.trueColor = true;

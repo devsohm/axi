@@ -10,6 +10,7 @@ import type {
 	Models,
 	ModelThinkingLevel,
 	Static,
+	ThinkingBudgets,
 	Tool,
 	ToolCall,
 	ToolResultMessage,
@@ -253,6 +254,8 @@ export type Agent<T extends ToolRegistration = ToolRegistration> = {
 export type ConversationStreamOptions = {
 	transport?: Transport;
 	timeoutMs?: number;
+	websocketConnectTimeoutMs?: number;
+	thinkingBudgets?: ThinkingBudgets;
 	maxRetries?: number;
 	maxRetryDelayMs?: number;
 	headers?: Record<string, string>;

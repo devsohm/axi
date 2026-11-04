@@ -2,10 +2,52 @@ import { expect, test, vi } from "vitest";
 import { normalizeNativeShiftEnterInput, ProcessTerminal } from "../src/terminal.ts";
 import { decodeKittyPrintable, matchesKey, parseKey } from "../src/keys.ts";
 import { TuiMainScreen } from "../src/tui-main-screen.ts";
-import { wrapTextWithAnsi } from "../src/utils.ts";
+import { sliceByColumn, wrapTextWithAnsi } from "../src/utils.ts";
+import { CURSOR_MARKER } from "../src/tui.ts";
+import { detectCapabilities } from "../src/terminal-image.ts";
 import { TestTerminal } from "./support/terminal.ts";
 import { CancellableLoader } from "../src/components/cancellable-loader.ts";
 import { ScrollView } from "../src/components/scroll-view.ts";
+
+test("column slicing carries color but leaves earlier cursor metadata behind", () => {
+	expect(sliceByColumn(`\x1b[31mab${CURSOR_MARKER}cdef`, 4, 2, true)).toBe("\x1b[31mef");
+	expect(sliceByColumn(`ab${CURSOR_MARKER}cdef`, 2, 2, true)).toBe(`${CURSOR_MARKER}cd`);
+});
+
+test("cursor metadata is removed from selected, repeated and offscreen render lines", async () => {
+	const terminal = new TestTerminal(20, 2);
+	const writes: string[] = [];
+	const write = terminal.write.bind(terminal);
+	terminal.write = (data) => {
+		writes.push(data);
+		write(data);
+	};
+	const ui = new TuiMainScreen(terminal);
+	ui.addChild({
+		render: () => [`old${CURSOR_MARKER}`, `ab${CURSOR_MARKER}cd${CURSOR_MARKER}`, `end${CURSOR_MARKER}`],
+		invalidate() {},
+	});
+	try {
+		ui.start();
+		await vi.waitFor(async () => expect((await terminal.screen()).join("\n")).toContain("end"));
+		expect(writes.join("")).not.toContain(CURSOR_MARKER);
+	} finally {
+		ui.stop();
+		terminal.dispose();
+	}
+});
+
+test("Alacritty advertises hyperlinks without TERM_PROGRAM", () => {
+	const env = process.env;
+	try {
+		process.env = { TERM: "alacritty" };
+		expect(detectCapabilities().hyperlinks).toBe(true);
+		process.env = { TERM: "xterm-256color", ALACRITTY_WINDOW_ID: "42" };
+		expect(detectCapabilities().hyperlinks).toBe(true);
+	} finally {
+		process.env = env;
+	}
+});
 
 test("scrollbar policy overrides determine both content width and visibility", () => {
 	class VisibleScroll extends ScrollView {

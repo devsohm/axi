@@ -838,7 +838,8 @@ export abstract class TuiBase extends Container implements TUI {
 	}
 	protected applyLineResets(lines: string[]): string[] {
 		for (let index = 0; index < lines.length; index++)
-			if (!isImageLine(lines[index])) lines[index] = normalizeTerminalOutput(lines[index]) + lineReset;
+			if (!isImageLine(lines[index]))
+				lines[index] = normalizeTerminalOutput(lines[index].replaceAll(CURSOR_MARKER, "")) + lineReset;
 		return lines;
 	}
 	protected extractCursorPosition(lines: string[], height: number): { row: number; col: number } | null {
@@ -846,7 +847,7 @@ export abstract class TuiBase extends Container implements TUI {
 			const index = lines[row].indexOf(CURSOR_MARKER);
 			if (index >= 0) {
 				const col = visibleWidth(lines[row].slice(0, index));
-				lines[row] = lines[row].slice(0, index) + lines[row].slice(index + CURSOR_MARKER.length);
+				lines[row] = lines[row].replaceAll(CURSOR_MARKER, "");
 				return { row, col };
 			}
 		}

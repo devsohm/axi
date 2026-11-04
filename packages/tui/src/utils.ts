@@ -263,7 +263,7 @@ export function sliceWithWidth(
 			if (position >= startCol && position < end) {
 				output += pending + unit.text;
 				pending = "";
-			} else if (position < startCol) pending += unit.text;
+			} else if (position < startCol && !unit.text.startsWith("\x1b_")) pending += unit.text;
 		} else {
 			if (position >= startCol && position < end && (!strict || position + unit.width <= end)) {
 				output += pending + unit.text;
