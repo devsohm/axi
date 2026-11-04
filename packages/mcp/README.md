@@ -61,6 +61,10 @@ Pass converted blocks to `limitMcpContent(content, saveOutput)` to limit combine
 
 Import OAuth helpers from `@axi/mcp/oauth`. `McpOAuthProvider` owns one exact server URL. Supply `McpOAuthStateStore` to persist credentials, and use `adaptOAuthProvider()` as the HTTP transport's `authProvider`. The library does not open a browser.
 
+For application-managed sign-in, use `createMcpAuthProvider()` for HTTP requests. Supply a store with `withRefreshLock()` to serialize refreshes across processes. Call `settled()` before shutdown so rotated tokens finish saving. The provider reports a challenge when the user must sign in; it does not launch a browser.
+
+`startMcpSignIn(options)` returns either `authorized` after a refresh or a `redirect` record for the browser. Keep the same options and pass the record with the callback response to `completeMcpSignIn()`. Use `listenForLoopbackSignIn()` and `waitForLoopbackSignIn()` for a local callback, or `responseFromRedirectUrl()` for a URL pasted from the browser. Abort a sign-in with its signal and close the callback server in `finally`. A refresh already in progress still saves its result when sign-in is cancelled.
+
 When authorization requires interaction, the adapter raises `McpOAuthAuthorizationRequiredError`. Your application opens the URL passed to `onRedirect`, waits for a callback, and passes both `code` and `iss` to `authorizeMcp()`. Always close the callback server when finished.
 
 This example verifies local callback handling without starting an external authorization flow:

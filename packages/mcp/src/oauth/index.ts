@@ -15,11 +15,34 @@ export {
 } from "./discovery.ts";
 export {
 	McpOAuthAuthorizationRequiredError,
+	McpRefreshLockBusyError,
 	OAuthError,
 	OAuthInsecureEndpointError,
 	OAuthIssuerMismatchError,
 	OAuthRegistrationError,
 } from "./errors.ts";
+export { createMcpAuthProvider, type McpAuthProvider } from "./auth-provider.ts";
+export type {
+	McpOAuthSettings,
+	McpClientMetadataDocuments,
+	McpOAuthServerStore,
+	McpOAuthClientOptions,
+} from "./client-settings.ts";
+export {
+	startMcpSignIn,
+	completeMcpSignIn,
+	McpSignInCancelledError,
+	type McpSignInOptions,
+	type McpSignInRedirect,
+	type McpSignInStart,
+	type McpAuthorizationResponse,
+} from "./sign-in.ts";
+export {
+	listenForLoopbackSignIn,
+	waitForLoopbackSignIn,
+	responseFromRedirectUrl,
+	type McpLoopbackCallback,
+} from "./loopback.ts";
 export {
 	adaptOAuthProvider,
 	authorizeMcp,

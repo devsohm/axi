@@ -43,3 +43,10 @@ export class McpOAuthAuthorizationRequiredError extends Error {
 		this.name = "McpOAuthAuthorizationRequiredError";
 	}
 }
+
+export class McpRefreshLockBusyError extends Error {
+	constructor() {
+		super("Another process is refreshing the MCP server's tokens");
+		this.name = "McpRefreshLockBusyError";
+	}
+}

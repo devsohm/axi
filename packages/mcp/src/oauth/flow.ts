@@ -62,6 +62,8 @@ export interface OAuthFlowOptions {
 	signal?: AbortSignal;
 	skipIssuerValidation?: boolean;
 	skipRefresh?: boolean;
+	refreshOnly?: boolean;
+	authorizationRedirectUrl?: string;
 }
 export type OAuthFlowResult = "AUTHORIZED" | "REDIRECT";
 export interface TokenRequestOptions {
@@ -238,7 +240,11 @@ export function stepUpScope(granted: string | undefined, challenged: string | un
 function scopeOf(tokens: OAuthTokens, scope?: string): OAuthTokens {
 	return tokens.scope === undefined && scope ? { ...tokens, scope } : tokens;
 }
-async function flow(provider: OAuthClientProvider, options: OAuthFlowOptions): Promise<OAuthFlowResult> {
+async function flow(
+	provider: OAuthClientProvider,
+	options: OAuthFlowOptions,
+	used: { clientId?: string } = {},
+): Promise<OAuthFlowResult> {
 	const metadataUrl = options.authorizationServerMetadataUrl && endpoint(options.authorizationServerMetadataUrl),
 		saved = metadataUrl ? undefined : await provider.discoveryState?.();
 	const info = saved?.authorizationServerUrl
@@ -270,13 +276,27 @@ async function flow(provider: OAuthClientProvider, options: OAuthFlowOptions): P
 		scope = options.scope || info.resourceMetadata?.scopes_supported?.join(" ") || provider.clientMetadata.scope;
 	const stored = await provider.clientInformation(),
 		document = stored ? undefined : provider.clientMetadataDocument?.(metadata);
+	used.clientId = stored?.client_id;
 	if (document) {
 		const url = new URL(document.url);
 		if (url.protocol !== "https:" || url.pathname === "/") throw new Error("Invalid OAuth client metadata URL");
 	}
+	const redirectUrl = document?.redirectUrl ?? String(provider.redirectUrl);
+	if (
+		options.authorizationCode &&
+		options.authorizationRedirectUrl !== undefined &&
+		redirectUrl !== options.authorizationRedirectUrl
+	)
+		throw new Error(
+			`The code exchange would use the redirect URI ${redirectUrl}, but the authorization request used ${options.authorizationRedirectUrl}`,
+		);
 	let client = stored ?? (document && { client_id: document.url });
 	if (!client) {
-		if (options.authorizationCode) throw new Error("OAuth client information is missing during code exchange");
+		if (options.refreshOnly) return "REDIRECT";
+		if (options.authorizationCode)
+			throw new Error(
+				"OAuth client information is missing during code exchange: the authorization request's client was removed, or the client settings changed",
+			);
 		if (!provider.saveClientInformation) throw new Error("OAuth client information cannot be persisted");
 		client = await registerClient(info.authorizationServerUrl, {
 			metadata,
@@ -287,7 +307,6 @@ async function flow(provider: OAuthClientProvider, options: OAuthFlowOptions): P
 		});
 		await provider.saveClientInformation(client);
 	}
-	const redirectUrl = document?.redirectUrl ?? provider.redirectUrl;
 	const tokenOptions: TokenRequestOptions = {
 		metadata,
 		clientInformation: client,
@@ -327,6 +346,7 @@ async function flow(provider: OAuthClientProvider, options: OAuthFlowOptions): P
 				throw error;
 		}
 	}
+	if (options.refreshOnly) return "REDIRECT";
 	const state = await provider.state?.(),
 		authorization = await startAuthorization(info.authorizationServerUrl, {
 			metadata,
@@ -341,12 +361,16 @@ async function flow(provider: OAuthClientProvider, options: OAuthFlowOptions): P
 	return "REDIRECT";
 }
 export async function authorizeMcp(provider: OAuthClientProvider, options: OAuthFlowOptions): Promise<OAuthFlowResult> {
+	const used: { clientId?: string } = {};
 	try {
-		return await flow(provider, options);
+		return await flow(provider, options, used);
 	} catch (error) {
 		if (error instanceof OAuthError) {
 			if (error.code === "invalid_client" || error.code === "unauthorized_client") {
-				await provider.invalidateCredentials?.("all");
+				if (!options.refreshOnly) await provider.invalidateCredentials?.("all");
+				else if ((await provider.clientInformation())?.client_id === used.clientId) {
+					for (const kind of ["client", "tokens", "discovery"] as const) await provider.invalidateCredentials?.(kind);
+				}
 				return flow(provider, options);
 			}
 			if (error.code === "invalid_grant") {
