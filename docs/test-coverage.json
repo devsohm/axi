@@ -79,6 +79,12 @@
 					]
 				},
 				{
+					"behavior": "streamed Store sync, lost upload replies, interrupted pulls, writer epochs and flush retries",
+					"tests": [
+						"packages/objects/test/sync.test.ts"
+					]
+				},
+				{
 					"behavior": "object-owned document transactions, handles, persistence and pinned keys",
 					"tests": [
 						"packages/objects/test/document-definition.test.ts",
@@ -151,7 +157,8 @@
 				{
 					"behavior": "worker processes, recovery, rollout, idle cleanup and locks",
 					"tests": [
-						"packages/objects/test/workers.test.ts"
+						"packages/objects/test/workers.test.ts",
+						"packages/objects/test/worker-snapshot.test.ts"
 					]
 				},
 				{
@@ -171,7 +178,8 @@
 					"behavior": "client reloads, localized messages, persistent preferences, React bindings, terminal scopes, bridge messages and browser bundles",
 					"tests": [
 						"packages/objects/test/client-surfaces.test.ts",
-						"packages/objects/test/client-bindings.test.ts"
+						"packages/objects/test/client-bindings.test.ts",
+						"packages/objects/test/tui-optimistic.test.ts"
 					]
 				},
 				{
