@@ -16,13 +16,17 @@ Call `startServer(options, context)`. Set these options:
 | `principal` | Server principal and a function assigning each worker its principal |
 | `workers` | Worker kinds, entry files, start data, authorization and idle policy |
 | `listen` | Listening host and port; defaults to loopback with an allocated port |
+| `base` | Additional source files or directories to watch for base-code changes |
+| `timeouts` | Host close and ready timeouts, shared by the server and workers |
 | `onError` | Receives host, HTTP, worker and plugin errors |
 
 The principal union must include `{ kind: "owner" }`. Application rules decide which workers a caller may reach. The server's own principal may reach its workers for administration and export.
 
 The returned `App` exposes the host, HTTP component, worker pools, plugin component and published client bundles. `AppInfo` reports the app name, API version and data directory. A worker exposes `WorkerInfo` with its address and application start data.
 
-Use `applyChanges(context)` to build dirty plugins and roll the result through the server, workers and client surfaces. File watching marks changes; it does not apply them automatically. Failed plugin changes keep the prior working implementation.
+Use `applyChanges(context)` to build dirty plugins and roll the result through the server, workers and client surfaces. File watching marks changes; it does not apply them automatically. Failed plugin changes keep the prior working implementation. Concurrent calls run in order, including the build step.
+
+The app watches files used by its worker and client bundles. A change sets `plugins.state.base`; it does not replace running base code. Additional `base` directories are watched recursively. The default host close timeout is 30 seconds; the ready timeout is 60 seconds.
 
 Call `close(context)` at shutdown. It closes HTTP, workers, the host and Store before releasing the app lock. Repeated calls share the same close promise.
 

@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
-import { basename, extname } from "node:path";
-import { build } from "esbuild";
+import { basename, extname, resolve } from "node:path";
+import { build, type Metafile } from "esbuild";
 import { mimeOf, type ServedFile } from "./served.ts";
 export type BasePlatform = "browser" | "sandbox";
 export type BaseBundle = {
@@ -8,10 +8,11 @@ export type BaseBundle = {
 	readonly script: string;
 	readonly style: string | undefined;
 	readonly files: ReadonlyMap<string, ServedFile>;
+	readonly inputs: readonly string[];
 };
 export async function buildBase(entry: string, platform: BasePlatform, prefix: string): Promise<BaseBundle> {
 	const browser = platform === "browser";
-	const { outputFiles } = await build({
+	const { outputFiles, metafile } = await build({
 		entryPoints: [entry],
 		bundle: true,
 		outdir: "/",
@@ -28,6 +29,7 @@ export async function buildBase(entry: string, platform: BasePlatform, prefix: s
 		jsx: "automatic",
 		define: { "process.env.NODE_ENV": '"production"' },
 		logLevel: "silent",
+		metafile: true,
 	});
 	const digest = createHash("sha256");
 	for (const file of [...outputFiles].sort((a, b) => (a.path < b.path ? -1 : 1)))
@@ -46,5 +48,10 @@ export async function buildBase(entry: string, platform: BasePlatform, prefix: s
 			else style = path;
 		}
 	}
-	return { hash, files, script, style };
+	return { hash, files, script, style, inputs: metafileInputs(metafile) };
+}
+export function metafileInputs(metafile: Metafile): string[] {
+	return Object.keys(metafile.inputs)
+		.filter((input) => !/^[a-z-]+:/.test(input))
+		.map((input) => resolve(input));
 }

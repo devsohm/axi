@@ -27,6 +27,7 @@ export type WebSurface<P extends Principal> = {
 	readonly facet: Facet<P>;
 	step(name: string): RolloutStep;
 	readonly base: string;
+	readonly inputs: readonly string[];
 };
 export async function webSurface<P extends Principal>(
 	server: Host<P>,
@@ -70,7 +71,7 @@ export async function webSurface<P extends Principal>(
 			scripts: [WEB_PREFIX],
 		});
 	});
-	return { facet, base: base.hash, step: (name) => scripts.step(name) };
+	return { facet, base: base.hash, inputs: base.inputs, step: (name) => scripts.step(name) };
 }
 export function pageScripts(assets: PageAssets, nonce: string): string {
 	return assets.styles

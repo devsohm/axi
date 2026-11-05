@@ -1,3 +1,4 @@
+import { statSync } from "node:fs";
 import { join, resolve } from "node:path";
 import type { TelemetryContext } from "@axi/telemetry";
 import { withAbortSignal, type Context } from "../../context/index.ts";
@@ -61,6 +62,7 @@ export type AppLimits = {
 	readonly importBytes?: number;
 	readonly importEntries?: number;
 };
+export type AppTimeouts = { readonly closeTimeout?: number; readonly readyTimeout?: number };
 export type AppWeb = Pick<WebSurfaceOptions, "entry" | "page" | "paths" | "public">;
 export type AppOptions<P extends Principal> = {
 	readonly name: string;
@@ -78,6 +80,8 @@ export type AppOptions<P extends Principal> = {
 	readonly tui?: { readonly entry: string };
 	readonly telemetry?: TelemetryContext & TelemetryIngestTarget;
 	readonly principalAttributes?: PrincipalAttributes<P>;
+	readonly base?: readonly string[];
+	readonly timeouts?: AppTimeouts;
 	readonly onError: (error: AppError) => void;
 } & (OwnerPrincipal extends P ? unknown : { readonly "the app's principal type must have { kind: 'owner' }": never });
 export type AppPlugins = {
@@ -108,9 +112,11 @@ export type KitStart = {
 	readonly files: { readonly maxFile?: number; readonly maxTotal?: number };
 	readonly telemetry: boolean;
 	readonly uploads?: number;
+	readonly timeouts: AppTimeouts;
 };
 type ClientSurface<P extends Principal> = {
 	readonly name: "web" | "tui";
+	readonly inputs: readonly string[];
 	readonly facet: import("../../host/index.ts").Facet<P>;
 	readonly base: string;
 	step(name: string): RolloutStep;
@@ -160,6 +166,7 @@ export async function startServer<P extends Principal>(options: AppOptions<P>, c
 		store,
 		telemetry: options.telemetry,
 		principalAttributes: options.principalAttributes,
+		...options.timeouts,
 		onError: (error) => onError({ kind: "host", error }),
 	});
 	const http = createHttp(
@@ -172,11 +179,14 @@ export async function startServer<P extends Principal>(options: AppOptions<P>, c
 		},
 		context,
 	);
+	const base = (options.base ?? []).map((path) => resolve(path));
+	const baseDirs = base.filter((path) => statSync(path, { throwIfNoEntry: false })?.isDirectory() === true);
 	const plugins = createPlugins(
 		{
 			roots: [{ path: resolve(options.root ?? "plugins"), required: true }, layout.plugins],
 			api: { name: api.name, versions: api.versions },
 			install: options.install,
+			base: baseDirs,
 			publicPath: WEB_PREFIX + "assets/",
 			kinds: Object.fromEntries(
 				Object.entries(options.kinds).map(([name, kind]) => [
@@ -197,44 +207,48 @@ export async function startServer<P extends Principal>(options: AppOptions<P>, c
 	const workers = new Map<string, Workers<HostKind>>(),
 		workerHosts = new Map<string, string>(),
 		serverKey = canonicalJson(options.principal.server as JsonValue, context);
-	for (const config of options.workers ?? []) {
-		const facet = config.facet ?? "worker";
-		workers.set(
-			config.kind.kind,
-			createWorkers(
-				host,
-				config.kind as HostKind,
-				{
-					kind: facet,
-					entry: config.entry,
-					execArgv: config.execArgv,
-					env: config.env,
-					authorize: (principal, address) =>
-						canonicalJson(principal as JsonValue, context) === serverKey || config.authorize(principal, address),
-					principal: options.principal.worker,
-					start: async (address, ctx) => {
-						const principal = options.principal.worker(address) as JsonValue;
-						workerHosts.set(canonicalJson(principal, ctx), address.key);
-						const kit: KitStart = {
-							dir: workerDirectory(dataDir, address),
-							facet,
-							principal,
-							server: options.principal.server as JsonValue,
-							files: { ...options.files },
-							telemetry: options.telemetry !== undefined,
-							...(limits.uploads === undefined ? {} : { uploads: limits.uploads }),
-						};
-						return { kit, app: await config.start(address, ctx) } as unknown as JsonValue;
+	async function startWorkers(): Promise<void> {
+		for (const config of options.workers ?? []) {
+			const facet = config.facet ?? "worker";
+			workers.set(
+				config.kind.kind,
+				await createWorkers(
+					host,
+					config.kind as HostKind,
+					{
+						kind: facet,
+						entry: config.entry,
+						execArgv: config.execArgv,
+						env: config.env,
+						authorize: (principal, address) =>
+							canonicalJson(principal as JsonValue, context) === serverKey || config.authorize(principal, address),
+						principal: options.principal.worker,
+						start: async (address, ctx) => {
+							const principal = options.principal.worker(address) as JsonValue;
+							workerHosts.set(canonicalJson(principal, ctx), address.key);
+							const kit: KitStart = {
+								dir: workerDirectory(dataDir, address),
+								facet,
+								principal,
+								server: options.principal.server as JsonValue,
+								files: { ...options.files },
+								telemetry: options.telemetry !== undefined,
+								timeouts: { ...options.timeouts },
+								...(limits.uploads === undefined ? {} : { uploads: limits.uploads }),
+							};
+							return { kit, app: await config.start(address, ctx) } as unknown as JsonValue;
+						},
+						lock: (address) => workerLock(options.name, dataDir, address),
+						idleMs: config.idleMs,
+						plugins,
+						onError: (error) => onError({ kind: "workers", error }),
 					},
-					lock: (address) => workerLock(options.name, dataDir, address),
-					idleMs: config.idleMs,
-					plugins,
-					onError: (error) => onError({ kind: "workers", error }),
-				},
-				context,
-			),
-		);
+					context,
+				),
+			);
+		}
 	}
+
 	const owner = new OwnerLink(),
 		surfaces: ClientSurface<P>[] = [];
 	const core: PluginFacet<P>[] = [
@@ -263,6 +277,7 @@ export async function startServer<P extends Principal>(options: AppOptions<P>, c
 		});
 	let link = "",
 		closing: Promise<void> | undefined;
+	let applying: Promise<void> = Promise.resolve();
 	async function addressLock(address: Address, ctx: Context): Promise<ProcessLock | undefined> {
 		const timeout = AbortSignal.timeout(2000);
 		try {
@@ -295,17 +310,24 @@ export async function startServer<P extends Principal>(options: AppOptions<P>, c
 		get tui() {
 			return surfaces.find((surface) => surface.name === "tui");
 		},
-		async applyChanges(ctx) {
-			const built = await plugins.build(plugins.state.value.dirty, ctx);
-			return plugins.rollout(
-				[
-					plugins.step("server", host),
-					...Array.from(workers, ([name, worker]) => worker.step(name)),
-					...surfaces.map((surface) => surface.step(surface.name)),
-				],
-				built,
-				ctx,
+		applyChanges(ctx) {
+			const run = applying.then(async () => {
+				const built = await plugins.build(plugins.state.value.dirty, ctx);
+				return plugins.rollout(
+					[
+						plugins.step("server", host),
+						...Array.from(workers, ([name, worker]) => worker.step(name)),
+						...surfaces.map((surface) => surface.step(surface.name)),
+					],
+					built,
+					ctx,
+				);
+			});
+			applying = run.then(
+				() => {},
+				() => {},
 			);
+			return run;
 		},
 		async exportData(address, path, ctx) {
 			const worker = pool(address),
@@ -371,10 +393,15 @@ export async function startServer<P extends Principal>(options: AppOptions<P>, c
 		},
 	};
 	try {
+		await startWorkers();
 		if (options.web) surfaces.push({ name: "web", ...(await webSurface(host, { ...options.web, plugins }, context)) });
 		if (options.tui)
 			surfaces.push({ name: "tui", ...(await tuiSurface(host, { entry: options.tui.entry, plugins }, context)) });
 		for (const surface of surfaces) core.push({ name: `objects.${surface.name}`, facet: surface.facet });
+		plugins.watchBase([
+			...base.filter((path) => !baseDirs.includes(path)),
+			...[...surfaces, ...workers.values()].flatMap(({ inputs }) => inputs),
+		]);
 		await plugins.load(
 			host,
 			{ kind: "server", core, modules: { ...api.modules, ...options.kinds.server?.packages } },

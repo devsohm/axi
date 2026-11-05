@@ -22,7 +22,7 @@ async function setup(onOutput: () => void = () => {}) {
 	let starts = 0,
 		fail = false;
 	const addresses: WeakRef<object>[] = [];
-	const workers = createWorkers(
+	const workers = await createWorkers(
 		host,
 		Runner,
 		{

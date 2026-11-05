@@ -87,7 +87,7 @@ workerMain(async ({address,parent,plugins,onClose},context)=>{
 }, {hostPackages:{"@axi/objects":objects},redact:()=>({message:"worker failed"}),onError(){}});
 `,
 	);
-	const workers = workerModule.createWorkers(
+	const workers = await workerModule.createWorkers(
 		listener,
 		Runner,
 		{

@@ -53,6 +53,7 @@ export interface Plugins {
 	reload<P extends Principal>(host: Host<P>, built: Built, context: Context): Promise<ReloadReport>;
 	step<P extends Principal>(name: string, host: Host<P>): RolloutStep;
 	rollout(steps: readonly RolloutStep[], built: Built, context: Context): Promise<RolloutResult>;
+	watchBase(files: readonly string[]): void;
 	installDependencies(name: string, context: Context): Promise<void>;
 	installPlugin(source: PluginSource, root: string, context: Context): Promise<readonly string[]>;
 	close(): void;
@@ -74,7 +75,7 @@ class PluginComponent implements Plugins {
 		this.#options = options;
 		this.#watcher = new PluginWatcher(
 			{
-				roots: options.roots.map((root) => typeof root === "string" ? root : root.path),
+				roots: options.roots.map((root) => (typeof root === "string" ? root : root.path)),
 				base: options.base ?? [],
 				kinds: Object.keys(options.kinds),
 				failed: (error) => options.onError({ kind: "watch_failed", error }),
@@ -119,7 +120,10 @@ class PluginComponent implements Plugins {
 		if (!this.#discovered || this.#watcher.needsDiscovery) await this.#discover(context);
 		const present = new Set(this.#known.plugins.map(({ name }) => name));
 		const removed = [...previous.keys()].filter((name) => !present.has(name));
-		const selected = this.#known.plugins.filter((plugin) => names.includes(plugin.name) || !previous.has(plugin.name) || !sameFiles(previous.get(plugin.name)!, plugin));
+		const selected = this.#known.plugins.filter(
+			(plugin) =>
+				names.includes(plugin.name) || !previous.has(plugin.name) || !sameFiles(previous.get(plugin.name)!, plugin),
+		);
 		const seen = this.#watcher.snapshot([...selected.map(({ name }) => name), ...removed]);
 		const facets = await Promise.all(
 			selected.flatMap((plugin) => Object.keys(plugin.facets).map((kind) => this.#compile(plugin, kind, context))),
@@ -165,9 +169,11 @@ class PluginComponent implements Plugins {
 		this.#hosts.set(host, kind);
 		const problems = this.#known.problems.filter((problem) => problem.required);
 		let report: LoadReport;
-		try { report = await this.#runtime.load(host, { kind, core, modules, scripts }, context); }
-		catch (error) {
-			if (error instanceof PluginError && problems.length) throw new PluginError(error.required, error.failed, problems);
+		try {
+			report = await this.#runtime.load(host, { kind, core, modules, scripts }, context);
+		} catch (error) {
+			if (error instanceof PluginError && problems.length)
+				throw new PluginError(error.required, error.failed, problems);
 			throw error;
 		}
 		if (problems.length) throw new PluginError([], report.failed, problems);
@@ -219,6 +225,10 @@ class PluginComponent implements Plugins {
 		return { steps: completed, stopped: undefined };
 	}
 
+	watchBase(files: readonly string[]): void {
+		this.#watcher.baseFiles(files);
+	}
+
 	async installDependencies(name: string, context: Context): Promise<void> {
 		if (!this.#discovered) await this.#discover(context);
 		const plugin = this.#known.plugins.find((item) => item.name === name);
@@ -227,8 +237,13 @@ class PluginComponent implements Plugins {
 		this.#watcher.installed(name);
 	}
 	async installPlugin(source: PluginSource, root: string, context: Context): Promise<readonly string[]> {
-		if (!this.#options.roots.some((item) => (typeof item === "string" ? item : item.path) === root)) throw new Error(`plugins.installPlugin: ${root} is not one of the roots`);
-		const installed = await installPlugin(source, root, context, { ...this.#options.install, kinds: Object.keys(this.#options.kinds), roots: this.#options.roots });
+		if (!this.#options.roots.some((item) => (typeof item === "string" ? item : item.path) === root))
+			throw new Error(`plugins.installPlugin: ${root} is not one of the roots`);
+		const installed = await installPlugin(source, root, context, {
+			...this.#options.install,
+			kinds: Object.keys(this.#options.kinds),
+			roots: this.#options.roots,
+		});
 		this.#watcher.added();
 		return installed;
 	}

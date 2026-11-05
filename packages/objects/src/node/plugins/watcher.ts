@@ -32,6 +32,8 @@ export class PluginWatcher extends Source {
 	readonly #options: WatcherOptions;
 	readonly #roots: readonly string[];
 	readonly #base: readonly string[];
+	readonly #files = new Set<string>();
+	readonly #fileWatches = new Map<string, FSWatcher>();
 	readonly #trees = new Set<string>();
 	readonly #directories = new Map<string, FSWatcher>();
 	readonly #marks = new Map<string, number>();
@@ -117,13 +119,38 @@ export class PluginWatcher extends Source {
 		this.#marks.set(name, this.#clock++);
 		this.#notify();
 	}
-	added(): void { this.#set = this.#clock++; this.#notify(); }
+	added(): void {
+		this.#set = this.#clock++;
+		this.#notify();
+	}
+	baseFiles(files: readonly string[]): void {
+		for (const file of files) {
+			const path = realDirectory(file);
+			if (path.split(sep).some(ignored)) continue;
+			this.#files.add(path);
+			const directory = dirname(path);
+			if (this.#fileWatches.has(directory) || this.#unavailable) continue;
+			try {
+				const handle = watch(directory, (_event, file) => {
+					if (file !== null && this.#files.has(join(directory, file))) this.mark(join(directory, file));
+				});
+				handle.on("error", (error) => this.#failure(error));
+				this.#fileWatches.set(directory, handle);
+			} catch (error) {
+				if ((error as NodeJS.ErrnoException).code !== "ENOENT") this.#failure(error);
+			}
+		}
+	}
 	mark(path: string): void {
 		if (path.split(sep).some(ignored)) return;
-		if (this.#base.some((dir) => inside(dir, path))) this.#baseChanged = true;
+		if (this.#files.has(path) || this.#base.some((dir) => inside(dir, path))) this.#baseChanged = true;
 		else {
 			const stamp = this.#clock++;
-			const owner = this.#known.plugins.find((plugin) => plugin.layout === "file" ? Object.values(plugin.facets).includes(path) : plugin.dir === path || inside(plugin.dir, path));
+			const owner = this.#known.plugins.find((plugin) =>
+				plugin.layout === "file"
+					? Object.values(plugin.facets).includes(path)
+					: plugin.dir === path || inside(plugin.dir, path),
+			);
 			if (!owner) {
 				if (this.#roots.some((dir) => inside(dir, path))) this.#set = stamp;
 			} else if (path === join(owner.dir, "package.json")) {
@@ -131,7 +158,8 @@ export class PluginWatcher extends Source {
 				this.#manifest = stamp;
 			} else {
 				if (
-					(owner.layout === "file" && !existsSync(path)) || path === owner.dir ||
+					(owner.layout === "file" && !existsSync(path)) ||
+					path === owner.dir ||
 					(dirname(path) === owner.dir &&
 						this.#options.kinds.some((kind) =>
 							FACET_EXTENSIONS.some((extension) => basename(path) === kind + extension),
@@ -145,8 +173,9 @@ export class PluginWatcher extends Source {
 		this.#notify();
 	}
 	close(): void {
-		for (const watcher of this.#directories.values()) watcher.close();
+		for (const watcher of [...this.#directories.values(), ...this.#fileWatches.values()]) watcher.close();
 		this.#directories.clear();
+		this.#fileWatches.clear();
 		this.#trees.clear();
 	}
 	#tree(dir: string): void {

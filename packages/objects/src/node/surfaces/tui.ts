@@ -14,6 +14,7 @@ export type TuiSurface<P extends Principal> = {
 	readonly facet: Facet<P>;
 	step(name: string): RolloutStep;
 	readonly base: string;
+	readonly inputs: readonly string[];
 };
 export async function tuiSurface<P extends Principal>(
 	server: Host<P>,
@@ -43,5 +44,5 @@ export async function tuiSurface<P extends Principal>(
 			},
 		});
 	});
-	return { facet, base: base.hash, step: (name) => scripts.step(name) };
+	return { facet, base: base.hash, inputs: base.inputs, step: (name) => scripts.step(name) };
 }

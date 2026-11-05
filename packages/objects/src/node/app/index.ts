@@ -7,6 +7,7 @@ export {
 	type AppKind,
 	type AppOptions,
 	type AppPlugins,
+	type AppTimeouts,
 	type AppWorkerKind,
 } from "./app.ts";
 export { ARCHIVE_FORMAT, type ArchiveManifest } from "./archive.ts";

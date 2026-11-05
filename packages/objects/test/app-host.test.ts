@@ -79,3 +79,35 @@ export default defineFacet((_host,self)=>self.contribute(Http,{routes:{
 		await rm(dir, { recursive: true, force: true });
 	}
 }, 15000);
+
+it("releases startup resources when a worker entry cannot be built", async () => {
+	const dir = await mkdtemp(join(tmpdir(), "axi-app-start-"));
+	const root = join(dir, "plugins"),
+		entry = join(dir, "broken.ts");
+	await mkdir(root);
+	await writeFile(entry, 'import "./absent.ts";');
+	const options: AppOptions<Principal> = {
+		name: "startup",
+		dataDir: join(dir, "data"),
+		root,
+		api: { name: "@example/api", versions: ["v1"], modules: {} },
+		kinds: { server: { platform: "node" }, worker: { platform: "node" } },
+		principal: { server: { kind: "server" }, worker: () => ({ kind: "worker" }) },
+		onError() {},
+	};
+	try {
+		await expect(
+			startServer(
+				{
+					...options,
+					workers: [{ kind: objects.hostKind("broken"), entry, authorize: () => true, start: () => null }],
+				},
+				context,
+			),
+		).rejects.toThrow('Could not resolve "./absent.ts"');
+		const app = await startServer(options, context);
+		await app.close(context);
+	} finally {
+		await rm(dir, { recursive: true, force: true });
+	}
+});

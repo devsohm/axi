@@ -4,7 +4,9 @@
 
 ## Parent process
 
-`createWorkers(host, Kind, options, context)` registers a route before host loading. Its `kind` selects the plugin facet kind. Bootstrap options name the entry module, Node arguments and environment overrides. The child inherits the parent environment with those overrides.
+`await createWorkers(host, Kind, options, context)` builds the worker entry and registers a route before host loading. A build failure rejects startup. Its `kind` selects the plugin facet kind. Bootstrap options name the entry module, Node arguments and environment overrides. The child inherits the parent environment with those overrides.
+
+All workers of one kind use the code snapshot built at startup. Edits to its source take effect after the server restarts. Installed packages remain external; linked workspace packages are included in the snapshot. `inputs` lists the source files used by the build. Source locations and stack traces point to those original files. A temporary-file cleaner can remove the bundle; the component recreates it before the next fork.
 
 `authorize` decides whether a principal can reach an address. `principal` stamps the worker's link. `start` supplies JSON before each start, and `lock` names the cross-process ownership lock. `plugins` supplies the current prebuilt scripts. `onOutput` receives stdout and stderr; without it, output goes to the parent's corresponding stream.
 
@@ -28,4 +30,4 @@ A crash or failed start stays failed until retry or a worker rollout. A running 
 
 `workers.step(name)` joins a plugin rollout. It retries earlier failed addresses and ships the current script set to running workers. Results identify each host's report, clean stop or error. Cancelling a rollout wait does not cancel its outstanding child reload.
 
-Shutdown aborts the child's context and runs registered closers in reverse order. The child has three seconds to exit; the parent kills the process group after five seconds. Closing the component cancels starts and stops its children. Process locks wait for the current holder without polling. The serialized starter clears an unheld stale file socket before acquisition and preserves live holders.
+Shutdown aborts the child's context and runs registered closers in reverse order. The child has three seconds to exit; the parent kills the process group after five seconds. Closing the component removes its snapshot file, cancels starts and stops its children. Process locks wait for the current holder without polling. The serialized starter clears an unheld stale file socket before acquisition and preserves live holders.

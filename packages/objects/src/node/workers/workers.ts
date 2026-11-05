@@ -11,6 +11,7 @@ import type { PluginScript } from "../plugins/runtime.ts";
 import { uncrossed, uncrossedReport, type CrossedError, type CrossedReport, type FromWorker } from "./control.ts";
 import { clearStaleLock } from "./lock.ts";
 import { WorkerProcess, type Exit } from "./process.ts";
+import { buildWorkerBase, type WorkerBase } from "./base.ts";
 export type WorkersOptions<P extends Principal, K extends KindShape> = {
 	readonly kind: string;
 	readonly entry: string;
@@ -41,18 +42,20 @@ export type WorkersError =
 	| BatchError;
 export interface Workers<K extends KindShape> {
 	readonly state: Watchable<Readonly<Record<string, WorkerState>>>;
+	readonly inputs: readonly string[];
 	stop(address: Address<K>, context: Context): Promise<void>;
 	retry(address: Address<K>, context: Context): Promise<void>;
 	step(name: string): RolloutStep;
 	close(context: Context): Promise<void>;
 }
-export function createWorkers<P extends Principal, N extends string, Q extends Params>(
+export async function createWorkers<P extends Principal, N extends string, Q extends Params>(
 	host: Host<P>,
 	kind: HostKind<N, Q>,
 	options: WorkersOptions<P, HostKind<N, Q>>,
 	context: Context,
-): Workers<HostKind<N, Q>> {
-	return new WorkerPool(options, context, (route) => host.route(kind, route, context));
+): Promise<Workers<HostKind<N, Q>>> {
+	const base = await buildWorkerBase(options.entry, options.execArgv ?? []);
+	return new WorkerPool(options, base, context, (route) => host.route(kind, route, context));
 }
 type Failure = { error: CrossedError; at: number };
 type Cause = { error: unknown; public?: CrossedError; killed?: true; lost?: true };
@@ -86,7 +89,9 @@ type Slot<K extends KindShape> = {
 const startFailed: CrossedError = { message: "worker failed to start", code: "unavailable" };
 function lostLink(child: Child): Cause {
 	const error = new Error("worker: link lost");
-	return child.status === "running" ? { error, public: { message: "worker lost its link", code: "unavailable" }, lost: true } : { error };
+	return child.status === "running"
+		? { error, public: { message: "worker lost its link", code: "unavailable" }, lost: true }
+		: { error };
 }
 const closed = (): ObjectsError => new ObjectsError({ code: "released", reason: "closed", message: "workers: closed" });
 const scriptKey = (scripts: readonly PluginScript[]): string =>
@@ -97,6 +102,7 @@ const scriptKey = (scripts: readonly PluginScript[]): string =>
 class WorkerPool<P extends Principal, K extends KindShape> implements Workers<K> {
 	readonly state: Watchable<Readonly<Record<string, WorkerState>>>;
 	readonly #options: WorkersOptions<P, K>;
+	readonly #base: WorkerBase;
 	readonly #slots = new Map<string, Slot<K>>();
 	readonly #view: WorkerView;
 	readonly #closing = new AbortController();
@@ -104,8 +110,14 @@ class WorkerPool<P extends Principal, K extends KindShape> implements Workers<K>
 	readonly #route: RouteHandle<K>;
 	#routing = false;
 	#idle: ReturnType<typeof setInterval> | undefined;
-	constructor(options: WorkersOptions<P, K>, context: Context, route: (options: RouteOptions<P, K>) => RouteHandle<K>) {
+	constructor(
+		options: WorkersOptions<P, K>,
+		base: WorkerBase,
+		context: Context,
+		route: (options: RouteOptions<P, K>) => RouteHandle<K>,
+	) {
 		this.#options = options;
+		this.#base = base;
 		this.#view = new WorkerView(() => this.#snapshot(), new Batch((error) => options.onError(error), undefined));
 		this.state = this.#view as unknown as Watchable<Readonly<Record<string, WorkerState>>>;
 		this.#route = route({
@@ -120,6 +132,9 @@ class WorkerPool<P extends Principal, K extends KindShape> implements Workers<K>
 			resolve: (address, routing) => this.#resolve(address, routing),
 		});
 		this.#followClose(context);
+	}
+	get inputs(): readonly string[] {
+		return this.#base.inputs;
 	}
 	#followClose(context: Context): void {
 		if (context.abortSignal && !context.abortSignal.aborted)
@@ -202,6 +217,7 @@ class WorkerPool<P extends Principal, K extends KindShape> implements Workers<K>
 	}
 	async close(context: Context): Promise<void> {
 		if (!this.#closing.signal.aborted) this.#closing.abort(closed());
+		this.#base.remove();
 		clearInterval(this.#idle);
 		this.#idle = undefined;
 		await awaitWithContext(
@@ -259,8 +275,8 @@ class WorkerPool<P extends Principal, K extends KindShape> implements Workers<K>
 		const onOutput = options.onOutput;
 		const process = new WorkerProcess(
 			{
-				entry: options.entry,
-				...(options.execArgv === undefined ? {} : { execArgv: options.execArgv }),
+				entry: this.#base.file(),
+				execArgv: ["--enable-source-maps", ...(options.execArgv ?? [])],
 				...(options.env === undefined ? {} : { env: options.env }),
 				...(onOutput === undefined ? {} : { onOutput: (stream, chunk) => onOutput(slot.address, stream, chunk) }),
 			},
