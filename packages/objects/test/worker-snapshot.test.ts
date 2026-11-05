@@ -1,11 +1,33 @@
 import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { expect, it } from "vitest";
 import { buildWorkerBase } from "../src/node/workers/base.ts";
+
+it("loads a lazy snapshot only on demand and restores every chunk after cleanup", async () => {
+	const directory = await mkdtemp(join(tmpdir(), "axi-lazy-base-"));
+	const entry = join(directory, "entry.ts"), lazy = join(directory, "lazy.ts");
+	await writeFile(entry, 'console.log("ready"); if (process.argv[2] === "load") console.log((await import("./lazy.ts")).value);');
+	await writeFile(lazy, 'console.log("loaded"); export const value = 42;');
+	const base = await buildWorkerBase(entry, []);
+	try {
+		expect(execFileSync(process.execPath, [base.file()], { encoding: "utf8" }).trim()).toBe("ready");
+		await writeFile(lazy, 'throw new Error("new source must not run");');
+		const first = base.file();
+		const chunks = (await readdir(dirname(first))).filter(name => name !== "worker.mjs");
+		expect(chunks.length).toBeGreaterThan(0);
+		await rm(join(dirname(first), chunks[0]!));
+		const recreated = base.file();
+		expect(recreated).not.toBe(first);
+		expect(execFileSync(process.execPath, [recreated, "load"], { encoding: "utf8" }).trim().split("\n")).toEqual(["ready", "loaded", "42"]);
+	} finally {
+		base.remove();
+		await rm(directory, { recursive: true, force: true });
+	}
+});
 
 it("keeps a worker snapshot and source location after edits and temporary-file cleanup", async () => {
 	const directory = await mkdtemp(join(tmpdir(), "axi-base-test-"));

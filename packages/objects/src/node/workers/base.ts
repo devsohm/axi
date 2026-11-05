@@ -2,7 +2,7 @@ import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { isBuiltin } from "node:module";
 import { tmpdir } from "node:os";
-import { dirname, extname, join, parse, resolve, sep } from "node:path";
+import { basename, dirname, extname, join, parse, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
 import { build, type Loader, type Plugin } from "esbuild";
 import { metafileInputs } from "../surfaces/bundle.ts";
@@ -24,8 +24,12 @@ export async function buildWorkerBase(entry: string, execArgv: readonly string[]
 	}
 	const root = parse(resolve(entry)).root;
 	const result = await build({
-		entryPoints: [entry],
-		outfile: join(root, "worker.mjs"),
+		entryPoints: { worker: entry },
+		outdir: root,
+		outExtension: { ".js": ".mjs" },
+		entryNames: "[name]",
+		chunkNames: "[name]-[hash]",
+		splitting: true,
 		write: false,
 		bundle: true,
 		format: "esm",
@@ -51,7 +55,7 @@ export async function buildWorkerBase(entry: string, execArgv: readonly string[]
 		},
 		plugins: [workerSources()],
 	});
-	return new Snapshot(result.outputFiles[0]!.contents, metafileInputs(result.metafile));
+	return new Snapshot(result.outputFiles.map(output => ({ name: basename(output.path), bytes: output.contents })), metafileInputs(result.metafile));
 }
 
 function workerSources(): Plugin {
@@ -94,16 +98,16 @@ function workerSources(): Plugin {
 
 class Snapshot implements WorkerBase {
 	readonly inputs: readonly string[];
-	readonly #bytes: Uint8Array;
+	readonly #outputs: readonly { readonly name: string; readonly bytes: Uint8Array }[];
 	#directory = "";
 	#file = "";
-	constructor(bytes: Uint8Array, inputs: readonly string[]) {
-		this.#bytes = bytes;
+	constructor(outputs: readonly { readonly name: string; readonly bytes: Uint8Array }[], inputs: readonly string[]) {
+		this.#outputs = outputs;
 		this.inputs = inputs;
 		this.#save();
 	}
 	file(): string {
-		if (!existsSync(this.#file)) {
+		if (this.#outputs.some(output => !existsSync(join(this.#directory, output.name)))) {
 			this.remove();
 			this.#save();
 		}
@@ -115,6 +119,6 @@ class Snapshot implements WorkerBase {
 	#save(): void {
 		this.#directory = mkdtempSync(join(tmpdir(), "axi-worker-"));
 		this.#file = join(this.#directory, "worker.mjs");
-		writeFileSync(this.#file, this.#bytes, { mode: 0o600 });
+		for (const output of this.#outputs) writeFileSync(join(this.#directory, output.name), output.bytes, { mode: 0o600 });
 	}
 }

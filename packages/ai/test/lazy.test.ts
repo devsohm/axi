@@ -1,10 +1,42 @@
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
 import { readFile } from "node:fs/promises";
 import { build } from "esbuild";
 import { lazyApi, lazyStream } from "../src/api/lazy.ts";
 import { fauxAssistantMessage } from "../src/providers/faux.ts";
 import type { Model } from "../src/types.ts";
 import { normalizeContext } from "../src/utils/transcript.ts";
+import { bedrockConverseStreamApi, setBedrockProviderLoader } from "../src/api/bedrock-converse-stream.lazy.ts";
+import { loadOpenAICodexOAuth, registerBundledOAuthFlowLoaders } from "../src/auth/oauth/load.ts";
+import type { OAuthAuth } from "../src/auth/types.ts";
+
+it("defers an overridden Bedrock loader until a request", async () => {
+	const loader = vi.fn(async () => { throw new Error("lazy chunk boundary"); });
+	setBedrockProviderLoader(loader);
+	const api = bedrockConverseStreamApi();
+	expect(loader).not.toHaveBeenCalled();
+	const model: Model<"bedrock-converse-stream"> = {
+		id: "deferred", name: "Deferred", api: "bedrock-converse-stream", provider: "test", baseUrl: "",
+		reasoning: false, input: ["text"], contextWindow: 10, maxTokens: 1,
+		cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+	};
+	const result = await api.stream(model, normalizeContext({ messages: [] })).result();
+	expect(result.errorMessage).toContain("lazy chunk boundary");
+	expect(loader).toHaveBeenCalledTimes(1);
+});
+
+it("uses the registered Node OAuth loader without opening a login flow", async () => {
+	const auth: OAuthAuth = {
+		name: "Bundled test",
+		async login() { throw new Error("login must not run"); },
+		async refresh() { throw new Error("refresh must not run"); },
+		async toAuth() { throw new Error("auth must not run"); },
+	};
+	const loader = vi.fn(() => auth);
+	registerBundledOAuthFlowLoaders({ anthropic: loader, openaiCodex: loader, githubCopilot: loader, openrouter: loader, kimiCoding: loader, meta: loader, xai: loader });
+	expect(loader).not.toHaveBeenCalled();
+	expect(await loadOpenAICodexOAuth()).toBe(auth);
+	expect(loader).toHaveBeenCalledTimes(1);
+});
 
 it("resolves a lazy OAuth module from its source location after bundling", async () => {
 	const location = new URL("../src/auth/oauth/load.ts", import.meta.url);

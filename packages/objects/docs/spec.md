@@ -44,6 +44,8 @@ Only parent links can stamp principals and incarnations. Routes authorize each h
 
 Each origin has independent call and state windows. Two unacknowledged local state messages fill the state window. Method replies and control messages remain independent. Remote views keep their last snapshot while disconnected. Sent calls fail on loss and are never replayed automatically.
 
+Before a result or error is sent, the answering host sends that origin's pending state, even when the ordinary state window is full. A relay sends its own pending state before forwarding an answer. These extra state messages use the same ordered acknowledgements. The guarantee covers changes committed by those answering hosts before the answer, not effects left running after it.
+
 A loading transition during reload preserves admitted calls. Calls that crossed the transition use the previous method names until the consumer acknowledges the new binding. Failure, removal, cancellation and link loss still end affected calls.
 
 Default heartbeat settings ping after 15 seconds and close after 30 seconds. A delayed local timer does not count a sleeping process as peer silence. Type names and host kinds are bounded to 256 characters on the wire. Trace carriers have at most eight printable entries of bounded length.

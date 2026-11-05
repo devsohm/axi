@@ -6,7 +6,9 @@
 
 `await createWorkers(host, Kind, options, context)` builds the worker entry and registers a route before host loading. A build failure rejects startup. Its `kind` selects the plugin facet kind. Bootstrap options name the entry module, Node arguments and environment overrides. The child inherits the parent environment with those overrides.
 
-All workers of one kind use the code snapshot built at startup. Edits to its source take effect after the server restarts. Installed packages remain external; linked workspace packages are included in the snapshot. `inputs` lists the source files used by the build. Source locations and stack traces point to those original files. A temporary-file cleaner can remove the bundle; the component recreates it before the next fork.
+All workers of one kind use the code snapshot built at startup. Edits to its source take effect after the server restarts. Installed packages remain external; linked workspace packages are included in the snapshot. Literal dynamic imports become lazy chunks. `inputs` lists the source files used by the build. Source locations and stack traces point to those original files. If a temporary-file cleaner removes an output file, the component recreates the complete snapshot before the next fork.
+
+A variable import resolves against its original source location and stays outside the snapshot. Shared chunks can change the execution order of modules that do not import one another. A running worker cannot import a chunk that was removed before the next fork restores it.
 
 `authorize` decides whether a principal can reach an address. `principal` stamps the worker's link. `start` supplies JSON before each start, and `lock` names the cross-process ownership lock. `plugins` supplies the current prebuilt scripts. `onOutput` receives stdout and stderr; without it, output goes to the parent's corresponding stream.
 
@@ -18,7 +20,7 @@ The first routed hold starts a child. Its IPC link exists from the fork, preserv
 
 ## Child process
 
-The entry module calls `workerMain(fn, options)`. The function receives its address, start data, parent link, plugin loader and `onClose` registration method. Connect a host to the parent before slow setup, register its closer, then load the supplied scripts through `plugins.load`.
+The entry module imports `workerMain(fn, options)` from `@axi/objects/workers/child`. This entry also exports `processLock` and loads no compiler. The function receives its address, start data, parent link, plugin loader and `onClose` registration method. Connect a host to the parent before slow setup, register its closer, then load the supplied scripts through `plugins.load`.
 
 The child's `hostPackages` contains its own module instances. Plugins use the separate prebuilt-script runtime, without importing esbuild. The function can return an additional `busy` watchable of numeric counts. Host references, jobs, lingering objects, extra busy counts and active reloads determine whether the worker is idle.
 

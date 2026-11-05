@@ -18,6 +18,8 @@ The optional `@axi/objects/react` entry requires React. Wrap components in `Host
 
 The `@axi/objects/tui` entry is independent of the terminal rendering library. `TuiScope` holds references, follows values and requests redraws. Dispose a scope when its component ends. Host page state survives replacement of the scope.
 
+`scope.optimistic(read)` returns a reader and `show(value, promise)`. The reader shows the latest supplied value until every shown call settles, including rejected calls. It then reads the real state again. `show` returns the original promise. Disposing the scope stops its redraws.
+
 `startTerminalRuntime` runs inside a launcher-provided sandbox. `BridgeTerminal` receives input and size changes and sends drawing frames. Machine actions such as copying text, opening a URL or attaching a file pass through the launcher's request bridge.
 
 The sandbox cannot use this bridge as direct filesystem or network access. The trusted launcher controls credentials and machine actions. Its output filter permits drawing controls and drops clipboard, title and other terminal configuration escapes.

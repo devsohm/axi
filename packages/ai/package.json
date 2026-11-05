@@ -48,6 +48,14 @@
 			"types": "./dist/bedrock-provider.d.ts",
 			"import": "./dist/bedrock-provider.js"
 		},
+		"./lazy-bedrock-provider": {
+			"types": "./dist/lazy-bedrock-provider.d.ts",
+			"import": "./dist/lazy-bedrock-provider.js"
+		},
+		"./lazy-oauth": {
+			"types": "./dist/lazy-oauth.d.ts",
+			"import": "./dist/lazy-oauth.js"
+		},
 		"./api/anthropic-client": null,
 		"./api/anthropic-request": null,
 		"./api/anthropic-sse": null,

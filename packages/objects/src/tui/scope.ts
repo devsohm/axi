@@ -55,6 +55,22 @@ export class TuiScope<P extends Principal = Principal> {
 		);
 		return () => read();
 	}
+	optimistic<T>(read: () => T | undefined): readonly [read: () => T | undefined, show: <R>(value: T, call: Promise<R>) => Promise<R>] {
+		let overlay: { value: T; count: number } | undefined;
+		const finish = () => {
+			if (overlay && --overlay.count === 0) overlay = undefined;
+			this.#notify();
+		};
+		return [
+			() => overlay ? overlay.value : read(),
+			<R>(value: T, call: Promise<R>): Promise<R> => {
+				overlay = { value, count: (overlay?.count ?? 0) + 1 };
+				call.then(finish, finish);
+				this.#notify();
+				return call;
+			},
+		];
+	}
 	pageState<T>(key: string, initial: T): PageState<T> {
 		const state = pageState(this.#host, key, initial);
 		this.#cleanup.push(state.subscribe(() => this.#changed()));

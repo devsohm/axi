@@ -173,9 +173,10 @@ export class ProviderSide {
 	}
 	reply(id: number, reply: Reply): void {
 		const running = this.#active.get(id);
-		if (running?.kind === "relayed") this.#relayEnd(running, reply);
 		if (!this.#active.delete(id)) return;
+		if (this.#pending.size) this.#sendPending();
 		this.send(reply);
+		if (running?.kind === "relayed") this.#relayEnd(running, reply);
 		this.#releaseIfIdle();
 	}
 	#releaseIfIdle(): void {
@@ -372,12 +373,16 @@ export class ProviderSide {
 				this.#preferBinding = false;
 				this.#sendState({ kind: "bound", holds: holds.map((hold) => hold.boundEntry(this.link.context)) });
 			} else {
-				const holds = [...this.#pending];
-				this.#pending.clear();
-				this.#preferBinding = this.#bindings.size > 0;
-				this.#sendState({ kind: "state", holds: holds.map((hold) => hold.pendingEntry(this.link.context)) });
+				this.#sendPending();
 			}
 		}
+	}
+	#sendPending(): void {
+		const holds = [...this.#pending];
+		this.#pending.clear();
+		this.#waited();
+		this.#preferBinding = this.#bindings.size > 0;
+		this.#sendState({ kind: "state", holds: holds.map(hold => hold.pendingEntry(this.link.context)) });
 	}
 	#sendState(message: Extract<OriginMessage, { kind: "bound" | "state" }>): void {
 		this.#ownSent++;

@@ -62,6 +62,8 @@ Anthropic requests with a `sessionId` use server-side message threads on the Ant
 
 Login flows support legacy Codex, Anthropic, GitHub Copilot, OpenRouter, Kimi, Meta and xAI. The legacy Codex request adapter supports SSE, WebSockets, account-scoped connection reuse, continuation requests, and session cleanup. Newer ChatGPT sign-in and partner authentication are excluded. The `axi-ai list` command lists login providers. `axi-ai login <provider>` stores credentials in `auth.json` in the current directory.
 
+For a Node bundle that splits dynamic imports, call `registerLazyOAuthFlows()` from `@axi/ai/lazy-oauth` and `registerLazyBedrockProvider()` from `@axi/ai/lazy-bedrock-provider` in its startup code. Their literal imports keep the included login flows and AWS implementation inside lazy chunks. The modules load on first use. Without these hooks, the default loaders resolve from the installed package. Keep these Node helpers out of browser bundles.
+
 Image generation supports text and image input and returns text and embedded images. Classifiers support System One, Cloudflare System One, OpenAI Decisions and llama.cpp token-probability classification. Compose these adapters with `createProvider()` and custom model definitions.
 
 GitHub Copilot exposes `microsoft-decision-1` through classifier accessors. It uses the authenticated account endpoint with `/v1/systemone`; chat and classifier catalogs stay separate.
