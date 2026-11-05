@@ -34,6 +34,8 @@ Publication replaces accepted providers and contributions in one batch. A pure i
 
 Reloads serialize. Cancellation before publication leaves the prior set intact. Cancellation after publication does not undo the accepted update. Error details identify committed plugin changes.
 
+A pure swap that reacquires a dependency on a worker can enter `loading`. A consumer updated before its worker's incompatible contract update can also enter `loading`. These cases do not guarantee uninterrupted `live` status.
+
 ## Links and authority
 
 Links handshake before queued work. Untrusted envelopes are validated. Malformed messages, duplicate identifiers and control traffic from an unauthorized role close the channel. Asynchronous handling holds later messages until it completes.
