@@ -20,6 +20,8 @@ Host close stops new work, closes links, seals scopes and objects, drains admitt
 
 Transactions serialize changes to one object's documents. Store commits order writes across owners. A transaction publishes no draft before storage adoption. Document changes, table changes and live-query refreshes publish in one batch. A failed refresh keeps the last live rows and reports its failure once per episode.
 
+Commits queued behind a running Store step share the next database transaction. Each retains its own sequence, outbox record and adoption. Metadata is written once per group. If a member's writes refuse, the group rolls back and runs its admitted members individually. A failed transaction boundary stops the Store instead of retrying an uncertain outcome.
+
 Persisted state declares a schema version and checkpoint policy. A schema change requires a compatible migration. Tables record version history and bounded migrations. Jobs persist unsettled run records separately from their state. Recovery uses committed records, not unfinished in-memory callbacks.
 
 An uncertain database outcome is terminal for the Store. Export holds its queue until the iterator ends or is cancelled. Import validates and applies the complete archive to an empty database. Optional outbox replay accepts consecutive commits and checks row counts.
@@ -39,6 +41,8 @@ Links handshake before queued work. Untrusted envelopes are validated. Malformed
 Only parent links can stamp principals and incarnations. Routes authorize each hold before resolution. Revocation ends matching external objects, unbound work and downstream links. The host's own principal is exempt.
 
 Each origin has independent call and state windows. Two unacknowledged local state messages fill the state window. Method replies and control messages remain independent. Remote views keep their last snapshot while disconnected. Sent calls fail on loss and are never replayed automatically.
+
+A loading transition during reload preserves admitted calls. Calls that crossed the transition use the previous method names until the consumer acknowledges the new binding. Failure, removal, cancellation and link loss still end affected calls.
 
 Default heartbeat settings ping after 15 seconds and close after 30 seconds. A delayed local timer does not count a sleeping process as peer silence. Type names and host kinds are bounded to 256 characters on the wire. Trace carriers have at most eight printable entries of bounded length.
 

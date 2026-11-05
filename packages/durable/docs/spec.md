@@ -182,6 +182,8 @@ Document history stores bases and subsequent Objects deltas. A copy names a sour
 | `IndexedDbStorage` | Uses a browser database with atomic record, document and allocation updates. |
 | `StoreStorage` | Uses an application-owned shared Store, with separate tables and document claims for each owner. |
 
+SQLite checks grouped batches with indexed reads, validates them in memory and writes their net changes in multi-row statements. A document copy first flushes earlier accepted writes so its source is visible. Large text rows use bound columns within the 100-parameter limit; other rows use JSON arrays. This reduces statement round trips while preserving each batch's sequence and refusal boundary.
+
 SQLite accepts Objects's asynchronous database contract. `openNodeSqliteStorage()` uses Node SQLite. `openDurableObjectSqliteStorage()` uses a SQLite-backed Durable Object. An optional schema prefix isolates table and index names. Opening applies pending schema versions atomically and refuses an unsupported newer version.
 
 JSONL stores table records and commit markers in `main.jsonl`. Document incarnations use `doc-<id>.jsonl`; live tasks use `task-<id>.jsonl`. A commit appends sidecars first, then its main marker, then publishes in memory.
