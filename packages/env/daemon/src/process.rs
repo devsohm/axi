@@ -109,11 +109,8 @@ pub fn run(
     let pid = child.id();
     groups.lock().unwrap().insert(pid);
     let stop = Arc::new(AtomicBool::new(false));
-    let abandon = |mut child: Child, readers: &[&thread::JoinHandle<()>], error: std::io::Error| {
+    let abandon = |mut child: Child, error: std::io::Error| {
         stop.store(true, Ordering::SeqCst);
-        for reader in readers {
-            sys::interrupt_reader(reader);
-        }
         exec::kill_group(pid);
         let _ = child.kill();
         let _ = child.wait();
@@ -122,32 +119,30 @@ pub fn run(
     };
     let group = match sys::process_group(&child) {
         Ok(group) => group,
-        Err(error) => return Err(abandon(child, &[], error)),
+        Err(error) => return Err(abandon(child, error)),
     };
-    let stdout = match exec::read_pipe(
+    if let Err(error) = exec::read_pipe(
         0,
         child.stdout.take().unwrap(),
         send.clone(),
         stop.clone(),
         Some(output.clone()),
     ) {
-        Ok(reader) => reader,
-        Err(error) => return Err(abandon(child, &[], error)),
-    };
-    let stderr = match exec::read_pipe(
+        return Err(abandon(child, error));
+    }
+    if let Err(error) = exec::read_pipe(
         1,
         child.stderr.take().unwrap(),
         send.clone(),
         stop.clone(),
         Some(output.clone()),
     ) {
-        Ok(reader) => reader,
-        Err(error) => return Err(abandon(child, &[&stdout], error)),
-    };
+        return Err(abandon(child, error));
+    }
     let (input, inputs) = mpsc::channel();
     let mut stdin = child.stdin.take().unwrap();
     let writer_stop = stop.clone();
-    let writer = match thread::Builder::new().spawn(move || {
+    if let Err(error) = thread::Builder::new().spawn(move || {
         for item in inputs {
             match item {
                 Input::Bytes(bytes) => {
@@ -159,9 +154,8 @@ pub fn run(
             }
         }
     }) {
-        Ok(writer) => writer,
-        Err(error) => return Err(abandon(child, &[&stdout, &stderr], error)),
-    };
+        return Err(abandon(child, error));
+    }
     let (give, take) = mpsc::channel::<Child>();
     let waiter_send = send.clone();
     let waiter_groups = groups.clone();
@@ -181,7 +175,7 @@ pub fn run(
             Err(error) => Message::WaitFailed(error.to_string()),
         });
     }) {
-        return Err(abandon(child, &[&stdout, &stderr, &writer], error));
+        return Err(abandon(child, error));
     }
     let _ = give.send(child);
     drop(send);
@@ -243,9 +237,6 @@ pub fn run(
         }
     }
     stop.store(true, Ordering::SeqCst);
-    for worker in [&stdout, &stderr, &writer] {
-        sys::interrupt_reader(worker);
-    }
     processes.lock().unwrap().remove(&id);
     groups.lock().unwrap().remove(&pid);
     if aborted {

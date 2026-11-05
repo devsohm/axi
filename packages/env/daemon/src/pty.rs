@@ -25,6 +25,7 @@ pub struct Terminal {
     pid: u32,
 }
 pub type Terminals = Arc<Mutex<HashMap<u32, Arc<Terminal>>>>;
+#[cfg_attr(not(unix), allow(dead_code))]
 pub struct PtyRequest {
     argv: Option<Vec<String>>,
     cwd: String,

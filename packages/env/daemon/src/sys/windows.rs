@@ -9,7 +9,7 @@ use std::io;
 use std::os::windows::{
     ffi::OsStrExt,
     fs::FileExt,
-    io::{AsRawHandle, FromRawHandle},
+    io::{AsRawHandle, FromRawHandle, OwnedHandle},
     process::CommandExt,
 };
 use std::path::{Path, PathBuf};
@@ -20,9 +20,15 @@ use std::sync::{
 };
 use std::time::UNIX_EPOCH;
 use windows_sys::Win32::{
-    Foundation::{CloseHandle, INVALID_HANDLE_VALUE},
+    Foundation::{
+        CloseHandle, ERROR_IO_PENDING, HANDLE, INVALID_HANDLE_VALUE, WAIT_OBJECT_0, WAIT_TIMEOUT,
+    },
     Storage::FileSystem::*,
-    System::{IO::CancelSynchronousIo, JobObjects::*, Threading::CREATE_NO_WINDOW},
+    System::{
+        IO::{CancelIoEx, GetOverlappedResult, OVERLAPPED},
+        JobObjects::*,
+        Threading::{CREATE_NO_WINDOW, CreateEventW, WaitForSingleObject},
+    },
 };
 
 pub const PATH_SEPARATOR: &str = "\\";
@@ -203,24 +209,88 @@ pub fn remove_file(path: &str) -> io::Result<()> {
         result => result,
     }
 }
-pub trait Pipe: io::Read {}
-impl<T: io::Read> Pipe for T {}
-pub fn read_pipe(mut pipe: impl Pipe, stop: &AtomicBool, mut consume: impl FnMut(&[u8]) -> bool) {
-    let mut bytes = vec![0; 65536];
-    while !stop.load(Ordering::SeqCst) {
-        match pipe.read(&mut bytes) {
-            Ok(0) | Err(_) => return,
-            Ok(n) => {
-                if !consume(&bytes[..n]) {
-                    return;
-                }
+pub trait Pipe: AsRawHandle {}
+impl<T: AsRawHandle> Pipe for T {}
+
+struct PipeIo {
+    handle: HANDLE,
+    event: OwnedHandle,
+}
+impl PipeIo {
+    fn new(pipe: &impl AsRawHandle) -> io::Result<Self> {
+        let event = unsafe { CreateEventW(std::ptr::null(), 1, 0, std::ptr::null()) };
+        if event.is_null() {
+            return Err(io::Error::last_os_error());
+        }
+        Ok(Self {
+            handle: pipe.as_raw_handle() as HANDLE,
+            event: unsafe { OwnedHandle::from_raw_handle(event as _) },
+        })
+    }
+    fn transferred(&self, operation: &OVERLAPPED, wait: bool) -> io::Result<u32> {
+        let mut bytes = 0;
+        if unsafe { GetOverlappedResult(self.handle, operation, &mut bytes, i32::from(wait)) } == 0
+        {
+            return Err(io::Error::last_os_error());
+        }
+        Ok(bytes)
+    }
+    fn transfer(
+        &self,
+        stop: &AtomicBool,
+        start: impl FnOnce(*mut OVERLAPPED) -> i32,
+    ) -> io::Result<Option<u32>> {
+        let mut operation: OVERLAPPED = unsafe { std::mem::zeroed() };
+        operation.hEvent = self.event.as_raw_handle() as HANDLE;
+        if start(&mut operation) == 0 {
+            let error = io::Error::last_os_error();
+            if error.raw_os_error() != Some(ERROR_IO_PENDING as i32) {
+                return Err(error);
             }
+        }
+        loop {
+            let status = unsafe { WaitForSingleObject(operation.hEvent, 100) };
+            if status == WAIT_OBJECT_0 {
+                return self.transferred(&operation, false).map(Some);
+            }
+            if status == WAIT_TIMEOUT && !stop.load(Ordering::SeqCst) {
+                continue;
+            }
+            let failure = (status != WAIT_TIMEOUT).then(io::Error::last_os_error);
+            // Cancellation must finish before the operation and its borrowed buffer are dropped.
+            unsafe { CancelIoEx(self.handle, &operation) };
+            let _ = self.transferred(&operation, true);
+            return match failure {
+                Some(error) => Err(error),
+                None => Ok(None),
+            };
         }
     }
 }
-pub fn interrupt_reader(reader: &std::thread::JoinHandle<()>) {
-    unsafe {
-        CancelSynchronousIo(reader.as_raw_handle() as _);
+
+pub fn read_pipe(pipe: impl Pipe, stop: &AtomicBool, mut consume: impl FnMut(&[u8]) -> bool) {
+    let Ok(input) = PipeIo::new(&pipe) else {
+        return;
+    };
+    let mut bytes = vec![0; 65536];
+    while !stop.load(Ordering::SeqCst) {
+        let read = input.transfer(stop, |operation| unsafe {
+            ReadFile(
+                input.handle,
+                bytes.as_mut_ptr(),
+                bytes.len() as u32,
+                std::ptr::null_mut(),
+                operation,
+            )
+        });
+        match read {
+            Ok(Some(n)) if n > 0 => {
+                if !consume(&bytes[..n as usize]) {
+                    return;
+                }
+            }
+            _ => return,
+        }
     }
 }
 pub fn resolve_program(
@@ -494,8 +564,30 @@ pub fn write_process_input(
     bytes: &[u8],
     stop: &AtomicBool,
 ) -> bool {
-    use std::io::Write;
-    !stop.load(Ordering::SeqCst) && pipe.write_all(bytes).is_ok()
+    let Ok(output) = PipeIo::new(pipe) else {
+        return false;
+    };
+    let mut remaining = bytes;
+    while !remaining.is_empty() {
+        if stop.load(Ordering::SeqCst) {
+            return false;
+        }
+        let count = remaining.len().min(u32::MAX as usize) as u32;
+        let written = output.transfer(stop, |operation| unsafe {
+            WriteFile(
+                output.handle,
+                remaining.as_ptr(),
+                count,
+                std::ptr::null_mut(),
+                operation,
+            )
+        });
+        match written {
+            Ok(Some(n)) if n > 0 => remaining = &remaining[n as usize..],
+            _ => return false,
+        }
+    }
+    true
 }
 pub fn on_exit_signal(_callback: impl FnOnce(i32) + Send + 'static) -> io::Result<()> {
     Ok(())

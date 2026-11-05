@@ -187,7 +187,6 @@ pub fn read_pipe(mut pipe: impl Pipe, stop: &AtomicBool, mut consume: impl FnMut
         }
     }
 }
-pub fn interrupt_reader(_thread: &std::thread::JoinHandle<()>) {}
 pub fn resolve_program(
     program: &str,
     _cwd: &str,

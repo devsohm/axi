@@ -278,50 +278,33 @@ pub fn run(
     groups.lock().unwrap().insert(pid);
     let deadline = request.timeout.map(|t| Instant::now() + t);
     let stop = Arc::new(AtomicBool::new(false));
-    let abandon = |mut child: std::process::Child,
-                   readers: &[&thread::JoinHandle<()>],
-                   error: std::io::Error| {
+    let abandon = |mut child: std::process::Child, error: std::io::Error| {
         stop.store(true, Ordering::SeqCst);
-        for reader in readers {
-            sys::interrupt_reader(reader);
-        }
         kill_group(pid);
         let _ = child.kill();
         let _ = child.wait();
         groups.lock().unwrap().remove(&pid);
         Failure::new("spawn_error", error.to_string())
     };
-    let reader = |index, pipe| {
-        read_pipe(
-            index,
-            pipe,
-            sender.clone(),
-            stop.clone(),
-            if request.window.is_none() {
-                Some(output.clone())
-            } else {
-                None
-            },
-        )
-    };
-    let first = match reader(0, child.stdout.take().unwrap()) {
-        Ok(reader) => reader,
-        Err(error) => return Err(abandon(child, &[], error)),
-    };
-    let second = match read_pipe(
+    let gate = request.window.is_none().then(|| output.clone());
+    if let Err(error) = read_pipe(
+        0,
+        child.stdout.take().unwrap(),
+        sender.clone(),
+        stop.clone(),
+        gate.clone(),
+    ) {
+        return Err(abandon(child, error));
+    }
+    if let Err(error) = read_pipe(
         1,
         child.stderr.take().unwrap(),
         sender.clone(),
         stop.clone(),
-        if request.window.is_none() {
-            Some(output.clone())
-        } else {
-            None
-        },
+        gate,
     ) {
-        Ok(reader) => reader,
-        Err(error) => return Err(abandon(child, &[&first], error)),
-    };
+        return Err(abandon(child, error));
+    }
     let (give, take) = mpsc::channel::<std::process::Child>();
     let waiter = sender.clone();
     let waiting = thread::Builder::new().spawn(move || {
@@ -334,7 +317,7 @@ pub fn run(
         });
     });
     if let Err(error) = waiting {
-        return Err(abandon(child, &[&first, &second], error));
+        return Err(abandon(child, error));
     }
     let _ = give.send(child);
     drop(sender);
@@ -424,8 +407,6 @@ pub fn run(
         }
     }
     stop.store(true, Ordering::SeqCst);
-    sys::interrupt_reader(&first);
-    sys::interrupt_reader(&second);
     groups.lock().unwrap().remove(&pid);
     for (stream, decoder) in decoders.iter_mut().enumerate() {
         emit(id, output, &mut pending, stream, decoder.decode(&[], true));
