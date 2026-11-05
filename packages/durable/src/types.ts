@@ -698,6 +698,7 @@ export interface Tx {
 		limit: number,
 		cursor?: Cursor,
 	): Promise<Page<TaskRecord<JsonValue, JsonValue, JsonValue>, Cursor>>;
+	submission(id: SubmissionId): Promise<SubmissionRecord | undefined>;
 	submissionByRequest(conversationId: ConversationId, requestId: string): Promise<SubmissionRecord | undefined>;
 	createConversation(options: { readonly ownership: ConversationOwnership }): Promise<ConversationRecord>;
 	forkConversation(

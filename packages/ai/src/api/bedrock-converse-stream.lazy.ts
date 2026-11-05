@@ -5,6 +5,6 @@ export function setBedrockProviderModule(module: ProviderStreams): void {
 	implementation = module;
 }
 const load = (specifier: string): Promise<ProviderStreams> =>
-	import(import.meta.url.endsWith(".js") ? specifier.replace(/\.ts$/, ".js") : specifier);
+	import(new URL(import.meta.url.endsWith(".js") ? specifier.replace(/\.ts$/, ".js") : specifier, import.meta.url).href);
 export const bedrockConverseStreamApi = (): ProviderStreams =>
 	lazyApi(async () => implementation ?? (await load("./bedrock-converse-stream.ts")));

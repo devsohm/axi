@@ -3,7 +3,7 @@ import type { OAuthAuth } from "../types.ts";
 async function flow<K extends string>(file: string, exported: K): Promise<OAuthAuth> {
 	const suffix = import.meta.url.endsWith(".js") ? "js" : "ts";
 	const specifier = `./${file}.${suffix}`;
-	const loaded: Record<K, OAuthAuth> = await import(specifier);
+	const loaded: Record<K, OAuthAuth> = await import(new URL(specifier, import.meta.url).href);
 	return loaded[exported];
 }
 export const loadAnthropicOAuth = (): Promise<OAuthAuth> => flow("anthropic", "anthropicOAuth");

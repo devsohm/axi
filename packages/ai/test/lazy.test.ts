@@ -1,8 +1,26 @@
 import { expect, it } from "vitest";
+import { readFile } from "node:fs/promises";
+import { build } from "esbuild";
 import { lazyApi, lazyStream } from "../src/api/lazy.ts";
 import { fauxAssistantMessage } from "../src/providers/faux.ts";
 import type { Model } from "../src/types.ts";
 import { normalizeContext } from "../src/utils/transcript.ts";
+
+it("resolves a lazy OAuth module from its source location after bundling", async () => {
+	const location = new URL("../src/auth/oauth/load.ts", import.meta.url);
+	const bundle = await build({
+		stdin: { contents: await readFile(location, "utf8"), loader: "ts" },
+		format: "esm",
+		platform: "node",
+		write: false,
+		define: { "import.meta.url": JSON.stringify(location.href) },
+	});
+	const code = bundle.outputFiles[0].text;
+	const loaded = await import(`data:text/javascript;base64,${Buffer.from(code).toString("base64")}`);
+	const auth = await loaded.loadOpenAICodexOAuth();
+	expect(auth.name).toBe("OpenAI (ChatGPT Plus/Pro)");
+	expect(typeof auth.login).toBe("function");
+});
 
 it("classifies lazy setup failures after cancellation on all stream entry points", async () => {
 	const model: Model<"test"> = {

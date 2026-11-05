@@ -15,7 +15,6 @@ export type TelemetryIngestOptions<P extends Principal> = {
 export function telemetryIngestFacet<P extends Principal>(options: TelemetryIngestOptions<P>): Facet<P> {
 	return defineFacet<P>((host) => {
 		host.serve(PageTelemetry, (_params, principal) => {
-			const stamp = { ...options.principalAttributes(principal), "objects.host": "browser" };
 			const minutes = new Map<string, { since: number; used: number }>();
 			return { variant: "main", members: { ingest: async ({ spans }, ctx) => {
 				const now = Date.now();
@@ -35,7 +34,11 @@ export function telemetryIngestFacet<P extends Principal>(options: TelemetryInge
 					if (![span.id, span.traceId, span.parentId ?? prefix].every((id) => id.startsWith(prefix))) return false;
 					budget.used++;
 					return true;
-				}).map((span) => ({ ...span, attributes: { ...span.attributes, ...stamp } }));
+				}).map((span) => ({ ...span, attributes: {
+					"objects.host": "browser",
+					...Object.fromEntries(Object.entries(span.attributes).filter(([name]) => !name.startsWith("objects."))),
+					...options.principalAttributes(principal),
+				} }));
 				const written = options.target.ingest({ spans: own, metrics: [] });
 				return { written, dropped: spans.length - written };
 			} } };
