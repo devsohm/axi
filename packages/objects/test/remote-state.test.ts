@@ -1,6 +1,15 @@
 import { expect, it } from "vitest";
 import { BACKGROUND_CONTEXT as context } from "../src/context/index.ts";
-import { constant, createHost, defineFacet, hostKind, int, memoryLinkPair, method, remote } from "../src/index.ts";
+import {
+	constant,
+	createHost,
+	defineFacet,
+	hostKind,
+	int,
+	memoryLinkPair,
+	method,
+	remote,
+} from "../src/index.ts";
 import { ObjectsError } from "../src/data/index.ts";
 import { CallWindow } from "../src/remote/calls.ts";
 import { Replica } from "../src/remote/replica.ts";
@@ -116,4 +125,48 @@ it("bounds raw-deflate expansion and distinguishes corrupt input", () => {
 	expect(nodeCompression.inflate(compressed, 9999)).toEqual({ kind: "too_large" });
 	expect(nodeCompression.inflate(compressed, 0)).toEqual({ kind: "too_large" });
 	expect(nodeCompression.inflate(new Uint8Array([255]), 100).kind).toBe("corrupt");
+});
+
+it("keeps a remote call queued while replacement code opens its native resource", async () => {
+	const Server = hostKind("reload.server");
+	const Counter = remote("reload.counter", {
+		version: 1,
+		params: {},
+		hostAddress: () => Server(),
+		variants: { ready: { methods: { current: method(undefined, int()) } } },
+	});
+	const server = createHost({ address: Server(), principal: { kind: "server" }, onError() {} });
+	const client = createHost({ onError() {} });
+	const opened = Promise.withResolvers<void>();
+	const serve = (value: number, wait: Promise<void>) =>
+		defineFacet((host) =>
+			host.serve(Counter, (_params, _principal, self) => {
+				self.open(
+					async () => {
+						await wait;
+						return null;
+					},
+					() => {},
+				);
+				return { variant: "ready", members: { current: async () => value } };
+			}),
+		);
+	try {
+		await server.load([{ name: "counter", facet: serve(1, Promise.resolve()) }], context);
+		await client.load([], context);
+		const [a, b] = memoryLinkPair();
+		server.accept(a, { principal: { kind: "client" } }, context);
+		client.connect(b, { principal: { kind: "server" } }, context);
+		const counter = await client.get(Counter, {}, context);
+		expect(await counter.current(context)).toBe(1);
+		await server.reload([{ name: "counter", facet: serve(2, opened.promise) }], context);
+		const pending = counter.current(context);
+		opened.resolve();
+		expect(await pending).toBe(2);
+		counter.release();
+	} finally {
+		opened.resolve();
+		await client.close(context);
+		await server.close(context);
+	}
 });

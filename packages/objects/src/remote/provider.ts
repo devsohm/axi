@@ -35,6 +35,7 @@ export class ProviderSide {
 	readonly #bindings = new Set<Hold>();
 	#touched: Hold[] = [];
 	#ownSent = 0;
+	#ownAcked = 0;
 	#preferBinding = false;
 	#waitingSince?: number;
 	#relay: { readonly origin: number; readonly links: Set<HostLink> } | undefined;
@@ -42,6 +43,12 @@ export class ProviderSide {
 		this.link = link;
 		this.origin = origin;
 		this.#limit = limit;
+	}
+	get nextOwn(): number {
+		return this.#ownSent + 1;
+	}
+	acknowledged(sequence: number): boolean {
+		return this.#ownAcked >= sequence;
 	}
 	message(message: ProviderMessage): void | Promise<void> {
 		switch (message.kind) {
@@ -264,7 +271,7 @@ export class ProviderSide {
 			return;
 		}
 		if (!hold.callable) {
-			this.#refuse(message.call, new ObjectsError({ code: "not_ready", message: `hold ${hold.id}: not bound yet` }));
+			this.#refuse(message.call, hold.refusal);
 			return;
 		}
 		const method = hold.method(message.method);
@@ -283,10 +290,21 @@ export class ProviderSide {
 		this.#active.set(message.call, running);
 		void this.#run(message.call, running, method.name, args, parentOf(message.trace, this.link.host.telemetry));
 	}
-	async #run(id: number, running: Extract<Running, { kind: "served" }>, method: string, args: unknown, parent: TelemetryContext): Promise<void> {
+	async #run(
+		id: number,
+		running: Extract<Running, { kind: "served" }>,
+		method: string,
+		args: unknown,
+		parent: TelemetryContext,
+	): Promise<void> {
 		let reply: Reply;
 		try {
-			const result = await running.hold.call(method, args, withAbortSignal(running.abort.signal, this.link.context), parent);
+			const result = await running.hold.call(
+				method,
+				args,
+				withAbortSignal(running.abort.signal, this.link.context),
+				parent,
+			);
 			if (result == null) reply = { kind: "result", call: id };
 			else {
 				const payload = payloadPart(result, running.bytes);
@@ -309,8 +327,10 @@ export class ProviderSide {
 		const running = this.#active.get(id);
 		if (!running) return;
 		this.#active.delete(id);
-		if (running.kind === "relayed") { this.#relayEnd(running); running.hold.abort(id); }
-		else running.abort.abort(new ObjectsError({ code: "aborted", message: `call ${id}: aborted by its caller` }));
+		if (running.kind === "relayed") {
+			this.#relayEnd(running);
+			running.hold.abort(id);
+		} else running.abort.abort(new ObjectsError({ code: "aborted", message: `call ${id}: aborted by its caller` }));
 	}
 	#ack(): void {
 		const sender = this.#acks.shift();
@@ -319,7 +339,7 @@ export class ProviderSide {
 			sender.send({ kind: "ack", origin: this.#relay!.origin });
 			return;
 		}
-		this.#ownSent--;
+		this.#ownAcked++;
 		this.#drain();
 	}
 	#flush(context: Context): void {
@@ -340,11 +360,11 @@ export class ProviderSide {
 		}
 	}
 	get #free(): boolean {
-		return this.#ownSent < 2 && !this.#pending.size && !this.#bindings.size;
+		return this.#ownSent - this.#ownAcked < 2 && !this.#pending.size && !this.#bindings.size;
 	}
 	#drain(): void {
-		if (this.#ownSent < 2 && (this.#pending.size || this.#bindings.size)) this.#waited();
-		while (this.#ownSent < 2 && (this.#pending.size || this.#bindings.size)) {
+		if (this.#ownSent - this.#ownAcked < 2 && (this.#pending.size || this.#bindings.size)) this.#waited();
+		while (this.#ownSent - this.#ownAcked < 2 && (this.#pending.size || this.#bindings.size)) {
 			const binding = this.#bindings.size > 0 && (!this.#pending.size || this.#preferBinding);
 			if (binding) {
 				const holds = [...this.#bindings];
@@ -362,18 +382,27 @@ export class ProviderSide {
 	#sendState(message: Extract<OriginMessage, { kind: "bound" | "state" }>): void {
 		this.#ownSent++;
 		this.#acks.push("local");
-		if (message.kind === "state") objectsMetrics(this.link.host.telemetry.metrics).counter("objects.link.state_messages").add(1);
+		if (message.kind === "state")
+			objectsMetrics(this.link.host.telemetry.metrics).counter("objects.link.state_messages").add(1);
 		this.send(message);
 	}
 	#waited(): void {
 		if (this.#waitingSince === undefined) return;
-		objectsMetrics(this.link.host.telemetry.metrics).histogram("objects.backpressure.wait").record(performance.now() - this.#waitingSince);
+		objectsMetrics(this.link.host.telemetry.metrics)
+			.histogram("objects.backpressure.wait")
+			.record(performance.now() - this.#waitingSince);
 		this.#waitingSince = undefined;
 	}
 	#relayEnd(running: Extract<Running, { kind: "relayed" }>, reply?: Reply): void {
 		const span = running.span;
 		if (!span) return;
-		span.span.setAttributes({ outcome: !reply ? "aborted" : reply.kind === "result" ? "ok" : ended(span.span, "relay_failed", errorFromWire(reply.error)) });
+		span.span.setAttributes({
+			outcome: !reply
+				? "aborted"
+				: reply.kind === "result"
+					? "ok"
+					: ended(span.span, "relay_failed", errorFromWire(reply.error)),
+		});
 		span.end();
 		running.span = undefined;
 	}

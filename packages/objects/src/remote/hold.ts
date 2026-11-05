@@ -42,15 +42,17 @@ type Bound = {
 	readonly variant: VariantData;
 	readonly names: VariantNames;
 	readonly followed: Subscription[];
+	readonly previous?: BoundNames & { readonly until: number };
 };
+type BoundNames = Pick<Bound, "variant" | "names">;
 type State =
 	| { readonly kind: "unplaced"; readonly request: HoldRequest }
-	| { readonly kind: "pending"; readonly toldFailed: boolean }
-	| { readonly kind: "binding"; readonly previous?: Pick<Bound, "variant" | "names"> }
+	| { readonly kind: "pending"; readonly told?: ObjectsError; readonly previous?: BoundNames }
+	| { readonly kind: "binding"; readonly previous?: BoundNames }
 	| Bound
 	| { readonly kind: "refused"; readonly request: HoldRequest; readonly cause: FailureCause }
 	| { readonly kind: "released" };
-const pending: State = { kind: "pending", toldFailed: false };
+const pending: State = { kind: "pending" };
 export class Hold implements Holder, UnboundRequest {
 	readonly kind = "served";
 	readonly id: number;
@@ -81,7 +83,21 @@ export class Hold implements Holder, UnboundRequest {
 		return this.#request?.fingerprint;
 	}
 	get callable(): boolean {
-		return this.bound || (this.#status.kind === "binding" && this.#status.previous !== undefined);
+		return this.#names() !== undefined;
+	}
+	get refusal(): ObjectsError {
+		const state = this.#status;
+		if (state.kind === "refused") return state.cause.error;
+		if (state.kind === "pending" && state.told) return state.told;
+		return new ObjectsError({ code: "not_ready", message: `hold ${this.id}: not bound yet` });
+	}
+	#names(): BoundNames | undefined {
+		const state = this.#status;
+		if (state.kind === "bound") {
+			if (state.previous && !this.#side.acknowledged(state.previous.until)) return state.previous;
+			return state;
+		}
+		return state.kind === "binding" || state.kind === "pending" ? state.previous : undefined;
 	}
 	get bound(): boolean {
 		return this.#status.kind === "bound";
@@ -146,29 +162,29 @@ export class Hold implements Holder, UnboundRequest {
 		if (previous.kind === "bound" || previous.kind === "binding") {
 			if (object.state.kind === "live") {
 				if (previous.kind === "bound" && previous.instance !== object.instance) {
+					const names = this.#names();
 					this.#unfollow(previous);
 					this.#side.unbind(this);
-					this.#status = { kind: "binding", previous: { names: previous.names, variant: previous.variant } };
+					this.#status = { kind: "binding", ...(names ? { previous: names } : {}) };
 					this.#side.bind(this, this.#side.link.context);
 				}
 				return;
 			}
 			if (previous.kind === "bound" && object.attachable === previous.instance) return;
 			if (previous.kind === "binding" && object.swapsInPlace && object.state.kind === "loading") return;
+			const names = this.#names();
 			if (previous.kind === "bound") this.#unfollow(previous);
 			const error = object.state.kind === "failed" ? object.state.cause.error : undefined;
-			this.#side.unbound(
-				this,
-				error ?? new ObjectsError({ code: "unavailable", message: `hold ${this.id}: its object rebinds` }),
-			);
-			this.#status = pending;
+			if (error) this.#side.unbound(this, error);
+			else this.#side.unbind(this);
+			this.#status = { kind: "pending", ...(!error && names ? { previous: names } : {}) };
 			if (error === undefined) this.#side.send({ kind: "loading", hold: this.id });
 		}
 		if (this.#status.kind !== "pending") return;
 		const state = object.state;
 		switch (state.kind) {
 			case "live":
-				this.#status = { kind: "binding" };
+				this.#status = { kind: "binding", ...(this.#status.previous ? { previous: this.#status.previous } : {}) };
 				this.#side.bind(this, this.#side.link.context);
 				break;
 			case "failed":
@@ -178,10 +194,10 @@ export class Hold implements Holder, UnboundRequest {
 					cause: { kind: state.cause.kind, error: wireError(state.cause.error) },
 					...(state.retryAt === undefined ? {} : { retryIn: Math.max(0, state.retryAt - Date.now()) }),
 				});
-				this.#status = { kind: "pending", toldFailed: true };
+				this.#status = { kind: "pending", told: state.cause.error };
 				break;
 			case "loading":
-				if (this.#status.toldFailed) {
+				if (this.#status.told) {
 					this.#side.send({ kind: "loading", hold: this.id });
 					this.#status = pending;
 				}
@@ -201,13 +217,13 @@ export class Hold implements Holder, UnboundRequest {
 		return this.#object!.call(method, args, context, this.caller, this.#request!.version, parent);
 	}
 	method(index: number): { readonly name: string; readonly resultBytes: boolean } {
-		const current = this.#status,
-			state = current.kind === "binding" ? current.previous : current.kind === "bound" ? current : undefined,
+		const state = this.#names(),
 			name = state?.names.methods[index];
 		if (state === undefined || name === undefined) throw new Error(`hold ${this.id}: no method ${index}`);
 		return { name, resultBytes: state.variant.methods.get(name)!.result.bytes };
 	}
 	boundEntry(context: Context): BoundEntry {
+		const previous = this.#names();
 		const object = this.#object!,
 			variant = object.variant!,
 			data = variantsAt(object.served.contract, this.#request!.version).get(variant)!;
@@ -217,6 +233,7 @@ export class Hold implements Holder, UnboundRequest {
 			variant: data,
 			names: variantNames(data),
 			followed: [],
+			...(previous ? { previous: { ...previous, until: this.#side.nextOwn } } : {}),
 		};
 		this.#status = state;
 		const members: BoundEntry["members"][number][] = [],
