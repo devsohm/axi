@@ -11,7 +11,7 @@ import type { PluginScript } from "../plugins/runtime.ts";
 import { uncrossed, uncrossedReport, type CrossedError, type CrossedReport, type FromWorker } from "./control.ts";
 import { clearStaleLock } from "./lock.ts";
 import { WorkerProcess, type Exit } from "./process.ts";
-import { buildWorkerBase, type WorkerBase } from "./base.ts";
+import type { WorkerBase } from "./base.ts";
 export type WorkersOptions<P extends Principal, K extends KindShape> = {
 	readonly kind: string;
 	readonly entry: string;
@@ -54,6 +54,7 @@ export async function createWorkers<P extends Principal, N extends string, Q ext
 	options: WorkersOptions<P, HostKind<N, Q>>,
 	context: Context,
 ): Promise<Workers<HostKind<N, Q>>> {
+	const { buildWorkerBase } = await import("./base.ts");
 	const base = await buildWorkerBase(options.entry, options.execArgv ?? []);
 	return new WorkerPool(options, base, context, (route) => host.route(kind, route, context));
 }

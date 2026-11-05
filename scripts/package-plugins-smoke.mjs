@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import * as objects from "@axi/objects";
 import { BACKGROUND_CONTEXT } from "@axi/objects/context";
@@ -9,7 +8,7 @@ for (const component of ["plugins", "http", "workers"])
 	assert.doesNotThrow(() => import.meta.resolve(`@axi/objects/${component}`));
 const { createPlugins } = await import("@axi/objects/plugins");
 
-const root = await mkdtemp(join(tmpdir(), "axi-package-plugins-"));
+const root = await mkdtemp(join(process.cwd(), ".axi-package-plugins-"));
 const dir = join(root, "sample");
 await mkdir(dir);
 await writeFile(join(dir, "package.json"), JSON.stringify({ name: "sample", type: "module" }));
@@ -74,10 +73,10 @@ try {
 	await writeFile(
 		entry,
 		`
-import * as objects from ${JSON.stringify(import.meta.resolve("@axi/objects"))};
+import * as objects from "@axi/objects";
 import { registerHooks } from "node:module";
 registerHooks({resolve(specifier,context,next){if(specifier==="esbuild") throw new Error("worker imported esbuild");return next(specifier,context);}});
-const { workerMain } = await import(${JSON.stringify(new URL("./node/workers/index.js", import.meta.resolve("@axi/objects")).href)});
+const { workerMain } = await import("@axi/objects/workers");
 const Runner=objects.hostKind("packed",{id:objects.str()});
 const Remote=objects.remote("packed.remote",{version:1,params:{id:objects.str()},hostAddress:({id})=>Runner({id}),variants:{ready:{state:{value:objects.int()},methods:{}}}});
 workerMain(async ({address,parent,plugins,onClose},context)=>{
