@@ -2,11 +2,7 @@ import { expect, it } from "vitest";
 import { BACKGROUND_CONTEXT as context } from "../src/context/index.ts";
 import { sqliteBackend } from "../src/store/backend.ts";
 import { createDocument, findDocument } from "../src/store/engine.ts";
-import {
-	openStore,
-	type ObjectsStore,
-	type SeriesCommit,
-} from "../src/store/store.ts";
+import { openStore, type ObjectsStore, type SeriesCommit } from "../src/store/store.ts";
 import { openNodeSqliteDatabase } from "../src/sqlite/node.ts";
 
 const address = {
@@ -18,11 +14,7 @@ const address = {
 const create = (key: string): SeriesCommit => ({
 	check: async () => {},
 	writes: [
-		createDocument(
-			{ ...address, key },
-			{ version: 1, fingerprint: "first", value: { key } },
-			JSON.stringify({ key }),
-		),
+		createDocument({ ...address, key }, { version: 1, fingerprint: "first", value: { key } }, JSON.stringify({ key })),
 	],
 });
 
@@ -58,8 +50,7 @@ it("stores an accepted prefix once and delivers receipts before the next queued 
 				},
 				create("never"),
 			],
-			(index, seq, ids) =>
-				events.push(`receipt ${index} ${seq} ${ids.join(",")}`),
+			(index, seq, ids) => events.push(`receipt ${index} ${seq} ${ids.join(",")}`),
 			context,
 		);
 		const next = store.commit(
@@ -82,22 +73,18 @@ it("stores an accepted prefix once and delivers receipts before the next queued 
 			"durable",
 			"next 3",
 		]);
-		expect(
-			await store.read(
-				(sql) => sql.all("SELECT key FROM objects_documents ORDER BY id"),
-				context,
-			),
-		).toEqual([{ key: "one" }, { key: "two" }, { key: "three" }]);
+		expect(await store.read((sql) => sql.all("SELECT key FROM objects_documents ORDER BY id"), context)).toEqual([
+			{ key: "one" },
+			{ key: "two" },
+			{ key: "three" },
+		]);
 	} finally {
 		await store.close(context);
 	}
 });
 
 it("rolls back every write if a check hides a SQL error and then refuses", async () => {
-	const store = (await openStore(
-		sqliteBackend(await openNodeSqliteDatabase(":memory:")),
-		context,
-	)) as ObjectsStore;
+	const store = (await openStore(sqliteBackend(await openNodeSqliteDatabase(":memory:")), context)) as ObjectsStore;
 	try {
 		const refusal = new Error("check failed");
 		const receipts: number[] = [];
@@ -118,12 +105,7 @@ it("rolls back every write if a check hides a SQL error and then refuses", async
 			),
 		).rejects.toBe(refusal);
 		expect([receipts, store.lastSeq]).toEqual([[], 0]);
-		expect(
-			await store.read(
-				(sql) => sql.all("SELECT key FROM objects_documents"),
-				context,
-			),
-		).toEqual([]);
+		expect(await store.read((sql) => sql.all("SELECT key FROM objects_documents"), context)).toEqual([]);
 		const created: number[] = [];
 		await store.commitSeries(
 			[create("after")],
@@ -150,17 +132,91 @@ it("stops after an uncertain transaction acknowledgement without issuing receipt
 	try {
 		const receipts: number[] = [];
 		await expect(
-			store.commitSeries(
-				[create("one"), create("two")],
-				(index) => receipts.push(index),
-				context,
-			),
+			store.commitSeries([create("one"), create("two")], (index) => receipts.push(index), context),
 		).rejects.toMatchObject({ reason: "storage_failed" });
 		expect(receipts).toEqual([]);
-		await expect(
-			store.commitSeries([create("after")], () => {}, context),
-		).rejects.toMatchObject({ reason: "storage_failed" });
+		await expect(store.commitSeries([create("after")], () => {}, context)).rejects.toMatchObject({
+			reason: "storage_failed",
+		});
 	} finally {
+		await store.close(context);
+	}
+});
+
+it.each([false, true])("groups queued commits and isolates a refused member (%s)", async (refuse) => {
+	const database = await openNodeSqliteDatabase(":memory:");
+	const store = (await openStore(sqliteBackend(database), context, { outbox: true })) as ObjectsStore;
+	const transaction = database.transaction.bind(database);
+	let transactions = 0;
+	database.transaction = (work) => {
+		transactions++;
+		return transaction(work);
+	};
+	const entered = Promise.withResolvers<void>(),
+		release = Promise.withResolvers<void>();
+	const adopted: number[] = [];
+	const fence = {
+		admit: () => true,
+		adopt: (seq: number) => {
+			expect(store.lastSeq).toBe(seq);
+			adopted.push(seq);
+		},
+	};
+	const refused = new Error("member refused");
+	try {
+		const running = store.commit(
+			[
+				...create("gate").writes,
+				{
+					order: "write",
+					apply: async () => {
+						entered.resolve();
+						await release.promise;
+						return [];
+					},
+				},
+			],
+			fence,
+			context,
+		);
+		await entered.promise;
+		const group = [
+			store.commit(create("left").writes, fence, context),
+			store.commit(
+				[
+					...create("middle").writes,
+					...(refuse
+						? [
+								{
+									order: "write" as const,
+									apply: async () => {
+										throw refused;
+									},
+								},
+							]
+						: []),
+				],
+				fence,
+				context,
+			),
+			store.commit(create("right").writes, fence, context),
+		];
+		const settled = Promise.allSettled(group);
+		release.resolve();
+		expect(await running).toBe(1);
+		const results = await settled;
+		expect(results.map((value) => value.status)).toEqual(
+			refuse ? ["fulfilled", "rejected", "fulfilled"] : ["fulfilled", "fulfilled", "fulfilled"],
+		);
+		if (refuse) expect(results[1]).toMatchObject({ reason: refused });
+		expect(transactions).toBe(refuse ? 5 : 2);
+		expect(adopted).toEqual(refuse ? [1, 2, 3] : [1, 2, 3, 4]);
+		expect((await store.outbox!.read(0, 10, context)).map(({ seq }) => seq)).toEqual(adopted);
+		expect(await store.read((sql) => sql.all("SELECT key FROM objects_documents ORDER BY id"), context)).toEqual(
+			(refuse ? ["gate", "left", "right"] : ["gate", "left", "middle", "right"]).map((key) => ({ key })),
+		);
+	} finally {
+		release.resolve();
 		await store.close(context);
 	}
 });

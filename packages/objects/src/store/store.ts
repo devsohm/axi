@@ -1,9 +1,5 @@
 import { awaitWithContext, type Context } from "../context/index.ts";
-import type {
-	SqliteDatabase,
-	SqliteExecutor,
-	SqliteValue,
-} from "../sqlite/index.ts";
+import type { SqliteDatabase, SqliteExecutor, SqliteValue } from "../sqlite/index.ts";
 import { ObjectsError } from "../data/index.ts";
 import { invalid } from "../data/internal.ts";
 import type { Batch } from "../state/internal.ts";
@@ -50,18 +46,19 @@ type Status =
 	| { readonly kind: "open" }
 	| { readonly kind: "failed"; readonly error: unknown }
 	| { readonly kind: "closed" };
-export async function openStore(
-	backend: Backend,
-	context: Context,
-	options: StoreOptions = {},
-): Promise<Store> {
+type WaitingCommit = {
+	readonly writes: readonly StagedWrite[];
+	readonly fence: CommitFence;
+	readonly context: Context;
+	readonly resolve: (seq: number) => void;
+	readonly reject: (error: unknown) => void;
+};
+type AppliedCommit = { readonly step: Step; readonly nextId: number };
+export async function openStore(backend: Backend, context: Context, options: StoreOptions = {}): Promise<Store> {
 	try {
 		context.abortSignal?.throwIfAborted();
 		let meta = await applyStoreSchema(backend.db);
-		if (
-			options.outbox !== undefined &&
-			options.outbox !== (meta.outbox === 1)
-		) {
+		if (options.outbox !== undefined && options.outbox !== (meta.outbox === 1)) {
 			const enabled = options.outbox,
 				floor = enabled ? meta.last_seq : 0;
 			await backend.db.transaction(async (tx) => {
@@ -102,24 +99,21 @@ export class ObjectsStore implements Store {
 	#seq: number;
 	#committedId: number;
 	#status: Status = { kind: "open" };
+	#failure: { readonly error: unknown } | undefined;
 	#diverged = false;
 	#queue = Promise.resolve();
+	#pending: WaitingCommit[] | undefined;
 	#activeReads = 0;
 	#drained: (() => void) | undefined;
 	#attachment: Attachment | undefined;
 	#closed: Promise<void> | undefined;
-	constructor(
-		db: SqliteDatabase,
-		meta: MetaRow,
-		catalog: Map<string, TableRecord>,
-	) {
+	constructor(db: SqliteDatabase, meta: MetaRow, catalog: Map<string, TableRecord>) {
 		this.#db = db;
 		this.#seq = meta.last_seq;
 		this.#committedId = meta.next_id;
 		this.#ids = new IdAllocator(meta.next_id);
 		this.#catalog = catalog;
-		this.#outbox =
-			meta.outbox === 1 ? new Outbox(this, meta.outbox_floor) : undefined;
+		this.#outbox = meta.outbox === 1 ? new Outbox(this, meta.outbox_floor) : undefined;
 	}
 	get lastSeq(): number {
 		return this.#seq;
@@ -148,15 +142,12 @@ export class ObjectsStore implements Store {
 	tableVersion(name: string): number | undefined {
 		const stored = this.#catalog.get(name)?.version;
 		const pending = this.#migratingTables.get(name);
-		return pending === undefined
-			? stored
-			: Math.max(pending, stored ?? pending);
+		return pending === undefined ? stored : Math.max(pending, stored ?? pending);
 	}
 	announceTable(name: string, version: number): () => void {
 		this.#migratingTables.set(name, version);
 		return () => {
-			if (this.#migratingTables.get(name) === version)
-				this.#migratingTables.delete(name);
+			if (this.#migratingTables.get(name) === version) this.#migratingTables.delete(name);
 		};
 	}
 	mintId(): number {
@@ -164,8 +155,7 @@ export class ObjectsStore implements Store {
 		return this.#ids.mint();
 	}
 	attach(attachment: Attachment): void {
-		if (this.#attachment)
-			throw invalid("args", "store: already attached to an open host");
+		if (this.#attachment) throw invalid("args", "store: already attached to an open host");
 		this.#attachment = attachment;
 	}
 	detach(): void {
@@ -185,6 +175,7 @@ export class ObjectsStore implements Store {
 			resume();
 		};
 		this.#exports.add(end);
+		this.#pending = undefined;
 		const taken = this.#queue.then(() => {
 			if (this.#status.kind === "closed") {
 				release();
@@ -196,6 +187,7 @@ export class ObjectsStore implements Store {
 		return taken;
 	}
 	#enqueue<T>(work: () => Promise<T>): Promise<T> {
+		this.#pending = undefined;
 		const result = this.#queue.then(work);
 		this.#queue = result.then(
 			() => {},
@@ -225,52 +217,126 @@ export class ObjectsStore implements Store {
 			throw this.#fail(error);
 		}
 	}
-	async commit(
-		writes: readonly StagedWrite[],
-		fence: CommitFence,
-		context: Context,
-	): Promise<number> {
+	async commit(writes: readonly StagedWrite[], fence: CommitFence, context: Context): Promise<number> {
 		this.assertUsable();
-		return this.#enqueue(async () => {
-			this.assertUsable();
-			if (!fence.admit())
-				throw new ObjectsError({
-					code: "released",
-					reason: "discarded",
-					message: "store: the commit's attempt ended",
-				});
-			let created: readonly number[] = [];
-			let rows = 0;
-			if (writes.length) {
-				if (this.#seq >= Number.MAX_SAFE_INTEGER)
-					throw this.#fail(
-						new Error("store: no seq past Number.MAX_SAFE_INTEGER"),
-					);
-				const seq = this.#seq + 1;
-				const committed = await this.#transaction(async (executor) => {
-					const step = new Step(executor, seq, this.#ids, this.#catalog);
-					const nextId = await this.#applyWrites(step, writes);
-					await this.#writeMeta(step, nextId);
-					return { step, nextId };
-				});
-				this.#seq = seq;
-				this.#committedId = committed.nextId;
-				created = committed.step.created;
-				rows = committed.step.rows;
-				for (const [name, record] of committed.step.tables)
-					this.#catalog.set(name, record);
-				context.telemetry.metrics?.counter("objects.store.commits").add(1);
-				context.telemetry.metrics
-					?.counter("objects.store.statements")
-					.add(committed.step.statements);
-			}
+		const { promise, resolve, reject } = Promise.withResolvers<number>();
+		const waiting: WaitingCommit = { writes, fence, context, resolve, reject };
+		if (writes.length && this.#pending) this.#pending.push(waiting);
+		else {
+			const group = [waiting];
+			this.#queue = this.#enqueue(() => this.#runGroup(group)).catch((error: unknown) => {
+				for (const commit of group) commit.reject(error);
+			});
+			this.#pending = writes.length ? group : undefined;
+		}
+		return promise;
+	}
+	async #runGroup(group: readonly WaitingCommit[]): Promise<void> {
+		if (this.#pending === group) this.#pending = undefined;
+		this.assertUsable();
+		const admitted: WaitingCommit[] = [];
+		for (const commit of group) {
 			try {
-				fence.adopt(this.#seq, created, rows);
+				if (!commit.fence.admit())
+					throw new ObjectsError({
+						code: "released",
+						reason: "discarded",
+						message: "store: the commit's attempt ended",
+					});
+				admitted.push(commit);
+			} catch (error) {
+				commit.reject(error);
+			}
+		}
+		if (admitted.length < 2 || this.#seq + admitted.length > Number.MAX_SAFE_INTEGER) {
+			await this.#runAlone(admitted);
+			return;
+		}
+		let retry = false;
+		let applied: AppliedCommit[];
+		try {
+			applied = await this.#transaction(
+				async (executor) => {
+					const steps: AppliedCommit[] = [];
+					let catalog: Map<string, TableRecord> | undefined;
+					for (const commit of admitted) {
+						const step = new Step(executor, this.#seq + steps.length + 1, this.#ids, catalog ?? this.#catalog);
+						steps.push({ step, nextId: await this.#applyWrites(step, commit.writes) });
+						if (step.tables.size) {
+							catalog ??= new Map(this.#catalog);
+							for (const [name, record] of step.tables) catalog.set(name, record);
+						}
+					}
+					const last = steps.at(-1)!;
+					await this.#writeMeta(last.step, last.nextId);
+					return steps;
+				},
+				() => {
+					retry = true;
+				},
+			);
+		} catch (error) {
+			if (retry) await this.#runAlone(admitted);
+			else for (const commit of admitted) commit.reject(error);
+			return;
+		}
+		let index = 0;
+		try {
+			for (; index < admitted.length; index++) {
+				const commit = admitted[index]!;
+				this.#adopt(applied[index]!);
+				this.#notify(applied[index]!.step, commit);
+				commit.resolve(this.#seq);
+			}
+		} catch (error) {
+			for (const result of applied.slice(index)) this.#adopt(result);
+			const failed = this.#fail(error);
+			for (const commit of admitted.slice(index)) commit.reject(failed);
+		}
+	}
+	#adopt({ step, nextId }: AppliedCommit): void {
+		this.#seq = step.seq;
+		this.#committedId = nextId;
+		for (const [name, record] of step.tables) this.#catalog.set(name, record);
+	}
+	#notify(step: Step, commit: WaitingCommit): void {
+		commit.context.telemetry.metrics?.counter("objects.store.commits").add(1);
+		commit.context.telemetry.metrics?.counter("objects.store.statements").add(step.statements);
+		commit.fence.adopt(step.seq, step.created, step.rows);
+	}
+	async #runAlone(commits: readonly WaitingCommit[]): Promise<void> {
+		for (const commit of commits) {
+			try {
+				commit.resolve(await this.#writeAlone(commit));
+			} catch (error) {
+				commit.reject(error);
+			}
+		}
+	}
+	async #writeAlone(commit: WaitingCommit): Promise<number> {
+		if (this.#failure) throw failedStorage(this.#failure.error);
+		if (!commit.writes.length) {
+			try {
+				commit.fence.adopt(this.#seq, [], 0);
 			} catch (error) {
 				throw this.#fail(error);
 			}
 			return this.#seq;
+		}
+		if (this.#seq >= Number.MAX_SAFE_INTEGER) throw this.#fail(new Error("store: no seq past Number.MAX_SAFE_INTEGER"));
+		const applied = await this.#transaction(async (executor) => {
+			const step = new Step(executor, this.#seq + 1, this.#ids, this.#catalog);
+			const nextId = await this.#applyWrites(step, commit.writes);
+			await this.#writeMeta(step, nextId);
+			return { step, nextId };
 		});
+		this.#adopt(applied);
+		try {
+			this.#notify(applied.step, commit);
+		} catch (error) {
+			throw this.#fail(error);
+		}
+		return this.#seq;
 	}
 	async commitSeries(
 		commits: readonly SeriesCommit[],
@@ -280,14 +346,9 @@ export class ObjectsStore implements Store {
 		this.assertUsable();
 		return this.#enqueue(async () => {
 			this.assertUsable();
-			const writing = commits.reduce(
-				(n, part) => n + Number(part.writes.length > 0),
-				0,
-			);
+			const writing = commits.reduce((n, part) => n + Number(part.writes.length > 0), 0);
 			if (this.#seq + writing > Number.MAX_SAFE_INTEGER)
-				throw this.#fail(
-					new Error("store: no seq past Number.MAX_SAFE_INTEGER"),
-				);
+				throw this.#fail(new Error("store: no seq past Number.MAX_SAFE_INTEGER"));
 			const done = await this.#transaction(async (executor) => {
 				let seq = this.#seq,
 					nextId = this.#committedId,
@@ -308,20 +369,14 @@ export class ObjectsStore implements Store {
 				const checked: SqliteExecutor = {
 					exec: (sql) => watch(() => executor.exec(sql)),
 					run: (sql, ...params) => watch(() => executor.run(sql, ...params)),
-					runCounted: (sql, ...params) =>
-						watch(() => executor.runCounted(sql, ...params)),
+					runCounted: (sql, ...params) => watch(() => executor.runCounted(sql, ...params)),
 					get: <T extends object>(sql: string, ...params: SqliteValue[]) =>
 						watch(() => executor.get<T>(sql, ...params)),
 					all: <T extends object>(sql: string, ...params: SqliteValue[]) =>
 						watch(() => executor.all<T>(sql, ...params)),
 				};
 				for (const commit of commits) {
-					const check = new Step(
-						checked,
-						seq + 1,
-						this.#ids,
-						catalog ?? this.#catalog,
-					);
+					const check = new Step(checked, seq + 1, this.#ids, catalog ?? this.#catalog);
 					statementFailed = false;
 					try {
 						await commit.check(check);
@@ -336,12 +391,7 @@ export class ObjectsStore implements Store {
 						receipts.push({ seq, ids: [], rows: 0 });
 						continue;
 					}
-					last = new Step(
-						executor,
-						seq + 1,
-						this.#ids,
-						catalog ?? this.#catalog,
-					);
+					last = new Step(executor, seq + 1, this.#ids, catalog ?? this.#catalog);
 					nextId = await this.#applyWrites(last, commit.writes);
 					statements += last.statements;
 					seq = last.seq;
@@ -360,16 +410,11 @@ export class ObjectsStore implements Store {
 			const written = done.seq - this.#seq;
 			this.#seq = done.seq;
 			this.#committedId = done.nextId;
-			if (done.catalog)
-				for (const [name, record] of done.catalog)
-					this.#catalog.set(name, record);
-			context.telemetry.metrics?.counter("objects.store.commits").add(written);
-			context.telemetry.metrics
-				?.counter("objects.store.statements")
-				.add(done.statements);
+			if (done.catalog) for (const [name, record] of done.catalog) this.#catalog.set(name, record);
 			try {
-				for (const [index, receipt] of done.receipts.entries())
-					receive(index, receipt.seq, receipt.ids, receipt.rows);
+				context.telemetry.metrics?.counter("objects.store.commits").add(written);
+				context.telemetry.metrics?.counter("objects.store.statements").add(done.statements);
+				for (const [index, receipt] of done.receipts.entries()) receive(index, receipt.seq, receipt.ids, receipt.rows);
 			} catch (error) {
 				throw this.#fail(error);
 			}
@@ -378,10 +423,7 @@ export class ObjectsStore implements Store {
 				: { stored: done.receipts.length, refused: done.refused.error };
 		});
 	}
-	async #applyWrites(
-		step: Step,
-		writes: readonly StagedWrite[],
-	): Promise<number> {
+	async #applyWrites(step: Step, writes: readonly StagedWrite[]): Promise<number> {
 		const recorded: StoreWrite[] | undefined = this.#outbox ? [] : undefined;
 		for (const order of ["retire", "create", "write"] as const)
 			for (const write of writes)
@@ -389,7 +431,13 @@ export class ObjectsStore implements Store {
 					const values = await write.apply(step);
 					for (const value of values) {
 						if (value.kind === "put") step.rows++;
-						else if (value.kind === "update" || value.kind === "delete" || value.kind === "updateWhere" || value.kind === "deleteWhere") step.rows += value.count;
+						else if (
+							value.kind === "update" ||
+							value.kind === "delete" ||
+							value.kind === "updateWhere" ||
+							value.kind === "deleteWhere"
+						)
+							step.rows += value.count;
 					}
 					recorded?.push(...values);
 				}
@@ -406,22 +454,12 @@ export class ObjectsStore implements Store {
 		return nextId;
 	}
 	#writeMeta(step: Step, nextId: number): Promise<void> {
-		return step.run(
-			`UPDATE ${TABLES.meta} SET last_seq = ?, next_id = ? WHERE singleton = 1`,
-			step.seq,
-			nextId,
-		);
+		return step.run(`UPDATE ${TABLES.meta} SET last_seq = ?, next_id = ? WHERE singleton = 1`, step.seq, nextId);
 	}
-	read<T>(
-		read: (executor: SqliteExecutor) => Promise<T>,
-		context: Context,
-	): Promise<T> {
+	read<T>(read: (executor: SqliteExecutor) => Promise<T>, context: Context): Promise<T> {
 		return this.#guard(() => read(this.#db), context);
 	}
-	readTransaction<T>(
-		read: (executor: SqliteExecutor) => Promise<T>,
-		context: Context,
-	): Promise<T> {
+	readTransaction<T>(read: (executor: SqliteExecutor) => Promise<T>, context: Context): Promise<T> {
 		return this.#guard(() => this.#db.transaction(read), context);
 	}
 	maintain(write: (executor: SqliteExecutor) => Promise<void>): Promise<void> {
@@ -434,6 +472,7 @@ export class ObjectsStore implements Store {
 		try {
 			value = await work();
 		} catch (error) {
+			if (!context?.abortSignal?.aborted) this.#failure ??= { error };
 			this.assertUsable();
 			if (context?.abortSignal?.aborted)
 				throw new ObjectsError(
@@ -449,10 +488,7 @@ export class ObjectsStore implements Store {
 		return value;
 	}
 	async replay(
-		apply: (
-			executor: SqliteExecutor,
-			catalog: ReadonlyMap<string, TableRecord>,
-		) => Promise<Replayed>,
+		apply: (executor: SqliteExecutor, catalog: ReadonlyMap<string, TableRecord>) => Promise<Replayed>,
 		isDivergence: (error: unknown) => boolean,
 	): Promise<void> {
 		this.#canReplay();
@@ -469,8 +505,7 @@ export class ObjectsStore implements Store {
 				this.#seq = result.lastSeq;
 				this.#committedId = result.nextId;
 				this.#ids.raise(result.nextId - 1);
-				for (const [name, table] of result.tables)
-					this.#catalog.set(name, table);
+				for (const [name, table] of result.tables) this.#catalog.set(name, table);
 			} finally {
 				unlock();
 			}
@@ -478,13 +513,8 @@ export class ObjectsStore implements Store {
 	}
 	#canReplay(): void {
 		this.assertUsable();
-		if (this.#diverged)
-			throw invalid("args", "store: diverged; a batch can no longer apply");
-		if (this.claims.held)
-			throw invalid(
-				"args",
-				"store: an owner holds claims; a batch would stale its memory",
-			);
+		if (this.#diverged) throw invalid("args", "store: diverged; a batch can no longer apply");
+		if (this.claims.held) throw invalid("args", "store: an owner holds claims; a batch would stale its memory");
 	}
 	close(context: Context): Promise<void> {
 		this.#closed ??= this.#close();
@@ -510,6 +540,7 @@ export class ObjectsStore implements Store {
 			});
 	}
 	#fail(error: unknown): ObjectsError {
+		this.#failure ??= { error };
 		if (this.#status.kind === "open") {
 			this.#status = { kind: "failed", error };
 			this.#attachment?.failed(error);

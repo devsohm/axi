@@ -72,6 +72,7 @@ export class QueryRefresh {
 		this.write = {
 			order: "write",
 			apply: async (step) => {
+				this.#runs.length = 0;
 				for (const query of queries) this.#runs.push(await query.rerun(step, context));
 				return [];
 			},
