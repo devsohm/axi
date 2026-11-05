@@ -27,6 +27,63 @@ const State = defineDoc({
 	initial: () => ({ count: 0, items: [] as string[] }),
 });
 describe("SQLite-backed Session", () => {
+	it("keeps grouped entry writes bounded and stops receipts at the first refusal", async () => {
+		const database = await openNodeSqliteDatabase(":memory:");
+		const storage = await SqliteStorage.open(database);
+		const transaction = database.transaction.bind(database);
+		let calls = 0;
+		vi.spyOn(database, "transaction").mockImplementation(
+			<Value>(callback: (executor: SqliteExecutor) => Promise<Value>) =>
+				transaction(async (executor) => {
+					const run = executor.run.bind(executor);
+					const get = executor.get.bind(executor);
+					const all = executor.all.bind(executor);
+					return callback({
+						...executor,
+						exec: (sql) => executor.exec(sql),
+						runCounted: (sql, ...params) => executor.runCounted(sql, ...params),
+						run: (sql, ...params) => {
+							calls++;
+							return run(sql, ...params);
+						},
+						get: (sql, ...params) => {
+							calls++;
+							return get(sql, ...params);
+						},
+						all: (sql, ...params) => {
+							calls++;
+							return all(sql, ...params);
+						},
+					});
+				}),
+		);
+		try {
+			const write = (id: number): StorageWrite => ({
+				type: "entry",
+				value: { id: idFromNumber<EntryId>(id), conversationId: ROOT_CONVERSATION_ID, kind: "note" },
+			});
+			await storage.commit([[write(2)]], () => {}, context);
+			const single = calls;
+			calls = 0;
+			const receipts: number[] = [];
+			await storage.commit(
+				Array.from({ length: 64 }, (_, index) => [write(index + 3)]),
+				(_, seq) => receipts.push(seq),
+				context,
+			);
+			expect(calls).toBe(single);
+			expect(receipts).toHaveLength(64);
+			const kept: number[] = [];
+			expect(
+				await storage.commit([[write(80)], [write(80)], [write(81)]], (index) => kept.push(index), context),
+			).toMatchObject({ stored: 1, refused: expect.any(Error) });
+			expect(kept).toEqual([0]);
+			expect(await storage.entry(idFromNumber<EntryId>(80), context)).toBeDefined();
+			expect(await storage.entry(idFromNumber<EntryId>(81), context)).toBeUndefined();
+		} finally {
+			await storage.close(context);
+		}
+	});
 	it("preserves IDs minted during a commit when reopening storage", async () => {
 		const directory = await mkdtemp(join(tmpdir(), "axi-id-allocation-"));
 		const path = join(directory, "session.sqlite");

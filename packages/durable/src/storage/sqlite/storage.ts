@@ -12,29 +12,9 @@ export type SqliteStorageOptions = { readonly prefix?: string };
 type Row = { record: string };
 type Revision = { seq: number; kind: "base" | "delta"; version: number; content: string };
 type Metadata = { next_id: string; next_seq: number };
-type Table = "conversation" | "entry" | "task" | "submission" | "document";
 type StoredTask = T.TaskRecord<JsonValue, JsonValue, JsonValue>;
-type Action = { create?: T.DocumentCreate; copy?: T.DocumentCopySource; content?: T.DocumentContent; retire: boolean };
-const encode = JSON.stringify;
-function decode<Value>(text: string): Value {
-	return JSON.parse(text) as Value;
-}
-function scopeValues(scope: T.DocumentRecord["scope"]): readonly [string, number] {
-	return [
-		scope.kind,
-		scope.kind === "session" ? 0 : scope.kind === "conversation" ? scope.conversationId : scope.taskId,
-	];
-}
-function addressValues(address: T.DocumentAddress): SqliteValue[] {
-	return [
-		encode(address.kind),
-		...scopeValues(address.scope),
-		address.key === undefined ? 0 : 1,
-		encode(address.key ?? ""),
-	];
-}
-const currentOnly = (record: T.DocumentRecord): boolean =>
-	record.scope.kind !== "conversation" || record.history === "latest";
+import { addressValues, currentOnly, decode, encode, scopeValues, type Action } from "./rows.ts";
+import { CommitState, PendingRows } from "./commit.ts";
 function alive(record: T.DocumentRecord, point: T.DocumentPoint): boolean {
 	return point === "current"
 		? record.retiredAt === undefined
@@ -119,22 +99,31 @@ export class SqliteStorage implements T.Storage {
 				all: <Value extends object>(sql: string, ...params: SqliteValue[]) =>
 					check(() => tx.all<Value>(sql, ...params)),
 			};
+			const state = await CommitState.load(tx, this.#schema.tables, batches);
+			const pending = new PendingRows();
 			for (const writes of batches) {
 				let actions: Map<T.DocumentId, Action>;
 				failed = false;
 				try {
 					actions = this.#actions(writes);
-					await this.#validateIds(reader, writes);
-					await this.#validateDocuments(reader, actions);
-					await this.#resolveCopies(reader, actions);
+					state.check(writes, actions);
 				} catch (error) {
-					if (failed) throw error;
 					refusal = { error };
 					break;
 				}
+				if ([...actions.values()].some((action) => action.copy !== undefined)) {
+					await pending.flush(tx, this.#schema.tables);
+					try {
+						await this.#resolveCopies(reader, actions);
+					} catch (error) {
+						if (failed) throw error;
+						refusal = { error };
+						break;
+					}
+				}
 				const seq = seqFromNumber(next++);
-				for (const write of writes) await this.#writeRecord(tx, write, seq);
-				await this.#writeDocuments(tx, actions, seq);
+				state.adopt(writes, actions, seq);
+				pending.add(writes, actions, seq, state);
 				seqs.push(seq);
 				nextId = Math.max(nextId, this.#nextId);
 				for (const write of writes) {
@@ -142,6 +131,8 @@ export class SqliteStorage implements T.Storage {
 					if (id !== undefined) nextId = Math.max(nextId, id + 1);
 				}
 			}
+			await pending.flush(tx, this.#schema.tables);
+			nextId = Math.max(nextId, this.#nextId);
 			if (seqs.length)
 				await tx.run(
 					`UPDATE ${this.#schema.tables.durableMetadata} SET next_id = ?, next_seq = ? WHERE singleton = 1`,
@@ -472,140 +463,6 @@ export class SqliteStorage implements T.Storage {
 		}
 		return actions;
 	}
-	async #validateIds(tx: SqliteExecutor, writes: readonly T.StorageWrite[]): Promise<void> {
-		const claimed = new Map<number, Table>();
-		for (const write of writes) {
-			if (write.type === "document.change" || write.type === "document.retire") continue;
-			const type: Table = "record" in write ? "document" : write.type;
-			const id = "record" in write ? write.record.id : write.value.id;
-			const existing = (
-				await tx.get<{ record_type: Table }>(
-					`SELECT record_type FROM ${this.#schema.tables.recordIds} WHERE id = ?`,
-					id,
-				)
-			)?.record_type;
-			const previous = claimed.get(id);
-			const immutable = type === "conversation" || type === "entry" || type === "document";
-			if (existing !== undefined && (immutable || existing !== type))
-				throw new Error(`ID ${id} already belongs to ${existing}`);
-			if (previous !== undefined && (immutable || previous !== type))
-				throw new Error(`ID ${id} is written ${immutable ? "more than once" : "as two record types"}`);
-			claimed.set(id, type);
-		}
-	}
-	async #validateDocuments(tx: SqliteExecutor, actions: ReadonlyMap<T.DocumentId, Action>): Promise<void> {
-		const counts = new Map<string, number>();
-		for (const [id, action] of actions) {
-			if (action.copy && actions.has(action.copy.id))
-				throw new Error(`Document copy ${id} source is changed in the copy batch`);
-			const existing = await this.#record<T.DocumentRecord>(tx, this.#schema.tables.documents, id);
-			if (!action.create && !existing) throw new Error(`Unknown document: ${id}`);
-			if (action.create && existing) throw new Error(`Document ${id} already exists`);
-			if (existing?.retiredAt !== undefined) throw new Error(`Document ${id} is retired`);
-			if (action.content?.kind === "delta") {
-				const previous = await tx.get<{ version: number }>(
-					`SELECT version FROM ${this.#schema.tables.documentRevisions} WHERE document_id = ? ORDER BY seq DESC LIMIT 1`,
-					id,
-				);
-				if (!previous) throw new Error(`Document ${id} delta has no base`);
-				if (previous.version !== action.content.version)
-					throw new Error(`Document ${id} version transition requires a base`);
-			}
-			const address = action.create ?? existing!;
-			const values = addressValues(address);
-			const key = encode(values);
-			let count = counts.get(key);
-			if (count === undefined) {
-				const current = await tx.get<{ id: number }>(
-					`SELECT id FROM ${this.#schema.tables.documents} WHERE ${addressWhere} AND retired_at IS NULL LIMIT 1`,
-					...values,
-				);
-				count = current ? 1 : 0;
-			}
-			if (action.retire && existing) count--;
-			if (action.create && !action.retire) count++;
-			counts.set(key, count);
-		}
-		if ([...counts.values()].some((count) => count > 1))
-			throw new Error("Document address already has a current incarnation");
-	}
-	#claim(tx: SqliteExecutor, id: number, type: Table): Promise<void> {
-		return tx.run(`INSERT OR IGNORE INTO ${this.#schema.tables.recordIds} (id,record_type) VALUES (?,?)`, id, type);
-	}
-	async #insert(
-		tx: SqliteExecutor,
-		table: string,
-		columns: readonly string[],
-		values: SqliteValue[],
-		replace = false,
-	): Promise<void> {
-		const update = replace
-			? ` ON CONFLICT(id) DO UPDATE SET ${columns
-					.slice(1)
-					.map((column) => `${column} = excluded.${column}`)
-					.join(",")}`
-			: "";
-		await tx.run(
-			`INSERT INTO ${table} (${columns.join(",")}) VALUES (${columns.map(() => "?").join(",")})${update}`,
-			...values,
-		);
-	}
-	async #writeRecord(tx: SqliteExecutor, write: T.StorageWrite, seq: T.Seq): Promise<void> {
-		if (!("value" in write)) return;
-		const row = write.value;
-		const tables = this.#schema.tables;
-		await this.#claim(tx, row.id, write.type);
-		switch (write.type) {
-			case "conversation":
-				await this.#insert(
-					tx,
-					tables.conversations,
-					["id", "owner_conversation_id", "owner_task_id", "record"],
-					[write.value.id, write.value.owner?.conversationId ?? null, write.value.owner?.taskId ?? null, encode(row)],
-				);
-				break;
-			case "entry":
-				await this.#insert(
-					tx,
-					tables.entries,
-					["id", "conversation_id", "head", "commit_seq", "record"],
-					[write.value.id, write.value.conversationId, write.value.head ?? null, seq, encode(row)],
-				);
-				break;
-			case "task":
-				await this.#insert(
-					tx,
-					tables.tasks,
-					["id", "conversation_id", "kind", "status", "abort_requested", "background", "record"],
-					[
-						write.value.id,
-						write.value.conversationId,
-						encode(write.value.kind),
-						write.value.state.status,
-						Number(write.value.abortRequested),
-						Number(write.value.background),
-						encode(row),
-					],
-					true,
-				);
-				break;
-			case "submission":
-				await this.#insert(
-					tx,
-					tables.submissions,
-					["id", "conversation_id", "request_id", "status", "record"],
-					[
-						write.value.id,
-						write.value.conversationId,
-						write.value.requestId === undefined ? null : encode(write.value.requestId),
-						write.value.status,
-						encode(row),
-					],
-					true,
-				);
-				break;
-		}
-	}
 	async #resolveCopies(tx: SqliteExecutor, actions: Map<T.DocumentId, Action>): Promise<void> {
 		for (const [id, action] of actions) {
 			if (action.copy) {
@@ -626,48 +483,6 @@ export class SqliteStorage implements T.Storage {
 				} catch (cause) {
 					throw new Error(`Document copy ${id} was rejected`, { cause });
 				}
-			}
-		}
-	}
-	async #writeDocuments(tx: SqliteExecutor, actions: ReadonlyMap<T.DocumentId, Action>, seq: T.Seq): Promise<void> {
-		const tables = this.#schema.tables;
-		for (const [id, action] of actions) {
-			const content = action.content;
-			let record: T.DocumentRecord;
-			if (action.create) {
-				record = { ...action.create, createdAt: seq, ...(action.retire ? { retiredAt: seq } : {}) };
-				const [kind, scopeKind, ownerId, family, key] = addressValues(record);
-				await this.#claim(tx, id, "document");
-				await this.#insert(
-					tx,
-					tables.documents,
-					["id", "kind", "family", "key_value", "scope_kind", "owner_id", "created_at", "retired_at", "record"],
-					[id, kind, family, key, scopeKind, ownerId, seq, action.retire ? seq : null, encode(record)],
-				);
-			} else record = (await this.#record<T.DocumentRecord>(tx, tables.documents, id))!;
-			if (content) {
-				if (content.kind === "base" && currentOnly(record))
-					await tx.run(`DELETE FROM ${tables.documentRevisions} WHERE document_id = ?`, id);
-				await tx.run(
-					`INSERT INTO ${tables.documentRevisions} (document_id,seq,kind,version,content) VALUES (?,?,?,?,?)`,
-					id,
-					seq,
-					content.kind,
-					content.version,
-					encode(content.kind === "base" ? content.value : content.ops),
-				);
-			}
-			if (action.retire) {
-				if (!action.create) {
-					record = { ...record, retiredAt: seq };
-					await tx.run(
-						`UPDATE ${tables.documents} SET retired_at = ?, record = ? WHERE id = ?`,
-						seq,
-						encode(record),
-						id,
-					);
-				}
-				if (currentOnly(record)) await tx.run(`DELETE FROM ${tables.documentRevisions} WHERE document_id = ?`, id);
 			}
 		}
 	}
