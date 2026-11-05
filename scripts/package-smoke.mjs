@@ -41,6 +41,10 @@ import {
 	sqliteBackend,
 } from "@axi/objects";
 import { openNodeSqliteDatabase } from "@axi/objects/sqlite/node";
+import { workerMain } from "@axi/objects/workers/child";
+import { decodeBatch, encodeBatch, LOG_VERSION } from "@axi/objects/sync";
+import { registerLazyOAuthFlows } from "@axi/ai/lazy-oauth";
+import { registerLazyBedrockProvider } from "@axi/ai/lazy-bedrock-provider";
 import { StoreStorage } from "@axi/durable/storage/store";
 import { openNodeSqliteStorage } from "@axi/durable/storage/sqlite/node";
 import { Connection, RemoteExecutionEnv, localDaemon, openProcess } from "@axi/env";
@@ -58,6 +62,14 @@ import {
 import { createInMemoryTransportPair } from "@axi/mcp/testing";
 
 const tui = await import("@axi/tui");
+assert.equal(typeof workerMain, "function");
+assert.equal(typeof registerLazyOAuthFlows, "function");
+assert.equal(typeof registerLazyBedrockProvider, "function");
+assert.equal(LOG_VERSION, 2);
+const syncRecords = [{ seq: 1, nextId: 2, writes: [] }];
+const decodedRecords = [];
+for await (const commit of decodeBatch(encodeBatch(syncRecords))) decodedRecords.push(commit);
+assert.deepEqual(decodedRecords, syncRecords);
 const plain = (text) => text;
 const markdownTheme = Object.fromEntries(
 	[

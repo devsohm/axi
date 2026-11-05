@@ -26,6 +26,14 @@ Persisted state declares a schema version and checkpoint policy. A schema change
 
 An uncertain database outcome is terminal for the Store. Export holds its queue until the iterator ends or is cancelled. Import validates and applies the complete archive to an empty database. Optional outbox replay accepts consecutive commits and checks row counts.
 
+## Store sync
+
+The experimental sync API uploads committed outbox records in ordered batches. A remote slot records the preceding sequence, final sequence and writer identity. Existing slots are immutable. A retry by the same writer can adopt its previously accepted slot. A slot from another writer reports divergence. Backends that enforce writer epochs can reject stale writers.
+
+Pull saves a target sequence before applying a batch. After interruption, that marker distinguishes the applied prefix from new local work. Pull refuses unsynced local commits. Archives restore only into an empty backend. Snapshot folding preserves slot ownership after removing old batch bodies.
+
+Batch bodies are gzip streams of version 2 JSON lines. Snapshot bodies compress the existing Store archive format. Upload targets 8 MiB batches. Pull applies about 4 MiB per transaction. A single large record can exceed either target. The filesystem remote supports one writer process and does not enforce epochs. See [Store sync](sync.md).
+
 ## Reload
 
 Reload applies a complete facet set. Identical facet objects remain installed. Staging runs no native open or job. Failed plugins retain previous code. Dependency checks preserve a changed consumer's prior code when its required provider update failed.

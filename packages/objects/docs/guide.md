@@ -73,6 +73,8 @@ Store commits apply document and table writes atomically. Adoption follows the d
 
 `store.export(context)` holds the commit queue while yielding an archive. `encodeJsonl()` and `decodeJsonl()` encode archive records as UTF-8 lines. `importStore()` validates an archive and imports it atomically into an empty database. Export records are separate from Durable's JSONL session backend.
 
+The experimental `@axi/objects/sync` helpers replicate a Store through its outbox. The application controls upload, pull and scheduling. A remote stores compressed batches and snapshots. See [Store sync](sync.md) for progress recovery, divergence and filesystem limits.
+
 The SQLite executor's transaction callback owns an exclusive queue slot. Use its temporary executor inside that callback. Awaiting the outer database there would deadlock. The temporary executor expires afterward. Failed callbacks roll back before rejecting.
 
 ## Observers and tracing

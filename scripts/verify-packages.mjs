@@ -196,6 +196,10 @@ import * as objects from "@axi/objects";
 import type { Context } from "@axi/objects/context";
 import type { AppOptions } from "@axi/objects/app";
 import type { TerminalOptions } from "@axi/objects/tui/launcher";
+import { workerMain } from "@axi/objects/workers/child";
+import { uploadSession, type SyncStateStore } from "@axi/objects/sync";
+import { registerLazyOAuthFlows } from "@axi/ai/lazy-oauth";
+import { registerLazyBedrockProvider } from "@axi/ai/lazy-bedrock-provider";
 import { HostProvider } from "@axi/objects/react";
 import * as codemode from "@axi/codemode";
 import * as durable from "@axi/durable";
@@ -218,6 +222,8 @@ export const sharedStorage = (store: objects.Store, context: Context) => StoreSt
 export const appOptions = (options: AppOptions<{kind:"owner"}|{kind:"server"}>) => options;
 export const terminalOptions = (options: TerminalOptions) => options;
 export const clientProvider = HostProvider;
+export const newEntries = [workerMain, uploadSession, registerLazyOAuthFlows, registerLazyBedrockProvider];
+export const syncProgress = (progress: SyncStateStore) => progress;
 `,
 	);
 	writeFileSync(

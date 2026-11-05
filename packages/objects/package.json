@@ -80,6 +80,11 @@
 			"types": "./dist/node/workers/child.d.ts",
 			"import": "./dist/node/workers/child.js"
 		},
+		"./sync": {
+			"source": "./src/sync/index.ts",
+			"types": "./dist/sync/index.d.ts",
+			"import": "./dist/sync/index.js"
+		},
 		"./plugins": {
 			"source": "./src/node/plugins/index.ts",
 			"types": "./dist/node/plugins/index.d.ts",

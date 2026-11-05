@@ -23,6 +23,8 @@ Persistent documents, tables and jobs use a shared SQLite Store. The Store commi
 | `@axi/objects/telemetry-sqlite/node` | Node recorder setup |
 | `@axi/objects/http` | Node HTTP routes, authentication and WebSockets |
 | `@axi/objects/workers` | Node worker hosts and process locks |
+| `@axi/objects/workers/child` | Worker entry point without the parent build helpers |
+| `@axi/objects/sync` | Experimental Store replication, compressed batches and snapshot folding |
 | `@axi/objects/plugins` | Plugin discovery, builds, installation, testing and rollout |
 | `@axi/objects/plugins/runtime` | Evaluation of prebuilt plugin scripts |
 | `@axi/objects/surfaces` | Browser and terminal bundle publication |
@@ -43,5 +45,6 @@ The Node helpers load only when imported. Plugin builds require the optional `es
 - [HTTP](docs/http.md), [workers](docs/workers.md) and [plugins](docs/plugins.md): Node integration.
 - [Clients](docs/clients.md): browser, React and terminal integration, messages and preferences.
 - [App host](docs/app.md): assemble a server and workers, authenticate clients and retain their data.
+- [Store sync](docs/sync.md): upload an outbox, restore another copy and compact remote history.
 
 Facets run as trusted code. Reload replaces implementations in a running host. Durable task recovery is provided by `@axi/durable`, which can use this package's Store and registry adapters.
