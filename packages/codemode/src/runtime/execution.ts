@@ -59,13 +59,13 @@ const reserved = new Set(["tools", "ALL_TOOLS", "console", "text", "image", "exi
 function globalsValid(values: readonly T.CodemodeDeclaredGlobal[]): void {
 	const seen = new Set<string>(),
 		groups = new Set<string>();
-	for (const { name } of values) {
-		const parts = name.split(".");
+	for (const global of values) {
+		const parts = global.name.split(".");
 		if (parts.length > 2 || parts.some((p) => !/^[A-Za-z_$][A-Za-z0-9_$]*$/.test(p)) || reserved.has(parts[0]))
-			throw new Error(`Invalid global name "${name}"`);
-		if (seen.has(name)) throw new Error(`Global "${name}" is already registered`);
-		seen.add(name);
+			throw new Error(`Invalid global name "${global.name}"`);
+		if (seen.has(global.name)) throw new Error(`Global "${global.name}" is already registered`);
 		if (parts.length === 2) groups.add(parts[0]);
+		seen.add(global.name);
 	}
 	for (const name of groups)
 		if (seen.has(name)) throw new Error(`Global "${name}" conflicts with the namespace "${name}"`);

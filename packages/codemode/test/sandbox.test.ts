@@ -164,6 +164,21 @@ describe("Code Mode", () => {
 			}),
 		).toThrow("Tool names must be unique");
 	});
+	it("reads a global name at validation and registration boundaries", () => {
+		let reads = 0;
+		const global = {
+			get name() {
+				reads++;
+				return "answer";
+			},
+			execute: () => 42,
+		};
+		const sandbox = new CodemodeSandboxBase({ globals: [global] }, () => {
+			throw new Error("No execution was requested");
+		});
+		expect(sandbox.globals[0]).toBe(global);
+		expect(reads).toBe(4);
+	});
 	it("captures the tool list and renders a sample signature before reading its description", () => {
 		let reads = 0;
 		expect(
