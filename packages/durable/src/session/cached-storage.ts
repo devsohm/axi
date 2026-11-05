@@ -5,7 +5,8 @@ import { freezeRecord, LruMap } from "./record-cache.ts";
 type Task = T.TaskRecord<JsonValue, JsonValue, JsonValue>;
 
 export function scopeOf(storage: T.Storage): T.Storage["publishing"] {
-	return storage.publishing?.bind(storage);
+	if (storage.publishing === undefined) return undefined;
+	return (publish, context) => storage.publishing!(publish, context);
 }
 
 export class CachedStorage implements T.Storage {
