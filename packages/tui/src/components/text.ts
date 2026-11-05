@@ -42,7 +42,7 @@ export class Text implements Component {
 			);
 			const blank: string[] = [];
 			for (let index = 0; index < this.#paddingY; index++)
-				blank.push(this.#background?.(" ".repeat(width)) ?? " ".repeat(width));
+				blank.push(applyBackgroundToLine(" ".repeat(width), width, background));
 			lines = [...blank, ...content, ...blank];
 			flattenLines(lines);
 		}

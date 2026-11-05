@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { KeybindingsManager, TUI_KEYBINDINGS } from "../src/keybindings.ts";
+import { KeybindingsManager, TUI_KEYBINDINGS, type KeybindingDefinitions } from "../src/keybindings.ts";
+import { WheelScrollAccelerator } from "../src/wheel-scroll.ts";
 import { decodePrintableKey, matchesKey, parseKey, setKittyProtocolActive } from "../src/keys.ts";
 import { parseKeyboardProtocolNegotiationSequence, resolveEscapeTimeoutMs } from "../src/terminal.ts";
 
@@ -62,12 +63,26 @@ describe("terminal negotiation", () => {
 });
 
 describe("keybinding configuration", () => {
+	it("reports current definition names after the catalog changes", () => {
+		const definitions: KeybindingDefinitions = { first: { defaultKeys: "enter" } };
+		const manager = new KeybindingsManager(definitions);
+		definitions.second = { defaultKeys: "tab" };
+		delete definitions.first;
+		expect(manager.getResolvedBindings()).toEqual({ second: [] });
+		manager.setUserBindings({});
+		expect(manager.getResolvedBindings()).toEqual({ second: "tab" });
+	});
 	it("preserves other actions when one action is rebound", () => {
 		const manager = new KeybindingsManager(TUI_KEYBINDINGS, { "tui.input.submit": "ctrl+s" });
 		expect(manager.matches("\r", "tui.select.confirm")).toBe(true);
 		expect(manager.matches("\r", "tui.input.submit")).toBe(false);
 		expect(manager.matches("\x13", "tui.input.submit")).toBe(true);
 	});
+});
+
+it("restarts wheel acceleration after a non-orderable clock sample", () => {
+	const wheel = new WheelScrollAccelerator("auto", true);
+	expect([0, Number.NaN, 30].map((time) => wheel.next(1, time))).toEqual([1, 1, 1]);
 });
 
 it("normalizes legacy terminal keys and explicit modifier reports through one public identity contract", () => {

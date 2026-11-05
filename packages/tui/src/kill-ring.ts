@@ -11,7 +11,7 @@ export class KillRing {
 
 	push(text: string, options: { prepend: boolean; accumulate?: boolean }): void {
 		if (text.length === 0) return;
-		const previous = this.peek();
+		const previous = this.#entries.at(-1);
 		if (options.accumulate && previous !== undefined) {
 			this.#entries[this.#entries.length - 1] = options.prepend ? text + previous : previous + text;
 			return;

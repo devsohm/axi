@@ -12,6 +12,16 @@ import { stripTerminalSequences } from "../src/utils.ts";
 
 afterEach(() => vi.useRealTimers());
 
+it("calls text background painters without a receiver for both content and padding", () => {
+	const receivers: unknown[] = [];
+	const text = new Text("x", 0, 1, function (this: unknown, line) {
+		receivers.push(this);
+		return line;
+	});
+	expect(text.render(3)).toEqual(["   ", "x  ", "   "]);
+	expect(receivers).toEqual([undefined, undefined]);
+});
+
 it("updates a loader without recursive invalidation and stops its animation", () => {
 	vi.useFakeTimers();
 	const redraw = vi.fn();

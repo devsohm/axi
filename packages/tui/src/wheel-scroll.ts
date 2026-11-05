@@ -26,7 +26,7 @@ export class WheelScrollAccelerator {
 		if (!this.#accelerate) return 1;
 		const previous = this.#previous;
 		const gap = previous ? now - previous.time : Infinity;
-		if (!previous || previous.direction !== direction || gap > 200) {
+		if (!previous || previous.direction !== direction || !(gap <= 200)) {
 			this.#previous = { time: now, direction, fraction: 0 };
 			return 1;
 		}

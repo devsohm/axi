@@ -3,6 +3,17 @@ import { KillRing } from "../src/kill-ring.ts";
 import { UndoStack } from "../src/undo-stack.ts";
 
 describe("deleted-text history", () => {
+	it("accumulates stored deletions independently of an overridden preview", () => {
+		class PreviewRing extends KillRing {
+			override peek() {
+				return "preview";
+			}
+		}
+		const ring = new PreviewRing();
+		ring.push("first", { prepend: false });
+		ring.push("second", { prepend: false, accumulate: true });
+		expect(KillRing.prototype.peek.call(ring)).toBe("firstsecond");
+	});
 	it("accumulates deletions in either direction and cycles entries", () => {
 		const ring = new KillRing();
 		ring.push("", { prepend: false });
