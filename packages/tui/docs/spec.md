@@ -6,6 +6,8 @@ This document describes the terminal library contracts. Native clipboard backend
 
 `StdinBuffer` separates text and complete terminal escape sequences. It retains partial sequences across input chunks and flushes an incomplete sequence after a timeout. A lone Escape uses a separate timeout. Both timeout values are captured at construction. Recognized terminal replies wait for their terminator instead of timing out into key events. Bracketed paste emits one paste event; pasted controls do not become ordinary key events. Clear and destroy cancel pending timeouts and discard incomplete input.
 
+Input following a completed paste stays separate while paste listeners run. A listener can clear or flush the buffer without consuming that trailing input. Input submitted by the listener is processed before the saved tail.
+
 ## Keyboard input
 
 Key matching accepts legacy terminal sequences, Kitty keyboard reports and xterm modified-key reports. Key identifiers support Shift, Control, Alt and Super combinations. Kitty lock bits do not change binding identity. Alternate layout keys are used when the reported character does not already identify a supported logical key. Printable decoding excludes command modifiers.

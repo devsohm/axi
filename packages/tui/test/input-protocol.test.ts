@@ -3,6 +3,29 @@ import { StdinBuffer } from "../src/stdin-buffer.ts";
 import { parseOscColorResponse, parseTerminalColorSchemeReport } from "../src/terminal-colors.ts";
 
 describe("input framing", () => {
+	it.each(["clear", "flush", "process"] as const)("preserves the paste tail when its handler calls %s", (action) => {
+		const buffer = new StdinBuffer();
+		const events: unknown[] = [];
+		buffer.on("data", (value) => events.push(value));
+		buffer.on("paste", (value) => {
+			events.push(["paste", value]);
+			if (action === "clear") buffer.clear();
+			if (action === "flush") events.push(buffer.flush());
+			if (action === "process") buffer.process("xy");
+		});
+		try {
+			buffer.process("\x1b[200~text\x1b[201~ab");
+			expect(events).toEqual([
+				["paste", "text"],
+				...(action === "flush" ? [[]] : action === "process" ? ["x", "y"] : []),
+				"a",
+				"b",
+			]);
+			expect(buffer.getBuffer()).toBe("");
+		} finally {
+			buffer.destroy();
+		}
+	});
 	it("reassembles a mouse sequence across every split point", () => {
 		const input = "\x1b[<35;20;5m";
 		for (let split = 1; split < input.length; split++) {

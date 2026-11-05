@@ -106,11 +106,12 @@ export class StdinBuffer extends EventEmitter<StdinBufferEventMap> {
 				const end = this.#paste.indexOf(pasteEnd);
 				if (end < 0) return;
 				const content = this.#paste.slice(0, end);
-				this.#pending = this.#paste.slice(end + pasteEnd.length);
+				const remaining = this.#paste.slice(end + pasteEnd.length);
 				this.#paste = undefined;
 				this.#duplicate = undefined;
 				this.emit("paste", content);
-				continue;
+				if (remaining.length) this.process(remaining);
+				return;
 			}
 			const start = this.#pending.indexOf(pasteStart);
 			if (start >= 0) {
