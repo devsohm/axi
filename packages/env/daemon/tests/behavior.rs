@@ -51,6 +51,68 @@ fn additional_failure_fields_replace_previous_extras_and_override_defaults() {
         json!({"code": "initial", "message": "original"})
     );
 }
+
+#[test]
+fn process_requests_distinguish_missing_arguments_from_malformed_arguments() {
+    use axi_env::process::ProcessRequest;
+
+    for (value, message) in [
+        (json!({}), "process needs argv"),
+        (json!({"argv":null}), "process needs argv"),
+        (
+            json!({"argv":[]}),
+            "argv must be a non-empty array of strings",
+        ),
+        (
+            json!({"argv":"echo"}),
+            "argv must be a non-empty array of strings",
+        ),
+        (
+            json!({"argv":["echo",3]}),
+            "argv must be a non-empty array of strings",
+        ),
+        (json!({"argv":["echo"]}), "process needs cwd"),
+    ] {
+        let failure = match ProcessRequest::from_json(&value) {
+            Err(failure) => failure,
+            Ok(_) => panic!("accepted malformed process request: {value}"),
+        };
+        assert_eq!(
+            failure.to_json(),
+            json!({"code":"EINVAL","message":message})
+        );
+    }
+}
+
+#[test]
+fn process_input_reports_missing_targets_and_ended_programs() {
+    use axi_env::process::{self, Processes};
+    use std::sync::{Arc, Mutex};
+
+    let processes: Processes = Arc::new(Mutex::new(Default::default()));
+    for value in [json!({}), json!({"target":null}), json!({"target":-1})] {
+        for result in [
+            process::write(&processes, &value, vec![]),
+            process::close_stdin(&processes, &value),
+        ] {
+            assert_eq!(
+                result.unwrap_err().to_json(),
+                json!({"code":"EINVAL","message":"missing field target"})
+            );
+        }
+    }
+    for value in [json!({"target":7}), json!({"target":4294967303_u64})] {
+        for result in [
+            process::write(&processes, &value, vec![]),
+            process::close_stdin(&processes, &value),
+        ] {
+            assert_eq!(
+                result.unwrap_err().to_json(),
+                json!({"code":"EBADF","message":"no running process with this id"})
+            );
+        }
+    }
+}
 #[test]
 fn line_ranges_keep_raw_offsets_and_count_decoded_invalid_utf8() {
     let bytes = [

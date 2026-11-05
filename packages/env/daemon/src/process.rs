@@ -35,15 +35,8 @@ pub struct ProcessRequest {
 }
 impl ProcessRequest {
     pub fn from_json(value: &Value) -> Result<Self, Failure> {
-        let argv: Option<Vec<String>> = value["argv"].as_array().and_then(|items| {
-            items
-                .iter()
-                .map(|item| item.as_str().map(String::from))
-                .collect()
-        });
-        let argv = argv
-            .filter(|items| !items.is_empty())
-            .ok_or_else(|| Failure::new("EINVAL", "process needs argv"))?;
+        let argv =
+            exec::arguments(value)?.ok_or_else(|| Failure::new("EINVAL", "process needs argv"))?;
         let cwd = value["cwd"]
             .as_str()
             .ok_or_else(|| Failure::new("EINVAL", "process needs cwd"))?
@@ -59,12 +52,11 @@ impl ProcessRequest {
 fn input(processes: &Processes, value: &Value, input: Input) -> Result<Value, Failure> {
     let target = value["target"]
         .as_u64()
-        .and_then(|id| u32::try_from(id).ok())
-        .ok_or_else(|| Failure::new("EINVAL", "missing or invalid target"))?;
+        .ok_or_else(|| Failure::new("EINVAL", "missing field target"))? as u32;
     let entries = processes.lock().unwrap();
     let program = entries
         .get(&target)
-        .ok_or_else(|| Failure::new("EBADF", "unknown process"))?;
+        .ok_or_else(|| Failure::new("EBADF", "no running process with this id"))?;
     program
         .input
         .send(input)
@@ -199,13 +191,18 @@ pub fn run(
     let mut eof = [false; 2];
     let mut idle: Option<Instant> = None;
     let mut aborted = false;
-    let kill = || {
-        if groups.lock().unwrap().contains(&pid) {
-            exec::kill_group(pid);
+    let mut killed = false;
+    let kill = |killed: &mut bool| {
+        if !*killed {
+            *killed = true;
+            let active = groups.lock().unwrap();
+            if active.contains(&pid) {
+                exec::kill_group(pid);
+            }
         }
     };
     if control.killed.load(Ordering::SeqCst) {
-        kill();
+        kill(&mut killed);
     }
     loop {
         if status.is_some() && eof.iter().all(|value| *value) {
@@ -228,6 +225,7 @@ pub fn run(
             }
             Ok(Message::Eof(stream)) => eof[stream] = true,
             Ok(Message::Exit(exit)) => {
+                killed = true;
                 status = Some(Ok(exit));
                 idle = Some(Instant::now() + Duration::from_millis(100));
             }
@@ -237,9 +235,9 @@ pub fn run(
             }
             Ok(Message::Cancel) => {
                 aborted = true;
-                kill();
+                kill(&mut killed);
             }
-            Ok(Message::Kill) => kill(),
+            Ok(Message::Kill) => kill(&mut killed),
             Err(RecvTimeoutError::Timeout) => {}
             Err(RecvTimeoutError::Disconnected) => break,
         }

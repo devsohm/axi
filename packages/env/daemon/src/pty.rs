@@ -42,26 +42,8 @@ fn cells(value: &Value, key: &str) -> Result<u16, Failure> {
 }
 impl PtyRequest {
     pub fn from_json(value: &Value) -> Result<Self, Failure> {
-        let argv = if value["argv"].is_null() {
-            None
-        } else {
-            Some(
-                value["argv"]
-                    .as_array()
-                    .and_then(|items| {
-                        items
-                            .iter()
-                            .map(|v| v.as_str().map(str::to_owned))
-                            .collect::<Option<Vec<_>>>()
-                    })
-                    .filter(|v| !v.is_empty())
-                    .ok_or_else(|| {
-                        Failure::new("EINVAL", "argv must be a non-empty array of strings")
-                    })?,
-            )
-        };
         Ok(Self {
-            argv,
+            argv: crate::exec::arguments(value)?,
             cwd: value["cwd"]
                 .as_str()
                 .ok_or_else(|| Failure::new("EINVAL", "pty needs cwd"))?

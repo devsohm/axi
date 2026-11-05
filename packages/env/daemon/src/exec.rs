@@ -56,6 +56,21 @@ impl Control {
 pub fn kill_group(pid: u32) {
     sys::kill_tree(pid);
 }
+pub(crate) fn arguments(value: &Value) -> Result<Option<Vec<String>>, Failure> {
+    if value["argv"].is_null() {
+        return Ok(None);
+    }
+    let invalid = || Failure::new("EINVAL", "argv must be a non-empty array of strings");
+    let items = value["argv"]
+        .as_array()
+        .filter(|items| !items.is_empty())
+        .ok_or_else(invalid)?;
+    let arguments = items
+        .iter()
+        .map(|item| item.as_str().map(str::to_owned).ok_or_else(invalid))
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(Some(arguments))
+}
 pub struct ExecRequest {
     pub command: Option<String>,
     pub argv: Option<Vec<String>>,
