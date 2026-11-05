@@ -98,17 +98,32 @@ export async function startClient<P extends Principal>(options: ClientOptions<P>
 	let scripts = new Map(options.initial.map((script) => [script.plugin, script]));
 	const abort = new AbortController(),
 		held = host.hold(options.scripts, {}, context);
-	async function apply(set: ScriptSet, ctx: Context): Promise<void> {
+	let latest: ScriptSet | undefined, cancelRetry: (() => void) | undefined;
+	let applying = Promise.resolve(),
+		pause = 0;
+	function queue(set: ScriptSet, ctx: Context): Promise<void> {
+		applying = applying.then(async () => {
+			if (set !== latest || abort.signal.aborted) return;
+			if (await apply(set, ctx)) return;
+			pause = pause ? Math.min(pause * 2, 30000) : 1000;
+			cancelRetry = options.environment.after(pause, () => {
+				cancelRetry = undefined;
+				void queue(set, ctx);
+			});
+		});
+		return applying;
+	}
+	async function apply(set: ScriptSet, ctx: Context): Promise<boolean> {
 		if (set.base !== options.base) {
 			options.outdated();
-			return;
+			return true;
 		}
 		if (
 			set.plugins.length === scripts.size &&
 			set.plugins.every((item) => scripts.get(item.name)?.digest === item.digest)
 		) {
 			options.applied?.(set);
-			return;
+			return true;
 		}
 		try {
 			const next = new Map<string, RegisteredScript>();
@@ -124,19 +139,28 @@ export async function startClient<P extends Principal>(options: ClientOptions<P>
 			scripts = next;
 			reportPlugins(result.failed);
 			options.applied?.(set);
+			return true;
 		} catch (error) {
 			options.onError({ kind: "update_failed", error });
+			return false;
 		}
 	}
 	const watch = await held.set.watch(withAbortSignal(abort.signal, context));
 	watch.start(async (frame, ctx) => {
-		if (frame.kind === "value") await apply(frame.value, ctx);
+		if (frame.kind !== "value") return;
+		latest = frame.value;
+		cancelRetry?.();
+		cancelRetry = undefined;
+		pause = 0;
+		await queue(frame.value, ctx);
 	});
 	return {
 		host,
 		async stop(ctx) {
 			loop.stop();
 			abort.abort();
+			cancelRetry?.();
+			cancelRetry = undefined;
 			held.release();
 			await host.close(ctx);
 		},

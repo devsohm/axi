@@ -190,7 +190,7 @@ it("reconnects with backoff and cancels its timeout when stopped", async () => {
 	}
 });
 
-it("updates client plugins over a real link and retains a facet when the replacement fails", async () => {
+it("retries a failed script download and retains a facet when replacement evaluation fails", async () => {
 	const server = createHost({ address: hostKind("server")(), principal: { kind: "server" }, onError() {} });
 	const script = (digest: string, broken = false): RegisteredScript => ({
 		plugin: "example",
@@ -213,6 +213,7 @@ it("updates client plugins over a real link and retains a facet when the replace
 		second = script("two"),
 		failed = script("three", true),
 		errors: unknown[] = [];
+	let attempts = 0;
 	await server.load([{ name: "scripts", facet: scriptsFacet("web", { set: set(first) }) }], context);
 	const client = await startClient({
 		scripts: WebScripts,
@@ -220,7 +221,11 @@ it("updates client plugins over a real link and retains a facet when the replace
 		initial: [first],
 		modules: {},
 		core: [{ name: "translations", facet: translationsFacet() }],
-		fetchScript: async (entry) => (entry.digest === "two" ? second : failed),
+		fetchScript: async (entry) => {
+			if (entry.digest !== "two") return failed;
+			if (++attempts === 1) throw new Error("download interrupted");
+			return second;
+		},
 		serverBase: async () => "stable",
 		outdated() {},
 		onError: (event) => errors.push(event),
@@ -243,7 +248,11 @@ it("updates client plugins over a real link and retains a facet when the replace
 	try {
 		const registry = await client.host.registry(Translations, context);
 		await publishTo(server, "web", set(second), context);
-		await vi.waitFor(() => expect(registry.value.catalogs.get("sample")?.get("en")?.value.messages.value).toBe("two"));
+		await vi.waitFor(() => expect(registry.value.catalogs.get("sample")?.get("en")?.value.messages.value).toBe("two"), {
+			timeout: 3000,
+		});
+		expect(attempts).toBe(2);
+		expect(errors).toContainEqual(expect.objectContaining({ kind: "update_failed" }));
 		await publishTo(server, "web", set(failed), context);
 		await vi.waitFor(() => expect(errors).toContainEqual(expect.objectContaining({ kind: "plugins" })));
 		expect(registry.value.catalogs.get("sample")?.get("en")?.value.messages.value).toBe("two");

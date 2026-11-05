@@ -1,6 +1,6 @@
 # Clients
 
-Objects can run a client host in a browser or a terminal sandbox. The host keeps references connected, watches published plugin scripts and replaces changed facets while it runs. A failed replacement keeps the previous working facet.
+Objects can run a client host in a browser or a terminal sandbox. The host keeps references connected, watches published plugin scripts and replaces changed facets while it runs. A failed replacement keeps the previous working facet. A failed script download reports `update_failed` and retries after one second. The delay doubles up to 30 seconds. Updates run in order; a new script set replaces the pending retry. Stopping the client cancels retries.
 
 ## Browser clients
 
