@@ -84,4 +84,4 @@ Mathematical notation supports inline Unicode symbols, scripts, fractions, roots
 
 ## Color utilities
 
-Color helpers convert sRGB, Oklab, OKLCH and OKHSL values, parse hexadecimal and indexed colors, mix colors, and construct ANSI styles. Styling restores enclosing styles after nested resets.
+Color helpers convert sRGB, Oklab, OKLCH and OKHSL values, parse hexadecimal and indexed colors, mix colors, and construct ANSI styles. Style helpers wrap text in opening codes and matching resets in reverse order. Existing escape sequences are preserved.
