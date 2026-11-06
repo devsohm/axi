@@ -9,6 +9,35 @@ import { ROOT_CONVERSATION_ID } from "../src/types.ts";
 
 Object.defineProperty(globalThis, "IDBKeyRange", { configurable: true, value: IDBKeyRange });
 
+it("retains accepted batches when range support is unavailable to a later batch", async () => {
+	const storage = await IndexedDbStorage.open("missing-key-range", { indexedDB: new IDBFactory() });
+	try {
+		const id = await storage.mintId<DocumentId>();
+		const receipts: number[] = [];
+		vi.stubGlobal("IDBKeyRange", undefined);
+		const result = await storage.commit(
+			[
+				[{ type: "conversation", value: { id: ROOT_CONVERSATION_ID } }],
+				[
+					{
+						type: "document.create",
+						record: { id, kind: "settings", scope: { kind: "session" } },
+						content: { kind: "base", version: 1, value: {} },
+					},
+				],
+			],
+			(_index, seq) => receipts.push(seq),
+			context,
+		);
+		expect(result).toEqual({ stored: 1, refused: new Error("IndexedDB key ranges are not available") });
+		expect(receipts).toEqual([1]);
+		expect(await storage.conversation(ROOT_CONVERSATION_ID, context)).toEqual({ id: ROOT_CONVERSATION_ID });
+	} finally {
+		vi.unstubAllGlobals();
+		await storage.close(context);
+	}
+});
+
 it("captures scan order once before the asynchronous database read", async () => {
 	const storage = await IndexedDbStorage.open("scan-order", { indexedDB: new IDBFactory() });
 	try {

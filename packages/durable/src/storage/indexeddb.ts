@@ -101,7 +101,7 @@ function get<Value>(tx: IDBTransaction, store: string, key: IDBValidKey): Promis
 	return result(tx.objectStore(store).get(key));
 }
 function keyRanges(): typeof IDBKeyRange {
-	if (typeof IDBKeyRange === "undefined") throw new IndexedDbFailure("IndexedDB key ranges are not available");
+	if (typeof IDBKeyRange === "undefined") throw new Error("IndexedDB key ranges are not available");
 	return IDBKeyRange;
 }
 function range(prefix: readonly IDBValidKey[], lower = 0, upper = maximum, lowerOpen = false, upperOpen = false) {
