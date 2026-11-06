@@ -76,11 +76,16 @@ function tags(value: unknown): string {
 		.join(" ");
 }
 type SchemaRender = { root: unknown; path: Set<string>; remaining: number; tags: boolean };
-function reference(pointer: string, root: unknown): unknown {
+export function resolveSchemaRef(pointer: string, root: unknown): CodemodeJsonSchema | undefined {
 	if (pointer !== "#" && !pointer.startsWith("#/")) return undefined;
 	let value = root;
 	for (const segment of pointer.slice(2).split("/").filter(Boolean)) {
-		const key = decodeURIComponent(segment).replaceAll("~1", "/").replaceAll("~0", "~");
+		let key: string;
+		try {
+			key = decodeURIComponent(segment).replaceAll("~1", "/").replaceAll("~0", "~");
+		} catch {
+			return undefined;
+		}
 		if (!object(value) || !(key in value)) return undefined;
 		value = value[key];
 	}
@@ -91,7 +96,7 @@ function render(value: unknown, ctx: SchemaRender): string {
 	if (!object(value)) return "unknown";
 	if (typeof value.$ref === "string") {
 		if (ctx.path.has(value.$ref) || ctx.remaining === 0) return "unknown";
-		const target = reference(value.$ref, ctx.root);
+		const target = resolveSchemaRef(value.$ref, ctx.root);
 		if (target === undefined) return "unknown";
 		ctx.remaining--;
 		ctx.path.add(value.$ref);

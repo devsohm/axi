@@ -146,6 +146,8 @@ Prompt sections have stable keys and render against the resolved agent, environm
 
 Tool discovery searches descriptions and parameter names with BM25. Names and namespace instructions are separate search fields. Exact tool names rank first, followed by the number of matched query terms and relevance. A full local tool name in the query receives an additional relevance weight. Unicode word boundaries and canonical spelling are supported. Code Mode's `searchTools()` uses the same ranking.
 
+Deferred tool discovery follows local schema references when collecting parameter names and descriptions. A referenced definition is read once, so recursive schemas terminate. Unreferenced definitions do not contribute search terms. Malformed references contribute no target terms.
+
 ## Built-in execution
 
 `GenerationTask` requests the selected model, commits partial assistant progress, records the final assistant entry, and coordinates tool rounds. `ToolTask` executes the selected tool. `CompactionTask` records a summary and the resulting context boundary.

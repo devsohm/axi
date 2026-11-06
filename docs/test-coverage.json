@@ -16,16 +16,11 @@
 				},
 				{
 					"behavior": "metrics and cross-process propagation",
-					"tests": [
-						"packages/telemetry/test/metrics.test.ts"
-					]
+					"tests": ["packages/telemetry/test/metrics.test.ts"]
 				},
 				{
 					"behavior": "memory and SQLite read-store contracts",
-					"tests": [
-						"packages/telemetry/test/store.test.ts",
-						"packages/telemetry/test/store-backends.test.ts"
-					]
+					"tests": ["packages/telemetry/test/store.test.ts", "packages/telemetry/test/store-backends.test.ts"]
 				}
 			]
 		},
@@ -62,9 +57,7 @@
 				},
 				{
 					"behavior": "contracts, version mappings, errors, principal keys and bounded link parts",
-					"tests": [
-						"packages/objects/test/contracts.test.ts"
-					]
+					"tests": ["packages/objects/test/contracts.test.ts"]
 				},
 				{
 					"behavior": "shared Store table declarations, queries, document history, commit failures, outbox and export lifecycle and replication/import validation",
@@ -80,9 +73,7 @@
 				},
 				{
 					"behavior": "streamed Store sync, lost upload replies, interrupted pulls, writer epochs and flush retries",
-					"tests": [
-						"packages/objects/test/sync.test.ts"
-					]
+					"tests": ["packages/objects/test/sync.test.ts"]
 				},
 				{
 					"behavior": "object-owned document transactions, handles, persistence and pinned keys",
@@ -119,10 +110,7 @@
 				},
 				{
 					"behavior": "followed runtime sources and object routines",
-					"tests": [
-						"packages/objects/test/follow-source.test.ts",
-						"packages/objects/test/object-routines.test.ts"
-					]
+					"tests": ["packages/objects/test/follow-source.test.ts", "packages/objects/test/object-routines.test.ts"]
 				},
 				{
 					"behavior": "wire message validation, codecs and channel ordering",
@@ -144,35 +132,23 @@
 				},
 				{
 					"behavior": "facet staging, replacement, resource restart and job/version handover",
-					"tests": [
-						"packages/objects/test/object-reload.test.ts"
-					]
+					"tests": ["packages/objects/test/object-reload.test.ts"]
 				},
 				{
 					"behavior": "HTTP routes, admission, bodies, files, authentication and sockets",
-					"tests": [
-						"packages/objects/test/http-server.test.ts"
-					]
+					"tests": ["packages/objects/test/http-server.test.ts"]
 				},
 				{
 					"behavior": "worker processes, recovery, rollout, idle cleanup and locks",
-					"tests": [
-						"packages/objects/test/workers.test.ts",
-						"packages/objects/test/worker-snapshot.test.ts"
-					]
+					"tests": ["packages/objects/test/workers.test.ts", "packages/objects/test/worker-snapshot.test.ts"]
 				},
 				{
 					"behavior": "plugin discovery, evaluation and installation",
-					"tests": [
-						"packages/objects/test/node-plugins.test.ts",
-						"packages/objects/test/plugin-discovery.test.ts"
-					]
+					"tests": ["packages/objects/test/node-plugins.test.ts", "packages/objects/test/plugin-discovery.test.ts"]
 				},
 				{
 					"behavior": "authenticated telemetry ingestion and disconnected delivery",
-					"tests": [
-						"packages/objects/test/telemetry-ingest.test.ts"
-					]
+					"tests": ["packages/objects/test/telemetry-ingest.test.ts"]
 				},
 				{
 					"behavior": "client reloads, localized messages, persistent preferences, React bindings, terminal scopes, bridge messages and browser bundles",
@@ -192,9 +168,7 @@
 				},
 				{
 					"behavior": "trusted terminal frame boundaries, credentials, consent, sandbox isolation and exit cleanup",
-					"tests": [
-						"packages/objects/test/terminal-launcher.test.ts"
-					]
+					"tests": ["packages/objects/test/terminal-launcher.test.ts"]
 				}
 			]
 		},
@@ -258,9 +232,7 @@
 			"areas": [
 				{
 					"behavior": "source parsing and schema declarations",
-					"tests": [
-						"packages/codemode/test/source-declarations.test.ts"
-					]
+					"tests": ["packages/codemode/test/source-declarations.test.ts"]
 				},
 				{
 					"behavior": "VM execution, tools, replay, cancellation and lifetime",
@@ -272,9 +244,7 @@
 				},
 				{
 					"behavior": "inline and remote execution boundaries",
-					"tests": [
-						"packages/codemode/test/portable-contract.test.ts"
-					]
+					"tests": ["packages/codemode/test/portable-contract.test.ts"]
 				}
 			]
 		},
@@ -342,7 +312,8 @@
 						"packages/durable/test/harness-state.test.ts",
 						"packages/durable/test/recovery-settings.test.ts",
 						"packages/durable/test/compaction-lifecycle.test.ts",
-						"packages/durable/test/generation-lifecycle.test.ts"
+						"packages/durable/test/generation-lifecycle.test.ts",
+						"packages/durable/test/tool-search.test.ts"
 					]
 				},
 				{
@@ -374,9 +345,7 @@
 				},
 				{
 					"behavior": "shared Store storage conformance, reopening, ownership and request errors",
-					"tests": [
-						"packages/durable/test/store-storage.test.ts"
-					]
+					"tests": ["packages/durable/test/store-storage.test.ts"]
 				}
 			]
 		},
@@ -386,9 +355,7 @@
 			"areas": [
 				{
 					"behavior": "connection framing, retry, process loss and stale handles",
-					"tests": [
-						"packages/env/test/connection.test.ts"
-					]
+					"tests": ["packages/env/test/connection.test.ts"]
 				},
 				{
 					"behavior": "filesystem and shell conformance, transfers and error mapping",
@@ -401,16 +368,11 @@
 				},
 				{
 					"behavior": "terminal lifecycle and watcher recovery",
-					"tests": [
-						"packages/env/test/terminal.test.ts",
-						"packages/env/test/watch-recovery.test.ts"
-					]
+					"tests": ["packages/env/test/terminal.test.ts", "packages/env/test/watch-recovery.test.ts"]
 				},
 				{
 					"behavior": "SSH host identity and bootstrap behavior",
-					"tests": [
-						"packages/env/test/host-keys.test.ts"
-					]
+					"tests": ["packages/env/test/host-keys.test.ts"]
 				}
 			]
 		},
@@ -455,9 +417,7 @@
 				},
 				{
 					"behavior": "real terminal negotiation and cleanup",
-					"tests": [
-						"packages/tui/test/process-terminal.test.ts"
-					]
+					"tests": ["packages/tui/test/process-terminal.test.ts"]
 				}
 			]
 		}

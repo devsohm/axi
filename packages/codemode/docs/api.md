@@ -55,6 +55,7 @@ Exports from the package root. The linked declarations contain exact signatures.
 | `renderToolOutputType` | function | [`declarations.d.ts`](../dist/declarations.d.ts) |
 | `renderToolSample` | function | [`declarations.d.ts`](../dist/declarations.d.ts) |
 | `renderToolSignature` | function | [`declarations.d.ts`](../dist/declarations.d.ts) |
+| `resolveSchemaRef` | function | [`declarations.d.ts`](../dist/declarations.d.ts) |
 | `schemaToType` | function | [`declarations.d.ts`](../dist/declarations.d.ts) |
 | `serveCodemodeRemote` | function | [`runtime/remote.d.ts`](../dist/runtime/remote.d.ts) |
 | `toCodemodeIdentifier` | export | [`declarations.d.ts`](../dist/declarations.d.ts) |

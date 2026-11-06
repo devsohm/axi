@@ -1,4 +1,5 @@
 import { Type } from "@axi/ai";
+import { resolveSchemaRef } from "@axi/codemode/declarations";
 import { defineExtension, defineTool } from "../harness/define.ts";
 import type { ToolRegistration } from "../harness/types.ts";
 import { rankDocuments } from "../search.ts";
@@ -17,21 +18,28 @@ const description =
 function record(value: unknown): value is Record<string, unknown> {
 	return value !== null && typeof value === "object" && !Array.isArray(value);
 }
-function schemaTerms(value: unknown, terms: string[]): void {
+function schemaTerms(value: unknown, root: unknown, terms: string[], referenced: Set<unknown>): void {
 	if (!record(value)) return;
+	if (typeof value.$ref === "string") {
+		const target = resolveSchemaRef(value.$ref, root);
+		if (record(target) && !referenced.has(target)) {
+			referenced.add(target);
+			schemaTerms(target, root, terms, referenced);
+		}
+	}
 	if (typeof value.description === "string") terms.push(value.description);
 	if (record(value.properties))
 		for (const [key, child] of Object.entries(value.properties)) {
 			terms.push(key);
-			schemaTerms(child, terms);
+			schemaTerms(child, root, terms, referenced);
 		}
-	schemaTerms(value.items, terms);
+	schemaTerms(value.items, root, terms, referenced);
 	for (const key of ["anyOf", "oneOf", "allOf"])
-		if (Array.isArray(value[key])) for (const child of value[key]) schemaTerms(child, terms);
+		if (Array.isArray(value[key])) for (const child of value[key]) schemaTerms(child, root, terms, referenced);
 }
 function document(tool: ToolRegistration): { name: string; text: string } {
 	const parts = [tool.description];
-	schemaTerms(tool.parameters, parts);
+	schemaTerms(tool.parameters, tool.parameters, parts, new Set([tool.parameters]));
 	return { name: tool.name, text: parts.filter((part) => part.trim() !== "").join(" ") };
 }
 export function createToolSearchTool() {
