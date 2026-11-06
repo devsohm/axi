@@ -3,8 +3,32 @@ import { BACKGROUND_CONTEXT as context, withAbortSignal, type Context } from "..
 import { Routines, type RoutineDeclarations, type RoutineOwner } from "../src/host/routines.ts";
 import type { HostError } from "../src/host/report.ts";
 import { Batch, Source } from "../src/state/internal.ts";
-import { createHost, defineFacet, int, local, ObjectsError } from "../src/index.ts";
+import { constant, createHost, defineFacet, int, local, ObjectsError } from "../src/index.ts";
 import type { FollowObserver } from "../src/host/follow.ts";
+
+it("reports each expired drain when a routine ignores cancellation during reload", async () => {
+	const Value = local("routine.draining", { version: 1, params: {}, members: { value: int() } });
+	const started = Promise.withResolvers<void>(), gate = Promise.withResolvers<void>(), errors: HostError[] = [];
+	const host = createHost({ closeTimeout: 15, reloadDrainTimeout: 15, onError(error) { errors.push(error); } });
+	const plugin = (n: number) => ({ name: "value", facet: defineFacet((h) => h.serve(Value, (_, self) => {
+		self.onLive(async () => {
+			if (n === 1) { started.resolve(); await gate.promise; }
+		});
+		return { value: constant(n) };
+	})) });
+	try {
+		await host.load([plugin(1)], context);
+		const ref = await host.get(Value, {}, context);
+		await started.promise;
+		await host.reload([plugin(2)], context);
+		await vi.waitFor(() => expect(ref.value.value).toBe(2));
+		expect(errors.map((error) => error.kind)).toEqual(["drain_timeout", "drain_timeout"]);
+		ref.release();
+	} finally {
+		gate.resolve();
+		await host.close(context);
+	}
+});
 
 it.each(["reload", "failure"] as const)("preserves the cancellation cause when a routine stops after %s", async (mode) => {
 	const Value = local("routine.cause", { version: 1, params: {}, members: { value: int() } });

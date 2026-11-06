@@ -193,7 +193,6 @@ export class Attempt implements StoreSelf, KeyDeclarer, RegistryWaiter {
 	readonly #runs = new Map<Promise<unknown>, (() => void) | undefined>();
 	#reloadStarted = false;
 	readonly #routineCalls = new Set<Promise<unknown>>();
-	#drainReported = false;
 	#callsDrained = false;
 	readonly #declared = new Map<string, AnyDefinition>();
 	readonly #pins: (() => void)[] = [];
@@ -637,7 +636,6 @@ export class Attempt implements StoreSelf, KeyDeclarer, RegistryWaiter {
 			const calls = [...this.#running.keys(), ...this.#routineCalls];
 			const left = due - Date.now();
 			if (left <= 0 || await drained(calls, calls.length, left) === "timeout") {
-				this.#drainReported = true;
 				this.#object.host.report({ kind: "drain_timeout", object: this.#object.label });
 				return;
 			}
@@ -651,8 +649,7 @@ export class Attempt implements StoreSelf, KeyDeclarer, RegistryWaiter {
 				pending,
 				pending.length,
 				this.#object.host.timeouts.close,
-			)) === "timeout" &&
-			!this.#drainReported
+			)) === "timeout"
 		)
 			this.#object.host.report({ kind: "drain_timeout", object: this.#object.label });
 		for (const job of this.#jobs.values()) await job.writeAtClose(this.#context);
