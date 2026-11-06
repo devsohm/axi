@@ -1,7 +1,53 @@
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
 import { InMemoryTelemetryContext } from "@axi/telemetry";
 import { BACKGROUND_CONTEXT as context, withTelemetry } from "../src/context/index.ts";
-import { createHost, defineFacet, defineState, int, local, method, obj, str, remote, hostKind, memoryLinkPair } from "../src/index.ts";
+import { createHost, defineFacet, defineState, int, local, method, obj, str, remote, hostKind, memoryLinkPair, ObjectsError } from "../src/index.ts";
+
+it.each(["source-fails", "retry", "aborted-error"] as const)("records routine retry events and links for %s", async (mode) => {
+	vi.useFakeTimers({ toFake: ["Date", "setTimeout", "clearTimeout"] });
+	const telemetry = new InMemoryTelemetryContext(), errors: string[] = [];
+	const entered = Promise.withResolvers<void>(), gate = Promise.withResolvers<void>();
+	const Value = local("trace.routine", { version: 1, params: {}, members: { value: obj({ n: int() }), set: method(int(), int()) } });
+	const State = defineState("value", { version: 1, schema: obj({ n: int() }), initial: () => ({ n: 0 }) });
+	const host = createHost({ telemetry, onError(error) { errors.push(error.kind); } });
+	let calls = 0;
+	try {
+		await host.load([{ name: "value", facet: defineFacet((h) => h.serve(Value, (_, self) => {
+			const value = self.state(State);
+			const derived = self.derive([value], ([state]) => {
+				if (state.n < 0) throw new Error("source failed");
+				return state.n;
+			});
+			self.on(derived, async ({ value: n }) => {
+				if (n !== 1) return;
+				calls++;
+				entered.resolve();
+				if (mode === "source-fails") { await gate.promise; throw new Error("routine rejected"); }
+				if (calls === 1) throw mode === "aborted-error"
+					? new ObjectsError({ code: "aborted", message: "routine cancelled" })
+					: new Error("routine rejected");
+			});
+			return { value, set: async (n, ctx) => { await value.change((draft) => { draft.n = n; }, ctx); return n; } };
+		})) }], context);
+		const ref = await host.get(Value, {}, context);
+		await new Promise<void>((resolve) => setImmediate(resolve));
+		await telemetry.startSpan({ name: "write" }, (span) => ref.set(1, withTelemetry(span, context)));
+		await entered.promise;
+		if (mode === "source-fails") { await ref.set(-1, context); gate.resolve(); }
+		await new Promise<void>((resolve) => setImmediate(resolve));
+		expect(errors).toContain("routine_failed");
+		if (mode !== "source-fails") await vi.advanceTimersByTimeAsync(1000);
+		const spans = telemetry.getSpans().filter((span) => span.name === "objects.routine");
+		expect(spans.map((span) => span.links.length)).toEqual(mode === "source-fails" ? [0, 1] : [0, 1, 0]);
+		expect(spans[1]?.attributes.outcome).toBe(mode === "aborted-error" ? "aborted" : "error");
+		expect(spans[1]?.events.filter((event) => event.name === "objects.retry")).toHaveLength(mode === "retry" ? 1 : 0);
+		ref.release();
+	} finally {
+		gate.resolve();
+		await host.close(context);
+		vi.useRealTimers();
+	}
+});
 
 it("retains a document through replacement and records resource and routine lifetimes", async () => {
 	const telemetry = new InMemoryTelemetryContext();

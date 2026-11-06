@@ -73,8 +73,9 @@ function invoke(owner: RoutineOwner, at: Position, fn: (context: Ctx) => void | 
 function complete(result: Result, owner: RoutineOwner, delay?: number): void {
 	const span = result.span;
 	if (!span) return;
-	span.span.setAttributes({ outcome: result.kind === "done" ? "ok" : ended(span.span, "routine_failed", result.error, owner.context.abortSignal) });
-	if (delay !== undefined) span.span.addEvent("objects.retry", { backoff: delay });
+	const outcome = result.kind === "done" ? "ok" : ended(span.span, "routine_failed", result.error, owner.context.abortSignal);
+	span.span.setAttributes({ outcome });
+	if (outcome === "error" && delay !== undefined) span.span.addEvent("objects.retry", { backoff: delay });
 	span.end();
 }
 function report(owner: RoutineOwner, routine: Position, error: unknown): void {
@@ -143,7 +144,6 @@ class SourceRoutine {
 	#phase: Phase = { kind: "starting" };
 	#native = false;
 	#pending: { readonly value: unknown; readonly trigger?: TelemetryContext } | undefined;
-	#lastTrigger?: TelemetryContext;
 	readonly #ops = new PendingOps();
 	#retired = false;
 	#full = true;
@@ -263,7 +263,6 @@ class SourceRoutine {
 		this.#pending = undefined;
 		this.#phase = { kind: "calling" };
 		this.#last = pending.value;
-		this.#lastTrigger = pending.trigger;
 		let call: WatchValueCall<unknown> | NativeWatchValueCall<unknown> = {
 			kind: "value",
 			value: pending.value,
@@ -293,15 +292,16 @@ class SourceRoutine {
 		this.#full = true;
 		this.#retired ||= this.#lastRetired;
 		this.#delay = nextDelay(this.#delay);
-		complete(result, this.#owner, this.#delay);
 		if (this.#failed) {
+			complete(result, this.#owner);
 			this.#phase = { kind: "idle" };
 			return;
 		}
+		complete(result, this.#owner, this.#delay);
 		this.#phase = {
 			kind: "backoff",
 			timer: setTimeout(() => {
-				this.#pending ??= { value: this.#last, trigger: this.#lastTrigger };
+				this.#pending ??= { value: this.#last };
 				this.#next();
 			}, this.#delay),
 		};
