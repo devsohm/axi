@@ -44,6 +44,14 @@ test("transcript search maps normalized text to Unicode terminal cells and reuse
 	expect(index.search(["changed"], "after").matches).toEqual([]);
 });
 
+test("an empty search does not read transcript lines", () => {
+	const read = vi.fn(() => "transcript");
+	const lines = ["transcript"];
+	Object.defineProperty(lines, 0, { get: read });
+	for (const query of ["", " ", "\t\n", "\u2003"]) expect(findAltScreenSearchMatches(lines, query)).toEqual([]);
+	expect(read).not.toHaveBeenCalled();
+});
+
 test("flash expiry removes only the expired message and disposal cancels timers", () => {
 	vi.useFakeTimers();
 	const redraw = vi.fn(),

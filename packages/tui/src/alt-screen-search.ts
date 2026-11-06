@@ -88,7 +88,8 @@ function matches(c: Corpus, query: string): AltScreenSearchMatch[] {
 	return result;
 }
 export function findAltScreenSearchMatches(lines: readonly string[], query: string): AltScreenSearchMatch[] {
-	return matches(corpus(lines), normalize(query));
+	const normalized = normalize(query);
+	return normalized ? matches(corpus(lines), normalized) : [];
 }
 export function getAltScreenSearchMatchKey(match: AltScreenSearchMatch): string {
 	const first = match.segments[0],
