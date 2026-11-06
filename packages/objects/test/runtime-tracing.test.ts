@@ -83,6 +83,44 @@ it("reuses described metric instruments while validating and changing state", as
 		expect(options).toHaveProperty("description", expect.any(String));
 });
 
+it("does not record a delivery wait for state cancelled by releasing its hold", async () => {
+	const histogram = vi.fn(NOOP_TELEMETRY_METRICS.histogram), waits: string[] = [];
+	histogram.mockImplementation((name) => ({ record() { waits.push(name); } }));
+	const telemetry = { ...NOOP_TELEMETRY_CONTEXT, metrics: { ...NOOP_TELEMETRY_METRICS, histogram } };
+	const address = hostKind("cancelled-state-server")();
+	const Value = remote("cancelled.state", {
+		version: 1, params: {}, hostAddress: () => address,
+		variants: { ready: { state: { value: int() } } },
+	});
+	const State = defineState("value", { version: 1, schema: obj({ value: int() }), initial: () => ({ value: 0 }) });
+	const errors: unknown[] = [];
+	const server = createHost({ address, principal: { kind: "server" }, telemetry, onError: error => errors.push(error) });
+	const client = createHost({ principal: { kind: "client" }, onError: error => errors.push(error) });
+	let update: (value: number) => Promise<void> = async () => { throw new Error("not activated"); };
+	try {
+		await server.load([{ name: "value", facet: defineFacet(h => h.serve(Value, (_params, _principal, self) => {
+			const state = self.state(State);
+			update = value => state.change(draft => { draft.value = value; }, context);
+			return { variant: "ready", members: { value: self.derive([state], ([current]) => current.value) } };
+		})) }], context);
+		await client.load([], context);
+		const [a, b] = memoryLinkPair(), send = b.send.bind(b);
+		b.send = packet => { if (binaryCodec.decode(packet).kind !== "ack") send(packet); };
+		server.accept(a, { principal: { kind: "client" } }, context);
+		client.connect(b, { principal: { kind: "server" }, trusted: true }, context);
+		const ref = await client.get(Value, {}, withAbortSignal(AbortSignal.timeout(4000), context));
+		await update(1);
+		await update(2);
+		ref.release();
+		for (let turn = 0; turn < 4; turn++) await new Promise<void>(resolve => setImmediate(resolve));
+		expect(errors).toEqual([]);
+		expect(waits).not.toContain("objects.backpressure.wait");
+	} finally {
+		await client.close(context);
+		await server.close(context);
+	}
+});
+
 it.each(["source-fails", "retry", "aborted-error"] as const)("records routine retry events and links for %s", async (mode) => {
 	vi.useFakeTimers({ toFake: ["Date", "setTimeout", "clearTimeout"] });
 	const telemetry = new InMemoryTelemetryContext(), errors: string[] = [];

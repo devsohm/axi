@@ -190,7 +190,7 @@ export class ProviderSide {
 	unbind(hold: Hold): void {
 		this.#pending.delete(hold);
 		this.#bindings.delete(hold);
-		if (!this.#pending.size && !this.#bindings.size) this.#waited();
+		if (!this.#pending.size) this.#waitingSince = undefined;
 	}
 	unbound(hold: Hold, error: ObjectsError): void {
 		this.unbind(hold);
@@ -371,7 +371,6 @@ export class ProviderSide {
 		return this.#ownSent - this.#ownAcked < 2 && !this.#pending.size && !this.#bindings.size;
 	}
 	#drain(): void {
-		if (this.#ownSent - this.#ownAcked < 2 && (this.#pending.size || this.#bindings.size)) this.#waited();
 		while (this.#ownSent - this.#ownAcked < 2 && (this.#pending.size || this.#bindings.size)) {
 			const binding = this.#bindings.size > 0 && (!this.#pending.size || this.#preferBinding);
 			if (binding) {
