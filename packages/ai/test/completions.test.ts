@@ -37,6 +37,47 @@ function answer(): Response {
 }
 
 describe("Chat Completions", () => {
+	it("uses compatibility settings exposed through class getters", async () => {
+		const compat = new (class {
+			get supportsStore() {
+				return false;
+			}
+			get supportsDeveloperRole() {
+				return false;
+			}
+			get supportsReasoningEffort() {
+				return false;
+			}
+			get maxTokensField(): "max_tokens" {
+				return "max_tokens";
+			}
+		})();
+		let body = "";
+		const result = await stream(
+			{ ...model, compat },
+			normalizeContext({ systemPrompt: "Instructions", messages: context.messages }),
+			{
+				apiKey: "test",
+				maxTokens: 128,
+				reasoningEffort: "high",
+				fetch: async (_input, init) => {
+					body = String(init?.body);
+					return answer();
+				},
+			},
+		).result();
+		expect(result.stopReason).toBe("stop");
+		expect(JSON.parse(body)).toEqual({
+			model: model.id,
+			messages: [
+				{ role: "system", content: "Instructions" },
+				{ role: "user", content: "hello" },
+			],
+			stream: true,
+			stream_options: { include_usage: true },
+			max_tokens: 128,
+		});
+	});
 	it("publishes tool argument previews without private parser state", async () => {
 		const frames = [
 			chunk({ tool_calls: [{ index: 0, id: "call-1", function: { name: "lookup", arguments: '{"query":"a"}' } }] }),

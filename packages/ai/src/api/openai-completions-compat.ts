@@ -49,6 +49,9 @@ export function completionsCompat(model: Model<"openai-completions">): Completio
 			chutes || deepseek || moonshot || gateway || together || nvidia || ling || zai
 				? "max_tokens"
 				: "max_completion_tokens",
+		promptCacheKeyMode: undefined,
+		thinkingTokenBudgetField: undefined,
+		vllmPriority: undefined,
 		requiresToolResultName: false,
 		requiresAssistantAfterToolResult: false,
 		requiresNonNullAssistantContent: false,
@@ -80,8 +83,10 @@ export function completionsCompat(model: Model<"openai-completions">): Completio
 		sessionAffinityFormat: router ? "openrouter" : "openai",
 		supportsLongCacheRetention: !(together || workers || gateway || nvidia || ling),
 	};
+	const overrides = model.compat;
+	if (!overrides) return defaults;
 	return {
 		...defaults,
-		...Object.fromEntries(Object.entries(model.compat ?? {}).filter(([, value]) => value != null)),
+		...Object.fromEntries(Object.entries(defaults).map(([key, value]) => [key, Reflect.get(overrides, key) ?? value])),
 	};
 }
