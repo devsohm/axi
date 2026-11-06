@@ -5,6 +5,26 @@ import { expect, test } from "vitest";
 import { BACKGROUND_CONTEXT as context } from "../src/context/index.ts";
 import { discoverPlugins } from "../src/node/plugins/discover.ts";
 
+test("same-root file collisions name the local directory before reporting cross-root duplicates", async () => {
+	const root = await mkdtemp(join(tmpdir(), "axi-plugin-collision-"));
+	try {
+		const roots = [join(root, "first"), join(root, "second")];
+		for (const path of roots) {
+			await mkdir(join(path, "same"), { recursive: true });
+			await writeFile(join(path, "same", "package.json"), JSON.stringify({ name: "same" }));
+		}
+		await writeFile(join(roots[1], "same.worker.ts"), "export default {};");
+		const { plugins, problems } = await discoverPlugins(roots, { kinds: ["worker"] }, context);
+		expect(plugins.map(({ dir }) => dir)).toEqual([join(roots[0], "same")]);
+		expect(problems).toEqual([
+			{ path: join(roots[1], "same.worker.ts"), root: roots[1], required: false,
+				error: `plugin "same" is in ${join(roots[1], "same")} already` },
+			{ path: join(roots[1], "same"), root: roots[1], required: false,
+				error: `plugin "same" is in ${join(roots[0], "same")} already` },
+		]);
+	} finally { await rm(root, { recursive: true, force: true }); }
+});
+
 test("plugin roots discover declared package folders and single files without executing them", async () => {
 	const root = await mkdtemp(join(tmpdir(), "axi-discovery-"));
 	try {

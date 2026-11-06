@@ -16,13 +16,16 @@ export async function installDependencies(
 ): Promise<void> {
 	if (plugin.layout === "file") throw new Error(`plugin "${plugin.name}": a single-file plugin has no package.json`);
 	const command = options.npmCommand ?? ["npm"];
-	if (command.length === 0) throw new Error("installDependencies: npmCommand is empty");
+	if (command.length === 0) throw new Error("npmCommand is empty");
 	await run(command[0], [...command.slice(1), ...installArgs], plugin.dir, context, `plugin "${plugin.name}": ${command[0]} install`);
 }
 
 export async function installPlugin(source: PluginSource, root: string, context: Context, options: InstallPluginOptions = {}): Promise<readonly string[]> {
-	const inputs = "git" in source ? [source.git, source.ref] : [source.npm, source.version];
-	for (const input of inputs) if (!input || input.startsWith("-")) throw new Error(`installPlugin: "${input}" is refused`);
+	const inputs = "git" in source
+		? [["repository", source.git], ["ref", source.ref]]
+		: [["package", source.npm], ["version", source.version]];
+	for (const [field, input] of inputs)
+		if (input === "" || input.startsWith("-")) throw new Error(`installPlugin: ${field} "${input}" is refused`);
 	const name = "git" in source ? basename(source.git.replace(/\/+$/, "")).replace(/\.git$/, "") : source.npm;
 	if ("git" in source ? !name || name.startsWith(".") || name.startsWith("-") : !isPluginName(name))
 		throw new Error("git" in source ? `installPlugin: "${source.git}" names no repository directory` : `installPlugin: "${name}" is not an npm package name`);
@@ -59,8 +62,9 @@ export async function installPlugin(source: PluginSource, root: string, context:
 			const command = options.npmCommand ?? ["npm"];
 			if (!command.length) throw new Error("npmCommand is empty");
 			const packDir = await mkdtemp(join(staging, "pack-"));
-			const packed = JSON.parse(await run(command[0], [...command.slice(1), "pack", "--json", "--pack-destination", packDir, "--", `${source.npm}@${source.version}`], packDir, context, `${command[0]} pack ${source.npm}@${source.version}`)) as { filename: string }[];
-			if (!packed[0]) throw new Error(`installPlugin: ${source.npm} packed nothing`);
+			const label = `${command[0]} pack ${source.npm}@${source.version}`;
+			const packed = JSON.parse(await run(command[0], [...command.slice(1), "pack", "--json", "--pack-destination", packDir, "--", `${source.npm}@${source.version}`], packDir, context, label)) as { filename: string }[];
+			if (!packed[0]) throw new Error(`${label}: packed nothing`);
 			await run("tar", ["-xzf", join(packDir, basename(packed[0].filename)), "--strip-components=1", "-C", payload], packDir, context, `extracting ${source.npm}`);
 		}
 		const at = { root, required: false, kinds: options.kinds ?? [] };

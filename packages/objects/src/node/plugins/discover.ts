@@ -99,8 +99,16 @@ export async function discoverPlugins(
 			problems.push(...discovered.problems);
 		}
 		const single = filePlugins(entries.files, at);
-		plugins.push(...single.plugins);
 		problems.push(...single.problems);
+		for (const plugin of single.plugins) {
+			const directory = plugins.find((other) => other.name === plugin.name);
+			if (directory) problems.push({
+				path: Object.values(plugin.facets)[0]!,
+				error: `plugin "${plugin.name}" is in ${directory.dir} already`,
+				root: at.root, required,
+			});
+			else plugins.push(plugin);
+		}
 		for (const plugin of plugins) {
 			const previous = found.get(plugin.name);
 			if (previous)
