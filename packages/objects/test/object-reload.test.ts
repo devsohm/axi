@@ -23,6 +23,26 @@ const Total = local("reload.total", {
 });
 const Count = defineState("count", { version: 1, schema: obj({ n: int() }), initial: () => ({ n: 5 }) });
 
+it("keeps void declaration results unchanged while staging a replacement factory", async () => {
+	const Value = local("reload.declaration-results", { version: 1, params: {}, members: { value: int() } });
+	const plugin = (n: number) => defineFacet((h) => h.serve(Value, (_, self) => {
+		const results = [self.onLive(async () => {}), self.on(constant(1), async () => {})];
+		if (results.some((result) => result !== undefined)) throw new Error("declaration returned a handle");
+		return { value: constant(n) };
+	}));
+	const host = createHost({ onError() {} });
+	try {
+		await host.load([{ name: "value", facet: plugin(1) }], context);
+		const ref = await host.get(Value, {}, context);
+		const report = await host.reload([{ name: "value", facet: plugin(2) }], context);
+		expect(report.failed).toEqual([]);
+		await vi.waitFor(() => expect(ref.value.value).toBe(2));
+		ref.release();
+	} finally {
+		await host.close(context);
+	}
+});
+
 it("keeps installed code after staging fails and carries documents into a restart", async () => {
 	const host = createHost({ onError: () => {} });
 	const plugin = (factor: number) =>

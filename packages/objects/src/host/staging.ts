@@ -227,7 +227,7 @@ export function recordFactory(object: ObjectsObject, served: Served, context: Co
 					? undefined
 					: (...args: never[]) => {
 							declaration(String(key));
-							return operations[String(key)]?.(...args) ?? unused;
+							return operations[String(key)]?.(...args);
 						},
 		},
 	) as StoreSelf;
