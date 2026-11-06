@@ -3,6 +3,26 @@ import { BACKGROUND_CONTEXT as context } from "../src/context/index.ts";
 import { createHost, hostKind, memoryLinkPair } from "../src/index.ts";
 import { sendPageTelemetry, TelemetryRecorder, telemetryIngestFacet, type TelemetryBatch } from "../src/telemetry-ingest/index.ts";
 
+it("ignores measurements and their attributes after recording stops", () => {
+	let reads = 0;
+	const attributes = { get value() { reads++; return 1; } };
+	for (const mode of ["keep", "discard"] as const) {
+		const recorder = new TelemetryRecorder(() => "test", 10);
+		const instruments = [
+			recorder.metrics.counter("count"),
+			recorder.metrics.upDownCounter("active"),
+			recorder.metrics.histogram("latency"),
+		];
+		recorder.stop(mode);
+		for (const instrument of instruments) {
+			if ("record" in instrument) instrument.record(1, attributes);
+			else instrument.add(1, attributes);
+		}
+		expect(recorder.take(true)).toEqual({ spans: [], metrics: [] });
+	}
+	expect(reads).toBe(0);
+});
+
 it("retains disconnected page spans, stamps the authenticated sender and never sends page metrics", async () => {
 	const batches: TelemetryBatch[] = [];
 	let principalReads = 0;

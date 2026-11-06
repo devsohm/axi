@@ -230,7 +230,8 @@ export class TelemetryRecorder implements TelemetryContext {
 		options?: InstrumentOptions,
 	): (value: number, attrs?: SpanAttributes) => void {
 		const unit = options?.unit;
-		return (value, attrs) =>
+		return (value, attrs) => {
+			if (this.#stopped) return;
 			this.merge({
 				name,
 				kind,
@@ -242,6 +243,7 @@ export class TelemetryRecorder implements TelemetryContext {
 				min: value,
 				max: value,
 			});
+		};
 	}
 	private merge(metric: StoredMetric): void {
 		if (this.#stopped) return;
