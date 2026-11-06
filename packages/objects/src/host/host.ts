@@ -12,7 +12,7 @@ import type { Watchable } from "../watch.ts";
 import type { Address, Contract, HostKind, ParamsOf } from "../contracts/index.ts";
 import { contractData, type Params } from "../contracts/internal.ts";
 import { ObjectsError, type FailureCause, type Principal, type PrincipalKeyFunction } from "../data/index.ts";
-import { OpenSpan, countingOnly, ended, parentOf, untraced } from "../telemetry.ts";
+import { OpenSpan, capped, countingOnly, ended, parentOf, untraced } from "../telemetry.ts";
 import {
 	asObjectsError,
 	binds,
@@ -233,6 +233,7 @@ export class ObjectsHost<P extends Principal = Principal, R extends JsonValue = 
 		this.#assertOpen();
 		if (this.#status !== "new") throw new Error("load runs once per host");
 		for (const { name } of facets) if (!isPluginName(name)) throw new Error(`"${name}" is not a valid plugin name`);
+		this.#status = "loading";
 		if (untraced(context.telemetry)) return this.#load(facets, context);
 		return context.telemetry.startSpan({ name: "objects.load", attributes: { "objects.host": this.spanHost, plugins: facets.length } }, async (span) => {
 			try {
@@ -243,7 +244,6 @@ export class ObjectsHost<P extends Principal = Principal, R extends JsonValue = 
 		});
 	}
 	async #load(facets: readonly PluginFacet<P>[], context: Context): Promise<LoadReport> {
-		this.#status = "loading";
 		const staged = emptyStaged<P>(),
 			failed: PluginFailure[] = [],
 			given = new Set<string>();
@@ -259,9 +259,9 @@ export class ObjectsHost<P extends Principal = Principal, R extends JsonValue = 
 			this.#install(staged, staged.plugins.keys());
 			for (const record of this.#registries.values()) record.composeServed();
 		}, context);
-		for (const record of this.#registries.values()) record.reportUndeclared();
 		this.#published = true;
 		this.#publication.resolve();
+		for (const record of this.#registries.values()) record.reportUndeclared();
 		this.#requests.wakeAll();
 		const starting: Promise<void>[] = [];
 		for (const served of this.#served.values())
@@ -425,9 +425,11 @@ export class ObjectsHost<P extends Principal = Principal, R extends JsonValue = 
 		return this.#status === "closed";
 	}
 	undeclaredRegistries(): { readonly name: string; readonly version: number }[] {
-		return [...this.#registries].flatMap(([name, record]) => record.providedVersion === undefined && record.newestContribution !== undefined ? [{ name, version: record.newestContribution }] : []);
+		return [...this.#registries].flatMap(([name, record]) => record.providedVersion === undefined && record.newestContribution !== undefined ? [{ name, version: record.newestContribution }] : []).sort((a, b) => a.name < b.name ? -1 : 1);
 	}
-	unservedNames(): readonly string[] { return this.#requests.names(); }
+	unservedNames(): readonly string[] {
+		return this.#requests.names().filter((name) => !this.#served.has(name) && this.#registries.get(name)?.providedVersion === undefined);
+	}
 	activationsUnderWay(): number { return [...this.#objects.values()].filter((object) => object.activating).length; }
 	index(name: string, request: UnboundRequest, cause?: FailureCause): void {
 		this.#requests.add(name, request, cause);
@@ -842,16 +844,16 @@ export class ObjectsHost<P extends Principal = Principal, R extends JsonValue = 
 	}
 	reload(facets: readonly PluginFacet<P>[], context: Context, options: ReloadOptions = {}): Promise<ReloadReport> {
 		this.batch.assertOutside("reload");
-		for (const { name } of facets) if (!isPluginName(name)) throw new Error(`"${name}" is not a valid plugin name`);
 		if (this.closing) return Promise.reject(this.#closedError());
 		if (this.#status !== "loaded") throw new Error("reload runs after load");
+		for (const { name } of facets) if (!isPluginName(name)) throw new Error(`"${name}" is not a valid plugin name`);
 		const run = this.#reloadTail.then(async () => {
 			if (untraced(context.telemetry)) return this.#reload(facets, context, options.failed ?? []);
 			return context.telemetry.startSpan({ name: "objects.reload", attributes: { "objects.host": this.spanHost, plugins: facets.length } }, async (span) => {
 				try {
 					const result = await this.#reload(facets, withTelemetry(span, context), options.failed ?? []);
 					span.setAttributes({ added: result.plugins.added.length, changed: result.plugins.changed.length, removed: result.plugins.removed.length, failed: result.failed.length, fates: result.objects.length });
-					for (const { object, kind } of result.objects) span.addEvent("objects.reload.fate", { object, fate: kind });
+					for (const { object, kind } of result.objects) span.addEvent("objects.reload.fate", { object: capped(object), fate: kind });
 					return result;
 				} catch (error) { ended(span, "reload_failed", error, context.abortSignal); throw error; }
 			});
