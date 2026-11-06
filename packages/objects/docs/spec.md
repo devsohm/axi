@@ -38,11 +38,15 @@ Batch bodies are gzip streams of version 2 JSON lines. Snapshot bodies compress 
 
 Reload applies a complete facet set. Identical facet objects remain installed. Staging runs no native open or job. Failed plugins retain previous code. Dependency checks preserve a changed consumer's prior code when its required provider update failed.
 
-Publication replaces accepted providers and contributions in one batch. A pure implementation swap retains documents and admitted calls. Natives or table migrations require restart and cleanup. Removed types leave held references waiting. Reports retain declaration order even when dependency order determines execution.
+Publication replaces accepted providers and contributions in one batch. Every affected live object restarts while retaining its documents and tables. Removed types leave held references waiting. Reports retain declaration order. Failed, waiting and activating objects retry on the new code.
 
 Reloads serialize. Cancellation before publication leaves the prior set intact. Cancellation after publication does not undo the accepted update. Error details identify committed plugin changes.
 
-A pure swap that reacquires a dependency on a worker can enter `loading`. A consumer updated before its worker's incompatible contract update can also enter `loading`. These cases do not guarantee uninterrupted `live` status.
+An outgoing attempt remains open for calls already running and calls they cause. New calls wait for the successor. Compatible references can read outgoing state until its attempt seals. A restart waits for its recorded dependencies and for outgoing calls to finish. Readiness references do not appear in presence lists and remain held until the successor checks its own dependencies.
+
+`reloadDrainTimeout` bounds this wait. Its default is 5,000 ms, capped by `closeTimeout`. A timed-out call rejects with `released`, and the host reports `drain_timeout`. Native resources close with reason `reload`. In-memory job runs end with an aborted reload outcome; persisted jobs recover according to their definition. An old call waiting through dependencies or openers on its own reload drain fails with `unavailable/reload_cycle`.
+
+Trusted links propagate outgoing-call ancestry through `call.old`. Untrusted links cannot claim it. Readiness waits through remote version skew until the other host updates or the deadline expires. Local dependency failures report `parked` with their cause. The replacement factory runs after the old attempt closes. Non-native contributions remain until the replacement publishes; native contributions leave at the seal.
 
 ## Links and authority
 

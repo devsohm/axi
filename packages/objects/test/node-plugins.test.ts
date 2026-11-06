@@ -71,7 +71,7 @@ it("updates a loaded plugin, keeps its last working code after a broken edit, an
 			context,
 		);
 		expect(changed.stopped).toBeUndefined();
-		expect(ref.reading.value).toBe(8);
+		await vi.waitFor(() => expect(ref.reading.value).toBe(8));
 		await writeFile(join(dir, "worker.ts"), "export default {");
 		expect(
 			(await plugins.reload(host, await plugins.build(["meter"], context), context)).failed.map(({ plugin }) => plugin),
@@ -81,7 +81,7 @@ it("updates a loaded plugin, keeps its last working code after a broken edit, an
 		expect(
 			(await plugins.reload(host, structuredClone(await plugins.build(["meter"], context)), context)).failed,
 		).toEqual([]);
-		expect(ref.reading.value).toBe(12);
+		await vi.waitFor(() => expect(ref.reading.value).toBe(12));
 	} finally {
 		await host.close(context);
 		plugins.close();

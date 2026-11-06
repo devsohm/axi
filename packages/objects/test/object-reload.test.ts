@@ -23,7 +23,7 @@ const Total = local("reload.total", {
 });
 const Count = defineState("count", { version: 1, schema: obj({ n: int() }), initial: () => ({ n: 5 }) });
 
-it("keeps installed code after staging fails and carries documents into a pure swap", async () => {
+it("keeps installed code after staging fails and carries documents into a restart", async () => {
 	const host = createHost({ onError: () => {} });
 	const plugin = (factor: number) =>
 		defineFacet((h) =>
@@ -53,7 +53,7 @@ it("keeps installed code after staging fails and carries documents into a pure s
 		]);
 		expect(ref.total.value).toEqual({ n: 8 });
 		const result = await host.reload([{ name: "counter", facet: plugin(3) }], context);
-		expect(result.objects).toEqual([{ object: "reload.total", kind: "swapped" }]);
+		expect(result.objects).toEqual([{ object: "reload.total", kind: "restarted" }]);
 		await ref.add(3, context);
 		expect(ref.total.value).toEqual({ n: 17 });
 	} finally {
@@ -87,7 +87,7 @@ it("loads healthy plugins beside failed ones and applies independent reloads", a
 		);
 		expect(updated.failed.map(({ plugin }) => plugin)).toEqual(["broken"]);
 		expect(updated.plugins.changed).toEqual(["status"]);
-		expect(ref.value.value).toBe(7);
+		await vi.waitFor(() => expect(ref.value.value).toBe(7));
 	} finally {
 		await host.close(context);
 	}
@@ -145,7 +145,7 @@ it("reports the applied plugins and preserves their publication when cancellatio
 			code: "aborted",
 			details: { committed: { added: [], changed: ["status"], removed: [], failed: [] } },
 		});
-		expect(ref.label.value).toBe("later");
+		await vi.waitFor(() => expect(ref.label.value).toBe("later"));
 	} finally {
 		hook.mockRestore();
 		await host.close(context);
@@ -184,7 +184,7 @@ it("restores a parameterized object after its only reference waits for an older 
 		await ref.set(12, context);
 		await host.reload([{ name: "rows", facet: plugin(false) }], context);
 		expect(ref.count.value).toBe(12);
-		expect(ref.state.value.kind).toBe("failed");
+		await vi.waitFor(() => expect(ref.state.value.kind).toBe("failed"));
 		await host.reload([{ name: "rows", facet: plugin(true) }], context);
 		await ref.set(21, context);
 		expect(ref.count.value).toBe(21);
@@ -230,7 +230,7 @@ it("closes native resources with the reload reason and keeps the last visible va
 	expect(closed).toEqual(["reload", "close"]);
 });
 
-it("finishes an older job on its original code and maps the outcome for the replacement", async () => {
+it("aborts an in-memory job on reload and maps its outcome for the replacement", async () => {
 	const Work = defineJob("reload.work", { version: 1, args: obj({ value: int() }), result: int() });
 	const Updated = defineJob("reload.work", {
 		version: 2,
@@ -281,10 +281,9 @@ it("finishes an older job on its original code and maps the outcome for the repl
 		const ref = await host.get(Runner, {}, context);
 		await ref.start(10, context);
 		await host.reload([{ name: "worker", facet: next }], context);
-		expect(ref.jobs.value).toMatchObject([{ args: { value: 10, priority: 2 } }]);
 		gate.resolve();
 		await vi.waitFor(() =>
-			expect(finished).toMatchObject([{ kind: "done", args: { value: 10, priority: 2 }, result: { total: 11 } }]),
+			expect(finished).toMatchObject([{ kind: "failed", args: { value: 10, priority: 2 }, error: { kind: "aborted", reason: "reload" } }]),
 		);
 	} finally {
 		gate.resolve();

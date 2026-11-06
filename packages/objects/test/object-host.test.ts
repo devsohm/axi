@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
 import { BACKGROUND_CONTEXT as context } from "../src/context/index.ts";
 import {
 	createHost,
@@ -55,7 +55,7 @@ it("moves references to a reloaded provider together before publishing derived v
 		const ref = await host.get(sum, {}, context), watch = await ref.n.watch(context);
 		watch.start(async () => {});
 		await host.reload([{ name: "value", facet: provider(2) }, { name: "sum", facet: consumer }], context);
-		expect(ref.n.value).toBe(4);
+		await vi.waitFor(() => expect(ref.n.value).toBe(4));
 		expect(errors).toEqual([]);
 		ref.release();
 	} finally { await host.close(context) }

@@ -9,7 +9,7 @@ export const OBJECTS_ERROR_REASONS = {
 	not_ready: [],
 	released: ["ended", "closed", "settled", "version", "discarded"],
 	too_large: ["part"],
-	unavailable: ["locked", "park_timeout", "busy", "storage_failed", "undeclared"],
+	unavailable: ["locked", "park_timeout", "busy", "storage_failed", "undeclared", "version", "reload_cycle"],
 	aborted: [],
 } as const;
 export type ObjectsErrorCode = keyof typeof OBJECTS_ERROR_REASONS;

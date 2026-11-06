@@ -62,7 +62,7 @@ export type AppLimits = {
 	readonly importBytes?: number;
 	readonly importEntries?: number;
 };
-export type AppTimeouts = { readonly closeTimeout?: number; readonly readyTimeout?: number };
+export type AppTimeouts = { readonly closeTimeout?: number; readonly readyTimeout?: number; readonly reloadDrainTimeout?: number };
 export type AppWeb = Pick<WebSurfaceOptions, "entry" | "page" | "paths" | "public">;
 export type AppOptions<P extends Principal> = {
 	readonly name: string;

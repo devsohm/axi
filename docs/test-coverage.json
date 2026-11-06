@@ -131,8 +131,8 @@
 					]
 				},
 				{
-					"behavior": "facet staging, replacement, resource restart and job/version handover",
-					"tests": ["packages/objects/test/object-reload.test.ts"]
+					"behavior": "facet staging, outgoing-call draining, resource restart and job recovery",
+					"tests": ["packages/objects/test/object-reload.test.ts", "packages/objects/test/reload-draining.test.ts", "packages/objects/test/reload-wire.test.ts"]
 				},
 				{
 					"behavior": "HTTP routes, admission, bodies, files, authentication and sockets",

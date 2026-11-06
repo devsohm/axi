@@ -1,5 +1,6 @@
 import { NOOP_TELEMETRY_CONTEXT, type SpanAttributes, type TelemetrySpan } from "@axi/telemetry";
 import { withAbortSignal, withoutAbortSignal, withTelemetry, type Context, type ContextKey } from "../context/index.ts";
+import { CALL_CHAIN, type CallNode, type OldWorkSource } from "./old-work.ts";
 import type { Contract, ParamsOf } from "../contracts/index.ts";
 import { isObjectsError, ObjectsError, type Principal } from "../data/index.ts";
 import type { Binding, Reference } from "./reference.ts";
@@ -52,15 +53,17 @@ export function withLinkedAbortSignal(
 	};
 }
 
-export class CallContext implements Ctx {
+export class CallContext implements Ctx, CallNode {
 	readonly principal: Principal | undefined;
 	readonly incarnation: string;
 	readonly #context: Context;
 	readonly #host: Acquirer;
+	readonly #on: OldWorkSource | undefined;
 	#bindings: Binding[] | undefined = [];
 	#ending: AbortController | undefined;
-	constructor(context: Context, caller: Caller, host: Acquirer) {
+	constructor(context: Context, caller: Caller, host: Acquirer, on?: OldWorkSource) {
 		this.#context = context;
+		this.#on = on;
 		this.#host = host;
 		this.principal = caller.principal;
 		this.incarnation = caller.incarnation;
@@ -72,7 +75,15 @@ export class CallContext implements Ctx {
 		return this.#context.telemetry;
 	}
 	value<T>(key: ContextKey<T>): T | undefined {
+		// This key carries a call node only when the scope runs a method.
+		if (key.token === CALL_CHAIN.token && this.#on !== undefined) return this as unknown as T;
 		return this.#context.value(key);
+	}
+	get on(): OldWorkSource {
+		return this.#on!;
+	}
+	up(): CallNode | undefined {
+		return this.#context.value(CALL_CHAIN);
 	}
 	toString(): string {
 		return `${this.#context}.Ctx`;
@@ -96,7 +107,7 @@ export class CallContext implements Ctx {
 		if (this.#bindings === undefined) throw ended();
 		this.abortSignal?.throwIfAborted();
 		this.#ending ??= new AbortController();
-		const linked = withLinkedAbortSignal(this.#ending.signal, this.#context);
+		const linked = withLinkedAbortSignal(this.#ending.signal, this);
 		let binding: Binding;
 		try {
 			binding = await this.#host.acquire(

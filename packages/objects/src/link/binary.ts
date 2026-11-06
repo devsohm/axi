@@ -400,7 +400,7 @@ export const binaryCodec: Codec = {
 			code = kinds.indexOf(message.kind),
 			origin = "origin" in message ? message.origin : undefined,
 			trace = "trace" in message ? message.trace : undefined;
-		writer.byte(code | (origin === undefined ? 0 : 128) | (trace === undefined ? 0 : 64));
+		writer.byte(code | (origin === undefined ? 0 : 128) | (trace === undefined ? 0 : 64) | (message.kind === "call" && message.old === true ? 32 : 0));
 		if (origin !== undefined) writer.integer(origin);
 		if (trace !== undefined) writer.json(trace);
 		const layout = layouts.get(message.kind);
@@ -411,8 +411,9 @@ export const binaryCodec: Codec = {
 	decode(bytes) {
 		const reader = new PacketReader(bytes),
 			tag = reader.byte(),
-			kind = kinds[tag & 63];
+			kind = kinds[tag & 31];
 		if (kind === undefined) throw new Error("binary: an unknown kind");
+		if (tag & 32 && kind !== "call") throw new Error("binary: an unknown kind");
 		const origin = tag & 128 ? reader.integer() : undefined;
 		const trace = tag & 64 ? reader.field("json") : undefined;
 		const layout = layouts.get(kind),
@@ -426,6 +427,7 @@ export const binaryCodec: Codec = {
 		reader.end();
 		if (origin !== undefined) value.origin = origin;
 		if (trace !== undefined) value.trace = trace;
+		if (tag & 32) value.old = true;
 		// Parts stay opaque. Schema validation belongs to the receiving channel.
 		return value as Message;
 	},

@@ -9,6 +9,8 @@ import { Backoff } from "../src/host/backoff.ts";
 import { ObjectsObject, type ObjectHost, type Served } from "../src/host/object.ts";
 import { Binding, type Reference } from "../src/host/reference.ts";
 import type { HostError } from "../src/host/report.ts";
+import { OldWork } from "../src/host/old-work.ts";
+import { ReloadCycles } from "../src/host/reload-cycle.ts";
 import { RegistryRecord } from "../src/registries/internal.ts";
 import { Batch } from "../src/state/internal.ts";
 const counter = defineState("counter", { version: 1, schema: obj({ n: int() }), initial: () => ({ n: 0 }) });
@@ -32,9 +34,12 @@ function fixture(factory: (self: Self) => unknown, linger = 0) {
 		spanHost: "client",
 		batch,
 		backoff,
+		oldWork: new OldWork(),
+		reloadCycles: new ReloadCycles(),
+		waitAsOldWork: (waiting) => waiting,
 		principal: caller.principal,
 		incarnation: caller.incarnation,
-		timeouts: { close: 100, ready: 1000 },
+		timeouts: { close: 100, ready: 1000, reload: 100 },
 		store: undefined,
 		report(error) {
 			errors.push(error);

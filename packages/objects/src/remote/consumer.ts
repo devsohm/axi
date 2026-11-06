@@ -85,6 +85,7 @@ export class ConsumerSide {
 					call,
 					hold,
 					method,
+					...(this.#link.host.oldWork.of(context) ? { old: true } : {}),
 					...(trace === undefined ? {} : { trace }),
 					...(part === undefined ? {} : { args: part }),
 					...(payload?.segments === undefined ? {} : { segments: payload.segments }),

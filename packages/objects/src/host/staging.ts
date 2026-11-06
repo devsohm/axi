@@ -121,7 +121,6 @@ export type Request =
 	| { readonly kind: "type"; readonly contract: Contract; readonly params: ParamsOf<Contract> }
 	| { readonly kind: "registry"; readonly registry: Registry<unknown, unknown> };
 export type Recorded = {
-	readonly natives: number;
 	readonly documents: readonly AnyDefinition[];
 	readonly tables: readonly TableDefinition[];
 	readonly jobs: readonly JobDefinition<unknown, unknown, unknown>[];
@@ -134,8 +133,7 @@ const unused = new Proxy(() => {}, {
 });
 
 export function recordFactory(object: ObjectsObject, served: Served, context: Context): Recorded {
-	let declaring = true,
-		natives = 0;
+	let declaring = true;
 	const names = new Set<string>(),
 		tables = new Map<string, TableDefinition>(),
 		documents: AnyDefinition[] = [],
@@ -215,7 +213,6 @@ export function recordFactory(object: ObjectsObject, served: Served, context: Co
 		on: () => undefined,
 		onLive: () => undefined,
 		open: () => {
-			natives++;
 			return unused;
 		},
 		tx: () => {
@@ -242,5 +239,5 @@ export function recordFactory(object: ObjectsObject, served: Served, context: Co
 	} finally {
 		declaring = false;
 	}
-	return { natives, tables: [...tables.values()], documents, jobs, contributions, requests };
+	return { tables: [...tables.values()], documents, jobs, contributions, requests };
 }

@@ -55,6 +55,7 @@ type State =
 const pending: State = { kind: "pending" };
 export class Hold implements Holder, UnboundRequest {
 	readonly kind = "served";
+	readonly listed = true;
 	readonly id: number;
 	readonly dependent = undefined;
 	readonly caller: Caller;
@@ -159,8 +160,9 @@ export class Hold implements Holder, UnboundRequest {
 		const previous = this.#status;
 		const object = this.#object;
 		if (object === undefined) return;
+		const shown = object.stateFor(this.#request!.version, this.#request!.fingerprint);
 		if (previous.kind === "bound" || previous.kind === "binding") {
-			if (object.state.kind === "live") {
+			if (shown.kind === "live") {
 				if (previous.kind === "bound" && previous.instance !== object.instance) {
 					const names = this.#names();
 					this.#unfollow(previous);
@@ -171,17 +173,16 @@ export class Hold implements Holder, UnboundRequest {
 				return;
 			}
 			if (previous.kind === "bound" && object.attachable === previous.instance) return;
-			if (previous.kind === "binding" && object.swapsInPlace && object.state.kind === "loading") return;
 			const names = this.#names();
 			if (previous.kind === "bound") this.#unfollow(previous);
-			const error = object.state.kind === "failed" ? object.state.cause.error : undefined;
+			const error = shown.kind === "failed" ? shown.cause.error : undefined;
 			if (error) this.#side.unbound(this, error);
 			else this.#side.unbind(this);
 			this.#status = { kind: "pending", ...(!error && names ? { previous: names } : {}) };
 			if (error === undefined) this.#side.send({ kind: "loading", hold: this.id });
 		}
 		if (this.#status.kind !== "pending") return;
-		const state = object.state;
+		const state = shown;
 		switch (state.kind) {
 			case "live":
 				this.#status = { kind: "binding", ...(this.#status.previous ? { previous: this.#status.previous } : {}) };
@@ -225,8 +226,9 @@ export class Hold implements Holder, UnboundRequest {
 	boundEntry(context: Context): BoundEntry {
 		const previous = this.#names();
 		const object = this.#object!,
+			contract = object.contractFor(this.#request!.version, this.#request!.fingerprint),
 			variant = object.variant!,
-			data = variantsAt(object.served.contract, this.#request!.version).get(variant)!;
+			data = variantsAt(contract, this.#request!.version).get(variant)!;
 		const state: Bound = {
 			kind: "bound",
 			instance: object.instance,
@@ -263,7 +265,7 @@ export class Hold implements Holder, UnboundRequest {
 		context.telemetry.metrics?.counter("objects.link.encodes").add(1);
 		return {
 			hold: this.id,
-			variant: variantOrder(object.served.contract).indexOf(variant),
+			variant: variantOrder(contract).indexOf(variant),
 			members,
 			failed,
 		};

@@ -62,6 +62,7 @@ const schema = union([
 		args: opt(part),
 		segments,
 		trace,
+		old: opt(lit(true)),
 	}),
 	message("abort", call),
 	message("retry", {

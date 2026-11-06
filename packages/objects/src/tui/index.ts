@@ -8,4 +8,4 @@ export {
 } from "./runtime.ts";
 export { BridgeTerminal } from "./terminal.ts";
 export { TerminalTheme } from "./theme.ts";
-export { TuiScope } from "./scope.ts";
+export { TuiScope, type OptimisticAdd } from "./scope.ts";

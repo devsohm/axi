@@ -90,6 +90,7 @@ export class RemoteObject implements Target {
 	get state(): RefState {
 		return this.#status;
 	}
+	stateFor(_version: number, _fingerprint: string): RefState { return this.state; }
 	get span(): TelemetrySpan | undefined { return this.#holding?.span; }
 	holdTrace(): TelemetryCarrier | undefined {
 		if (this.#holds++ === 0) return this.#firstHold;

@@ -51,9 +51,10 @@ function ownMessage(message: Message): string {
 				fields.push(partText(part));
 				if (message.segments !== undefined) fields.push(json(message.segments.map((bytes) => bytes.byteLength)));
 			}
-			if (message.kind === "call" && message.trace !== undefined) {
+			if (message.kind === "call" && (message.trace !== undefined || message.old !== undefined)) {
 				while (fields.length < 6) fields.push("null");
 				fields.push(json(message.trace));
+				if (message.old !== undefined) fields.push(json(message.old));
 			}
 			return tuple(fields);
 		}
@@ -180,14 +181,15 @@ function envelope(fields: unknown[], rest: Uint8Array): Record<string, unknown> 
 			};
 		}
 		case "c":
-			arity(3, 4, 5, 6);
+			arity(3, 4, 5, 6, 7);
 			return {
 				kind: "call",
 				call: args[0],
 				hold: args[1],
 				method: args[2],
 				...payload(args.slice(3, 5), rest, "args"),
-				...(args[5] === undefined ? {} : { trace: args[5] }),
+				...(args[5] == null ? {} : { trace: args[5] }),
+				...(args[6] === undefined ? {} : { old: args[6] }),
 			};
 		case "r":
 			arity(1, 2, 3);

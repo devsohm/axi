@@ -57,11 +57,10 @@ export type JobOwner = {
 export class Job implements JobHandle<JsonValue, unknown, JsonValue | undefined> {
 	readonly #records: JobRecords;
 	readonly #definition: JobDefinition<unknown, unknown, unknown>;
-	#handed = false;
 	#cutReason: "restart" | "reload" = "restart";
 	readonly #implementation: AnyJobImplementation;
 	readonly #owner: JobOwner;
-	#phase: "declared" | "live" | "handed" | "sealed" = "declared";
+	#phase: "declared" | "live" | "sealed" = "declared";
 	#sealError: ObjectsError | undefined;
 	readonly #invocations = new Set<JobRun>();
 	readonly #finishing = new Set<JobRun>();
@@ -109,7 +108,7 @@ export class Job implements JobHandle<JsonValue, unknown, JsonValue | undefined>
 	stage(tx: Transaction, args: unknown, context: Context, options: StartOptions): Run<AnyOutcome> {
 		if (tx.documents !== this.#owner.documents)
 			throw new Error(`${this.#owner.documents.label}: a transaction starts only its own object's jobs`);
-		if (this.#phase === "sealed" || this.#phase === "handed")
+		if (this.#phase === "sealed")
 			throw new ObjectsError({
 				code: "released",
 				reason: "ended",
@@ -122,21 +121,14 @@ export class Job implements JobHandle<JsonValue, unknown, JsonValue | undefined>
 			});
 		return this.#records.stage(tx, args, context, options);
 	}
-	handOver(): void {
-		if (this.#phase === "sealed" || this.#phase === "handed") return;
-		this.#phase = "handed";
-		this.#handed = true;
-		this.#records.detach(this, []);
-	}
 	seal(error: ObjectsError, reason: "restart" | "reload" = "restart"): void {
 		if (this.#phase === "sealed") return;
-		const handed = this.#phase === "handed";
 		this.#phase = "sealed";
 		this.#sealError = error;
 		this.#cutReason = reason;
 		this.#records.detach(this, this.#finishing);
 		this.#finishing.clear();
-		if (!handed) for (const run of this.#invocations) this.#records.cut(run, error, reason);
+		for (const run of this.#invocations) this.#records.cut(run, error, reason);
 		this.#invocations.clear();
 	}
 	invoke(run: JobRun): void {
@@ -150,7 +142,7 @@ export class Job implements JobHandle<JsonValue, unknown, JsonValue | undefined>
 			.tx((tx) => this.#records.reserve(tx, run), owner.token, owner.context)
 			.then(
 				() => {
-					if (this.#phase !== "sealed" || this.#handed) this.#execute(run, invocation);
+					if (this.#phase !== "sealed") this.#execute(run, invocation);
 					else {
 						this.#records.cut(run, this.#sealError!, this.#cutReason);
 						invocation.ended();

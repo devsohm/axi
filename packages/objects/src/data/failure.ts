@@ -27,7 +27,8 @@ export function waitingFor(blocker: string, error: ObjectsError): FailureCause {
 		root = shorten(root, Math.max(320, 486 - blocker.length));
 		blocker = shorten(blocker, 486 - root.length);
 	}
-	return { kind: "waiting", error: new ObjectsError({ code: "unavailable", message: `waiting for ${blocker}: ${root}` }, { cause: error }) };
+	const version = error.code === "contract_mismatch" || error.code === "unavailable" && error.reason === "version";
+	return { kind: "waiting", error: new ObjectsError({ code: "unavailable", ...(version ? { reason: "version" } : {}), message: `waiting for ${blocker}: ${root}` }, { cause: error }) };
 }
 export function sameCause(a: FailureCause, b: FailureCause): boolean {
 	return a.kind === b.kind && a.error.code === b.error.code && a.error.reason === b.error.reason && a.error.message === b.error.message;

@@ -62,6 +62,7 @@ import type { Failed, RefState } from "./ref-state.ts";
 import type { Binding, CheckedParams, LocalTarget, Reference, RetryOperation, Target } from "./reference.ts";
 import type { HostError } from "./report.ts";
 import { retrySource, type RetrySource } from "./retry-on.ts";
+import { OPENING, type Opening, type OldWork } from "./old-work.ts";
 import {
 	Routines,
 	type OnHandler,
@@ -117,6 +118,7 @@ export type AttemptHost = Acquirer & {
 	readonly principal: Principal | undefined;
 	readonly incarnation: string;
 	readonly timeouts: { readonly ready: number; readonly close: number };
+	readonly oldWork: OldWork;
 	readonly store: ObjectsStore | undefined;
 	count(kind: "calls" | "jobs" | "references" | "lingering", delta: number): void;
 	report(error: HostError): void;
@@ -137,7 +139,7 @@ export type AttemptServing = ServingBase &
 				readonly factory: (params: ParamsOf<Contract>, principal: Principal, self: Self) => unknown;
 		  }
 	);
-export interface AttemptObject extends LocalTarget {
+export interface AttemptObject extends LocalTarget, Opening {
 	readonly host: AttemptHost;
 	readonly served: AttemptServing;
 	readonly documents: Documents;
@@ -192,6 +194,7 @@ export class Attempt implements StoreSelf, KeyDeclarer, RegistryWaiter {
 	#reloadStarted = false;
 	readonly #routineCalls = new Set<Promise<unknown>>();
 	#drainReported = false;
+	#callsDrained = false;
 	readonly #declared = new Map<string, AnyDefinition>();
 	readonly #pins: (() => void)[] = [];
 	readonly #derives: Derive[] = [];
@@ -220,7 +223,7 @@ export class Attempt implements StoreSelf, KeyDeclarer, RegistryWaiter {
 		this.#served = object.served;
 		this.#context = context;
 		this.#trace = trace;
-		this.#opening = withAbortSignal(this.#abort.signal, context);
+		this.#opening = withContextValue(OPENING, object, withAbortSignal(this.#abort.signal, context));
 	}
 	state<D extends StateDefinition<JsonObject, boolean, boolean>>(definition: D): HandleOf<D> {
 		this.#declaringOnly("state");
@@ -445,7 +448,7 @@ export class Attempt implements StoreSelf, KeyDeclarer, RegistryWaiter {
 			"principal.kind": (acting.principal?.kind ?? "none").slice(0, 256),
 			...host.principalAttributes?.(acting.principal, context),
 		}) : undefined;
-		const ctx = new CallContext(span ? withTelemetry(span.span, linked.context) : linked.context, acting, host);
+		const ctx = new CallContext(span ? withTelemetry(span.span, linked.context) : linked.context, acting, host, this);
 		const running = Promise.withResolvers<unknown>();
 		const inFlight = objectsMetrics(host.telemetry?.metrics).upDownCounter("objects.calls.in_flight");
 		inFlight.add(1);
@@ -581,7 +584,7 @@ export class Attempt implements StoreSelf, KeyDeclarer, RegistryWaiter {
 	get checked(): Promise<FailureCause | undefined> {
 		return this.#checked.promise;
 	}
-	live(routinesAfter?: Promise<void>): void {
+	live(): void {
 		this.#live = true;
 		if (this.#early) {
 			this.#object.failLive(this, { kind: "transient", error: this.#early });
@@ -609,10 +612,10 @@ export class Attempt implements StoreSelf, KeyDeclarer, RegistryWaiter {
 					},
 				});
 		};
-		if (routinesAfter) void routinesAfter.then(start);
-		else start();
+		start();
 	}
 	seal(error: ObjectsError, reason: "restart" | "reload" = "restart"): void {
+		if (this.draining) this.#object.host.oldWork.close();
 		this.stopRoutines();
 		this.#object.documents.fence(this.#routineToken);
 		this.abandon({ kind: "ended", error });
@@ -622,29 +625,30 @@ export class Attempt implements StoreSelf, KeyDeclarer, RegistryWaiter {
 	stopRoutines(): void {
 		this.#routineAbort.abort(this.#object.ended());
 	}
-	handOver(): void {
-		this.stopRoutines();
-		for (const job of this.#jobs.values()) job.handOver();
+	beginDrain(): void {
+		this.#callsDrained = true;
+		this.#object.host.oldWork.open();
 	}
-	async drainCalls(): Promise<void> {
-		await this.#drain(new Set([...this.#running.keys(), ...this.#routineCalls]));
-	}
-	async drainRoutines(): Promise<void> {
-		await this.#drain(this.#routineCalls);
-		this.#object.documents.fence(this.#routineToken);
-	}
-	async #drain(work: Iterable<Promise<unknown>>): Promise<void> {
-		const all = [...work];
-		if ((await drained(all, all.length, this.#object.host.timeouts.close)) === "timeout" && !this.#drainReported) {
-			this.#drainReported = true;
-			this.#object.host.report({ kind: "drain_timeout", object: this.#object.label });
+	get draining(): boolean { return this.#callsDrained && this.#abandoned === undefined; }
+	get served(): AttemptServing { return this.#served; }
+	async drainCalls(due: number): Promise<void> {
+		while (this.#running.size || this.#routineCalls.size) {
+			const calls = [...this.#running.keys(), ...this.#routineCalls];
+			const left = due - Date.now();
+			if (left <= 0 || await drained(calls, calls.length, left) === "timeout") {
+				this.#drainReported = true;
+				this.#object.host.report({ kind: "drain_timeout", object: this.#object.label });
+				return;
+			}
 		}
 	}
 	async close(reason: NativeCloseReason): Promise<CloseFailed[]> {
+		const calls = this.#callsDrained ? [] : [...this.#running.keys()];
+		const pending = [...calls, ...this.#routineCalls, ...this.#runs.keys()];
 		if (
 			(await drained(
-				[...this.#running.keys(), ...this.#runs.keys()],
-				this.#running.size + this.#runs.size,
+				pending,
+				pending.length,
 				this.#object.host.timeouts.close,
 			)) === "timeout" &&
 			!this.#drainReported
@@ -653,6 +657,10 @@ export class Attempt implements StoreSelf, KeyDeclarer, RegistryWaiter {
 		for (const job of this.#jobs.values()) await job.writeAtClose(this.#context);
 		for (const [work, cleanup] of this.#running) {
 			this.#running.delete(work);
+			cleanup?.();
+		}
+		for (const [work, cleanup] of this.#runs) {
+			this.#runs.delete(work);
 			cleanup?.();
 		}
 		const failures: CloseFailed[] = [];

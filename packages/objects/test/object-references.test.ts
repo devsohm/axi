@@ -23,6 +23,8 @@ function provider() {
 	let state: RefState = LOADING;
 	const source = new Constant<JsonValue>(4);
 	const target: Target = {
+		kind: "local",
+		stateFor: () => state,
 		label: "test.counter",
 		get state() {
 			return state;

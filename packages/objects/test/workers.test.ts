@@ -104,6 +104,15 @@ it("keeps a crash failed until an explicit retry creates a new process", async (
 		}),
 	);
 	expect(f.starts()).toBe(1);
+	expect(ref.label.value).toBe("started");
+	const paused = await ref.label.watch(context);
+	expect(paused.value).toBe("started");
+	const frames: string[] = [];
+	paused.start(async (frame) => {
+		frames.push(frame.kind);
+	});
+	await vi.waitFor(() => expect(frames).toEqual(["failed"]));
+	await paused.stop();
 	await f.workers.retry(Runner({ id: "restart" }), context);
 	await vi.waitFor(() => expect(ref.state.value).toEqual({ kind: "live" }));
 	expect(f.workers.state.value["runner|restart"]).not.toEqual(first);

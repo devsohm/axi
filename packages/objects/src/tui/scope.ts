@@ -7,6 +7,8 @@ import { hostLanguage, type Messages, type Translator } from "../surfaces/index.
 import { pageState, type PageState } from "../surfaces/page-state.ts";
 import type { NativeWatchable, Watchable } from "../watch.ts";
 
+export type OptimisticAdd<A> = <R>(action: A, call: Promise<R>) => Promise<R>;
+
 export class TuiScope<P extends Principal = Principal> {
 	readonly #host: Host<P>;
 	readonly #changed: () => void;
@@ -55,21 +57,42 @@ export class TuiScope<P extends Principal = Principal> {
 		);
 		return () => read();
 	}
-	optimistic<T>(read: () => T | undefined): readonly [read: () => T | undefined, show: <R>(value: T, call: Promise<R>) => Promise<R>] {
-		let overlay: { value: T; count: number } | undefined;
-		const finish = () => {
-			if (overlay && --overlay.count === 0) overlay = undefined;
-			this.#notify();
-		};
-		return [
-			() => overlay ? overlay.value : read(),
-			<R>(value: T, call: Promise<R>): Promise<R> => {
-				overlay = { value, count: (overlay?.count ?? 0) + 1 };
-				call.then(finish, finish);
+	optimistic<T>(read: () => T): readonly [read: () => T, add: OptimisticAdd<T>, pending: () => boolean];
+	optimistic<T, A>(
+		read: () => T,
+		reduce: (current: T, action: A) => T,
+	): readonly [read: () => T, add: OptimisticAdd<A>, pending: () => boolean];
+	optimistic<T, A>(read: () => T, reduce?: (current: T, action: A) => T) {
+		const track = <Action>(apply: (current: T, action: Action) => T) => {
+			let actions: Action[] = [],
+				count = 0,
+				revision = 0;
+			let cache: { readonly base: T; readonly revision: number; readonly value: T } | undefined;
+			const finish = (): void => {
+				if (--count === 0) {
+					actions = [];
+					cache = undefined;
+				}
+				this.#notify();
+			};
+			const shown = (): T => {
+				const base = read();
+				if (!count) return base;
+				if (!cache || cache.base !== base || cache.revision !== revision)
+					cache = { base, revision, value: actions.reduce(apply, base) };
+				return cache.value;
+			};
+			const add: OptimisticAdd<Action> = (action, call) => {
+				actions.push(action);
+				revision++;
+				count++;
+				void call.then(finish, finish);
 				this.#notify();
 				return call;
-			},
-		];
+			};
+			return [shown, add, () => count > 0] as const;
+		};
+		return reduce ? track(reduce) : track((_current, value: T) => value);
 	}
 	pageState<T>(key: string, initial: T): PageState<T> {
 		const state = pageState(this.#host, key, initial);

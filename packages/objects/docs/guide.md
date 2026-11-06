@@ -37,7 +37,7 @@ An empty-parameter local factory receives `StoreSelf`. With a Store, it can also
 
 `defineState()` specifies a document's name, schema, version and initial value. A keyed definition addresses documents with `handle.at(key)`. Change documents with `handle.change()` or draft several handles in `self.tx()`. A failed transaction publishes nothing.
 
-A persisted definition also supplies `checkpointWhen`. Schema migrations run through its `migrate` callback. State survives a code swap. Persistence also retains it across host restarts when the application reopens the same Store.
+A persisted definition also supplies `checkpointWhen`. Schema migrations run through its `migrate` callback. State survives a reload. Persistence also retains it across host restarts when the application reopens the same Store.
 
 `defineTable()` specifies columns, a primary key, indexes and a version. `evolveTable()` records later schema changes and row transformations. `query()` builds conditions and ordering. Use table paging for bounded reads and `self.query()` for a watched result.
 
@@ -51,9 +51,13 @@ Pass the complete desired facet set to `host.reload()`. Reusing the same facet o
 
 Staging records setup and factory declarations without opening natives or publishing state. A failed plugin keeps its prior implementation. A changed consumer also stays on prior code when it requires an incompatible provider whose update failed.
 
-Objects without native resources or table migration can swap implementations while retaining documents. Calls already running finish on their admitted implementation. Objects requiring a restart drain calls, close natives and activate replacement code. Parked or failed objects retry. References keep their last visible values until the replacement binds.
+Every affected live object restarts. Its outgoing attempt serves calls already running and calls they cause while new calls wait for the replacement. Documents stay. Readiness checks the replacement's dependencies before closing the outgoing attempt. Parked or failed objects retry. References retain their last visible values until the replacement binds.
+
+Set `reloadDrainTimeout` in host options, or `timeouts.reloadDrainTimeout` in the app host, to bound outgoing work. It defaults to five seconds and cannot exceed `closeTimeout`. Work still running at that deadline is cut off. Use persisted jobs for work that must recover after reload. In-memory jobs receive an aborted reload outcome.
 
 A reload report describes plugin changes and each affected object's result. Cancellation before publication changes nothing. Cancellation after publication can reject the wait while retaining the committed update.
+
+For terminal clients, `TuiScope.optimistic(read, reduce?)` returns a reader, `add(action, call)` and a `pending()` reader. The reducer applies pending actions in order over the current server value. Without a reducer, the latest action is the displayed value. Once all calls settle, the reader returns the server value. Callers handle rejected calls.
 
 ## Principals, links and routes
 

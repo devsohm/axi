@@ -7,6 +7,7 @@ import { type Message, wireError } from "../src/link/internal.ts";
 import { ConsumerSide } from "../src/remote/consumer.ts";
 import type { HostLink } from "../src/remote/host-link.ts";
 import type { RemoteObject } from "../src/remote/remote-object.ts";
+import { OldWork } from "../src/host/old-work.ts";
 
 it("rejects waiting calls when their provider fails without sending them after an active call ends", async () => {
 	const contract = local("tests.waiting-calls", {
@@ -17,6 +18,7 @@ it("rejects waiting calls when their provider fails without sending them after a
 	const data = currentVariants(contract).values().next().value!.methods.get("run")!;
 	const messages: Message[] = [];
 	const link = {
+		host: { oldWork: new OldWork() },
 		role: "parent",
 		context,
 		limits: { part: Infinity, decoded: Infinity },

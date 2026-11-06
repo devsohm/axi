@@ -1,4 +1,5 @@
 import { type Context, withAbortSignal } from "../context/index.ts";
+import { asRemoteOldWork } from "../host/old-work.ts";
 import type { TelemetryContext } from "@axi/telemetry";
 import { objectsMetrics, parentOf, ended, type OpenSpan } from "../telemetry.ts";
 import { ObjectsError, isObjectsError, type Principal } from "../data/index.ts";
@@ -268,7 +269,8 @@ export class ProviderSide {
 			}
 			const running: Extract<Running, { kind: "relayed" }> = { kind: "relayed", hold };
 			this.#active.set(message.call, running);
-			running.span = hold.call(message);
+			const { old, ...unmarked } = message;
+			running.span = hold.call(old && !this.link.trusted ? unmarked : message);
 			return;
 		}
 		if (!hold.callable) {
@@ -289,7 +291,11 @@ export class ProviderSide {
 		const args = json === undefined ? null : parsePayload(json, message.segments);
 		const running = { kind: "served", hold, bytes: method.resultBytes, abort: new AbortController() } as const;
 		this.#active.set(message.call, running);
-		void this.#run(message.call, running, method.name, args, parentOf(message.trace, this.link.host.telemetry));
+		const old = message.old === true && this.link.trusted;
+		if (old) this.link.host.oldWork.open();
+		const scope = old ? asRemoteOldWork(this.link.context) : this.link.context;
+		const work = this.#run(message.call, running, method.name, args, parentOf(message.trace, this.link.host.telemetry), scope);
+		if (old) void work.then(() => this.link.host.oldWork.close(), () => this.link.host.oldWork.close());
 	}
 	async #run(
 		id: number,
@@ -297,13 +303,14 @@ export class ProviderSide {
 		method: string,
 		args: unknown,
 		parent: TelemetryContext,
+		scope: Context,
 	): Promise<void> {
 		let reply: Reply;
 		try {
 			const result = await running.hold.call(
 				method,
 				args,
-				withAbortSignal(running.abort.signal, this.link.context),
+				withAbortSignal(running.abort.signal, scope),
 				parent,
 			);
 			if (result == null) reply = { kind: "result", call: id };

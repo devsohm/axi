@@ -63,6 +63,8 @@ import { Route, type RouteHandle, type RouteOptions } from "./route.ts";
 import { UnboundIndex, type UnboundRequest } from "./unbound.ts";
 import { UnboundClock } from "./unbound-clock.ts";
 import { uuidv7 } from "./uuid.ts";
+import { chainAttempts, OldWork } from "./old-work.ts";
+import { ReloadCycles } from "./reload-cycle.ts";
 export type { HostError, Position } from "./report.ts";
 export type { GetOptions } from "./ctx.ts";
 export type PrincipalAttributes<P extends Principal> = (principal: P) => Readonly<SpanAttributes>;
@@ -74,6 +76,7 @@ export type HostOptions<P extends Principal = Principal, R extends JsonValue = J
 	readonly principalAttributes?: PrincipalAttributes<P>;
 	readonly onError: (error: HostError) => void;
 	readonly closeTimeout?: number;
+	readonly reloadDrainTimeout?: number;
 	readonly readyTimeout?: number;
 	readonly heartbeat?: { readonly ping?: number; readonly close?: number };
 	readonly revokedBy?: RevokedBy<P, R>;
@@ -118,7 +121,7 @@ export function createHost<P extends Principal = Principal, R extends JsonValue 
 	return new ObjectsHost<P, R>(options);
 }
 export type ReloadedObject = { readonly object: string } & (
-	| { readonly kind: "swapped" | "restarted" | "ended" | "retried" }
+	| { readonly kind: "restarted" | "ended" | "retried" }
 	| { readonly kind: "parked"; readonly cause: FailureCause }
 );
 export type ReloadReport = {
@@ -141,7 +144,7 @@ type Loaded<P extends Principal> = {
 };
 type Action = { readonly object: ObjectsObject } & (
 	| { readonly kind: "end" }
-	| { readonly kind: "swap" | "restart" | "retry"; readonly served: Served }
+	| { readonly kind: "restart" | "retry"; readonly served: Served; readonly requests: readonly Request[] }
 );
 type ReloadPlan<P extends Principal> = {
 	readonly staged: Staged<P>;
@@ -153,7 +156,9 @@ type ReloadPlan<P extends Principal> = {
 };
 export class ObjectsHost<P extends Principal = Principal, R extends JsonValue = JsonValue> implements Host<P, R> {
 	readonly batch: Batch;
-	readonly timeouts: { readonly close: number; readonly ready: number };
+	readonly timeouts: { readonly close: number; readonly ready: number; readonly reload: number };
+	readonly oldWork = new OldWork();
+	readonly reloadCycles = new ReloadCycles();
 	readonly backoff = new Backoff((identity) => {
 		const object = this.#objects.get(identity);
 		if (object) object.attempt();
@@ -209,7 +214,8 @@ export class ObjectsHost<P extends Principal = Principal, R extends JsonValue = 
 		this.#activity = new Activity(this.batch);
 		this.compression = options.compression;
 		this.#revocations = new RevocationKeys(options.revokedBy as RevokedBy<Principal, JsonValue> | undefined);
-		this.timeouts = { close: options.closeTimeout ?? 30000, ready: options.readyTimeout ?? 60000 };
+		const close = options.closeTimeout ?? 30000;
+		this.timeouts = { close, ready: options.readyTimeout ?? 60000, reload: Math.min(close, options.reloadDrainTimeout ?? 5000) };
 		this.#heartbeat = { ping: options.heartbeat?.ping ?? 15000, close: options.heartbeat?.close ?? 30000 };
 		this.#destinations = new Destination(this.address, this.#routes, this.#parent);
 		this.store = options.store as ObjectsStore | undefined;
@@ -343,7 +349,7 @@ export class ObjectsHost<P extends Principal = Principal, R extends JsonValue = 
 			presence = new References(this.batch);
 			for (const object of this.#objects.values())
 				if (object.served.contract.name === type.name)
-					for (const holder of object.holders) presence.record(object, holder);
+					for (const holder of object.holders) if (holder.listed) presence.record(object, holder);
 			this.#presence.set(type.name, presence);
 		}
 		return presence as unknown as Watchable<readonly Presence<C, P>[]>;
@@ -444,7 +450,8 @@ export class ObjectsHost<P extends Principal = Principal, R extends JsonValue = 
 			linked = withLinkedAbortSignal(expired.signal, context);
 		const timer = setTimeout(() => expired.abort(binding.lastFailure ?? notLive(binding.label, timeout)), timeout);
 		try {
-			await binding.live(linked.context);
+			const live = binding.live(linked.context), target = binding.target;
+			await (target instanceof ObjectsObject ? this.waitAsOldWork(live, target, type, context) : live);
 			return binding;
 		} catch (error) {
 			binding.release();
@@ -454,11 +461,16 @@ export class ObjectsHost<P extends Principal = Principal, R extends JsonValue = 
 			linked.release();
 		}
 	}
+	waitAsOldWork<T>(waiting: Promise<T>, target: ObjectsObject, contract: Contract, context: Context): Promise<T> {
+		if (!this.oldWork.of(context)) return waiting;
+		const chain = chainAttempts(context);
+		return chain.size ? this.reloadCycles.wait(waiting, target, contract, chain) : waiting;
+	}
 	count(kind: keyof ActivityCounts, delta: number): void {
 		this.#activity.count(kind, delta);
 	}
 	referenced(object: ObjectsObject, holder: Holder, context: Context): void {
-		this.#presence.get(object.served.contract.name)?.add(object, holder, context);
+		if (holder.listed) this.#presence.get(object.served.contract.name)?.add(object, holder, context);
 	}
 	unreferenced(object: ObjectsObject, holders: Iterable<Holder>, context: Context): void {
 		this.#presence.get(object.served.contract.name)?.remove(holders, context);
@@ -500,6 +512,12 @@ export class ObjectsHost<P extends Principal = Principal, R extends JsonValue = 
 				missing(served, type.kind, type.name, type.version, type.fingerprint) ??
 				this.#misplaced(type, served!, checked.params);
 		if (mismatch) {
+			if (mismatch.error.code === "contract_mismatch" && this.oldWork.of(context)) {
+				const old = this.#objects.get(this.#identity(served!, checked, principal, context));
+				if (!old?.oldServes(type.version, type.fingerprint)) throw mismatch.error;
+				binding.bind(old);
+				return old;
+			}
 			this.#wait(binding, type.name, mismatch, () => this.#place(binding, type, checked, context));
 			return;
 		}
@@ -653,10 +671,7 @@ export class ObjectsHost<P extends Principal = Principal, R extends JsonValue = 
 		dependent?: LocalTarget,
 		trigger: TelemetryContext = context.telemetry,
 	): ObjectsObject {
-		const identity =
-			served.kind === "local"
-				? identityKey(served.contract as LocalContract, checked.key)
-				: identityKey(served.contract as RemoteContract, checked.key, principalKey(principal as P, context, this.#key));
+		const identity = this.#identity(served, checked, principal, context);
 		let object = this.#objects.get(identity);
 		if (!object) {
 			const ancestry = dependent instanceof ObjectsObject ? (dependent.activationChain() ?? chain) : chain;
@@ -675,6 +690,11 @@ export class ObjectsHost<P extends Principal = Principal, R extends JsonValue = 
 			if (!this.backoff.waiting(identity)) object.attempt();
 		}
 		return object;
+	}
+	#identity(served: Served, checked: CheckedParams, principal: Principal | undefined, context: Context): string {
+		return served.kind === "local"
+			? identityKey(served.contract as LocalContract, checked.key)
+			: identityKey(served.contract as RemoteContract, checked.key, principalKey(principal as P, context, this.#key));
 	}
 	async #close(): Promise<void> {
 		this.#status = "closed";
@@ -754,7 +774,7 @@ export class ObjectsHost<P extends Principal = Principal, R extends JsonValue = 
 					try {
 						const declarations = recordFactory(object, served, context);
 						recorded.push({ plugin: served.plugin, declarations });
-						actions.push({ object, served, kind: object.reloadFate(declarations) });
+						actions.push({ object, served, kind: object.reloadFate(), requests: declarations.requests });
 					} catch (error) {
 						if (!failures.has(served.plugin)) failures.set(served.plugin, error);
 					}
@@ -871,29 +891,20 @@ export class ObjectsHost<P extends Principal = Principal, R extends JsonValue = 
 		}, context);
 		for (const name of this.#presence.keys()) if (!this.#served.has(name)) this.#presence.delete(name);
 		for (const record of this.#registries.values()) record.reportUndeclared();
-		const start = async (action: Action): Promise<ReloadedObject> => {
+		const attempts = new Map<ObjectsObject, ReturnType<ObjectsObject["reload"]>>();
+		for (const action of actions) {
+			if (action.kind !== "end") attempts.set(action.object, action.object.reload(action.served, action.kind, action.requests));
+			else action.object.remove({ kind: "waiting", error: new ObjectsError({ code: "unavailable", message: `${action.object.served.contract.name} is not served here` }) });
+		}
+		for (const action of actions) action.object.startSuccessor();
+		const checks = actions.map(async (action): Promise<ReloadedObject> => {
 			const { object } = action;
-			if (action.kind === "end") {
-				object.remove({
-					kind: "waiting",
-					error: new ObjectsError({
-						code: "unavailable",
-						message: `${object.served.contract.name} is not served here`,
-					}),
-				});
-				return { object: object.label, kind: "ended" };
-			}
-			const attempt = object.reload(action.served, action.kind);
-			if (action.kind === "restart") return { object: object.label, kind: "restarted" };
-			const cause = await attempt.checked;
+			if (action.kind === "end") return { object: object.label, kind: "ended" };
+			const cause = await (action.kind === "restart" || object.openOldAttempt !== undefined ? object.readinessCause : attempts.get(object)!.checked);
 			return cause === undefined
-				? { object: object.label, kind: action.kind === "swap" ? "swapped" : "retried" }
+				? { object: object.label, kind: action.kind === "restart" ? "restarted" : "retried" }
 				: { object: object.label, kind: "parked", cause };
-		};
-		const running = new Map<Action, Promise<ReloadedObject>>();
-		for (const action of actions) if (action.kind === "end") running.set(action, start(action));
-		for (const action of actions.toReversed()) if (action.kind !== "end") running.set(action, start(action));
-		const checks = actions.map((action) => running.get(action)!);
+		});
 		for (const served of this.#served.values())
 			if (served.kind === "local" && served.hostLifetime)
 				this.#object(served, { params: {}, key: "" }, undefined, context);

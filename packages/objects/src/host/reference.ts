@@ -62,6 +62,7 @@ export type KeyedBinding =
 			readonly member: string;
 	  };
 export interface Target {
+	readonly kind: "local" | "remote";
 	readonly instance?: unknown;
 	readonly label: string;
 	readonly state: RefState;
@@ -72,6 +73,8 @@ export interface Target {
 	readonly heldOnLink: boolean;
 	readonly blocksFirstPass: boolean;
 	readonly lastValues: boolean;
+	stateFor(version: number, fingerprint: string): RefState;
+	waitFor?<T>(waiting: Promise<T>, context: Context): Promise<T>;
 	hold(binding: Binding): void;
 	unhold(binding: Binding): void;
 	call(method: string, args: unknown, context: Context, caller: Caller, version?: number): Promise<unknown>;
@@ -126,6 +129,13 @@ export class Binding {
 	#attached = false;
 	#variant: string = LOCAL;
 	#heldKeys: HeldKeys | undefined;
+	#listed = true;
+	get listed(): boolean {
+		return this.#listed;
+	}
+	unlist(): void {
+		this.#listed = false;
+	}
 	constructor(
 		contract: Contract,
 		batch: Batch,
@@ -183,7 +193,7 @@ export class Binding {
 	get refState(): RefState {
 		switch (this.#status.kind) {
 			case "bound":
-				return this.#status.target.state;
+				return this.#status.target.stateFor(this.version, this.fingerprint);
 			case "unbound":
 				return LOADING;
 			case "waiting":
@@ -321,16 +331,26 @@ export class Binding {
 			context,
 		);
 	}
+	until(predicate: () => boolean, context: Context): Promise<void> {
+		return this.#until(() => (predicate() ? done : wait), context);
+	}
 	member(name: string): DeriveSource {
 		if (this.#status.kind === "released") throw this.#status.state.error;
 		let source = this.#remoteMembers.get(name);
 		if (source === undefined) {
+			const state = this.refState;
 			const attached = this.target;
 			const target =
-				attached !== undefined && (attached.hydrated || (this.#attached && attached.lastValues))
+				attached !== undefined &&
+				(state.kind === "live" ||
+					(this.#attached && (attached.lastValues || (attached.kind === "remote" && attached.hydrated))))
 					? attached
 					: this.#requireTarget();
 			source = new MemberSource(target.member(name, this.version), this.#owner!.batch);
+			if (state.kind !== "live" && target.kind === "remote") {
+				source.freeze();
+				if (state.kind === "failed") source.fail(state.cause.error, BACKGROUND_CONTEXT);
+			}
 			this.#remoteMembers.set(name, source);
 		}
 		return source;
@@ -359,7 +379,7 @@ export class Binding {
 		}
 	}
 	async hydrated(context: Context): Promise<void> {
-		if (this.target?.hydrated) return;
+		if (this.target?.hydrated && this.refState.kind === "live") return;
 		await this.#until(
 			(state) =>
 				state.kind === "live" ? done : state.kind === "failed" ? { kind: "failed", error: state.cause.error } : wait,
@@ -367,7 +387,7 @@ export class Binding {
 		);
 	}
 	async firstValues(context: Context): Promise<void> {
-		if (this.target?.hydrated) return;
+		if (this.target?.hydrated && this.refState.kind === "live") return;
 		await this.#until((state) => (state.kind === "live" ? done : wait), context);
 	}
 	async watch(name: string, context: Context): Promise<Watch<JsonValue>> {
@@ -460,7 +480,8 @@ export class Binding {
 		if (state.kind === "failed") throw state.cause.error;
 		if (state.kind === "live" && !this.#parked?.waiting) return this.#send(method, args, context);
 		this.#parked ??= new ParkedCalls(this.#timeout, this.label);
-		return this.#parked.park(method, args, context);
+		const parked = this.#parked.park(method, args, context);
+		return this.target?.waitFor?.(parked, context) ?? parked;
 	}
 	#send(method: string, args: unknown, context: Context): Promise<unknown> {
 		const target = this.#requireTarget();

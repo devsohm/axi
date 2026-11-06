@@ -21,14 +21,17 @@ import type { CloseFailed, NativeCloseReason } from "./native.ts";
 import { LIVE, LOADING, type Ended, type Failed, type RefState } from "./ref-state.ts";
 import { retryOperation, type LocalTarget, type Target } from "./reference.ts";
 import { RetryWakes, type RetrySource } from "./retry-on.ts";
-import type { Recorded } from "./staging.ts";
-import { tableSqlName } from "../store/sql.ts";
+import type { Request } from "./staging.ts";
+import { OPENING } from "./old-work.ts";
+import { Readiness } from "./readiness.ts";
+import type { ReloadCycles } from "./reload-cycle.ts";
 import { uuidv7 } from "./uuid.ts";
 
 export type LocalContract = Contract<ContractShape & { readonly kind: "local" }>;
 export type RemoteContract = Contract<ContractShape & { readonly kind: "remote" }>;
 export type Served = AttemptServing & { readonly linger: number };
 export interface Holder {
+	readonly listed: boolean;
 	readonly following?: boolean;
 	readonly version?: number;
 	readonly fingerprint?: string;
@@ -43,6 +46,9 @@ export interface Holder {
 export interface ObjectHost extends AttemptHost {
 	readonly telemetry?: import("@axi/telemetry").TelemetryContext;
 	readonly backoff: Backoff;
+	readonly reloadCycles: ReloadCycles;
+	readonly timeouts: AttemptHost["timeouts"] & { readonly reload: number };
+	waitAsOldWork<T>(waiting: Promise<T>, target: ObjectsObject, contract: Contract, context: Context): Promise<T>;
 	referenced(object: ObjectsObject, holder: Holder, context: Context): void;
 	unreferenced(object: ObjectsObject, holders: Iterable<Holder>, context: Context): void;
 	endingOf(identity: string): Promise<void> | undefined;
@@ -51,10 +57,9 @@ export interface ObjectHost extends AttemptHost {
 	wentLive(object: ObjectsObject): void;
 	cycle(chain: readonly string[], instance: string, labels: readonly string[]): ObjectsError;
 }
-type Swap = { readonly old: Attempt; readonly done: PromiseWithResolvers<void>; parked: boolean };
 type State =
 	| { readonly kind: "waiting" }
-	| { readonly kind: "activating"; readonly attempt: Attempt; readonly shown: RefState; readonly swap?: Swap }
+	| { readonly kind: "activating"; readonly attempt: Attempt; readonly shown: RefState }
 	| { readonly kind: "live"; readonly attempt: Attempt }
 	| { readonly kind: "failed"; readonly failure: Failed }
 	| { readonly kind: "ended"; readonly state: Ended };
@@ -65,6 +70,7 @@ type Teardown =
 const noDependencies: readonly Dependency[] = [];
 
 export class ObjectsObject implements LocalTarget {
+	readonly kind = "local";
 	readonly host: ObjectHost;
 	served: Served;
 	readonly params: ParamsOf<Contract>;
@@ -80,7 +86,12 @@ export class ObjectsObject implements LocalTarget {
 	#attempts = 0;
 	readonly #jobs = new Map<string, JobRecords>();
 	readonly #holders = new Set<Holder>();
-	readonly #retiring = new Map<Attempt, Promise<void>>();
+	#old: Attempt | undefined;
+	#kept: Attempt | undefined;
+	#readiness: Readiness | undefined;
+	#showsReadiness: Attempt | undefined;
+	#startSuccessor: (() => void) | undefined;
+	#gateWaits: Set<ObjectsObject> | undefined;
 	#unbinding = false;
 	#status: State = { kind: "waiting" };
 	#instance: string | undefined;
@@ -141,16 +152,25 @@ export class ObjectsObject implements LocalTarget {
 		}
 	}
 	get hydrated(): boolean {
-		return this.#status.kind === "live";
+		return this.#status.kind === "live" || this.openOldAttempt !== undefined;
 	}
 	get attachable(): unknown {
 		return this.#exposed;
 	}
-	get swapsInPlace(): boolean {
-		return this.#status.kind === "activating" && this.#status.swap !== undefined && !this.#status.swap.parked;
-	}
 	get instance(): unknown {
-		return this.#status.kind === "live" ? this.#exposed : undefined;
+		return this.#status.kind === "live" ? this.#exposed : this.openOldAttempt;
+	}
+	get openOldAttempt(): Attempt | undefined { return this.#old?.draining ? this.#old : undefined; }
+	oldServes(version: number, fingerprint: string): boolean {
+		const old = this.openOldAttempt;
+		return old !== undefined && binds(old.served.provider, version, fingerprint);
+	}
+	stateFor(version: number, fingerprint: string): RefState {
+		return this.#status.kind === "activating" && this.#status.shown.kind !== "failed" && this.oldServes(version, fingerprint)
+			? LIVE : this.state;
+	}
+	contractFor(version: number, fingerprint: string): Contract {
+		return this.oldServes(version, fingerprint) ? this.openOldAttempt!.served.contract : this.served.contract;
 	}
 	get lastValues(): boolean {
 		return this.#exposed !== undefined && this.#status.kind !== "ended";
@@ -179,7 +199,7 @@ export class ObjectsObject implements LocalTarget {
 		return this.#status.kind === "activating" ? this.#instance : undefined;
 	}
 	get variant(): string | undefined {
-		return this.#status.kind === "live" ? this.#status.attempt.variant : undefined;
+		return this.#status.kind === "live" ? this.#status.attempt.variant : this.openOldAttempt?.variant;
 	}
 	get stateMembers(): ReadonlyMap<string, DeriveSource> {
 		return this.#live().stateMembers;
@@ -222,19 +242,45 @@ export class ObjectsObject implements LocalTarget {
 		parent?: import("@axi/telemetry").TelemetryContext,
 	): Promise<unknown> {
 		if (this.#status.kind === "activating") {
-			const due = Date.now() + this.host.timeouts.ready;
-			while (this.#status.kind === "activating") {
-				if (this.#status.shown.kind === "failed") throw this.#status.shown.cause.error;
-				const remaining = due - Date.now();
-				if (remaining <= 0) throw new ObjectsError({ code: "unavailable", reason: "park_timeout", message: `${this.label}: a call waited ${this.host.timeouts.ready} ms for its object to go live` });
-				this.#changed ??= Promise.withResolvers<void>();
-				const elapsed = Promise.withResolvers<void>();
-				const timer = setTimeout(elapsed.resolve, remaining);
-				try { await awaitWithContext(Promise.race([this.#changed.promise, elapsed.promise]), context); }
-				finally { clearTimeout(timer); }
-			}
+			const old = this.openOldAttempt;
+			if (old && this.host.oldWork.of(context))
+				return old.call(method, args, context, caller, version, parent ?? context.telemetry);
+			await this.waitFor(this.#gate(context), context);
 		}
 		return this.#live().call(method, args, context, caller, version, parent ?? context.telemetry);
+	}
+	waitAt(target: ObjectsObject): () => void {
+		this.#gateWaits ??= new Set();
+		const waits = this.#gateWaits;
+		waits.add(target);
+		this.host.reloadCycles.recheck();
+		return () => { waits.delete(target); };
+	}
+	waitEdges(): ObjectsObject[] {
+		const edges = [...this.#gateWaits ?? []];
+		for (const dependency of this.#waiting) {
+			const target = dependency.kind === "reference" ? dependency.binding.target : undefined;
+			if (target instanceof ObjectsObject) edges.push(target);
+		}
+		return edges;
+	}
+	async waitFor<T>(waiting: Promise<T>, context: Context): Promise<T> {
+		const release = context.value(OPENING)?.waitAt(this);
+		try { return await this.host.waitAsOldWork(waiting, this, this.served.contract, context); }
+		finally { release?.(); }
+	}
+	async #gate(context: Context): Promise<void> {
+		const due = Date.now() + this.host.timeouts.ready;
+		while (this.#status.kind === "activating") {
+			if (this.#status.shown.kind === "failed") throw this.#status.shown.cause.error;
+			const remaining = due - Date.now();
+			if (remaining <= 0) throw new ObjectsError({ code: "unavailable", reason: "park_timeout", message: `${this.label}: a call waited ${this.host.timeouts.ready} ms for its object to go live` });
+			this.#changed ??= Promise.withResolvers<void>();
+			const elapsed = Promise.withResolvers<void>();
+			const timer = setTimeout(elapsed.resolve, remaining);
+			try { await awaitWithContext(Promise.race([this.#changed.promise, elapsed.promise]), context); }
+			finally { clearTimeout(timer); }
+		}
 	}
 	member(name: string, version = this.served.contract.version): DeriveSource {
 		const instance = this.#exposed ?? this.#live();
@@ -375,6 +421,7 @@ export class ObjectsObject implements LocalTarget {
 	}
 	waitsFor(dependencies: readonly Dependency[]): void {
 		this.#waiting = dependencies;
+		this.host.reloadCycles.recheck();
 	}
 	dependencyMoved(): void {
 		if (this.#status.kind === "activating") this.#status.attempt.dependencyMoved();
@@ -389,83 +436,57 @@ export class ObjectsObject implements LocalTarget {
 				status.shown.retryAt === shown.retryAt &&
 				sameCause(status.shown.cause, shown.cause));
 		if (!same) {
-			this.#status = { kind: "activating", attempt, shown, ...(status.swap ? { swap: status.swap } : {}) };
+			this.#status = { kind: "activating", attempt, shown };
 			if (shown.kind === "failed") this.#lastFailure = shown.cause.error;
 			this.#notify();
 		}
-		if (status.swap && !status.swap.parked && shown.kind !== "live") {
-			status.swap.parked = true;
-			this.#withdraw(status.swap.old);
-			status.swap.done.resolve();
-		}
+		if (shown.kind === "failed") this.#dropKept();
+		this.host.reloadCycles.recheck();
 		if (firstPass) this.#firstOutcome();
 	}
 	unparked(attempt: Attempt): void {
 		this.parked(attempt, LOADING, false);
 	}
-	reloadFate(recorded: Recorded): "swap" | "restart" | "retry" {
-		if (this.#status.kind !== "live") return "retry";
-		const migrating = recorded.tables.some((definition) => {
-			const table = this.host.store?.table(tableSqlName(this.served.contract.name, definition.name));
-			return table !== undefined && table.version < definition.version;
-		});
-		return this.#status.attempt.opensNatives || recorded.natives > 0 || migrating ? "restart" : "swap";
-	}
-	reload(served: Served, fate: "swap" | "restart" | "retry"): Attempt {
+	reloadFate(): "restart" | "retry" { return this.#status.kind === "live" ? "restart" : "retry"; }
+	reload(served: Served, _fate: "restart" | "retry", requests: readonly Request[]): Attempt {
 		this.served = served;
 		const state = this.#status;
 		if (state.kind === "live") {
 			const old = state.attempt;
-			if (fate === "swap") {
-				old.handOver();
-				const swap: Swap = { old, done: Promise.withResolvers<void>(), parked: false };
-				const attempt = this.#replace(swap);
-				const retiring = (async () => {
-					await Promise.all([old.drainCalls(), swap.done.promise]);
-					old.seal(this.#reloaded(), "reload");
-					await this.documents.settled();
-					this.#stopFollowing(old);
-					for (const failure of await old.close({ kind: "end" })) this.host.report(failure);
-					old.detach();
-					old.releaseReferences();
-				})();
-				this.#retiring.set(old, retiring);
-				void retiring.then(() => this.#retiring.delete(old));
-				void this.#activate(attempt);
-				return attempt;
-			}
-			this.#withdraw(old);
+			this.#old = old;
+			old.beginDrain();
 			old.stopRoutines();
+			if (!old.opensNatives) this.#kept = old;
 			this.#instance = uuidv7();
-			const previous = this.host.endingOf(this.identity);
-			const closing = (async () => {
-				await Promise.all([old.drainCalls(), ...this.#retiring.values(), previous]);
-				old.seal(this.#reloaded(), "reload");
-				await this.documents.settled();
-				this.#stopFollowing(old);
-				const failures = await old.close({ kind: "reload" });
-				old.detach();
-				old.releaseReferences();
-				return failures;
-			})();
-			this.host.ending(this.identity, this.#reportClose(closing));
 			const attempt = this.#replace();
-			void this.#activate(attempt);
+			const caller = { principal: served.kind === "remote" ? this.principal : this.host.principal, incarnation: this.host.incarnation };
+			const readiness = new Readiness(this.host, caller, requests, (cause) => this.#readinessShown(attempt, cause), this.#context);
+			this.#readiness = readiness;
+			const ended = this.#endOld(old, readiness, Date.now() + this.host.timeouts.reload);
+			this.host.ending(this.identity, this.#reportClose(ended));
+			const ending = this.host.endingOf(this.identity);
+			this.#startSuccessor = () => {
+				this.#showsReadiness = attempt;
+				void ended.then(() => { if (this.#showsReadiness === attempt) this.#showsReadiness = undefined; });
+				readiness.start();
+				void this.#activate(attempt, ending);
+				void Promise.all([ended, attempt.checked]).then(() => {
+					old.releaseReferences();
+					readiness.release();
+					if (this.#readiness === readiness) this.#readiness = undefined;
+				});
+			};
 			return attempt;
 		}
 		if (state.kind === "activating") {
-			state.swap?.done.resolve();
-			const old = state.attempt,
-				parked = old.isParked,
-				previous = this.host.endingOf(this.identity);
+			const old = state.attempt, parked = old.isParked, previous = this.host.endingOf(this.identity);
 			old.seal(this.#reloaded(), "reload");
 			const attempt = this.#replace();
 			if (parked) void this.#activate(attempt, previous);
 			const closing = (async () => {
 				if (parked) await attempt.checked;
 				const failures = await old.close({ kind: "reload" });
-				old.detach();
-				old.releaseReferences();
+				old.detach(); old.releaseReferences();
 				return failures;
 			})();
 			this.host.ending(this.identity, this.#reportClose(closing));
@@ -477,19 +498,51 @@ export class ObjectsObject implements LocalTarget {
 		attempt.startedByReload();
 		return attempt;
 	}
+	async #endOld(old: Attempt, readiness: Readiness, due: number): Promise<CloseFailed[]> {
+		await readiness.ready(due);
+		await old.drainCalls(due);
+		if (old.opensNatives) this.#withdraw(old);
+		old.seal(this.#reloaded(), "reload");
+		this.#notify();
+		await this.documents.settled();
+		this.#stopFollowing(old);
+		const failures = await old.close({ kind: "reload" });
+		old.detach();
+		return failures;
+	}
+	startSuccessor(): void {
+		const start = this.#startSuccessor;
+		this.#startSuccessor = undefined;
+		start?.();
+	}
+	get readinessCause(): FailureCause | undefined { return this.#readiness?.cause; }
+	#readinessShown(attempt: Attempt, cause: FailureCause | undefined): void {
+		if (this.#showsReadiness !== attempt || this.#status.kind !== "activating" || this.#status.attempt !== attempt) return;
+		const shown: RefState = cause ? { kind: "failed", cause, retryAt: undefined } : LOADING;
+		this.#status = { kind: "activating", attempt, shown };
+		if (cause) this.#lastFailure = cause.error;
+		this.#notify();
+		this.host.reloadCycles.recheck();
+	}
+	#dropKept(): void {
+		const kept = this.#kept;
+		this.#kept = undefined;
+		if (kept) this.#withdraw(kept);
+	}
 	remove(cause: FailureCause): void {
 		const closing = this.#seal(this.ended(), cause);
 		if (closing.kind !== "none")
 			this.host.ending(this.identity, this.#reportClose(this.#teardown(closing, { kind: "end" })));
 	}
-	#replace(swap?: Swap): Attempt {
+	#replace(): Attempt {
 		const attempt = this.#newAttempt();
 		attempt.startedByReload();
-		this.#status = { kind: "activating", attempt, shown: LOADING, ...(swap ? { swap } : {}) };
+		this.#status = { kind: "activating", attempt, shown: LOADING };
 		this.#notify();
 		return attempt;
 	}
 	#stopFollowing(attempt: Attempt): void {
+		if (this.#old === attempt) this.#old = undefined;
 		if (this.#exposed !== attempt) return;
 		this.#exposed = undefined;
 		this.host.batch.within(() => this.#notify(), this.#context);
@@ -537,7 +590,6 @@ export class ObjectsObject implements LocalTarget {
 		return this.#status.kind === "activating" ? this.#status.attempt.activationSpan : undefined;
 	}
 	#wentLive(attempt: Attempt): void {
-		const swap = this.#status.kind === "activating" ? this.#status.swap : undefined;
 		let unfit = false;
 		this.#unbinding = true;
 		for (const holder of [...this.#holders]) {
@@ -552,10 +604,9 @@ export class ObjectsObject implements LocalTarget {
 		this.#status = { kind: "live", attempt };
 		this.#exposed = attempt;
 
-		if (attempt.contributions.length || (swap && !swap.parked))
+		if (attempt.contributions.length || this.#kept)
 			this.host.batch.within(() => {
-				if (swap && !swap.parked)
-					for (const contribution of swap.old.contributions) contribution.record.remove(contribution);
+				this.#dropKept();
 				for (const contribution of attempt.contributions) contribution.record.add(contribution);
 			}, this.#context);
 		for (const contribution of attempt.contributions) contribution.record.reportUndeclared();
@@ -563,8 +614,7 @@ export class ObjectsObject implements LocalTarget {
 		this.host.wentLive(this);
 		this.#notify();
 		this.#firstOutcome();
-		swap?.done.resolve();
-		attempt.live(swap?.old.drainRoutines());
+		attempt.live();
 		for (const [name, records] of this.#jobs) {
 			if (!attempt.declaresJob(name)) records.undeclare();
 			else if (attempt.reloadStarted) void records.retryBlocked(this.#context);
@@ -582,11 +632,7 @@ export class ObjectsObject implements LocalTarget {
 		if (version !== this.served.contract.version) return refusal(this.served, version, attempt.variant);
 	}
 	#activationFailed(attempt: Attempt, cause: FailureCause): void {
-		const swap = this.#status.kind === "activating" ? this.#status.swap : undefined;
-		if (swap) {
-			this.#withdraw(swap.old);
-			swap.done.resolve();
-		}
+		this.#dropKept();
 		const woken = this.#wakes?.during === attempt;
 		if (this.#wakes) this.#wakes.during = undefined;
 		this.#setFailed(cause);
@@ -653,10 +699,14 @@ export class ObjectsObject implements LocalTarget {
 	#seal(error: ObjectsError, removal?: FailureCause): Teardown {
 		const status = this.#status;
 		if (status.kind === "ended") return { kind: "none" };
-		const pending = [...this.#retiring.values()],
-			ending = this.host.endingOf(this.identity);
-		if (ending) pending.push(ending);
-		const previous = pending.length ? Promise.all(pending).then(() => {}) : undefined;
+		const previous = this.host.endingOf(this.identity);
+		this.#old?.seal(error);
+		this.#old = undefined;
+		this.#readiness?.release();
+		this.#readiness = undefined;
+		this.#showsReadiness = undefined;
+		this.#startSuccessor = undefined;
+		this.#dropKept();
 		if (removal) for (const holder of this.#holders) holder.freeze?.();
 		this.#status = { kind: "ended", state: { kind: "ended", error } };
 		for (const records of this.#jobs.values()) records.end(error);
@@ -675,8 +725,6 @@ export class ObjectsObject implements LocalTarget {
 			if (removal && holder.removed) holder.removed(removal);
 			else holder.end(error);
 		}
-		for (const old of this.#retiring.keys()) old.seal(error);
-		if (status.kind === "activating") status.swap?.done.resolve();
 		if (status.kind === "waiting" || status.kind === "failed") return { kind: "end", previous };
 		if (status.kind === "live") this.#withdraw(status.attempt);
 		status.attempt.seal(error);
@@ -730,6 +778,7 @@ export class ObjectsObject implements LocalTarget {
 	}
 	#live(): Attempt {
 		if (this.#status.kind === "live") return this.#status.attempt;
+		if (this.#status.kind === "activating" && this.openOldAttempt) return this.openOldAttempt;
 		if (this.#status.kind === "ended") throw this.ended();
 		if (this.#status.kind === "failed") throw this.#status.failure.cause.error;
 		throw new ObjectsError({ code: "not_ready", message: `${this.label}: not live yet` });

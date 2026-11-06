@@ -10,6 +10,7 @@ import { Attempt, type AttemptObject, type Self } from "../src/host/attempt.ts";
 import { Binding } from "../src/host/reference.ts";
 import { LOADING } from "../src/host/ref-state.ts";
 import type { HostError } from "../src/host/report.ts";
+import { OldWork } from "../src/host/old-work.ts";
 import { RegistryRecord } from "../src/registries/internal.ts";
 import { Batch } from "../src/state/internal.ts";
 const counter = defineState("counter", { version: 1, schema: obj({ n: int() }), initial: () => ({ n: 0 }) });
@@ -36,6 +37,7 @@ function environment(factory: (self: Self) => unknown) {
 		},
 	});
 	const host = {
+		oldWork: new OldWork(),
 		spanHost: "client",
 		batch,
 		principal: { kind: "host" },
@@ -68,6 +70,9 @@ function environment(factory: (self: Self) => unknown) {
 	};
 	let attempt: Attempt;
 	const object: AttemptObject = {
+		kind: "local",
+		stateFor: () => LOADING,
+		waitAt: () => () => {},
 		liveQueries: new LiveQueries(),
 		label: type.name,
 		documents,
