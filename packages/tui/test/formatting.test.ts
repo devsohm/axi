@@ -44,6 +44,15 @@ const theme: MarkdownTheme = {
 	underline: plain,
 };
 
+test("wrapping large tokens and word sequences preserves every output line", () => {
+	const length = 150_000;
+	for (const source of ["x".repeat(length), "x ".repeat(length)]) {
+		const lines = wrapTextWithAnsi(source, 1);
+		expect(lines).toHaveLength(length);
+		expect(lines.join("")).toBe("x".repeat(length));
+	}
+});
+
 test("HTML comments disappear from blocks and inline text but remain literal in code", () => {
 	const render = (source: string) => new Markdown(source, 0, 0, theme).render(60).map((line) => line.trimEnd());
 	expect(render("before\n\n<!-- hidden -->\n\nafter")).toEqual(["before", "", "after"]);

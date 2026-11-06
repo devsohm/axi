@@ -458,7 +458,7 @@ function wrapLine(text: string, width: number): string[] {
 		if (size > width && !space) {
 			if (line) lines.push(line.trimEnd() + style.lineEnd());
 			const fragments = breakToken(token, width, style);
-			lines.push(...fragments.slice(0, -1));
+			for (let index = 0; index < fragments.length - 1; index++) lines.push(fragments[index]!);
 			line = fragments.at(-1) ?? "";
 			used = visibleWidth(line);
 			continue;
@@ -484,7 +484,7 @@ export function wrapTextWithAnsi(text: string, width: number): string[] {
 	const style = new StyleState();
 	const output: string[] = [];
 	for (const line of text.split(/\r\n|\r|\n/)) {
-		output.push(...wrapLine((output.length ? style.active() : "") + line, width));
+		for (const wrapped of wrapLine((output.length ? style.active() : "") + line, width)) output.push(wrapped);
 		style.update(line);
 	}
 	return output;
