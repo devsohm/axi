@@ -129,7 +129,7 @@ export const OpenAICompletionsCompatSchema = Type.Object(
 			}),
 		),
 		requiresToolResultName: bool("Include a name on tool results; detected from the URL when omitted."),
-		requiresNonNullAssistantContent: bool("Use empty text instead of null for assistant tool calls.", false),
+		requiresNonNullAssistantContent: bool("Use empty text instead of null for assistant tool calls."),
 		promptCacheKeyMode: cacheKeyMode(),
 		requiresAssistantAfterToolResult: bool(
 			"Insert an assistant message between tool results and a following user message when required; otherwise detect from the URL.",
@@ -276,7 +276,9 @@ export const AnthropicMessagesCompatSchema = Type.Object(
 			false,
 		),
 		allowEmptySignature: bool("Replay empty reasoning signatures rather than converting the reasoning to text.", false),
-		supportsMessageThreads: bool("Allow session requests to create and continue server-side message threads.", false),
+		supportsMessageThreads: bool(
+			"Allow session requests to create and continue server-side message threads. Detected from the provider and endpoint when omitted.",
+		),
 		supportsStrictTools: bool(
 			"Accept Anthropic strict tool schemas; capable catalog models enable this explicitly.",
 			false,
