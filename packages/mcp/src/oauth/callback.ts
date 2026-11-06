@@ -126,6 +126,8 @@ export class OAuthCallbackServer {
 			pending.reject(new Error("OAuth callback server closed"));
 		}
 		this.#pending.clear();
-		await new Promise<void>((resolve, reject) => this.#server.close((error) => (error ? reject(error) : resolve())));
+		const closed = new Promise<void>((resolve, reject) => this.#server.close((error) => (error ? reject(error) : resolve())));
+		this.#server.closeAllConnections();
+		await closed;
 	}
 }

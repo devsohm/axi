@@ -76,4 +76,4 @@ Code exchange checks `iss` against discovered metadata when supplied or promised
 
 `OAuthCallbackServer.listen()` defaults to `127.0.0.1`, an ephemeral port, `/callback` and a five-minute wait. Options select advertised host, extra paths, timeout and page renderer. Callback state must match one pending wait. An optional expected path prevents accepting a response on another configured path. Duplicate pending states fail. OAuth errors, missing codes and expired state produce failed responses; successful results contain code, state and optional issuer.
 
-Default callback pages are plain text. A custom renderer returns HTML with `cache-control: no-store`. Closing rejects pending waits, clears timers and closes the server. The application must close it on success and failure.
+Default callback pages are plain text. A custom renderer returns HTML with `cache-control: no-store`. Closing rejects pending waits, clears timers and closes the server and its remaining connections. A browser's spare or incomplete connection does not keep shutdown waiting. The application must close it on success and failure.

@@ -1,5 +1,28 @@
 import { expect, test } from "vitest";
+import { once } from "node:events";
+import { createConnection } from "node:net";
 import { OAuthCallbackServer } from "../src/oauth/index.ts";
+
+test("closing a completed login also closes an unused browser connection", async () => {
+	const server = await OAuthCallbackServer.listen();
+	const url = new URL(server.redirectUrl);
+	const spare = createConnection({ host: url.hostname, port: Number(url.port) });
+	let closing: Promise<void> | undefined, timer: ReturnType<typeof setTimeout> | undefined;
+	try {
+		await once(spare, "connect");
+		spare.write("GET /callback HTTP/1.1\r\n");
+		const result = server.waitForCallback("browser");
+		await (await fetch(server.redirectUrl + "?state=browser&code=accepted")).text();
+		expect((await result).code).toBe("accepted");
+		closing = server.close();
+		const deadline = new Promise<boolean>(resolve => { timer = setTimeout(() => resolve(false), 300); });
+		expect(await Promise.race([closing.then(() => true), deadline])).toBe(true);
+	} finally {
+		clearTimeout(timer);
+		spare.destroy();
+		await (closing ?? server.close());
+	}
+});
 
 test("loopback callbacks separate states and handle success, denial, wrong paths, timeout and closure", async () => {
 	const server = await OAuthCallbackServer.listen({
