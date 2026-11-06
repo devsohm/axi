@@ -2,8 +2,9 @@ import { createModels, createProvider, fauxAssistantMessage, fauxProvider, fauxT
 import { BACKGROUND_CONTEXT as context } from "@axi/objects/context";
 import { CodemodeSandbox } from "@axi/codemode";
 import { expect, it } from "vitest";
+import { Type } from "typebox";
 import { CodemodeStoreDoc, createCodemodeExtension } from "../src/codemode/index.ts";
-import { createRegistry, Harness, MemoryStorage, ToolResultEntry } from "../src/index.ts";
+import { createRegistry, defineTool, Harness, MemoryStorage, ToolResultEntry } from "../src/index.ts";
 
 it("commits successful script state and discards writes from a failed script", async () => {
 	const sandbox = new CodemodeSandbox();
@@ -37,6 +38,67 @@ it("commits successful script state and discards writes from a failed script", a
 		).toEqual([false, true, false]);
 		const last = results.at(-1)?.model?.[0];
 		expect(last?.role === "toolResult" ? last.content : []).toContainEqual({ type: "text", text: "7" });
+	} finally {
+		await harness.close(context);
+		await sandbox.close();
+	}
+});
+
+it("keeps bounded call previews after a script catches a large tool error", async () => {
+	const sandbox = new CodemodeSandbox(),
+		models = createModels(),
+		provider = fauxProvider(),
+		registry = createRegistry();
+	models.setProvider(provider.provider);
+	registry.install(createCodemodeExtension({ sandbox, models: false }));
+	let argumentLength = 0;
+	registry.install({
+		name: "errors",
+		tools: [
+			defineTool({
+				name: "problem",
+				description: "Return the argument as an error",
+				parameters: Type.Object({ value: Type.String() }),
+				async execute({ value }) {
+					argumentLength = value.length;
+					return { isError: true, diagnostics: [{ severity: "error", message: value }] };
+				},
+			}),
+		],
+	});
+	const harness = await Harness.open(new MemoryStorage(), { models, registry }, context);
+	try {
+		const root = await harness.root(context, { agent: { model: { provider: "faux", modelId: "faux-1" } } });
+		provider.setResponses([
+			fauxAssistantMessage(
+				[
+					fauxToolCall("codemode", {
+						code: 'try { await tools.problem({ value: "🧪".repeat(2000) }); } catch {} return "recovered";',
+					}),
+				],
+				{ stopReason: "toolUse" },
+			),
+			fauxAssistantMessage("done"),
+		]);
+		expect(
+			(await (await root.submit({ type: "input", content: "Run the script" }, context)).wait(context)).status,
+		).toBe("done");
+		const entry = (await root.entries({}, 100, undefined, context)).items.find(ToolResultEntry.is);
+		const message = entry?.model?.[0];
+		if (message?.role !== "toolResult") throw new Error("Missing code result");
+		expect(message.isError).toBe(false);
+		expect(message.content).toContainEqual({ type: "text", text: "recovered" });
+		expect(argumentLength).toBe(4000);
+		expect(message.details).toMatchObject({
+			calls: [
+				{
+					name: "problem",
+					status: "error",
+					args: expect.stringMatching(/^(?=\{"value":"🧪)[\s\S]{197}\.\.\.$/),
+					error: expect.stringMatching(/^(?=🧪)[\s\S]{497}\.\.\.$/),
+				},
+			],
+		});
 	} finally {
 		await harness.close(context);
 		await sandbox.close();

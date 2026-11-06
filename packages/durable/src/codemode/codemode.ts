@@ -8,6 +8,7 @@ import type {
 } from "@axi/codemode/portable";
 import { CODEMODE_SOURCE_GRAMMAR, parseCodemodeSource } from "@axi/codemode/source";
 import { type Context } from "@axi/objects/context";
+import { ownedSlice } from "@axi/objects/delta";
 import { copyJson, type JsonValue } from "@axi/objects/json";
 import { type Static, Type } from "typebox";
 import { defineDoc } from "../documents.ts";
@@ -108,7 +109,7 @@ export type CodemodeToolOptions = {
 };
 const limits = { maxBytes: 4 * 1024 * 1024, maxLines: 100_000 };
 const discoveryNames = ["searchTools", "describeTool", "describeNamespace"];
-const cut = (text: string, count: number): string => (text.length <= count ? text : `${text.slice(0, count - 3)}...`);
+const cut = (text: string, count: number): string => (text.length <= count ? text : `${ownedSlice(text, 0, count - 3)}...`);
 const clone = <T>(value: T): T => copyJson(value, { omitUndefinedProperties: true }) as T;
 const failed = (message: string): ToolExecutionResult => ({ output: [{ type: "text", text: message }], isError: true });
 const describeCall = (call: CodemodeHostCall): string =>
