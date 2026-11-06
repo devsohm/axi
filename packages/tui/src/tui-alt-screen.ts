@@ -1194,10 +1194,8 @@ export class TuiAltScreen extends TuiBase implements ViewportTUI {
 		const anchorChanged = screen.some(
 			(line, row) => changed[row] && (isImageLine(line) || isImageLine(this.#screen[row] ?? "")),
 		);
-		const wez = Boolean(process.env.WEZTERM_PANE) || process.env.TERM_PROGRAM?.toLowerCase() === "wezterm";
 		const cellsChanged =
 			!anchorChanged &&
-			wez &&
 			this.#protocol === "kitty" &&
 			changed.some(Boolean) &&
 			screen.some((line, row) => {
@@ -1222,7 +1220,7 @@ export class TuiAltScreen extends TuiBase implements ViewportTUI {
 		const rows = Array.from({ length: height }, (_, row) => row).filter(
 			(row) => full || images || screen[row] !== this.#screen[row],
 		);
-		if (redrawImages && this.#protocol === "kitty" && screen.some(isImageLine) && wez) {
+		if (redrawImages && this.#protocol === "kitty" && screen.some(isImageLine)) {
 			for (const row of rows) output += `\x1b[${row + 1};1H\x1b[2K`;
 			for (const image of [false, true])
 				for (const row of rows)

@@ -6,12 +6,53 @@ import { ScrollView } from "../src/components/scroll-view.ts";
 import { TuiMainScreen } from "../src/tui-main-screen.ts";
 import { TuiAltScreen } from "../src/tui-alt-screen.ts";
 import { TestTerminal } from "./support/terminal.ts";
+import { encodeKitty, registerKittyImageMetadata, resetCapabilitiesCache, setCapabilities } from "../src/terminal-image.ts";
 
 const resources: { ui: TuiMainScreen | TuiAltScreen; terminal: TestTerminal }[] = [];
 afterEach(() => {
 	for (const { ui, terminal } of resources.splice(0)) {
 		ui.stop();
 		terminal.dispose();
+	}
+});
+
+test("fullscreen image placements follow clears and later writes on every terminal", async () => {
+	vi.stubEnv("WEZTERM_PANE", undefined);
+	vi.stubEnv("TERM_PROGRAM", "test-terminal");
+	setCapabilities({ images: "kitty", trueColor: true, hyperlinks: true });
+	const terminal = new TestTerminal(24, 6), writes: string[] = [];
+	const write = terminal.write.bind(terminal);
+	terminal.write = (value) => {
+		writes.push(value);
+		write(value);
+	};
+	const imageId = 82001;
+	registerKittyImageMetadata({ imageId, columns: 2, rows: 3, widthPx: 20, heightPx: 60 });
+	const lines = [
+		"heading",
+		encodeKitty("AQ==", { imageId, columns: 2, rows: 3, moveCursor: false }),
+		"", "", "", "footer",
+	];
+	const ui = new TuiAltScreen(terminal);
+	try {
+		ui.setLayoutRoot({ render: () => lines, invalidate() {} });
+		ui.start();
+		ui.renderNow();
+		await terminal.screen();
+		const first = writes.join("");
+		expect(first.indexOf("\x1b_Ga=T")).toBeGreaterThan(first.lastIndexOf("\x1b[6;1H\x1b[2K"));
+		expect(first.indexOf("\x1b_Ga=T")).toBeGreaterThan(first.indexOf("footer"));
+		writes.length = 0;
+		lines[2] = "streaming row";
+		ui.renderNow();
+		await terminal.screen();
+		const changed = writes.join("");
+		expect(changed.indexOf("\x1b_Ga=p")).toBeGreaterThan(changed.indexOf("streaming row"));
+	} finally {
+		ui.stop();
+		terminal.dispose();
+		resetCapabilitiesCache();
+		vi.unstubAllEnvs();
 	}
 });
 
