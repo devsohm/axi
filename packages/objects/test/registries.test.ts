@@ -1,9 +1,10 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { BACKGROUND_CONTEXT as context } from "../src/context/index.ts";
 import { RegistryContribution, type ContributionContent } from "../src/registries/contribution.ts";
 import { RegistryRecord, type RegistryError } from "../src/registries/record.ts";
 import { Batch, WritableSource } from "../src/state/internal.ts";
 import { createHost, defineFacet, defineRegistry, local, type HostError } from "../src/index.ts";
+import { UnboundClock, type UnboundLong } from "../src/host/unbound-clock.ts";
 
 function setup() {
 	const errors: RegistryError[] = [];
@@ -18,6 +19,48 @@ function setup() {
 }
 
 describe("experimental registries", () => {
+	it.each([false, true])("ends an unbound warning episode without rearming it (close: %s)", (close) => {
+		vi.useFakeTimers();
+		vi.setSystemTime(0);
+		const reports: UnboundLong[] = [];
+		const clock = new UnboundClock((report) => reports.push(report));
+		const registry = new RegistryRecord("app.waiting", new Batch(() => {}, undefined), () => {}, clock);
+		const value = registry.value(1);
+		const release = value.wait({ dependencyMoved() {}, closed() {} });
+		try {
+			value.start();
+			if (close) {
+				registry.close();
+				expect(vi.getTimerCount()).toBe(0);
+			} else {
+				vi.advanceTimersByTime(5000);
+				value.start();
+				value.start();
+			}
+			vi.advanceTimersByTime(5000);
+			expect(reports).toHaveLength(close ? 0 : 1);
+		} finally {
+			release();
+			registry.close();
+			clock.close();
+			vi.useRealTimers();
+		}
+	});
+	it("registers waiters without running composition until a read", () => {
+		const { registry } = setup();
+		let composed = 0;
+		registry.serve(1, { compose() { composed++; return 10; } });
+		const value = registry.value(1);
+		const release = value.wait({ dependencyMoved() {}, closed() {} });
+		try {
+			expect(composed).toBe(0);
+			expect(value.current()).toBe(10);
+			expect(composed).toBe(1);
+		} finally {
+			release();
+			registry.close();
+		}
+	});
 	it("recomputes a contribution when its provider changes the adapter", () => {
 		const { registry } = setup();
 		const contribution = new RegistryContribution(registry, { plugin: "old", type: undefined }, 1,

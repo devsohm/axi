@@ -52,7 +52,6 @@ export class RegistryValueSource extends FollowedSource<unknown> {
 		const token = { waiter };
 		if (!this.#waiters.size) this.#told = undefined;
 		this.#waiters.add(token);
-		this.start();
 		return () => {
 			this.#waiters.delete(token);
 			if (!this.#waiters.size) {
@@ -64,9 +63,10 @@ export class RegistryValueSource extends FollowedSource<unknown> {
 	recomposed(): void { this.changed() }
 	relisted(): void { this.list() }
 	close(): void {
-		if (this.#attachment.kind === "open") this.#attachment.record.clock?.stop(this);
+		const attachment = this.#attachment;
 		let last: NativeStart<unknown>;
 		try { last = this.start() } catch (error) { last = { kind: "failed", error, last: undefined } }
+		if (attachment.kind === "open") attachment.record.clock?.stop(this);
 		this.#attachment = { kind: "closed", last };
 		this.#readers.clear();
 		const waiters = [...this.#waiters];
@@ -83,14 +83,14 @@ export class RegistryValueSource extends FollowedSource<unknown> {
 		const clock = this.#attachment.kind === "open" ? this.#attachment.record.clock : undefined;
 		let next: Availability;
 		if (current.kind === "value" || current.last) {
-			clock?.stop(this);
 			if (previous?.kind === "usable") return;
+			clock?.stop(this);
 			next = { kind: "usable" };
 		} else {
-			const error = asObjectsError(current.error, `registry ${this.name}`);
-			clock?.start(this, `registry ${this.name}`, error);
-			clock?.failed(this, error);
 			if (previous?.kind === "failed" && sameError(previous.error, current.error)) return;
+			const error = asObjectsError(current.error, `registry ${this.name}`);
+			if (previous?.kind === "failed") clock?.failed(this, error);
+			else clock?.start(this, `registry ${this.name}`, error);
 			next = { kind: "failed", error: current.error };
 		}
 		this.#told = next;
