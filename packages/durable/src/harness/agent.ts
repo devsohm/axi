@@ -115,6 +115,33 @@ export async function configure(tx: Tx, id: ConversationId, change: AgentChange)
 		if (!Number.isSafeInteger(maxTurns) || maxTurns < 1) throw new RangeError(`maxTurns must be an integer 1 or more, got ${String(maxTurns)}`);
 		state.maxTurns = maxTurns;
 	}
+	const compaction = change.compaction;
+	if (compaction === null) delete state.compaction;
+	else if (compaction !== undefined) {
+		const { modelOverrides, ...policy } = compaction;
+		state.compaction = {
+			...compactionFields(policy),
+			...(modelOverrides === undefined
+				? {}
+				: {
+						modelOverrides: Object.fromEntries(
+							Object.entries(modelOverrides).map(([key, value]) => [key, compactionFields(value)]),
+						),
+					}),
+		};
+	}
+}
+
+function compactionFields(policy: Partial<CompactionPolicy>): Partial<CompactionPolicy> {
+	const fields: Partial<CompactionPolicy> = policy.enabled === undefined ? {} : { enabled: policy.enabled };
+	for (const key of ["reserveTokens", "keepRecentTokens", "backgroundTokens"] as const) {
+		const value = policy[key];
+		if (value === undefined) continue;
+		if (!Number.isSafeInteger(value) || value < 0)
+			throw new RangeError(`compaction.${key} must be an integer 0 or more, got ${String(value)}`);
+		fields[key] = value;
+	}
+	return fields;
 }
 
 export async function addTools(tx: Tx, id: ConversationId, added: readonly string[]): Promise<void> {
@@ -275,5 +302,6 @@ export function resolveAgent<T extends ToolRegistration>(
 		...(instructions === undefined ? {} : { instructions }),
 		...(state?.cwd === undefined ? {} : { cwd: state.cwd }),
 		...(state?.maxTurns === undefined ? {} : { maxTurns: state.maxTurns }),
+		...(state?.compaction === undefined ? {} : { compaction: state.compaction }),
 	};
 }

@@ -223,6 +223,7 @@ export type AgentState = {
 	instructions?: string;
 	cwd?: string;
 	maxTurns?: number;
+	compaction?: CompactionSettings;
 };
 export type AgentChange = {
 	readonly model?: ModelRef | null;
@@ -239,6 +240,7 @@ export type AgentChange = {
 	readonly instructions?: string | null;
 	readonly cwd?: string | null;
 	readonly maxTurns?: number | null;
+	readonly compaction?: CompactionSettings | null;
 };
 export type Agent<T extends ToolRegistration = ToolRegistration> = {
 	readonly model?: ModelRef;
@@ -251,6 +253,7 @@ export type Agent<T extends ToolRegistration = ToolRegistration> = {
 	readonly instructions?: string;
 	readonly cwd?: string;
 	readonly maxTurns?: number;
+	readonly compaction?: CompactionSettings;
 };
 export type ConversationStreamOptions = {
 	transport?: Transport;

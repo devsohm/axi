@@ -33,6 +33,7 @@ import type {
 	CompactionPolicy,
 	CompactionReason,
 	CompactionResult,
+	CompactionSettings,
 	ContextView,
 	ConversationStreamOptions,
 	ModelRef,
@@ -104,7 +105,7 @@ export const CompactionTask = defineTask<CompactionInput, CompactionCheckpoint, 
 				ref = agent.model;
 			const model = ref === undefined ? undefined : runtime.models.getModel(ref.provider, ref.modelId);
 			if (ref === undefined || model === undefined) return noModel(runtime, ref, context);
-			const policy = compactionPolicy(settings, ref),
+			const policy = compactionPolicy(settings, ref, agent.compaction),
 				view = await runtime.context(runtime.conversationId, context),
 				cut = selectCut(view, policy.keepRecentTokens);
 			if (cut === undefined) return complete(runtime, context);
@@ -241,14 +242,20 @@ export async function createCompaction(
 	});
 	return taskId;
 }
-export function compactionPolicy(settings: Settings, model: ModelRef): CompactionPolicy {
+export function compactionPolicy(settings: Settings, model: ModelRef, conversation?: CompactionSettings): CompactionPolicy {
 	const { modelOverrides, ...policy } = settings.compaction,
-		override = modelOverrides?.[`${model.provider}/${model.modelId}`];
+		key = `${model.provider}/${model.modelId}`,
+		local = conversation?.modelOverrides?.[key];
+	const layers = [local, modelOverrides?.[key], conversation];
+	const field = <K extends keyof CompactionPolicy>(name: K): CompactionPolicy[K] => {
+		for (const layer of layers) if (layer?.[name] !== undefined) return layer[name] ?? policy[name];
+		return policy[name];
+	};
 	return {
-		enabled: override?.enabled ?? policy.enabled,
-		reserveTokens: override?.reserveTokens ?? policy.reserveTokens,
-		keepRecentTokens: override?.keepRecentTokens ?? policy.keepRecentTokens,
-		backgroundTokens: override?.backgroundTokens ?? policy.backgroundTokens,
+		enabled: local?.enabled ?? (conversation?.enabled === false ? false : field("enabled")),
+		reserveTokens: field("reserveTokens"),
+		keepRecentTokens: field("keepRecentTokens"),
+		backgroundTokens: field("backgroundTokens"),
 	};
 }
 function candidate(contributions: ContextView["contributions"], at: number): boolean {

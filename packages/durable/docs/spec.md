@@ -120,6 +120,21 @@ Busy input policy is `steer`, `followUp`, or `reject`. Queue settings determine 
 
 `maxTurns` bounds tool rounds in one run. It must be a positive safe integer; a configuration update with `null` removes the bound. After the last allowed round runs its tools, an otherwise continuing run ends with `turn_limit`. A final answer or unanimous tool termination completes normally. `LiveDoc` records the turn count and the most recent run failure.
 
+### Conversation compaction settings
+
+`AgentState.compaction` stores a conversation's `CompactionSettings`. The resolved agent exposes these settings. `configure({ compaction })` replaces the whole stored value, `null` clears it, and `undefined` keeps it. Child conversations and forks inherit the settings with the rest of the agent state.
+
+Each policy field uses the first defined value from these layers:
+
+1. The conversation's override for the exact `provider/modelId`.
+2. The harness's override for that model.
+3. The conversation's general settings.
+4. The harness policy, including defaults.
+
+The conversation's general `enabled: false` also overrides the harness's model-specific flag. Its own model-specific flag can enable compaction again. Disabling automatic compaction prevents threshold, background and context-overflow compaction; an explicit `compact()` call remains available.
+
+`reserveTokens`, `keepRecentTokens` and `backgroundTokens` must be safe integers of zero or more, including within model overrides. Invalid configuration throws `RangeError` and commits no changes. Undefined fields are omitted from storage. Threshold checks use the request's agent settings. Overflow handling uses that phase's agent settings, and a compaction task resolves settings when it selects the summary range.
+
 ## Extensions and tools
 
 `createRegistry()` holds extensions by name. An extension can register tools, prompt sections, task definitions, task hooks, and wrappers. A snapshot captures registrations for an invocation. The registry loads definitions; an application owns importing modules and supplying them.

@@ -50,6 +50,8 @@ Tasks are created inside Session transactions with explicit ownership. Creating 
 
 `AgentDoc` stores conversation choices. `configure` updates those choices by name. `ProviderDoc` stores a stable provider session ID and gives each fork a fresh ID. `UsageDoc`, `InboxDoc`, and `LiveDoc` store accounting, queued submissions, and running progress.
 
+Compaction settings can apply to one conversation. For example, `await conversation.configure({ compaction: { enabled: false } }, context)` disables its automatic compaction. Set `compaction: null` to use the harness settings again. Settings persist and are inherited by child conversations and forks. See the [compaction rules](docs/spec.md#conversation-compaction-settings) for model overrides and validation.
+
 `ToolTask` executes model and nested tool calls. It records arguments and replay policy before execution, streams bounded progress, validates structured results, and stores nested results in task-scoped documents. Interrupted calls run again only when both the recorded and current policies allow safe replay.
 
 `Harness.open(storage, options, context)` connects models, an extension registry, settings and execution environments. Conversations accept input, continue interrupted runs, queue follow-ups, fork history, compact context and expose committed views through observers and watches. The scheduler executes phases, joins owned work, handles cancellation and sleep, and restores checkpoints after reopening. Generation, tool execution and compaction use that same scheduler.

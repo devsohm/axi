@@ -164,7 +164,7 @@ export const GenerationTask = defineTask<GenerationInput, GenerationCheckpoint, 
 			const entries = planSystemEntries(view, desired, agent.tools, runtime.now()),
 				compact =
 					compacted === undefined
-						? thresholdCompaction(view, entries, resolved.contextWindow, compactionPolicy(settings, model))
+						? thresholdCompaction(view, entries, resolved.contextWindow, compactionPolicy(settings, model, agent.compaction))
 						: undefined;
 			if (compact === "blocking") {
 				await runtime.commit(async (tx): Promise<Next> => {
@@ -670,11 +670,11 @@ async function classify(
 		return answer(runtime, message, context);
 	const settings = runtime.settings,
 		overflow = message.stopReason === "error" && isContextOverflow(message),
-		policy = compactionPolicy(settings, model);
+		policy = overflow && compacted === undefined
+			? compactionPolicy(settings, model, (await runtime.agent(context)).compaction)
+			: undefined;
 	if (
-		overflow &&
-		compacted === undefined &&
-		policy.enabled &&
+		policy?.enabled === true &&
 		selectCut(await runtime.context(runtime.conversationId, context, { at: cutoff }), policy.keepRecentTokens) !==
 			undefined
 	) {
