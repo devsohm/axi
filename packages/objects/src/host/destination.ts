@@ -46,7 +46,8 @@ export class Destination {
 			: invalid("host_address", `${type.name}: placed on ${address.kind}, this host is ${this.#own!.key}`);
 	}
 	#compute(type: Contract, params: ParamsOf<Contract>): WireAddress {
-		const address = contractData(type).hostAddress!(params) as { readonly kind: string; readonly params: unknown };
+		const locate = contractData(type).hostAddress!;
+		const address = locate(params) as { readonly kind: string; readonly params: unknown };
 		return { kind: address.kind, params: address.params };
 	}
 	#route(address: WireAddress, principal: Principal | undefined, context: Context): Path | undefined {

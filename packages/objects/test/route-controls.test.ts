@@ -1,5 +1,6 @@
 import { expect, it, vi } from "vitest";
-import { BACKGROUND_CONTEXT as context } from "../src/context/index.ts";
+import { BACKGROUND_CONTEXT as context, withTelemetry } from "../src/context/index.ts";
+import { InMemoryTelemetryContext } from "@axi/telemetry";
 import {
 	constant,
 	createHost,
@@ -11,6 +12,60 @@ import {
 	remote,
 	str,
 } from "../src/index.ts";
+
+it("calls an address callback without an internal receiver", async () => {
+	const Server = hostKind("callback.server");
+	const receivers: unknown[] = [];
+	const Value = remote("callback.value", {
+		version: 1,
+		params: {},
+		hostAddress(this: unknown) { receivers.push(this); return Server(); },
+		variants: { value: { state: { value: int() } } },
+	});
+	const host = createHost({ address: Server(), principal: { kind: "service" }, onError() {} });
+	try {
+		await host.load([{ name: "value", facet: defineFacet((h) => h.serve(Value, () => ({
+			variant: "value", members: { value: constant(3) },
+		}))) }], context);
+		const value = await host.get(Value, {}, context);
+		value.release();
+		expect(receivers).toEqual([undefined]);
+	} finally {
+		await host.close(context);
+	}
+});
+
+it("links a shared route span to its first trigger and each waiting span to that route", async () => {
+	const Worker = hostKind("trace.worker");
+	const Value = remote("trace.value", {
+		version: 1, params: {}, hostAddress: () => Worker(),
+		variants: { value: { state: { value: int() } } },
+	});
+	const telemetry = new InMemoryTelemetryContext();
+	const host = createHost({ telemetry, principal: { kind: "service" }, onError() {} });
+	const pending = Promise.withResolvers<never>();
+	host.route(Worker, { authorize: () => true, resolve: () => pending.promise }, context);
+	try {
+		await host.load([], context);
+		const first = await telemetry.startSpan({ name: "first" }, async (span) =>
+			host.hold(Value, {}, withTelemetry(span, context)));
+		await telemetry.startSpan({ name: "second" }, async (span) =>
+			host.hold(Value, {}, withTelemetry(span, context)));
+		pending.reject(new Error("worker unavailable"));
+		await vi.waitFor(() => expect(first.state.value.kind).toBe("failed"));
+		const spans = telemetry.getSpans();
+		const route = spans.find((span) => span.name === "objects.resolve")!;
+		expect(route.links).toHaveLength(1);
+		const waiting = spans.filter((span) => span.name === "objects.hold");
+		expect(waiting).toHaveLength(2);
+		expect(route.links[0]!.context).toEqual(waiting[0]!.context);
+		for (const span of waiting)
+			expect(span.links.map((link) => link.context)).toEqual([route.context]);
+	} finally {
+		pending.reject(new Error("test ended"));
+		await host.close(context);
+	}
+});
 
 it("keeps an explicitly anonymous root anonymous and limits it to local objects", async () => {
 	const Value = local("root.local", { version: 1, params: {}, members: { value: int() } });

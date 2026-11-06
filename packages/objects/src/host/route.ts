@@ -1,4 +1,5 @@
 import { withTelemetry, type Context } from "../context/index.ts";
+import type { TelemetrySpan } from "@axi/telemetry";
 import { OpenSpan, spanFailed, untraced } from "../telemetry.ts";
 import type { Address, HostKind, KindShape } from "../contracts/index.ts";
 import { kindParams, type ParamsData } from "../contracts/internal.ts";
@@ -100,25 +101,22 @@ export class Route {
 			entry.suspended = false;
 			if (!entry.path.link && !entry.resolving) this.#entries.delete(entry.address.key);
 		} else if (event.kind === "attached") {
-			if (entry.span && event.holder.span) {
-				entry.span.span.addLink({ context: event.holder.span });
-				event.holder.span.addLink({ context: entry.span.span });
-			}
 			if (entry.suspended) event.holder.unreachable(this.#suspended(entry));
-			else if (!entry.resolving) void this.#connect(entry);
+			else if (!entry.resolving) void this.#connect(entry, event.holder.span);
+			else if (entry.span) event.holder.span?.addLink({ context: entry.span.span });
 		} else if (!entry.path.held) this.#entries.delete(entry.address.key);
 		else if (entry.suspended) entry.path.unreachable(this.#suspended(entry));
 		else if (entry.failure) entry.path.unreachable(entry.failure);
 		else void this.#connect(entry);
 	}
-	async #connect(entry: Entry): Promise<void> {
+	async #connect(entry: Entry, trigger?: TelemetrySpan): Promise<void> {
 		entry.resolving = true;
 		const adapter = this.#host.telemetry;
 		const span = untraced(adapter) ? undefined : new OpenSpan(adapter, "objects.resolve", { "objects.host": this.#host.spanHost, kind: this.kind, address: entry.address.key.slice(0, 256) });
 		entry.span = span;
-		for (const holder of entry.path.holders()) if (span && holder.span) {
-			span.span.addLink({ context: holder.span });
-			holder.span.addLink({ context: span.span });
+		if (span && trigger) {
+			span.span.addLink({ context: trigger });
+			trigger.addLink({ context: span.span });
 		}
 		const finish = (error?: unknown): void => {
 			entry.span = undefined;
