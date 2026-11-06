@@ -2,6 +2,7 @@ import { Type } from "typebox";
 import { describe, expect, it } from "vitest";
 import { resolveAzureConfig, resolveDeploymentName } from "../src/api/azure-openai-config.ts";
 import { stream, streamSimple } from "../src/api/azure-openai-responses.ts";
+import { azureProvider } from "../src/providers/azure.ts";
 import type { Model } from "../src/types.ts";
 import { normalizeContext } from "../src/utils/transcript.ts";
 
@@ -27,6 +28,22 @@ function completed(): Response {
 	});
 }
 describe("Azure Responses", () => {
+	it.each(["stream", "streamSimple"] as const)(
+		"reports endpoint setup errors before cancellation in %s",
+		async (operation) => {
+			const result = await azureProvider()
+				[operation]({ ...model, api: "openai-completions" }, context, {
+					apiKey: "test-key",
+					signal: AbortSignal.abort(),
+					env: { AZURE_OPENAI_BASE_URL: "invalid-endpoint" },
+				})
+				.result();
+			expect(result).toMatchObject({
+				stopReason: "error",
+				errorMessage: "Invalid Azure OpenAI base URL: invalid-endpoint",
+			});
+		},
+	);
 	it("resolves the base URL before reading the fallback resource", () => {
 		const options = {
 			azureResourceName: "initial",

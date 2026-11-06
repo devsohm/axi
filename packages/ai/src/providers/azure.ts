@@ -24,7 +24,6 @@ function azureCompletions(): ProviderStreams {
 		stream: (model, context, options) =>
 			lazyStream(model, async () =>
 				api.stream({ ...model, baseUrl: resolveAzureBaseUrl(model, options) }, context, deployment(model, options)),
-				undefined, options?.signal,
 			),
 		streamSimple: (model, context, options) =>
 			lazyStream(model, async () =>
@@ -33,7 +32,6 @@ function azureCompletions(): ProviderStreams {
 					context,
 					deployment(model, options),
 				),
-				undefined, options?.signal,
 			),
 	};
 }
