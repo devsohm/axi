@@ -23,6 +23,37 @@ const Total = local("reload.total", {
 });
 const Count = defineState("count", { version: 1, schema: obj({ n: int() }), initial: () => ({ n: 5 }) });
 
+it("stops removed objects before restarting retained objects in the same reload", async () => {
+	const First = local("reload.first", { version: 1, params: {}, members: { value: int() } });
+	const Second = local("reload.second", { version: 1, params: {}, members: { value: int() } });
+	const events: string[] = [];
+	const plugin = (name: string, type: typeof First | typeof Second, n: number) => ({
+		name,
+		facet: defineFacet((h) => h.serve(type, (_, self) => {
+			self.onLive((ctx) => new Promise<void>((resolve) => {
+				events.push(`started:${name}`);
+				ctx.abortSignal?.addEventListener("abort", () => {
+					events.push(`stopped:${name}`);
+					resolve();
+				}, { once: true });
+			}));
+			return { value: constant(n) };
+		})),
+	});
+	const host = createHost({ onError() {} });
+	try {
+		await host.load([plugin("first", First, 1), plugin("second", Second, 1)], context);
+		const first = await host.get(First, {}, context), second = await host.get(Second, {}, context);
+		await vi.waitFor(() => expect(events).toContain("started:second"));
+		events.length = 0;
+		await host.reload([plugin("first", First, 2)], context);
+		expect(events.filter((event) => event.startsWith("stopped:"))).toEqual(["stopped:second", "stopped:first"]);
+		first.release(); second.release();
+	} finally {
+		await host.close(context);
+	}
+});
+
 it("keeps void declaration results unchanged while staging a replacement factory", async () => {
 	const Value = local("reload.declaration-results", { version: 1, params: {}, members: { value: int() } });
 	const plugin = (n: number) => defineFacet((h) => h.serve(Value, (_, self) => {

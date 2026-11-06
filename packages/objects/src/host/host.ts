@@ -895,8 +895,10 @@ export class ObjectsHost<P extends Principal = Principal, R extends JsonValue = 
 		for (const record of this.#registries.values()) record.reportUndeclared();
 		const attempts = new Map<ObjectsObject, ReturnType<ObjectsObject["reload"]>>();
 		for (const action of actions) {
+			if (action.kind === "end") action.object.remove({ kind: "waiting", error: new ObjectsError({ code: "unavailable", message: `${action.object.served.contract.name} is not served here` }) });
+		}
+		for (const action of actions) {
 			if (action.kind !== "end") attempts.set(action.object, action.object.reload(action.served, action.kind, action.requests));
-			else action.object.remove({ kind: "waiting", error: new ObjectsError({ code: "unavailable", message: `${action.object.served.contract.name} is not served here` }) });
 		}
 		for (const action of actions) action.object.startSuccessor();
 		const checks = actions.map(async (action): Promise<ReloadedObject> => {
