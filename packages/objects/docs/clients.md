@@ -18,7 +18,7 @@ The optional `@axi/objects/react` entry requires React. Wrap components in `Host
 
 The `@axi/objects/tui` entry is independent of the terminal rendering library. `TuiScope` holds references, follows values and requests redraws. Dispose a scope when its component ends. Host page state survives replacement of the scope.
 
-`scope.optimistic(read)` returns a reader and `show(value, promise)`. The reader shows the latest supplied value until every shown call settles, including rejected calls. It then reads the real state again. `show` returns the original promise. Disposing the scope stops its redraws.
+`scope.optimistic(read, reduce?)` returns a reader, `add(action, call)` and a `pending()` reader. The reducer applies actions in order over the current server value. Without a reducer, the latest action is the displayed value. Actions remain until every added call settles, including rejected calls. The reader then uses the server value again. `add` returns the original promise; callers handle rejections. Disposing the scope stops its redraws.
 
 `startTerminalRuntime` runs inside a launcher-provided sandbox. `BridgeTerminal` receives input and size changes and sends drawing frames. Machine actions such as copying text, opening a URL or attaching a file pass through the launcher's request bridge.
 
