@@ -222,7 +222,7 @@ class WorkerPool<P extends Principal, K extends KindShape> implements Workers<K>
 		clearInterval(this.#idle);
 		this.#idle = undefined;
 		await awaitWithContext(
-			Promise.all([...this.#slots.values()].map((slot) => this.#queue(slot, () => this.#stop(slot)))),
+			Promise.all([...this.#slots.values()].map((slot) => this.#queue(slot, () => this.#stop(slot)).then(() => slot.queue))),
 			context,
 		);
 	}

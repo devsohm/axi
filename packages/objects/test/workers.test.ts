@@ -8,8 +8,14 @@ import { expect, it, vi } from "vitest";
 import { BACKGROUND_CONTEXT as context, withAbortSignal } from "../src/context/index.ts";
 import { createHost } from "../src/index.ts";
 import { createPlugins } from "../src/node/plugins/index.ts";
+import { clearStaleLock } from "../src/node/workers/lock.ts";
 import { createWorkers, processLock, type WorkersError } from "../src/node/workers/index.ts";
 import { Control, Runner, Value } from "./fixtures/worker-contracts.ts";
+
+vi.mock("../src/node/workers/lock.ts", async (importOriginal) => {
+	const original = await importOriginal<typeof import("../src/node/workers/lock.ts")>();
+	return { ...original, clearStaleLock: vi.fn(original.clearStaleLock) };
+});
 
 async function setup(onOutput: () => void = () => {}) {
 	const directory = await mkdtemp(join(tmpdir(), "axi-workers-"));
@@ -76,6 +82,31 @@ it("calls the worker output callback without binding an options object", async (
 		await vi.waitFor(() => expect(receivers.length).toBeGreaterThan(0));
 		expect(receivers.every((receiver) => receiver === undefined)).toBe(true);
 	} finally {
+		ref.release();
+	}
+});
+
+it("waits for a killed worker's queued lock cleanup before close resolves", async () => {
+	await using f = await setup();
+	const ref = await f.host.get(Control, { id: "close-drain" }, context);
+	await vi.waitFor(() => expect(f.workers.state.value["runner|close-drain"]?.status).toBe("running"));
+	const worker = f.workers.state.value["runner|close-drain"];
+	if (!worker || !("pid" in worker)) throw new Error("Worker did not start");
+	const entered = Promise.withResolvers<void>(), gate = Promise.withResolvers<boolean>();
+	vi.mocked(clearStaleLock).mockImplementationOnce(() => { entered.resolve(); return gate.promise; });
+	let finished = false;
+	process.kill(worker.pid, "SIGKILL");
+	const closing = f.workers.close(context).then(() => { finished = true; });
+	try {
+		await entered.promise;
+		await new Promise<void>((resolve) => setImmediate(resolve));
+		expect(finished).toBe(false);
+		gate.resolve(false);
+		await closing;
+		expect(finished).toBe(true);
+	} finally {
+		gate.resolve(false);
+		await closing;
 		ref.release();
 	}
 });
