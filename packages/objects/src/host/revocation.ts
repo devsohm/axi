@@ -11,10 +11,11 @@ export class RevocationKeys {
 		this.#identify = revokedBy;
 	}
 	revokes(principal: Principal, key: string, context: Context): boolean {
-		if (!this.#identify) return false;
+		const identify = this.#identify;
+		if (!identify) return false;
 		let keys = this.#cache.get(principal);
 		if (!keys) {
-			keys = new Set(this.#identify(principal).map((value) => canonicalJson(value, context)));
+			keys = new Set(identify(principal).map((value) => canonicalJson(value, context)));
 			this.#cache.set(principal, keys);
 		}
 		return keys.has(key);

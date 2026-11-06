@@ -2,7 +2,27 @@ import { expect, it } from "vitest";
 import { InMemoryTelemetryContext, NOOP_TELEMETRY_CONTEXT, type TelemetrySpan } from "@axi/telemetry";
 import { BACKGROUND_CONTEXT as context, withTelemetry } from "../src/context/index.ts";
 import { ObjectsHost } from "../src/host/host.ts";
-import { constant, defineFacet, defineRegistry, int, local, str } from "../src/index.ts";
+import { constant, defineFacet, defineRegistry, hostKind, int, local, remote, str } from "../src/index.ts";
+
+it("calls the revocation key callback without exposing an internal receiver", async () => {
+	const address = hostKind("lifecycle.private-host")(), receivers: boolean[] = [];
+	const Private = remote("lifecycle.private", { version: 1, params: {}, hostAddress: () => address, variants: { active: {} } });
+	const host = new ObjectsHost({ address, principal: { kind: "server" }, onError() {},
+		revokedBy(this: unknown, principal) { receivers.push(this === undefined); return [principal.kind]; },
+	});
+	try {
+		await host.load([{ name: "private", facet: defineFacet((h) => h.serve(Private,
+			() => ({ variant: "active", members: {} }))) }], context);
+		await host.root(async (ctx) => {
+			const ref = await ctx.get(Private, {});
+			host.revoke("client", context);
+			expect(ref.state.value.kind).toBe("ended");
+		}, context, { principal: { kind: "client" } });
+		expect(receivers).toEqual([true]);
+	} finally {
+		await host.close(context);
+	}
+});
 
 it("reports published registries in name order and distinguishes missing types from version skew", async () => {
 	const first = local("lifecycle.notes", { version: 1, params: { id: str() }, members: { value: int() } });
