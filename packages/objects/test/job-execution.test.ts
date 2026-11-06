@@ -1,5 +1,6 @@
 import { expect, it, vi } from "vitest";
-import { BACKGROUND_CONTEXT as context } from "../src/context/index.ts";
+import { NOOP_TELEMETRY_CONTEXT } from "@axi/telemetry";
+import { BACKGROUND_CONTEXT as context, withTelemetry } from "../src/context/index.ts";
 import { defineJob, defineState, obj, str } from "../src/index.ts";
 import { ObjectsError } from "../src/data/index.ts";
 import { Documents, SealToken } from "../src/documents/internal.ts";
@@ -98,6 +99,23 @@ function setup(implementation: AnyJobImplementation) {
 const flushed = async (): Promise<void> => {
 	for (let i = 0; i < 8; i++) await Promise.resolve();
 };
+
+it("does not inject a job trace carrier when recording is disabled", async () => {
+	const inject = vi.fn(() => ({ trace: "unrecorded" }));
+	const untraced = {
+		...NOOP_TELEMETRY_CONTEXT,
+		propagation: { inject, extract: () => NOOP_TELEMETRY_CONTEXT },
+	};
+	const app = setup({ run: async () => "done" });
+	try {
+		app.job.live();
+		const run = await app.job.start({}, withTelemetry(untraced, context));
+		expect(await run.outcome(context)).toMatchObject({ kind: "done", result: "done" });
+		expect(inject).not.toHaveBeenCalled();
+	} finally {
+		await app.close();
+	}
+});
 
 it("executes after activation and commits progress, finish and cleanup before resolving a run", async () => {
 	const seen: unknown[] = [],

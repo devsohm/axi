@@ -7,6 +7,7 @@ import { Persistence, type Documents, type Staged, type Transaction } from "../d
 import type { JsonObject } from "../documents/index.ts";
 import type { HostError } from "../host/report.ts";
 import { uuidv7 } from "../host/uuid.ts";
+import { carrierOf } from "../telemetry.ts";
 import type { StagedWrite } from "../store/step.ts";
 import type { ObjectsStore } from "../store/store.ts";
 import type { JobDefinition, JobError } from "./definition.ts";
@@ -290,7 +291,7 @@ export class JobRecords {
 				reason: "busy",
 				message: `${this.name}: at its concurrency limit (${limit})`,
 			});
-		const trace = context.telemetry.propagation?.inject(context.telemetry);
+		const trace = carrierOf(context.telemetry);
 		const run = new JobRun(
 			uuidv7(),
 			this.definition.version,
