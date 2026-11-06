@@ -93,6 +93,9 @@ class PluginComponent implements Plugins {
 		const seen = this.#watcher.discoverySnapshot();
 		this.#known = await discoverPlugins(this.#options.roots, { kinds: Object.keys(this.#options.kinds) }, context);
 		this.#discovered = true;
+		const present = new Set(this.#known.plugins.map((plugin) => plugin.name));
+		for (const key of this.#cache.keys())
+			if (!present.has(key.slice(0, key.indexOf("\0")))) this.#cache.delete(key);
 		this.#watcher.know(this.#known, seen);
 	}
 	async #compile(plugin: Plugin, kind: string, context: Context): Promise<BuiltFacet> {

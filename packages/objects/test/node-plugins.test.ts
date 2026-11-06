@@ -1,6 +1,8 @@
 import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { execFileSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 import { expect, it, vi } from "vitest";
 import { BACKGROUND_CONTEXT as context } from "../src/context/index.ts";
 import * as api from "../src/index.ts";
@@ -13,6 +15,14 @@ const Metric = api.local("plugin.metric", { version: 1, params: {}, members: { r
 const source = (reading: number) => `import {defineFacet,local,int,constant} from "@axi/objects";
 const Metric=local("plugin.metric",{version:1,params:{},members:{reading:int()}});
 export default defineFacet(host=>host.serve(Metric,()=>({reading:constant(${reading})})));`;
+
+it("releases the build of a removed plugin while its loader remains alive", () => {
+	execFileSync(
+		process.execPath,
+		["--expose-gc", fileURLToPath(new URL("./fixtures/removed-plugin-build.mjs", import.meta.url))],
+		{ timeout: 10000 },
+	);
+});
 
 it("uses one public asset address from the options for each build", async () => {
 	const root = await mkdtemp(join(tmpdir(), "axi-plugin-assets-"));
