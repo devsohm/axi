@@ -21,6 +21,7 @@ const transient = new RegExp(
 		"upstream_stream_read_error",
 		"stream was interrupted",
 		"stream disconnected before completion",
+		"cut short after the reply had begun",
 		"http/?2 stream failed",
 		"network.?error",
 		"connection.?error",

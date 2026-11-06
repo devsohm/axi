@@ -55,6 +55,7 @@ export function completionsCompat(model: Model<"openai-completions">): Completio
 		requiresToolResultName: false,
 		requiresAssistantAfterToolResult: false,
 		requiresNonNullAssistantContent: false,
+		requiresToolsWithToolHistory: false,
 		requiresThinkingAsText: false,
 		requiresReasoningContentOnAssistantMessages: deepseek,
 		thinkingFormat: deepseek

@@ -130,6 +130,7 @@ export const OpenAICompletionsCompatSchema = Type.Object(
 		),
 		requiresToolResultName: bool("Include a name on tool results; detected from the URL when omitted."),
 		requiresNonNullAssistantContent: bool("Use empty text instead of null for assistant tool calls."),
+		requiresToolsWithToolHistory: bool("Send an empty tools list for tool history when a proxy requires it."),
 		promptCacheKeyMode: cacheKeyMode(),
 		requiresAssistantAfterToolResult: bool(
 			"Insert an assistant message between tool results and a following user message when required; otherwise detect from the URL.",

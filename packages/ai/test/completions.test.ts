@@ -9,6 +9,7 @@ import { envApiKeyAuth } from "../src/auth/helpers.ts";
 import { createModels, createProvider } from "../src/models.ts";
 import type { AssistantMessage, Model, Tool } from "../src/types.ts";
 import { normalizeContext } from "../src/utils/transcript.ts";
+import { fauxAssistantMessage } from "../src/providers/faux.ts";
 
 const model: Model<"openai-completions"> = {
 	id: "test-model",
@@ -37,6 +38,41 @@ function answer(): Response {
 }
 
 describe("Chat Completions", () => {
+	it.each([undefined, false, true])("uses the explicit empty-tool compatibility option %s", async (setting) => {
+		let body = "";
+		const history = normalizeContext({
+			messages: [
+				...context.messages,
+				{
+					...fauxAssistantMessage([{ type: "toolCall", id: "done", name: "lookup", arguments: {} }]),
+					api: model.api,
+					provider: model.provider,
+					model: model.id,
+					stopReason: "toolUse",
+				},
+				{
+					role: "toolResult",
+					toolCallId: "done",
+					toolName: "lookup",
+					content: [{ type: "text", text: "found" }],
+					isError: false,
+					timestamp: 2,
+				},
+			],
+			tools: [],
+		});
+		const selected = { ...model, compat: { requiresToolsWithToolHistory: setting } };
+		const result = await stream(selected, history, {
+			apiKey: "offline",
+			fetch: async (_url, init) => {
+				body = String(init?.body);
+				return answer();
+			},
+		}).result();
+		expect(result.stopReason).toBe("stop");
+		if (setting === true) expect(JSON.parse(body)).toHaveProperty("tools", []);
+		else expect(JSON.parse(body)).not.toHaveProperty("tools");
+	});
 	it("uses compatibility settings exposed through class getters", async () => {
 		const compat = new (class {
 			get supportsStore() {

@@ -101,6 +101,7 @@ export function completionsRequest({
 		body.tools = completionsTools(declared, compat);
 		if (compat.zaiToolStream) Object.assign(body, { tool_stream: true });
 	} else if (
+		compat.requiresToolsWithToolHistory &&
 		context.messages.some(
 			(message) =>
 				message.role === "toolResult" ||

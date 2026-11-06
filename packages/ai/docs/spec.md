@@ -129,6 +129,8 @@ A custom provider's `refreshModels()` receives the stored snapshot, resolved cre
 
 `ProviderCompat` from `@axi/ai/providers/compat-schema` types provider-wide and model-specific compatibility overrides. It is derived from `ProviderCompatSchema`, including the supported cache, reasoning and routing fields.
 
+Chat Completions requests omit `tools` when no tools are declared. Set `compat.requiresToolsWithToolHistory` to true for a proxy that requires `tools: []` when replaying tool calls or results. It defaults to false.
+
 ## Images and classifiers
 
 `ImagesContext` contains text and image input. `AssistantImages` returns text and image output with `stop`, `error`, or `aborted` status. Images carry base64 data and MIME types.

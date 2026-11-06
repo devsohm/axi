@@ -6,6 +6,7 @@ import { isRetryableAssistantError, retryAssistantCall } from "../src/utils/retr
 it.each([
 	["HTTP 503 temporarily unavailable", true],
 	["stream disconnected before completion", true],
+	["The upstream stream was cut short after the reply had begun", true],
 	["Request id a503b failed", false],
 	["Input has 150000 bytes", false],
 	["429 subscription_sharing_workplace_individual_usage_limit_exceeded", false],
