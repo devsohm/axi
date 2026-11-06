@@ -7,12 +7,39 @@ import { invalid } from "./errors.ts";
 
 type Owner = { readonly schema: TSchema };
 const compiled = new WeakMap<Owner, Validator>();
+
+function validationSchema(schema: TSchema): TSchema {
+	if (typeof schema !== "object" || schema === null) return schema;
+	const descriptors = Object.getOwnPropertyDescriptors(schema);
+	for (const descriptor of Object.values(descriptors)) {
+		descriptor.configurable = true;
+		if ("value" in descriptor) descriptor.writable = true;
+	}
+	const result = Object.defineProperties({}, descriptors);
+	Reflect.deleteProperty(result, "format");
+	for (const key of ["items", "additionalItems", "additionalProperties"]) {
+		const child: TSchema | TSchema[] | undefined = Reflect.get(schema, key);
+		if (child !== undefined)
+			Reflect.set(result, key, Array.isArray(child) ? child.map(validationSchema) : validationSchema(child));
+	}
+	for (const key of ["anyOf", "allOf", "prefixItems"]) {
+		const children: TSchema[] | undefined = Reflect.get(schema, key);
+		if (children !== undefined) Reflect.set(result, key, children.map(validationSchema));
+	}
+	for (const key of ["properties", "patternProperties", "$defs"]) {
+		const fields: Record<string, TSchema> | undefined = Reflect.get(schema, key);
+		if (fields !== undefined)
+			Reflect.set(result, key, Object.fromEntries(Object.entries(fields).map(([name, child]) => [name, validationSchema(child)])));
+	}
+	return result;
+}
+
 export function validatorFor(owner: Owner, context: Context): Validator {
 	const existing = compiled.get(owner);
 	if (existing) return existing;
 	context.telemetry.metrics?.counter("objects.data.compilations").add(1);
 	let validator: Validator;
-	try { validator = Compile(owner.schema); }
+	try { validator = Compile(validationSchema(owner.schema)); }
 	finally { ResetFunctions(); ResetExternal(); }
 	compiled.set(owner, validator);
 	return validator;

@@ -17,9 +17,12 @@ function allowed(value: JsonValue): boolean {
 }
 export function readParams(fields: readonly [string, unknown][], path: string): ParamsData {
 	const schemas = fields.map(([name, schema]) => {
-		const at = `${path}.${name}`, snap = snapshotSchema(schema, at);
-		if (Object.hasOwn(schema as object, "~optional") || !allowed(snap.normal))
-			throw new Error(`${at}: a param is a required str(), int(), bool() or oneOf(...) of strings`);
+		const at = `${path}.${name}`;
+		const message = `${at}: a param is a required str(), int(), bool() or oneOf(...) of strings`;
+		if (schema !== null && typeof schema === "object" && Object.hasOwn(schema, "~optional"))
+			throw new Error(message);
+		const snap = snapshotSchema(schema, at);
+		if (!allowed(snap.normal)) throw new Error(message);
 		return [name, snap] as const;
 	});
 	const names = schemas.map(([name]) => name);

@@ -1,14 +1,49 @@
 import { expect, expectTypeOf, it } from "vitest";
 import { BACKGROUND_CONTEXT as context } from "../src/context/index.ts";
-import { local, remote, hostKind, method, obj, str, int, bytes, map, evolve, keyed, type Implementation } from "../src/contracts/index.ts";
+import { local, remote, hostKind, method, obj, str, opt, int, bytes, map, evolve, keyed, type Implementation } from "../src/contracts/index.ts";
 import { contractData, checkAccepts, snapshotArguments } from "../src/contracts/internal.ts";
 import type { Increment } from "../src/contracts/history.ts";
 import { bindProvider, binds, checkArgs, checkParams, principalKey, canonicalJson, check, validatorFor, objectsErrorFromJson, waitingFor } from "../src/data/internal.ts";
 import { ObjectsError } from "../src/data/index.ts";
 import { createHost, defineFacet } from "../src/host/index.ts";
+import { defineState } from "../src/documents/index.ts";
 import { nodeCompression } from "../src/node/compression.ts";
 import { DeflatedPart, inflateAsync, openPart, originPart, oversized } from "../src/link/part.ts";
 import { compareText, prefixUpperBound, storedText } from "../src/store/text.ts";
+
+it("treats formats as annotations through references while retaining data constraints and schema metadata", () => {
+	const schema = Object.assign(obj({
+		addresses: { type: "array", items: { $ref: "#/$defs/address" } },
+		literal: { type: "object", const: { format: "keep" }, properties: { format: str() }, required: ["format"], additionalProperties: false },
+	}), { $defs: { address: { type: "string", format: "email", pattern: "^mail:" } } });
+	const original = JSON.stringify(schema);
+	const contract = local("mail", { version: 1, params: {}, members: { send: method(schema) } });
+	const bound = bindProvider(contract, {});
+	const value = { addresses: ["mail:unformatted"], literal: { format: "keep" } };
+	expect(checkArgs(bound, "send", value, 1, context).args).toBe(value);
+	expect(() => checkArgs(bound, "send", { ...value, addresses: ["no-prefix"] }, 1, context)).toThrow();
+	expect(() => checkArgs(bound, "send", { ...value, literal: {} }, 1, context)).toThrow();
+	expect(JSON.stringify(schema)).toBe(original);
+	expect(contractData(contract).versions[0].variants.get("members")!.methods.get("send")!.args.normal).toMatchObject({
+		$defs: { address: { format: "email" } },
+	});
+});
+
+it("identifies optional parameters as an unsupported parameter declaration", () => {
+	const message = "group.params.id: a param is a required str(), int(), bool() or oneOf(...) of strings";
+	// @ts-expect-error Parameters are required.
+	expect(() => hostKind("group", { id: opt(str()) })).toThrow(message);
+	// @ts-expect-error Parameters are required.
+	expect(() => local("group", { version: 1, params: { id: opt(str()) }, members: {} })).toThrow(message);
+});
+
+it("accepts frozen state schemas without treating format annotations as constraints", () => {
+	const to = Object.freeze(Object.assign(str(), { format: "email" }));
+	const schema = Object.freeze(obj(Object.freeze({ to })));
+	const state = defineState("mail", { schema, version: 1, initial: () => ({ to: "unfinished" }) });
+	expect(state.initial(context)).toEqual({ to: "unfinished" });
+	expect(schema.properties.to.format).toBe("email");
+});
 
 it("evolves keyed document schemas without mutating older versions and requires direct mappings", () => {
 	const original = local("drafts", { version: 1, params: {}, members: { items: keyed(obj({ text: str() })) } });

@@ -6,7 +6,7 @@ The [JSON revision contract](delta.md) defines draft ownership, preparation, rep
 
 ## Identity and declarations
 
-Object identity consists of contract, canonical parameters and principal. Parameter defaults are normalized before identity lookup. Contract declarations own immutable schema snapshots and fingerprints. Equal versions require compatible fingerprints. Accepted older versions use explicit adapters.
+Object identity consists of contract, canonical parameters and principal. Parameters are required and cannot declare defaults. Contract declarations own immutable schema snapshots and fingerprints. Equal versions require compatible fingerprints. Accepted older versions use explicit adapters. Schema `format` fields describe values without validating their format; constraints such as `pattern` still apply.
 
 A local contract has one member set. A remote contract has named variants and a host-address function. Placement cannot be overridden by a request. Method arguments and results are checked at dispatch, including local calls. Factories declare synchronously and return an implementation rather than a promise.
 
