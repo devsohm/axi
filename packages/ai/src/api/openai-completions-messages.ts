@@ -6,7 +6,6 @@ import type {
 } from "openai/resources/chat/completions.js";
 import type { JsonValue, Model, Tool, TranscriptContext } from "../types.ts";
 import { shortHash } from "../utils/hash.ts";
-import { isOpenRouterModel } from "../utils/openrouter-cost.ts";
 import { sanitizeSurrogates } from "../utils/sanitize-unicode.ts";
 import { getSystemMessageText, renderSystemMessageUpdate } from "../utils/text.ts";
 import { resolveTranscript, resolveTranscriptTools } from "../utils/transcript.ts";
@@ -66,12 +65,9 @@ function legacyDetail(signature?: string): ReasoningDetail | undefined {
 		return undefined;
 	}
 }
-function toolId(id: string, model: Model<"openai-completions">): string {
+function toolId(id: string, provider: string): string {
 	const separator = id.indexOf("|");
-	if (separator < 0)
-		return id.length > 40 && (model.provider === "openai" || isOpenRouterModel(model))
-			? `${id.slice(0, 31)}_${shortHash(id).slice(0, 8)}`
-			: id;
+	if (separator < 0) return provider === "openai" ? id.slice(0, 40) : id;
 	const call = id.slice(0, separator).replace(/[^\w-]/g, "_");
 	const item = id.slice(separator + 1).replace(/[^\w-]/g, "_");
 	const combined = item ? `${call}_${item}` : call;
@@ -117,7 +113,7 @@ export function convertMessages(
 			? "additions"
 			: "none",
 	);
-	const input = transformMessages(transcript.messages, model, (id) => toolId(id, model));
+	const input = transformMessages(transcript.messages, model, (id) => toolId(id, model.provider));
 	const output: ChatCompletionMessageParam[] = [];
 	let previous = "";
 	let systemIndex = 0;
