@@ -33,6 +33,10 @@ it("rejects malformed framing while leaving envelope types to the channel", () =
 		'["s",[[0]]]',
 		'["@",1,["@",2,["a"]]]',
 		'["H",0,"t",1,"0123456789abcdef",[0,{}],null]',
+		'["r",1,null]',
+		'["r",1,[0,7],null]',
+		'["c",1,0,0,null]',
+		'["c",1,0,0,[0,7],null]',
 	])
 		expect(() => decode(value)).toThrow();
 	expect(decode('["e",0,{"kind":"invalid"}]')).toEqual({
@@ -43,4 +47,10 @@ it("rejects malformed framing while leaving envelope types to the channel", () =
 	expect(() =>
 		checkMessage(decode('["e",0,{"kind":"invalid"}]'), context),
 	).toThrow("message schema");
+	expect(decode('["c",1,0,0,null,null,{"traceparent":"value"}]')).toEqual({
+		kind: "call", call: 1, hold: 0, method: 0, trace: { traceparent: "value" },
+	});
+	expect(decode('["c",1,0,0,[0,7],null,{"traceparent":"value"}]')).toEqual({
+		kind: "call", call: 1, hold: 0, method: 0, args: "7", trace: { traceparent: "value" },
+	});
 });

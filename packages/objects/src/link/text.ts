@@ -121,14 +121,6 @@ function failures(value: unknown): unknown[] {
 	return value === undefined ? [] : pairs(value).map(([member, error]) => ({ member, error }));
 }
 function payload(fields: readonly unknown[], rest: Uint8Array, key: string): Record<string, unknown> {
-	if (fields[0] === null && fields[1] == null) {
-		if (rest.byteLength) throw new Error("text: byte segments without a payload that carries them");
-		return {};
-	}
-	if (fields[1] === null) {
-		if (rest.byteLength) throw new Error("text: byte segments without lengths");
-		return { [key]: textPart(fields[0]) };
-	}
 	if (fields.length < 2) {
 		if (rest.byteLength) throw new Error("text: byte segments without a payload that carries them");
 		return fields.length ? { [key]: textPart(fields[0]) } : {};
@@ -180,17 +172,23 @@ function envelope(fields: unknown[], rest: Uint8Array): Record<string, unknown> 
 				...optional,
 			};
 		}
-		case "c":
+		case "c": {
 			arity(3, 4, 5, 6, 7);
+			let parameters = args.slice(3, 5);
+			if (args.length >= 6) {
+				if (args[3] === null) parameters = [];
+				else if (args[4] === null) parameters = [args[3]];
+			}
 			return {
 				kind: "call",
 				call: args[0],
 				hold: args[1],
 				method: args[2],
-				...payload(args.slice(3, 5), rest, "args"),
+				...payload(parameters, rest, "args"),
 				...(args[5] == null ? {} : { trace: args[5] }),
 				...(args[6] === undefined ? {} : { old: args[6] }),
 			};
+		}
 		case "r":
 			arity(1, 2, 3);
 			return {
