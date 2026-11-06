@@ -92,13 +92,21 @@ it("relays terminal input, sockets and confirmed action replies across the bridg
 		input = vi.fn(),
 		resized = vi.fn();
 	terminal.onInput(input);
-	terminal.onResize(resized);
+	const stopFirstResize = terminal.onResize(resized),
+		stopSecondResize = terminal.onResize(resized);
 	receive({ kind: "input", data: "a" });
 	receive({ kind: "resize", columns: 100, rows: 40 });
 	expect(input).toHaveBeenCalledWith("a");
 	expect(terminal.columns).toBe(100);
 	expect(terminal.rows).toBe(40);
-	expect(resized).toHaveBeenCalledOnce();
+	expect(resized).toHaveBeenCalledTimes(2);
+	expect(resized).toHaveBeenCalledWith();
+	stopFirstResize();
+	receive({ kind: "resize", columns: 120, rows: 50 });
+	expect(resized).toHaveBeenCalledTimes(3);
+	stopSecondResize();
+	receive({ kind: "resize", columns: 140, rows: 60 });
+	expect(resized).toHaveBeenCalledTimes(3);
 	const link = channel.openSocket({ opened() {}, received() {} }),
 		frame = new Uint8Array([1, 2]);
 	link.send(frame);

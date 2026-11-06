@@ -25,6 +25,6 @@ export class BridgeTerminal {
 		return this.#channel.onInput(listener);
 	}
 	onResize(listener: () => void): () => void {
-		return this.#channel.onResize(listener);
+		return this.#channel.onResize(() => listener());
 	}
 }
