@@ -70,6 +70,7 @@ export function sshArguments(
 		"RemoteCommand=none",
 		"PermitLocalCommand=no",
 		"SendEnv=-*",
+		"ConnectTimeout=15",
 		"ServerAliveInterval=15",
 		`StrictHostKeyChecking=${strictHostKeys ? "yes" : "accept-new"}`,
 		`UserKnownHostsFile=${optionPath("known hosts file", knownHostsFile)}`,

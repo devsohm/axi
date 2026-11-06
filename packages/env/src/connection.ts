@@ -52,7 +52,18 @@ export interface RequestOptions {
 type Pending = { resolve(value: Reply): void; reject(error: Error): void; onEvent?: RequestOptions["onEvent"] };
 const lost = (message: string) => new RemoteError({ code: "unknown", message, lost: true });
 const closed = () => new RemoteError({ code: "unknown", message: "Connection closed" });
+const aborted = () => new RemoteError({ code: "aborted", message: "aborted" });
 export const isConnectionLost = (error: unknown): boolean => error instanceof RemoteError && error.fields.lost === true;
+
+function waitForStart<T>(ready: Promise<T>, signal: AbortSignal | undefined): Promise<T> {
+	if (!signal) return ready;
+	if (signal.aborted) return Promise.reject(aborted());
+	return new Promise((resolve, reject) => {
+		const cancel = () => reject(aborted());
+		signal.addEventListener("abort", cancel, { once: true });
+		void ready.then(resolve, reject).finally(() => signal.removeEventListener("abort", cancel));
+	});
+}
 
 function startupDiagnostics(message: string, output: string): string {
 	const text = stripVTControlCharacters(output.replace(/\r\n?/g, "\n")).replace(
@@ -124,8 +135,8 @@ export class Connection {
 	constructor(options: ConnectionOptions) {
 		this.#options = options;
 	}
-	async info(): Promise<RemoteInfo> {
-		return (await this.#connect()).info;
+	async info(signal?: AbortSignal): Promise<RemoteInfo> {
+		return (await waitForStart(this.#connect(), signal)).info;
 	}
 	async session(): Promise<number> {
 		return (await this.#connect()).session.id;
@@ -136,7 +147,7 @@ export class Connection {
 			if (!current?.live || current.id !== options.session) throw lost("Axi environment connection lost");
 			return this.#send(current, op, json, options);
 		}
-		return this.#send((await this.#connect()).session, op, json, options);
+		return this.#send((await waitForStart(this.#connect(), options.signal)).session, op, json, options);
 	}
 	close(): void {
 		this.#closed = true;
@@ -161,9 +172,20 @@ export class Connection {
 		if (!session.live) return Promise.reject(lost("Axi environment connection lost"));
 		const id = this.#requestId++;
 		return new Promise((resolve, reject) => {
-			const cancel = () => this.#write(session, encode(5, id, {}));
-			const detach = () => options.signal?.removeEventListener("abort", cancel);
-			session.pending.set(id, {
+			let grace: ReturnType<typeof setTimeout> | undefined;
+			const cancel = () => {
+				this.#write(session, encode(5, id, {}));
+				grace = setTimeout(() => {
+					if (session.pending.get(id) !== pending) return;
+					session.pending.delete(id);
+					pending.reject(aborted());
+				}, 1000);
+			};
+			const detach = () => {
+				clearTimeout(grace);
+				options.signal?.removeEventListener("abort", cancel);
+			};
+			const pending: Pending = {
 				resolve: (value) => {
 					detach();
 					resolve(value);
@@ -173,7 +195,8 @@ export class Connection {
 					reject(error);
 				},
 				...(options.onEvent ? { onEvent: options.onEvent } : {}),
-			});
+			};
+			session.pending.set(id, pending);
 			options.signal?.addEventListener("abort", cancel, { once: true });
 			options.onStart?.(id, session.id);
 			this.#write(session, encode(1, id, { ...json, op }, options.payload));

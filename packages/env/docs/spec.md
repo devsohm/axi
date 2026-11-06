@@ -30,7 +30,9 @@ Connection close is terminal. Unplanned connection loss rejects pending work, ma
 
 Environment file methods return Durable `Result` values. Known remote error codes map to stable `FileError` codes; other names map to `unknown`. Existing `FileError` instances retain their identity. Diagnostic messages and native error details may vary by platform.
 
-Request cancellation sends a cancel frame and waits for the daemon's result or error. Cancellation of a command or terminal kills its process group. Explicit kill can stop a command without classifying the request as aborted. Short file operations can finish normally after cancellation is requested. Callers must follow the operation-specific checkpoints in the semantics document.
+Cancelling a request or `info(signal)` during startup stops that caller's wait immediately with `aborted`. The shared connection continues starting for other callers. File operations also stop waiting for startup when their context is cancelled.
+
+After a request is sent, cancellation sends a cancel frame and waits up to one second for the daemon's result or error. If the daemon does not answer, the client returns `aborted` and ignores a later reply. A remote command timeout also runs on the client, covering connection startup and an unresponsive daemon. Cancellation of a command or terminal kills its process group. Explicit kill can stop a command without classifying the request as aborted. Short file operations can finish normally after cancellation is requested. Callers must follow the operation-specific checkpoints in the semantics document.
 
 An output callback failure takes precedence over a command failure. Command timeout, abort, spill failure and process exit follow the documented precedence. Complete output can spill to a file independently of the retained display window.
 
@@ -43,6 +45,8 @@ Connection and daemon pings detect silence. Reconnected watchers establish new c
 SSH host keys are supplied through an explicit known-hosts file and alias. Applications compare newly scanned keys through a trusted channel before accepting them. Deployment verifies the binary content and activates it only after the uploaded checksum agrees. The remote machine needs the native executable; it does not need Node or Rust to run it.
 
 ## Platform boundaries
+
+SSH uses a 15-second connection timeout and keepalives for an established connection.
 
 The client follows the remote machine's path, file, environment and executable-search rules. Platform and architecture names from Rust are converted by `nodePlatform()` for Node callers. Filesystem edge cases remain subject to native semantics documented in the guide.
 

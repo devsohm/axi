@@ -28,7 +28,7 @@ export async function listFilesOver(
 	const before = abortResult<FileListing>(context.abortSignal, path);
 	if (before) return before;
 	try {
-		if (!(await connection.info()).features?.includes("listFiles"))
+		if (!(await connection.info(context.abortSignal)).features?.includes("listFiles"))
 			return err(
 				new FileError("not_supported", "This Axi environment does not support file listing; update its daemon", path),
 			);

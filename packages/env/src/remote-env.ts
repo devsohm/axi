@@ -67,8 +67,8 @@ export class RemoteExecutionEnv implements ExecutionEnv {
 		this.#shellEnv = options.shellEnv;
 		this.#watchOptions = options.watch ?? {};
 	}
-	async #resolve(input: string): Promise<string> {
-		const info = await this.connection.info(),
+	async #resolve(input: string, signal: AbortSignal | undefined): Promise<string> {
+		const info = await this.connection.info(signal),
 			windows = nodePlatform(info).platform === "win32",
 			paths = windows ? win32 : posix;
 		let path = input;
@@ -96,7 +96,7 @@ export class RemoteExecutionEnv implements ExecutionEnv {
 	): Promise<Result<T, FileError>> {
 		let resolved: string;
 		try {
-			resolved = await this.#resolve(path);
+			resolved = await this.#resolve(path, context.abortSignal);
 		} catch (error) {
 			return err(toFileError(error, path));
 		}
@@ -113,9 +113,9 @@ export class RemoteExecutionEnv implements ExecutionEnv {
 		const { json, session } = await this.connection.request(op, { path, ...fields });
 		return { handle: new Handle(this, json.handle as number, session, path), json };
 	}
-	async absolutePath(path: string, _context: Context): Promise<Result<string, FileError>> {
+	async absolutePath(path: string, context: Context): Promise<Result<string, FileError>> {
 		try {
-			return ok(await this.#resolve(path));
+			return ok(await this.#resolve(path, context.abortSignal));
 		} catch (error) {
 			return err(toFileError(error, path));
 		}
@@ -339,8 +339,8 @@ export class RemoteExecutionEnv implements ExecutionEnv {
 		let source = sourcePath,
 			destination: string;
 		try {
-			source = await this.#resolve(sourcePath);
-			destination = await this.#resolve(destinationPath);
+			source = await this.#resolve(sourcePath, context.abortSignal);
+			destination = await this.#resolve(destinationPath, context.abortSignal);
 		} catch (error) {
 			return err(toFileError(error, sourcePath));
 		}
@@ -397,7 +397,7 @@ export class RemoteExecutionEnv implements ExecutionEnv {
 		context: Context,
 	): Promise<Result<FileListing, FileError>> {
 		try {
-			return listFilesOver(this.connection, await this.#resolve(path), options, context);
+			return listFilesOver(this.connection, await this.#resolve(path, context.abortSignal), options, context);
 		} catch (error) {
 			return err(toFileError(error, path));
 		}
@@ -439,7 +439,7 @@ export class RemoteExecutionEnv implements ExecutionEnv {
 		const aborted = abortResult<string>(context.abortSignal);
 		if (aborted) return aborted;
 		try {
-			const info = await this.connection.info(),
+			const info = await this.connection.info(context.abortSignal),
 				paths = await remotePath(this.connection);
 			return ok(
 				(await this.connection.request("mkdtemp", { path: paths.join(info.tmpdir, prefix ?? "tmp-") })).json
@@ -476,7 +476,7 @@ export class RemoteExecutionEnv implements ExecutionEnv {
 		if (before) return before;
 		try {
 			const resolved = await Promise.all(
-				targets.map(async (target) => ({ ...target, path: await this.#resolve(target.path) })),
+				targets.map(async (target) => ({ ...target, path: await this.#resolve(target.path, context.abortSignal) })),
 			);
 			const after = abortResult<FileWatcher>(context.abortSignal);
 			if (after) return after;
@@ -506,23 +506,38 @@ export class RemoteExecutionEnv implements ExecutionEnv {
 				return err(new ExecutionError("timeout", "Invalid timeout: maximum is 2147483.647 seconds"));
 		}
 		const inheritEnv = options?.inheritEnv ?? true;
-		let cwd: string;
-		try {
-			cwd = options?.cwd ? await this.#resolve(options.cwd) : this.cwd;
-		} catch (error) {
-			return err(new ExecutionError("unknown", error instanceof Error ? error.message : String(error)));
-		}
-		if (signal?.aborted) return err(new ExecutionError("aborted", "aborted"));
 		const env: Record<string, string> = {};
 		for (const [key, value] of Object.entries({ ...(inheritEnv ? this.#shellEnv : {}), ...options?.env }))
 			if (value !== undefined) env[key.toWellFormed()] = value;
 		const abort = new AbortController(),
 			cancel = () => abort.abort();
 		let callbackError: ExecutionError | undefined,
+			timedOut = false,
 			settled = false,
 			requestId: number | undefined;
 		signal?.addEventListener("abort", cancel, { once: true });
+		const timer =
+			timeout === undefined
+				? undefined
+				: setTimeout(() => {
+						if (abort.signal.aborted) return;
+						timedOut = true;
+						abort.abort();
+					}, timeout * 1000);
+		const stopped = () =>
+			new ExecutionError(timedOut ? "timeout" : "aborted", timedOut ? `timeout:${timeout}` : "aborted");
 		try {
+			let cwd: string;
+			try {
+				cwd = options?.cwd ? await this.#resolve(options.cwd, abort.signal) : this.cwd;
+			} catch (error) {
+				return err(
+					abort.signal.aborted
+						? stopped()
+						: new ExecutionError("unknown", error instanceof Error ? error.message : String(error)),
+				);
+			}
+			if (abort.signal.aborted) return err(stopped());
 			const { json } = await this.connection.request(
 				"exec",
 				{
@@ -574,14 +589,15 @@ export class RemoteExecutionEnv implements ExecutionEnv {
 				error.code === "spawn_error"
 					? error.code
 					: "unknown";
-			const failure = new ExecutionError(
-				code,
-				code === "timeout" ? `timeout:${timeout}` : code === "aborted" ? "aborted" : error.message,
-			);
+			const failure =
+				code === "aborted"
+					? stopped()
+					: new ExecutionError(code, code === "timeout" ? `timeout:${timeout}` : error.message);
 			if (typeof error.fields.spillPath === "string") failure.spillPath = error.fields.spillPath;
 			return err(failure);
 		} finally {
 			settled = true;
+			clearTimeout(timer);
 			signal?.removeEventListener("abort", cancel);
 			if (requestId !== undefined) this.#running.delete(requestId);
 		}

@@ -107,15 +107,27 @@ const operations: Record<string, (context: Context) => Promise<unknown>> = {
 	openDirReader: (context) => environment.openDirReader("item", context),
 	listDir: (context) => environment.listDir("item", context),
 };
-it.each(Object.entries(operations))("propagates context lookup failures from %s", async (_name, operation) => {
-	const cause = new Error("context lookup failed");
-	const context: Context = {
-		telemetry: BACKGROUND_CONTEXT.telemetry,
-		get abortSignal(): AbortSignal | undefined {
-			throw cause;
-		},
-		value: (key) => BACKGROUND_CONTEXT.value(key),
-		toString: () => "failing-context",
-	};
-	await expect(operation(context)).rejects.toBe(cause);
-});
+it.each(Object.entries(operations))(
+	"returns context lookup failures from %s as file errors",
+	async (_name, operation) => {
+		const cause = new Error("context lookup failed");
+		const context: Context = {
+			telemetry: BACKGROUND_CONTEXT.telemetry,
+			get abortSignal(): AbortSignal | undefined {
+				throw cause;
+			},
+			value: (key) => BACKGROUND_CONTEXT.value(key),
+			toString: () => "failing-context",
+		};
+		await expect(operation(context)).resolves.toEqual({
+			ok: false,
+			error: expect.objectContaining({
+				name: "FileError",
+				code: "unknown",
+				path: "item",
+				message: cause.message,
+				cause,
+			}),
+		});
+	},
+);

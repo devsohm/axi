@@ -1,4 +1,5 @@
 const token = process.argv[process.argv.indexOf("--token") + 1];
+const silent = process.argv.includes("--silent");
 process.stdout.write("shell startup\nAX");
 await new Promise<void>((resolve) => setImmediate(resolve));
 process.stdout.write(`I-ENV ${token}\n`);
@@ -26,7 +27,7 @@ process.stdin.on("data", (chunk: Buffer) => {
 		const payload = new Uint8Array(buffer.subarray(13 + size, 4 + length));
 		buffer = buffer.subarray(length + 4);
 		if (type === 5) {
-			send(3, id, { code: "aborted", message: "aborted" });
+			if (!silent) send(3, id, { code: "aborted", message: "aborted" });
 			continue;
 		}
 		if (type !== 1) continue;
@@ -43,6 +44,7 @@ process.stdin.on("data", (chunk: Buffer) => {
 				driveCwds: {},
 				pid: process.pid,
 			});
+		else if (silent) continue;
 		else if (json.op === "echo") {
 			send(4, id, { kind: "progress" }, payload);
 			send(2, id, { value: json.value }, payload);
