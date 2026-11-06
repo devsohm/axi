@@ -108,7 +108,7 @@ function wait(path: string, context: Context): Promise<boolean> {
 			connected = true;
 		});
 		socket.on("error", (error: NodeJS.ErrnoException) => {
-			if (!connected && error.code === "ECONNREFUSED") done(false);
+			if (!connected && (error.code === "ECONNREFUSED" || error.code === "ENOTSOCK")) done(false);
 		});
 		socket.once("close", () => done(true));
 	});
