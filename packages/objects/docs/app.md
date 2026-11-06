@@ -76,7 +76,40 @@ Device pairing starts at `POST /_objects/pair`. The device shows a code. The own
 
 ## Files and archives
 
-`Files` supports whole-file writes and incremental uploads. Appends carry an expected byte offset. `finish()` makes an upload visible as a completed file. Expired or failed uploads are removed. Defaults limit one file to 256 MiB and all completed files to 4 GiB; `files` and `limits.uploads` configure these bounds.
+Import `Files`, `FilesFolder`, `filesFacet` and `copyFiles` from `@axi/objects/app/files`. This entry does not load the server or plugin compiler. The same names are available from `@axi/objects/app`. Server and worker startup install the files facet automatically. A standalone host installs `filesFacet(filesDirectory)` itself.
+
+Each file belongs to a `space` at a `path`. Spaces contain 1 to 64 lowercase letters, digits, dots, underscores or hyphens, starting with a letter or digit. Paths use `/` between names. Empty names, `.` and `..`, NUL characters and paths longer than 1,024 characters are invalid. An empty folder path selects the space's root.
+
+`put({ space, path, mime, source, bytes, ... }, context)` returns `FileInfo`, including the version's permanent `id`. Writing the same path adds a version. Previous versions remain readable by ID. Optional `ref` identifies a producer's record; optional `key` makes a retried delivery return the committed file without storing another version. Optional `created` supplies an import timestamp. Optional `meta` stores JSON metadata; `null` is treated as absent.
+
+Use these operations to inspect and organize files:
+
+| Operation | Result |
+| --- | --- |
+| `file(id)` | A version by ID, or `null` |
+| `get({ space, path, version? })` | The current or requested version, or `null` |
+| `byKey({ space, key })` | A committed delivery, or `null` |
+| `byRef({ space, ref, after?, limit? })` | Versions with that reference, oldest first |
+| `versions({ space, path, after?, limit? })` | Versions at a path, newest first |
+| `list({ space, folder, after?, limit? })` | Child folders followed by current child files, ordered by path |
+| `mkdir({ space, path })` | Creates a folder and its missing parents |
+| `move({ space, from, to })` | Moves a path and its versions or folder subtree without changing bytes |
+| `copy({ id, space, path })` | Creates a version that shares the original blob |
+| `remove(id)` | Deletes one version and promotes the previous version if needed |
+| `removePath({ space, path })` | Deletes a file's versions or a folder subtree |
+| `removeSpace(space)` | Deletes that space and its summary |
+
+Pass `context` as the last argument. Paged results have `items` and an optional `next` cursor. Pass that cursor as `after`; the default page size is 100 and the maximum is 1,000. Version counters survive deletion and space removal. A copy has no delivery key. A move refuses an occupied destination or a destination inside its source.
+
+For chunked writes, `begin(write, context)` returns `{ kind: "upload", upload }` or `{ kind: "exists", file }` for an already committed key. Repeating a pending key returns its existing upload. `append()` carries the expected byte offset, `uploaded()` returns the stored offset, `finish()` commits and returns `FileInfo`, and `cancel()` discards an unfinished upload. A failed write or one hour without activity removes an upload. A new host removes uploads left by an earlier process.
+
+`put`, `append` and `read` accept at most 4 MiB per call. Defaults limit one file to 256 MiB and total stored or pending blob bytes to 4 GiB, with 64 uploads in progress. Shared copies count their blob once toward the total. `files` and `limits.uploads` configure these bounds in app options.
+
+`Files.summary.get(space, context)` reports path count, version count, bytes across versions and the 20 newest versions. Acquire `FilesFolder` with `{ space, folder }` to follow its `listing`: up to 500 current entries and a `more` flag.
+
+The host stores four index tables and summary documents in its Store. Immutable bytes live in `files/blobs/<blob id>`. Temporary uploads live in `files/.uploads/<run>/<upload>`. A file version ID is not its blob filename. Files contract version 2 does not migrate a version 1 file index.
+
+`copyFiles({ store, files: filesDirectory }, targetDirectory, context)` copies only the file index and committed blobs into a new host directory. It holds the source Store's export queue while linking or copying blobs, stages beside the target, and removes staging data on failure. The target must not exist. Unfinished uploads and unrelated Store owners are excluded.
 
 `exportData(address, path, context)` writes a tar archive containing a manifest, Store JSONL records and completed files. A running worker performs its export. Otherwise, the server acquires the worker's lock before reading its data.
 

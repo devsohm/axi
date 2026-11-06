@@ -41,6 +41,7 @@ import {
 	sqliteBackend,
 } from "@axi/objects";
 import { openNodeSqliteDatabase } from "@axi/objects/sqlite/node";
+import { Files, FilesFolder, filesFacet } from "@axi/objects/app/files";
 import { workerMain } from "@axi/objects/workers/child";
 import { decodeBatch, encodeBatch, LOG_VERSION } from "@axi/objects/sync";
 import { registerLazyOAuthFlows } from "@axi/ai/lazy-oauth";
@@ -263,6 +264,30 @@ try {
 	program.closeStdin();
 	assert.equal(await program.exited, 0);
 	assert.deepEqual([...Buffer.concat(pipeOutput)], [1, 255, 13, 10]);
+	const fileStore = await openStore(sqliteBackend(await openNodeSqliteDatabase(join(cwd, "files.sqlite"))), context);
+	const fileErrors = [];
+	const fileHost = createHost({ store: fileStore, onError: (error) => fileErrors.push(error) });
+	try {
+		await fileHost.load([{ name: Files.name, facet: filesFacet(join(cwd, "files")) }], context);
+		const files = await fileHost.get(Files, {}, context);
+		const folder = await fileHost.get(FilesFolder, { space: "installed", folder: "" }, context);
+		try {
+			const data = { space: "installed", path: "note", mime: "text/plain", source: "installed", bytes: new Uint8Array([1, 2]) };
+			const original = await files.put(data, context);
+			const latest = await files.put(data, context);
+			assert.equal(latest.version, 2);
+			assert.equal((await files.get({ space: data.space, path: data.path }, context)).id, latest.id);
+			assert.deepEqual(await files.read({ id: original.id, offset: 0, length: 2 }, context), data.bytes);
+			assert.deepEqual(folder.listing.value.entries, [{ kind: "file", file: latest }]);
+		} finally {
+			folder.release();
+			files.release();
+		}
+	} finally {
+		await fileHost.close(context);
+		await fileStore.close(context);
+		assert.deepEqual(fileErrors, []);
+	}
 	const sharedFile = join(cwd, "shared.sqlite");
 	let store = await openStore(sqliteBackend(await openNodeSqliteDatabase(sharedFile)), context);
 	let storage = await StoreStorage.open(store, "installed", context);

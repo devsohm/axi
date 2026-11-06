@@ -3,9 +3,8 @@ import { join } from "node:path";
 import { ObjectsError } from "../../data/index.ts";
 import { invalid } from "../../data/internal.ts";
 import { newToken } from "./secrets.ts";
-type Upload = {
-	name: string;
-	mime: string;
+type Upload<T> = {
+	data: T;
 	handle: FileHandle;
 	size: number;
 	touched: number;
@@ -13,11 +12,11 @@ type Upload = {
 	failed: boolean;
 	closing?: Promise<void>;
 };
-export type Finished = { readonly name: string; readonly mime: string; readonly size: number };
-export class Uploads {
+export type Finished<T> = { readonly data: T; readonly size: number };
+export class Uploads<T> {
 	readonly #directory: string;
 	readonly #max: number;
-	readonly #pending = new Map<string, Upload>();
+	readonly #pending = new Map<string, Upload<T>>();
 	constructor(run: string, max: number) {
 		this.#directory = run;
 		this.#max = max;
@@ -25,7 +24,11 @@ export class Uploads {
 	get size(): number {
 		return [...this.#pending.values()].reduce((sum, upload) => sum + upload.size, 0);
 	}
-	async begin(name: string, mime: string): Promise<string> {
+	find(matches: (data: T) => boolean): string | undefined {
+		for (const [id, upload] of this.#pending) if (matches(upload.data)) return id;
+		return undefined;
+	}
+	async begin(data: T): Promise<string> {
 		if (this.#pending.size >= this.#max)
 			throw new ObjectsError({
 				code: "unavailable",
@@ -35,15 +38,15 @@ export class Uploads {
 		const id = newToken(12);
 		await mkdir(this.#directory, { recursive: true, mode: 0o700 });
 		const handle = await open(join(this.#directory, id), "wx", 0o600);
-		this.#pending.set(id, { name, mime, handle, size: 0, touched: Date.now(), writes: new Set(), failed: false });
+		this.#pending.set(id, { data, handle, size: 0, touched: Date.now(), writes: new Set(), failed: false });
 		return id;
 	}
-	#find(id: string): Upload {
+	#find(id: string): Upload<T> {
 		const upload = this.#pending.get(id);
 		if (!upload) throw invalid("args", `files: no upload ${id} (finished, failed, expired or unknown)`);
 		return upload;
 	}
-	#close(upload: Upload): Promise<void> {
+	#close(upload: Upload<T>): Promise<void> {
 		return (upload.closing ??= Promise.allSettled([...upload.writes]).then(() => upload.handle.close()));
 	}
 	async append(
@@ -80,15 +83,19 @@ export class Uploads {
 		if (upload.failed) throw invalid("args", `files: upload ${id} failed to write and was dropped`);
 		return upload.size;
 	}
-	async finish(id: string, path: string): Promise<Finished> {
+	async finish(id: string, path: string): Promise<Finished<T>> {
 		const upload = this.#find(id);
 		this.#pending.delete(id);
 		await this.#close(upload);
 		if (upload.failed) throw invalid("args", `files: upload ${id} failed to write and was dropped`);
 		await rename(join(this.#directory, id), path);
-		return { name: upload.name, mime: upload.mime, size: upload.size };
+		return { data: upload.data, size: upload.size };
 	}
-	async #discard(id: string, upload: Upload): Promise<void> {
+	async cancel(id: string): Promise<void> {
+		const upload = this.#pending.get(id);
+		if (upload) await this.#discard(id, upload);
+	}
+	async #discard(id: string, upload: Upload<T>): Promise<void> {
 		this.#pending.delete(id);
 		await this.#close(upload);
 		await rm(join(this.#directory, id), { force: true });

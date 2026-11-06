@@ -195,6 +195,7 @@ import * as ai from "@axi/ai";
 import * as objects from "@axi/objects";
 import type { Context } from "@axi/objects/context";
 import type { AppOptions } from "@axi/objects/app";
+import { Files, FilesFolder, type FileWrite, type FileInfo, type FolderListing, copyFiles } from "@axi/objects/app/files";
 import type { TerminalOptions } from "@axi/objects/tui/launcher";
 import { workerMain } from "@axi/objects/workers/child";
 import { uploadSession, type SyncStateStore } from "@axi/objects/sync";
@@ -210,6 +211,8 @@ import * as tui from "@axi/tui";
 import type { SummaryRequest, BlockedReason } from "@axi/durable";
 import { StoreStorage } from "@axi/durable/storage/store";
 export const packages = [ai, objects, codemode, durable, env, mcp, telemetry, tui];
+export const fileEntries = [Files, FilesFolder, copyFiles];
+export const fileTypes = (write: FileWrite, info: FileInfo, listing: FolderListing) => [write.path, info.version, listing.more];
 export const reasons = ["missing_task", "task_too_old", "migration_failed"] satisfies BlockedReason[];
 // @ts-expect-error Restart-limited tasks settle rather than remaining blocked.
 export const removedReason: BlockedReason = "restart_limit";

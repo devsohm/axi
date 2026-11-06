@@ -1,126 +1,328 @@
-import { mkdir, open, readdir, rm, writeFile } from "node:fs/promises";
+import { readdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
-import { arr, bytes, int, local, map, method, num, obj, str } from "../../contracts/index.ts";
+import type { Context } from "../../context/index.ts";
+import {
+	arr,
+	bool,
+	bytes,
+	int,
+	keyed,
+	lit,
+	local,
+	method,
+	nul,
+	obj,
+	opt,
+	type TSchema,
+	str,
+	union,
+} from "../../contracts/index.ts";
 import { ObjectsError, type Principal } from "../../data/index.ts";
 import { invalid } from "../../data/internal.ts";
-import { defineState } from "../../documents/index.ts";
-import { defineFacet, type Facet } from "../../host/index.ts";
+import { type Ctx, defineFacet, type Facet } from "../../host/index.ts";
+import { Blobs } from "./blobs.ts";
+import {
+	checkPath,
+	checkSpace,
+	type FileInfo,
+	FileSchema,
+	FilesIndex,
+	type FileWrite,
+	FolderSchema,
+	MAX_PAGE,
+	MetaSchema,
+	SummarySchema,
+} from "./files-index.ts";
+import { type FolderListing, FolderViews } from "./folder-views.ts";
 import { newToken } from "./secrets.ts";
 import { Uploads } from "./uploads.ts";
-export type FileInfo = {
-	readonly id: string;
-	readonly name: string;
-	readonly mime: string;
-	readonly size: number;
-	readonly created: number;
-};
+
+export type { FileInfo, FileWrite, FolderEntry, FolderInfo, SpaceSummary } from "./files-index.ts";
+export type { FolderListing } from "./folder-views.ts";
 export type FilesCaps = { readonly maxFile?: number; readonly maxTotal?: number };
-const Entry = obj({ name: str(), mime: str(), size: int(), created: num() });
+const writeFields = {
+	space: str(),
+	path: str(),
+	mime: str(),
+	source: str(),
+	ref: opt(str({ min: 1 })),
+	key: opt(str({ min: 1 })),
+	meta: opt(MetaSchema),
+	created: opt(int({ min: 0 })),
+};
+const pageFields = { after: opt(str()), limit: opt(int({ min: 1, max: MAX_PAGE })) };
+const pageOf = <T extends TSchema>(schema: T) => obj({ items: arr(schema), next: opt(str()) });
+const maybeFile = union([FileSchema, nul()]);
+const entrySchema = union([
+	obj({ kind: lit("folder"), folder: FolderSchema }),
+	obj({ kind: lit("file"), file: FileSchema }),
+]);
 export const Files = local("objects.app.files", {
-	version: 1,
+	version: 2,
 	params: {},
 	members: {
-		list: arr(obj({ id: str(), ...Entry.properties })),
-		put: method(obj({ name: str(), mime: str(), bytes: bytes() }), str()),
-		begin: method(obj({ name: str(), mime: str() }), str()),
+		summary: keyed(SummarySchema),
+		put: method(obj({ ...writeFields, bytes: bytes() }), FileSchema),
+		begin: method(
+			obj(writeFields),
+			union([obj({ kind: lit("upload"), upload: str() }), obj({ kind: lit("exists"), file: FileSchema })]),
+		),
 		append: method(obj({ upload: str(), offset: int({ min: 0 }), bytes: bytes() })),
 		uploaded: method(str(), int()),
-		finish: method(str(), str()),
+		finish: method(str(), FileSchema),
+		cancel: method(str()),
 		read: method(obj({ id: str(), offset: int({ min: 0 }), length: int({ min: 0 }) }), bytes()),
+		file: method(str(), maybeFile),
+		get: method(obj({ space: str(), path: str(), version: opt(int({ min: 1 })) }), maybeFile),
+		byKey: method(obj({ space: str(), key: str({ min: 1 }) }), maybeFile),
+		byRef: method(obj({ space: str(), ref: str({ min: 1 }), ...pageFields }), pageOf(FileSchema)),
+		versions: method(obj({ space: str(), path: str(), ...pageFields }), pageOf(FileSchema)),
+		list: method(obj({ space: str(), folder: str(), ...pageFields }), pageOf(entrySchema)),
+		mkdir: method(obj({ space: str(), path: str() }), FolderSchema),
+		move: method(obj({ space: str(), from: str(), to: str() })),
+		copy: method(obj({ id: str(), space: str(), path: str() }), FileSchema),
 		remove: method(str()),
+		removePath: method(obj({ space: str(), path: str() })),
+		removeSpace: method(str()),
 	},
 });
-const Index = defineState("objects.app.files", {
+export const FilesFolder = local("objects.app.files.folder", {
 	version: 1,
-	schema: obj({ files: map(Entry) }),
-	persist: true,
-	initial: () => ({ files: {} }),
-	checkpointWhen: (_value, _ops, info) => info.deltasSinceBase >= 50,
+	params: { space: str(), folder: str() },
+	members: { listing: obj({ entries: arr(entrySchema), more: bool() }) },
 });
 const piece = 4 * 1024 * 1024;
 const tooLarge = (message: string) => new ObjectsError({ code: "too_large", message: "files: " + message });
+function checkWrite(write: FileWrite): void {
+	checkSpace(write.space);
+	checkPath(write.path, "file");
+}
+
 export function filesFacet<P extends Principal>(dir: string, caps: FilesCaps = {}, uploads = 64): Facet<P> {
-	return defineFacet<P>((host) =>
+	const blobs = new Blobs(join(dir, "blobs"));
+	const views = new FolderViews();
+	const uploadsDir = join(dir, ".uploads");
+	const maxFile = caps.maxFile ?? 256 * 1024 * 1024;
+	const maxTotal = caps.maxTotal ?? 4 * 1024 ** 3;
+	return defineFacet<P>((host) => {
 		host.serve(Files, (_params, self) => {
-			const index = self.state(Index),
-				uploadsDir = join(dir, ".uploads"),
-				run = join(uploadsDir, newToken(12)),
-				pending = new Uploads(run, uploads);
-			const room = (adding: number, fileSize: number): void => {
-				if (fileSize > (caps.maxFile ?? 256 * 1024 * 1024))
-					throw tooLarge(
-						`a file of ${fileSize} bytes is larger than this host's cap (${caps.maxFile ?? 256 * 1024 * 1024})`,
-					);
-				const total =
-					Object.values(index.value.files).reduce((sum, file) => sum + file.size, 0) + pending.size + adding;
-				if (total > (caps.maxTotal ?? 4 * 1024 ** 3))
-					throw tooLarge(`this host's files would exceed their cap (${caps.maxTotal ?? 4 * 1024 ** 3} bytes)`);
+			const index = new FilesIndex(self);
+			const run = join(uploadsDir, newToken(12));
+			const pending = new Uploads<FileWrite>(run, uploads);
+			let queue: Promise<unknown> = Promise.resolve();
+			const change = <T>(operation: () => Promise<T>): Promise<T> => {
+				const next = queue.then(operation);
+				queue = next.catch(() => {});
+				return next;
 			};
-			const has = (id: string): boolean => Object.hasOwn(index.value.files, id);
-			self.onLive(async (ctx) => {
-				for (const child of await readdir(uploadsDir).catch(() => []))
-					if (join(uploadsDir, child) !== run) await rm(join(uploadsDir, child), { recursive: true, force: true });
-				try {
-					for (;;) {
-						await delay(60_000, undefined, { signal: ctx.abortSignal });
-						await pending.expire(60 * 60_000);
-					}
-				} finally {
-					if (ctx.abortSignal?.aborted) await pending.close();
-				}
+			views.bind(async (space, folder, context) => {
+				const page = await index.list(space, folder, 500, undefined, context);
+				return { entries: page.items, more: page.next !== undefined };
 			});
+			const room = (adding: number, size: number): void => {
+				if (size > maxFile) throw tooLarge(`a file of ${size} bytes is larger than this host's cap (${maxFile})`);
+				if (index.usage.value.bytes + pending.size + adding > maxTotal)
+					throw tooLarge(`this host's files would exceed their cap (${maxTotal} bytes)`);
+			};
+			const existing = (write: FileWrite, context: Ctx): Promise<FileInfo | undefined> =>
+				write.key === undefined ? Promise.resolve(undefined) : index.byKey(write.space, write.key, context);
+			const commit = async (write: FileWrite, blob: string, size: number, context: Ctx): Promise<FileInfo> => {
+				try {
+					const file = await index.add(newToken(12), write, { id: blob, size, fresh: true }, context);
+					await views.changed(write.space, context);
+					return file;
+				} catch (error) {
+					await blobs.remove([blob]);
+					throw error;
+				}
+			};
+			self.onLive((context) =>
+				sweep(uploadsDir, run, pending, () => change(() => blobs.sweep((id) => index.hasBlob(id, context))), context),
+			);
 			return {
-				list: self.derive([index], ([value]) => Object.entries(value.files).map(([id, file]) => ({ id, ...file }))),
-				put: async ({ name, mime, bytes }, context) => {
+				summary: index.summary,
+				put: ({ bytes, ...write }, context) => {
+					checkWrite(write);
 					if (bytes.length > piece) throw tooLarge(`put takes at most ${piece} bytes: use begin, append, finish`);
-					room(bytes.length, bytes.length);
-					const id = newToken(12);
-					await mkdir(dir, { recursive: true, mode: 0o700 });
-					await writeFile(join(dir, id), bytes, { mode: 0o600 });
-					await index.change((draft) => {
-						draft.files[id] = { name, mime, size: bytes.length, created: Date.now() };
-					}, context);
-					return id;
+					return change(async () => {
+						const known = await existing(write, context);
+						if (known) return known;
+						room(bytes.length, bytes.length);
+						const blob = newToken(12),
+							staging = join(run, `put-${blob}`);
+						try {
+							await blobs.write(blob, bytes, staging);
+						} catch (error) {
+							await rm(staging, { force: true });
+							throw error;
+						}
+						return commit(write, blob, bytes.length, context);
+					});
 				},
-				begin: ({ name, mime }) => pending.begin(name, mime),
+				begin: (write, context) => {
+					checkWrite(write);
+					return change(async () => {
+						const known = await existing(write, context);
+						if (known) return { kind: "exists" as const, file: known };
+						const resumed = pending.find(
+							(data) => data.space === write.space && data.key !== undefined && data.key === write.key,
+						);
+						if (resumed !== undefined) return { kind: "upload" as const, upload: resumed };
+						if ((await index.exists(write.space, write.path, context)) === "folder")
+							throw invalid("args", `files: ${write.space}:${write.path} is a folder`, { conflict: write.path });
+						return { kind: "upload" as const, upload: await pending.begin(write) };
+					});
+				},
 				append: async ({ upload, offset, bytes }) => {
 					if (bytes.length > piece) throw tooLarge(`append takes at most ${piece} bytes`);
 					await pending.append(upload, offset, bytes, room);
 					return null;
 				},
-				uploaded: (id) => pending.uploaded(id),
-				finish: async (upload, context) => {
-					const id = newToken(12);
-					await mkdir(dir, { recursive: true, mode: 0o700 });
-					const file = await pending.finish(upload, join(dir, id));
-					await index.change((draft) => {
-						draft.files[id] = { ...file, created: Date.now() };
-					}, context);
-					return id;
-				},
-				read: async ({ id, offset, length }) => {
-					if (!has(id)) throw invalid("args", `files: no file ${id}`);
-					if (length > piece) throw tooLarge(`read takes at most ${piece} bytes`);
-					const file = await open(join(dir, id), "r");
-					try {
-						const data = new Uint8Array(Math.max(0, Math.min(length, index.value.files[id]!.size - offset))),
-							{ bytesRead } = await file.read(data, 0, data.length, offset);
-						return data.subarray(0, bytesRead);
-					} finally {
-						await file.close();
-					}
-				},
-				remove: async (id, context) => {
-					if (has(id)) {
-						await index.change((draft) => {
-							delete draft.files[id];
-						}, context);
-						await rm(join(dir, id), { force: true });
-					}
+				uploaded: (upload) => pending.uploaded(upload),
+				finish: (upload, context) =>
+					change(async () => {
+						const blob = newToken(12);
+						await blobs.prepare();
+						const { data, size } = await pending.finish(upload, blobs.path(blob));
+						const known = await existing(data, context);
+						if (!known) return commit(data, blob, size, context);
+						await blobs.remove([blob]);
+						return known;
+					}),
+				cancel: async (upload) => {
+					await pending.cancel(upload);
 					return null;
 				},
+				read: async ({ id, offset, length }, context) => {
+					if (length > piece) throw tooLarge(`read takes at most ${piece} bytes`);
+					const entry = await index.blobOf(id, context);
+					if (!entry) throw invalid("args", `files: no file ${id}`);
+					return blobs.read(entry.blob, entry.size, offset, length);
+				},
+				file: async (id, context) => (await index.file(id, context)) ?? null,
+				get: async ({ space, path, version }, context) => {
+					checkSpace(space);
+					checkPath(path, "file");
+					return (await index.get(space, path, version, context)) ?? null;
+				},
+				byKey: async ({ space, key }, context) => {
+					checkSpace(space);
+					return (await index.byKey(space, key, context)) ?? null;
+				},
+				byRef: ({ space, ref, limit, after }, context) => {
+					checkSpace(space);
+					return index.byRef(space, ref, limit ?? 100, after, context);
+				},
+				versions: ({ space, path, limit, after }, context) => {
+					checkSpace(space);
+					checkPath(path, "file");
+					return index.versions(space, path, limit ?? 100, after, context);
+				},
+				list: ({ space, folder, limit, after }, context) => {
+					checkSpace(space);
+					checkPath(folder, "folder");
+					return index.list(space, folder, limit ?? 100, after, context);
+				},
+				mkdir: ({ space, path }, context) => {
+					checkSpace(space);
+					checkPath(path, "file");
+					return change(async () => {
+						const folder = await index.mkdir(space, path, context);
+						await views.changed(space, context);
+						return folder;
+					});
+				},
+				move: ({ space, from, to }, context) => {
+					checkSpace(space);
+					checkPath(from, "file");
+					checkPath(to, "file");
+					return change(async () => {
+						await index.move(space, from, to, context);
+						await views.changed(space, context);
+						return null;
+					});
+				},
+				copy: ({ id, space, path }, context) => {
+					checkSpace(space);
+					checkPath(path, "file");
+					return change(async () => {
+						const file = await index.file(id, context),
+							blob = await index.blobOf(id, context);
+						if (!file || !blob) throw invalid("args", `files: no file ${id}`);
+						const { mime, source, ref, meta } = file;
+						const copied = await index.add(
+							newToken(12),
+							{
+								space,
+								path,
+								mime,
+								source,
+								...(ref === undefined ? {} : { ref }),
+								...(meta === undefined ? {} : { meta }),
+							},
+							{ id: blob.blob, size: blob.size, fresh: false },
+							context,
+						);
+						await views.changed(space, context);
+						return copied;
+					});
+				},
+				remove: (id, context) =>
+					change(async () => {
+						const removed = await index.remove(id, context);
+						if (removed) {
+							await blobs.remove(removed.gone);
+							await views.changed(removed.space, context);
+						}
+						return null;
+					}),
+				removePath: ({ space, path }, context) => {
+					checkSpace(space);
+					checkPath(path, "file");
+					return change(async () => {
+						await blobs.remove(await index.removePath(space, path, context));
+						await views.changed(space, context);
+						return null;
+					});
+				},
+				removeSpace: (space, context) => {
+					checkSpace(space);
+					return change(async () => {
+						await blobs.remove(await index.removeSpace(space, context));
+						await views.changed(space, context);
+						return null;
+					});
+				},
 			};
-		}),
-	);
+		});
+		host.serve(FilesFolder, ({ space, folder }, self) => {
+			checkSpace(space);
+			checkPath(folder, "folder");
+			self.get(Files, {});
+			return {
+				listing: self.follow<FolderListing>((observer, context) => views.attach(space, folder, observer, context)),
+			};
+		});
+	});
+}
+
+async function sweep(
+	directory: string,
+	run: string,
+	pending: Uploads<FileWrite>,
+	cleanBlobs: () => Promise<void>,
+	context: Context,
+): Promise<void> {
+	for (const child of await readdir(directory).catch(() => []))
+		if (join(directory, child) !== run) await rm(join(directory, child), { recursive: true, force: true });
+	try {
+		await cleanBlobs();
+		for (;;) {
+			await delay(60_000, undefined, { signal: context.abortSignal });
+			await pending.expire(60 * 60_000);
+		}
+	} finally {
+		if (context.abortSignal?.aborted) await pending.close();
+	}
 }

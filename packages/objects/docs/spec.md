@@ -84,6 +84,8 @@ Worker starts serialize per address and hold process locks. Stale file locks are
 
 The app host opens one server Store and one Store per worker address. Startup holds a data-directory lock. Closing the app releases that lock after its components close. Persistent device and browser sessions store hashes rather than token secrets. Ephemeral sessions and pending sign-in links remain in memory.
 
+Files contract version 2 stores immutable file versions by space and path. Index mutations serialize per Files object and commit version rows, path counters, blob reference counts and summaries together. Deleting data retains path counters. Moves preserve version identities; copies share blobs without carrying delivery keys. Folder views attach without missing intervening changes and refresh once per affected watched folder. File-only copies export the Files owner's tables and documents while retaining referenced blobs. The previous file index has no automatic migration. See [App host](app.md#files-and-archives).
+
 An address export holds its worker's data through the worker or its process lock. Import requires a new destination, validates archive paths and limits, and publishes the staged directory only after Store import succeeds. Finished files are included; incomplete uploads are not.
 
 Client plugin changes reload facets in place. A changed base bundle restarts the client. React and terminal scopes release their subscriptions and references when disposed. Page state survives component replacement within one client host; it does not survive that host's destruction.

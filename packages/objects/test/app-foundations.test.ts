@@ -96,17 +96,19 @@ it("persists session hashes and completed uploads through the real SQLite store"
 		expect(await sessions.verify("constructor.bad", context)).toBeNull();
 		expect(sessions.list.value.find((item) => item.id === issued.id)).not.toHaveProperty("hash");
 		const files = await host.get(Files, {}, context),
-			upload = await files.begin({ name: "note", mime: "text/plain" }, context),
+			started = await files.begin({ space: "test", path: "note", mime: "text/plain", source: "test" }, context),
 			encode = new TextEncoder();
+		if (started.kind !== "upload") throw new Error("expected a new upload");
+		const { upload } = started;
 		await Promise.all([
 			files.append({ upload, offset: 0, bytes: encode.encode("ab") }, context),
 			files.append({ upload, offset: 2, bytes: encode.encode("cd") }, context),
 		]);
 		expect(await files.uploaded(upload, context)).toBe(4);
-		const id = await files.finish(upload, context);
+		const { id } = await files.finish(upload, context);
 		expect(new TextDecoder().decode(await files.read({ id, offset: 1, length: 2 }, context))).toBe("bc");
 		await expect(
-			files.put({ name: "large", mime: "binary", bytes: new Uint8Array(33) }, context),
+			files.put({ space: "test", path: "large", mime: "binary", source: "test", bytes: new Uint8Array(33) }, context),
 		).rejects.toMatchObject({ code: "too_large" });
 		await sessions.revoke(issued.id, context);
 		expect(await sessions.verify(issued.token, context)).toBeNull();

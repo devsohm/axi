@@ -162,6 +162,7 @@
 					"behavior": "private app setup, session authentication and restart, plugin rollout, user profiles, file uploads and address archives",
 					"tests": [
 						"packages/objects/test/app-foundations.test.ts",
+						"packages/objects/test/files.test.ts",
 						"packages/objects/test/app-host.test.ts",
 						"packages/objects/test/app-archive.test.ts"
 					]
