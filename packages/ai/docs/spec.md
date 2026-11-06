@@ -125,6 +125,8 @@ A custom provider's `refreshModels()` receives the stored snapshot, resolved cre
 
 `Model` includes its API, provider, endpoint, input modalities, limits, costs, reasoning capabilities, and optional compatibility metadata. `ImageModel` also declares output modalities. `ClassifierModel` declares its classifier API and context limit.
 
+`ProviderCompat` from `@axi/ai/providers/compat-schema` types provider-wide and model-specific compatibility overrides. It is derived from `ProviderCompatSchema`, including the supported cache, reasoning and routing fields.
+
 ## Images and classifiers
 
 `ImagesContext` contains text and image input. `AssistantImages` returns text and image output with `stop`, `error`, or `aborted` status. Images carry base64 data and MIME types.

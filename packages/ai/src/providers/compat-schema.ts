@@ -370,6 +370,7 @@ export const ProviderCompatSchema = Type.Object(
 	{ description: "Provider-wide and model-specific compatibility settings.", additionalProperties: true },
 );
 export type ChatTemplateKwargValue = Static<typeof ChatTemplateKwargValueSchema>;
+export type ProviderCompat = Static<typeof ProviderCompatSchema>;
 export type ThinkingTokenBudgetField = Static<typeof ThinkingTokenBudgetFieldSchema>;
 export type SessionAffinityFormat = Static<typeof SessionAffinityFormatSchema>;
 export interface OpenRouterRouting extends Static<typeof OpenRouterRoutingSchema> {}

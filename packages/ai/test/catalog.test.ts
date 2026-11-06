@@ -1,4 +1,5 @@
 import { expect, expectTypeOf, it } from "vitest";
+import type { ProviderCompat } from "@axi/ai/providers/compat-schema";
 import { buildModelsDevCatalog, parseModelsDev } from "../catalog/sources/models-dev.ts";
 import { assembleCatalog } from "../catalog/assemble.ts";
 import { streamSimple } from "../src/api/anthropic-messages.ts";
@@ -11,6 +12,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
+
+it("exports provider compatibility fields with their declared value types", () => {
+	expectTypeOf<ProviderCompat["supportsStore"]>().toEqualTypeOf<boolean | undefined>();
+	expectTypeOf<ProviderCompat["promptCacheKeyMode"]>().toEqualTypeOf<"auto" | "enabled" | "disabled" | undefined>();
+});
 
 it("can generate again after replacing the catalog with a smaller upstream listing", () => {
 	const root = mkdtempSync(join(tmpdir(), "axi-regenerate-"));
