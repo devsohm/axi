@@ -64,6 +64,35 @@ it("rejects a driver that retains old row fields after a root replacement", asyn
 	}
 });
 
+it("rejects a driver that accepts nonempty commits after closing", async () => {
+	const storage = new MemoryStorage();
+	const close = storage.close.bind(storage);
+	const commit = storage.commit.bind(storage);
+	let closed = false;
+	vi.spyOn(storage, "close").mockImplementation(async (ctx) => {
+		closed = true;
+		await close(ctx);
+	});
+	vi.spyOn(storage, "commit").mockImplementation(async (batches, receive, ctx) => {
+		if (closed && batches.some((batch) => batch.length > 0)) {
+			receive(0, seqFromNumber(2));
+			return { stored: 1 };
+		}
+		return commit(batches, receive, ctx);
+	});
+	try {
+		const check = createStorageConformance({
+			assertions: createExpectAssertions(expect),
+			withStorage: (use) => use(storage),
+		}).find((check) => check.name === "rejects every operation after close");
+		if (!check) throw new Error("Missing closed-storage check");
+		await expect(check.run()).rejects.toThrow();
+	} finally {
+		vi.restoreAllMocks();
+		await storage.close(context);
+	}
+});
+
 it.each(["sequence after batches", "copy source changed in batch"] as const)(
 	"rejects a storage driver that violates %s",
 	async (defect) => {

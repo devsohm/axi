@@ -1941,9 +1941,10 @@ export function createStorageConformance(options: StorageConformanceOptions): re
 		a.deepEqual((await storage.document(source, "current", context))?.value, { n: 2 });
 	});
 	seeded("rejects every operation after close", async (storage) => {
+		const id = await storage.mintId<EntryId>();
 		await storage.close(context);
 		await a.rejects(storage.conversation(ROOT, context), "closed");
-		await a.rejects(commitWrites(storage, [], context), "closed");
+		await a.rejects(commitWrites(storage, [{ type: "entry", value: entry(id) }], context), "closed");
 		await a.rejects(storage.mintId<ConversationId>(), "closed");
 	});
 	return cases;
