@@ -247,19 +247,25 @@ export const GenerationTask = defineTask<GenerationInput, GenerationCheckpoint, 
 			const { attempt, compacted, until, poll } = task.state.checkpoint;
 			if (until > runtime.now()) return runtime.sleepUntil(until, task.state.checkpoint, context);
 			await runtime.commit(async (tx) => {
-				(await tx.doc(LiveDoc, runtime.conversationId)).generation = { attempt: attempt + 1 };
+				const live = await tx.doc(LiveDoc, runtime.conversationId);
+				if (poll !== undefined) {
+					const pollAt = runtime.now();
+					live.generation = { attempt: attempt + 1, deferred: { pollAt } };
+					return {
+						status: "running",
+						checkpoint: {
+							phase: "poll",
+							attempt: attempt + 1,
+							...(compacted === undefined ? {} : { compacted }),
+							...poll,
+							pollAt,
+						},
+					};
+				}
+				live.generation = { attempt: attempt + 1 };
 				return {
 					status: "running",
-					checkpoint:
-						poll === undefined
-							? { phase: "prepare", attempt: attempt + 1, ...(compacted === undefined ? {} : { compacted }) }
-							: {
-									phase: "poll",
-									...poll,
-									attempt: attempt + 1,
-									...(compacted === undefined ? {} : { compacted }),
-									pollAt: until,
-								},
+					checkpoint: { phase: "prepare", attempt: attempt + 1, ...(compacted === undefined ? {} : { compacted }) },
 				};
 			}, context);
 		},
@@ -270,9 +276,6 @@ export const GenerationTask = defineTask<GenerationInput, GenerationCheckpoint, 
 			if (pollAt > runtime.now()) return runtime.sleepUntil(pollAt, task.state.checkpoint, context);
 			const model = runtime.models.getModel(ref.provider, ref.modelId);
 			if (model === undefined) return failNoModel(runtime, ref, context);
-			await runtime.commit(async (tx) => {
-				(await tx.doc(LiveDoc, runtime.conversationId)).generation = { attempt, deferred: { pollAt } };
-			}, context);
 			await classify(
 				runtime,
 				{ attempt, compacted, model: ref, thinkingLevel, cutoff, pollAt },

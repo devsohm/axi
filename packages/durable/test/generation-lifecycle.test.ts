@@ -15,6 +15,7 @@ import {
 } from "../src/index.ts";
 import { openNodeJsonlStorage } from "../src/storage/jsonl/node.ts";
 import { openNodeSqliteStorage } from "../src/storage/sqlite/node.ts";
+import { commitWrites } from "../src/testing/commit-writes.ts";
 
 function setup(settings: HarnessSettings = {}, providerOptions: Parameters<typeof fauxProvider>[0] = {}) {
 	const models = createModels(),
@@ -153,6 +154,101 @@ test("deferred generation polls its receipt and commits only the final assistant
 		expect(await harness.snapshot(LiveDoc, conversation.id, context)).toEqual({});
 	} finally {
 		await harness.close(context);
+	}
+});
+
+test("a late deferred retry publishes its actual poll time in one revision", async () => {
+	const directory = await mkdtemp(join(tmpdir(), "axi-deferred-clock-"));
+	const open = () => openNodeSqliteStorage(join(directory, "session.sqlite"));
+	const f = setup({ stream: { deferred: true } }, { deferred: { pollAfterMs: 60000 } });
+	const entered = Promise.withResolvers<void>(),
+		release = Promise.withResolvers<void>();
+	f.provider.setResponses([
+		async () => {
+			entered.resolve();
+			await release.promise;
+			return fauxAssistantMessage("Recovered deferred answer");
+		},
+	]);
+	let clock = 1000;
+	const options = { ...f.options, now: () => clock, onWake: () => {} };
+	let harness = await Harness.open(await open(), options, context);
+	try {
+		const conversation = await harness.root(context, { agent: { model: f.model } });
+		const submission = await conversation.submit({ type: "input", content: "Resume the saved job" }, context);
+		await vi.waitFor(async () =>
+			expect((await harness.snapshot(LiveDoc, conversation.id, context))?.generation?.deferred).toBeDefined(),
+		);
+		const taskId = (await harness.snapshot(LiveDoc, conversation.id, context))!.run!.taskId;
+		await harness.close(context);
+		const storage = await open();
+		try {
+			const task = await storage.task(taskId, context);
+			if (task?.state.status !== "sleeping") throw new Error("Deferred task was not sleeping");
+			const poll = task.state.checkpoint;
+			if (poll === null || typeof poll !== "object" || Array.isArray(poll) || poll.phase !== "poll")
+				throw new Error("Deferred checkpoint was lost");
+			if (poll.model === undefined || poll.handle === undefined || poll.cutoff === undefined)
+				throw new Error("Deferred request was lost");
+			await commitWrites(
+				storage,
+				[
+					{
+						type: "task",
+						value: {
+							...task,
+							state: {
+								status: "sleeping",
+								until: 2000,
+								checkpoint: {
+									phase: "retry",
+									attempt: 1,
+									until: 2000,
+									poll: {
+										model: poll.model,
+										handle: poll.handle,
+										cutoff: poll.cutoff,
+										...(poll.thinkingLevel === undefined ? {} : { thinkingLevel: poll.thinkingLevel }),
+									},
+								},
+							},
+						},
+					},
+				],
+				context,
+			);
+		} finally {
+			await storage.close(context);
+		}
+		clock = 3000;
+		harness = await Harness.open(await open(), options, context);
+		const frames: unknown[] = [];
+		const observation = await harness.observeDoc(
+			LiveDoc,
+			conversation.id,
+			{
+				advance: (call) => {
+					if (call.kind === "value") frames.push(call.value.generation);
+				},
+				end: () => {},
+			},
+			context,
+		);
+		try {
+			harness.resume();
+			await entered.promise;
+			expect(frames).toEqual([{ attempt: 2, deferred: { pollAt: 3000 } }]);
+		} finally {
+			observation?.detach();
+		}
+		release.resolve();
+		const restored = await harness.submission(submission.id, context);
+		if (!restored) throw new Error("Saved submission was lost");
+		expect(await restored.wait(context)).toMatchObject({ status: "done" });
+	} finally {
+		release.resolve();
+		await harness.close(context);
+		await rm(directory, { force: true, recursive: true });
 	}
 });
 
