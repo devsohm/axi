@@ -1,8 +1,10 @@
 import { expect, it, vi } from "vitest";
+import { NOOP_TELEMETRY_METRICS } from "@axi/telemetry";
 import { BACKGROUND_CONTEXT as context } from "../src/context/index.ts";
 import { Channel } from "../src/link/channel.ts";
 import { memoryLinkPair } from "../src/link/link.ts";
 import { textCodec } from "../src/link/text.ts";
+import { objectsMetrics } from "../src/telemetry.ts";
 const incarnation = "0190f5a2-7c3e-7d4a-9b1c-2d3e4f5a6b7c";
 const flushed = () => new Promise((resolve) => setImmediate(resolve));
 
@@ -99,5 +101,34 @@ it("reports a malformed handshake once and closes a peer that stays silent", asy
 		expect(quiet.closed).toBe(true);
 	} finally {
 		vi.useRealTimers();
+	}
+});
+it("keeps heartbeat probes outside outgoing application-byte accounting", async () => {
+	const [local, peer] = memoryLinkPair(), add = vi.fn();
+	const channel = new Channel(
+		local,
+		{ opened() {}, message() {}, closed() {} },
+		{
+			codec: textCodec, incarnation, calls: 256, trusted: true, report() {},
+			metrics: objectsMetrics({ ...NOOP_TELEMETRY_METRICS, counter: () => ({ add }) }),
+		},
+		context,
+	);
+	try {
+		channel.start();
+		peer.send(textCodec.encode({ kind: "hello", protocol: 1, incarnation, calls: 256 }));
+		await flushed();
+		add.mockClear();
+		channel.tick(Date.now() + 20, 0, 10, 100);
+		expect(add).not.toHaveBeenCalled();
+		peer.send(textCodec.encode({ kind: "pong" }));
+		await flushed();
+		channel.send({ kind: "ack" });
+		expect(add.mock.calls).toEqual([
+			[textCodec.encode({ kind: "pong" }).byteLength, { direction: "received" }],
+			[textCodec.encode({ kind: "ack" }).byteLength, { direction: "sent" }],
+		]);
+	} finally {
+		channel.close();
 	}
 });

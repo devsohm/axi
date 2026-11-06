@@ -91,7 +91,7 @@ export class Channel {
 		if (silence >= close) this.close();
 		else if (this.opened && silence >= ping && !this.#ping) {
 			this.#ping = true;
-			this.send({ kind: "ping" });
+			this.#link.send(this.#options.codec.encode({ kind: "ping" }));
 		}
 	}
 	#receive(bytes: Uint8Array): void {
