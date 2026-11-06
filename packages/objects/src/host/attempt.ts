@@ -13,7 +13,7 @@ import type { NativeWatchable, Watchable, WatchEnd } from "../watch.ts";
 import type { Contract, Implementation, ParamsOf } from "../contracts/index.ts";
 import { contractData, type ShapeOf } from "../contracts/internal.ts";
 import { ObjectsError, type FailureCause, type Principal } from "../data/index.ts";
-import { asObjectsError, checkArgs, checkParams, invalid, openFailure, type Provider } from "../data/internal.ts";
+import { asObjectsError, checkArgs, checkParams, invalid, openFailure, type Provider, type Value } from "../data/internal.ts";
 import type { HandleOf, JsonObject, StateDefinition, Tx } from "../documents/index.ts";
 import {
 	SealToken,
@@ -436,9 +436,10 @@ export class Attempt implements StoreSelf, KeyDeclarer, RegistryWaiter {
 			own = this.#members!.methods.get(method);
 		if (own === undefined && version === this.#served.contract.version) throw this.#missingMethod(method);
 		const checked = checkArgs(this.#served.provider, method, args, version, context),
+			replacement = checked.kind === "call" ? checked.call : undefined,
 			handler =
-				checked.kind === "call"
-					? (value: unknown, ctx: Context) => checked.call(value as Parameters<typeof checked.call>[0], ctx)
+				replacement !== undefined
+					? (value: unknown, ctx: Context) => replacement(value as Value, ctx)
 					: own;
 		if (!handler) throw this.#missingMethod(method);
 		const linked = withLinkedAbortSignal(this.#abort.signal, context);
@@ -462,9 +463,8 @@ export class Attempt implements StoreSelf, KeyDeclarer, RegistryWaiter {
 		span?.endWhen(running.promise, "method_failed", linked.context.abortSignal);
 		(async () => handler(checked.args, ctx))().then(running.resolve, running.reject);
 		const result = await awaitWithContext(running.promise, linked.context);
-		return checked.kind === "method" && checked.result !== undefined
-			? checked.result(result as Parameters<typeof checked.result>[0])
-			: result;
+		const mapResult = checked.kind === "method" ? checked.result : undefined;
+		return mapResult === undefined ? result : mapResult(result as Value);
 	}
 	#missingMethod(method: string): ObjectsError {
 		return invalid(
@@ -566,7 +566,9 @@ export class Attempt implements StoreSelf, KeyDeclarer, RegistryWaiter {
 		if (!this.#abandoned) {
 			this.#abandoned = outcome;
 			this.#checked.resolve(outcome.kind === "failed" ? outcome.cause : undefined);
-			this.#abort.abort(outcome.kind === "ended" ? outcome.error : outcome.cause.error);
+			const reason = outcome.kind === "ended" ? outcome.error : outcome.cause.error;
+			this.#abort.abort(reason);
+			this.#routineAbort.abort(reason);
 		}
 	}
 	startedByReload(): void {
@@ -616,14 +618,13 @@ export class Attempt implements StoreSelf, KeyDeclarer, RegistryWaiter {
 	}
 	seal(error: ObjectsError, reason: "restart" | "reload" = "restart"): void {
 		if (this.draining) this.#object.host.oldWork.close();
-		this.stopRoutines();
 		this.#object.documents.fence(this.#routineToken);
 		this.abandon({ kind: "ended", error });
 		this.#object.documents.fence(this.#token);
 		for (const job of this.#jobs.values()) job.seal(error, reason);
 	}
 	stopRoutines(): void {
-		this.#routineAbort.abort(this.#object.ended());
+		this.#routineAbort.abort(new ObjectsError({ code: "released", reason: "ended", message: `${this.#object.label}: reloaded` }));
 	}
 	beginDrain(): void {
 		this.#callsDrained = true;

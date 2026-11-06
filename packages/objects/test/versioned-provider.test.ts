@@ -13,6 +13,34 @@ import { defineState } from "../src/documents/index.ts";
 import { createHost, defineFacet } from "../src/host/index.ts";
 import { constant } from "../src/state/index.ts";
 
+it("calls result mappings and removed-method replacements without a receiver", async () => {
+	const first = local("counter.receivers", { version: 1, params: {}, members: {
+		mapped: method(int(), int()), replaced: method(int(), int()),
+	} });
+	const current = evolve(first, (e) => e.method("mapped", obj({ n: int() }), obj({ n: int() })).removeMethod("replaced"));
+	const receivers: boolean[] = [];
+	const host = createHost({ onError() {} });
+	try {
+		await host.load([{ name: "counter", facet: defineFacet((h) => h.serve(current,
+			() => ({ mapped: async ({ n }) => ({ n: n + 1 }) }),
+			{ accepts: { 1: { methods: {
+				mapped: {
+					args: (n) => ({ n }),
+					result(this: unknown, value) { receivers.push(this === undefined); return value.n; },
+				},
+				replaced: { async call(this: unknown, n) { receivers.push(this === undefined); return n + 2; } },
+			} } } },
+		)) }], context);
+		const ref = await host.get(first, {}, context);
+		expect(await ref.mapped(3, context)).toBe(4);
+		expect(await ref.replaced(3, context)).toBe(5);
+		expect(receivers).toEqual([true, true]);
+		ref.release();
+	} finally {
+		await host.close(context);
+	}
+});
+
 it("serves older state, methods and keyed documents through one shared mapping", async () => {
 	const first = local("counter.versioned", {
 		version: 1,

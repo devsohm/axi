@@ -3,6 +3,40 @@ import { BACKGROUND_CONTEXT as context, withAbortSignal, type Context } from "..
 import { Routines, type RoutineDeclarations, type RoutineOwner } from "../src/host/routines.ts";
 import type { HostError } from "../src/host/report.ts";
 import { Batch, Source } from "../src/state/internal.ts";
+import { createHost, defineFacet, int, local, ObjectsError } from "../src/index.ts";
+import type { FollowObserver } from "../src/host/follow.ts";
+
+it.each(["reload", "failure"] as const)("preserves the cancellation cause when a routine stops after %s", async (mode) => {
+	const Value = local("routine.cause", { version: 1, params: {}, members: { value: int() } });
+	const started = Promise.withResolvers<Context>(), attached = Promise.withResolvers<FollowObserver<unknown>>();
+	const plugin = () => ({ name: "value", facet: defineFacet((h) => h.serve(Value, (_, self) => {
+		const value = self.follow(async (observer) => {
+			attached.resolve(observer);
+			return { value: 1, detach() {} };
+		});
+		self.onLive((ctx) => new Promise<void>((resolve) => {
+			started.resolve(ctx);
+			ctx.abortSignal?.addEventListener("abort", () => resolve(), { once: true });
+		}));
+		return { value };
+	})) });
+	const host = createHost({ onError() {} });
+	try {
+		await host.load([plugin()], context);
+		const ref = await host.get(Value, {}, context), ctx = await started.promise;
+		if (mode === "reload") {
+			await host.reload([plugin()], context);
+			expect(ctx.abortSignal?.reason).toMatchObject({ code: "released", reason: "ended", message: "routine.cause: reloaded" });
+		} else {
+			const failure = new ObjectsError({ code: "unavailable", message: "runtime disconnected" });
+			(await attached.promise).end({ kind: "failed", error: failure });
+			expect(ctx.abortSignal?.reason).toBe(failure);
+		}
+		ref.release();
+	} finally {
+		await host.close(context);
+	}
+});
 
 class Values extends Source {
 	#n = 0;
