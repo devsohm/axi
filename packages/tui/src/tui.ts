@@ -789,7 +789,7 @@ export abstract class TuiBase extends Container implements TUI {
 				? value
 				: value !== undefined
 					? /^\d+(?:\.\d+)?%$/.test(value)
-						? origin + Math.floor((Math.max(0, free) * Number.parseFloat(value)) / 100)
+						? origin + Math.floor(Math.max(0, free) * (Number.parseFloat(value) / 100))
 						: origin + Math.floor(free / 2)
 					: fallback;
 		const row = position(options.row, top, availableHeight - actualHeight, rowAnchor) + (options.offsetY ?? 0),

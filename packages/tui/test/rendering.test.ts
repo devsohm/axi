@@ -15,6 +15,26 @@ afterEach(() => {
 	}
 });
 
+test("percentage overlay positions retain ratio rounding at cell boundaries", () => {
+	for (const [extent, percentage, position] of [
+		[51, 58, 28],
+		[101, 29, 28],
+		[101, 57, 56],
+		[101, 58, 57],
+	] as const) {
+		const terminal = new TestTerminal(extent, extent),
+			ui = new TuiMainScreen(terminal);
+		resources.push({ ui, terminal });
+		const overlay = ui.showOverlay(new Text("x", 0, 0), {
+			width: 1,
+			row: `${percentage}%`,
+			col: `${percentage}%`,
+		});
+		ui.renderNow();
+		expect(overlay.getBounds()).toEqual({ row: position, col: position, width: 1, height: 1 });
+	}
+});
+
 test("scrollback rendering edits focused input, restores focus after overlays and clears removed content", async () => {
 	const terminal = new TestTerminal(30, 8),
 		ui = new TuiMainScreen(terminal);
