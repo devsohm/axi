@@ -23,11 +23,12 @@ export class RelayedHold {
 		this.caller = caller;
 		this.#provider = downstream;
 		this.#path = path;
+		const { trace, ...fields } = request;
 		this.#request = {
-			...request,
+			...fields,
 			params: typeof request.params === "string" ? request.params : (request.params as Uint8Array).slice(),
 		};
-		this.#trace = request.trace;
+		this.#trace = trace;
 		const adapter = downstream.link.host.telemetry;
 		if (!untraced(adapter)) {
 			this.#relaying = new OpenSpan(parentOf(request.trace, adapter), "objects.relay", this.#attributes("hold"));
@@ -55,10 +56,11 @@ export class RelayedHold {
 	attach(link: HostLink): void {
 		const origin = this.#provider.relayTo(link);
 		this.#connection = { link, origin };
-		let trace = this.#trace;
-		if (this.#holds++ > 0 && trace && !untraced(link.host.telemetry)) {
+		const first = this.#holds++ === 0;
+		let trace = first ? this.#trace : undefined;
+		if (!first && this.#trace !== undefined && !untraced(link.host.telemetry)) {
 			const again = new OpenSpan(link.host.telemetry, "objects.relay", this.#attributes("hold"));
-			again.span.addLink({ context: parentOf(trace, link.host.telemetry) });
+			again.span.addLink({ context: parentOf(this.#trace, link.host.telemetry) });
 			trace = carrierOf(again.span);
 			again.span.setAttributes({ outcome: "ok" });
 			again.end();

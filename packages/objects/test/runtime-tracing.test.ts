@@ -1,7 +1,55 @@
 import { expect, it, vi } from "vitest";
 import { InMemoryTelemetryContext, NOOP_TELEMETRY_CONTEXT, NOOP_TELEMETRY_METRICS } from "@axi/telemetry";
-import { BACKGROUND_CONTEXT as context, withTelemetry } from "../src/context/index.ts";
-import { createHost, defineFacet, defineState, int, local, method, obj, str, remote, hostKind, memoryLinkPair, ObjectsError } from "../src/index.ts";
+import { BACKGROUND_CONTEXT as context, withAbortSignal, withTelemetry } from "../src/context/index.ts";
+import { createHost, defineFacet, defineState, int, local, method, obj, str, remote, hostKind, memoryLinkPair, binaryCodec, ObjectsError } from "../src/index.ts";
+
+it("forwards the first incoming trace and omits it when a non-recording relay reconnects", async () => {
+	const telemetry = new InMemoryTelemetryContext(), traces: boolean[] = [], errors: unknown[] = [];
+	const address = hostKind("relay-trace-server")();
+	const Value = remote("relay.trace", {
+		version: 1, params: {}, hostAddress: () => address,
+		variants: { ready: { state: { value: int() } } },
+	});
+	const server = createHost({ address, principal: { kind: "server" }, onError: error => errors.push(error) });
+	const relay = createHost({ principal: { kind: "relay" }, onError: error => errors.push(error) });
+	const client = createHost({ telemetry, principal: { kind: "client" }, onError: error => errors.push(error) });
+	const connect = () => {
+		const [a, b] = memoryLinkPair(), send = b.send.bind(b);
+		b.send = packet => {
+			const message = binaryCodec.decode(packet);
+			if (message.kind === "hold") traces.push(message.trace !== undefined);
+			send(packet);
+		};
+		server.connect(a, { principal: { kind: "relay" }, trusted: true }, context);
+		relay.connect(b, { principal: { kind: "server" }, trusted: true }, context);
+		return b;
+	};
+	try {
+		await server.load([{ name: "value", facet: defineFacet(h => h.serve(Value, (_params, _principal, self) => ({
+			variant: "ready", members: { value: self.derive([], () => 7) },
+		}))) }], context);
+		await relay.load([], context);
+		await client.load([], context);
+		const first = connect(), [a, b] = memoryLinkPair();
+		relay.accept(a, { principal: { kind: "client" } }, context);
+		client.connect(b, { principal: { kind: "relay" }, trusted: true }, context);
+		const ref = await telemetry.startSpan({ name: "request" }, span =>
+			client.get(Value, {}, withAbortSignal(AbortSignal.timeout(4000), withTelemetry(span, context))));
+		expect(ref.value.value).toBe(7);
+		first.close();
+		await vi.waitFor(() => expect(ref.state.value.kind).toBe("loading"));
+		connect();
+		await vi.waitFor(() => expect(ref.state.value.kind).toBe("live"));
+		expect(ref.value.value).toBe(7);
+		ref.release();
+		expect(errors).toEqual([]);
+		expect(traces).toEqual([true, false]);
+	} finally {
+		await client.close(context);
+		await relay.close(context);
+		await server.close(context);
+	}
+});
 
 it("reuses described metric instruments while validating and changing state", async () => {
 	const counter = vi.fn(NOOP_TELEMETRY_METRICS.counter);
