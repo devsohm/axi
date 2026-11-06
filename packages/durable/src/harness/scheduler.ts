@@ -538,7 +538,7 @@ export class TaskScheduler {
 			}
 			if (equal(wake, this.#lastWake)) return;
 			try {
-				this.#options.onWake(wake);
+				this.#options.onWake.call(this, wake);
 				this.#lastWake = wake;
 			} catch (error) {
 				this.#hostError(error, "onWake");

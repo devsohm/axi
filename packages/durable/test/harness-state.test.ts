@@ -31,6 +31,26 @@ import { SessionImpl } from "../src/session/session.ts";
 import { openNodeJsonlStorage } from "../src/storage/jsonl/node.ts";
 
 describe("conversation state", () => {
+	it("supplies the scheduler as the wake callback receiver", async () => {
+		const receivers: unknown[] = [];
+		const harness = await Harness.open(
+			new MemoryStorage(),
+			{
+				models: createModels(),
+				registry: createRegistry(),
+				onWake: function (this: unknown) {
+					receivers.push(this);
+				},
+			},
+			context,
+		);
+		try {
+			await expect.poll(() => receivers.length).toBeGreaterThan(0);
+			for (const receiver of receivers) expect(receiver).toHaveProperty("wake", expect.any(Function));
+		} finally {
+			await harness.close(context);
+		}
+	});
 	it("preserves custom registry sections before conversation instructions", async () => {
 		const base = createRegistry().snapshot();
 		const extension = defineExtension({
