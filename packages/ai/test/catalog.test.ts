@@ -260,18 +260,22 @@ it("uses the model's declared identity when its listing key differs", () => {
 	]);
 });
 
-it("uses the last live NVIDIA model ID for a normalized catalog identity", () => {
+it.each([
+	[undefined, "Vendor/Model_A"],
+	["vendor/model.a", "Vendor/Model_A"],
+	["Descriptive name", "Descriptive name"],
+])("resolves the live NVIDIA identity while preserving the display name %s", (name, expectedName) => {
 	const catalog = buildModelsDevCatalog(
 		{
 			nvidia: {
 				models: {
-					"vendor/model.a": { tool_call: true, modalities: { input: ["text"], output: ["text"] } },
+					"vendor/model.a": { name, tool_call: true, modalities: { input: ["text"], output: ["text"] } },
 				},
 			},
 		},
 		["vendor/model.a", "Vendor/Model_A"],
 	);
-	expect(catalog.models.map((model) => model.id)).toEqual(["Vendor/Model_A"]);
+	expect(catalog.models.map((model) => [model.id, model.name])).toEqual([["Vendor/Model_A", expectedName]]);
 });
 
 it("keeps separate typed model identities across all included providers", () => {

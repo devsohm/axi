@@ -429,7 +429,7 @@ export function buildModelsDevCatalog(data: SourceCatalog, nvidiaIds: readonly s
 				)
 					continue;
 				model.id = live;
-				model.name = source.name || live;
+				if (model.name === id) model.name = live;
 				model.headers = { "NVCF-POLL-SECONDS": "3600" };
 				model.compat = { ...togetherBase };
 			}
