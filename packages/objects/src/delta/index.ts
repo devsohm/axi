@@ -337,11 +337,7 @@ function copyPath(root: JsonValue, path: Path, owned: WeakSet<object>): JsonValu
 	const copy = (value: JsonValue): Container => {
 		if (Array.isArray(value)) return value.slice();
 		if (!container(value)) throw new PathError(path);
-		const result: Record<string, JsonValue> = Object.create(
-			Object.getPrototypeOf(value) === null ? null : Object.prototype,
-		);
-		for (const key of Object.keys(value)) put(result, key, value[key]);
-		return result;
+		return Object.getPrototypeOf(value) === null ? Object.assign(Object.create(null), value) : { ...value };
 	};
 	if (!container(root)) throw new PathError(path);
 	let result = root;

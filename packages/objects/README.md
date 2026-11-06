@@ -41,6 +41,7 @@ The Node helpers load only when imported. Plugin builds require the optional `es
 - [Tutorial](docs/tutorial.md): build a counter, change its code and retain its state.
 - [Guide](docs/guide.md): choose contracts, ownership, storage and transport.
 - [Specification](docs/spec.md): lifecycle, publication, failures and limits.
+- [JSON revisions](docs/delta.md): draft ownership, immutable replay, operations and streaming.
 - [API reference](docs/api.md): exported names and declarations.
 - [HTTP](docs/http.md), [workers](docs/workers.md) and [plugins](docs/plugins.md): Node integration.
 - [Clients](docs/clients.md): browser, React and terminal integration, messages and preferences.

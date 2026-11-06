@@ -12,11 +12,7 @@ function put(target: Container, key: Seg, value: JsonValue): void {
 }
 function copy(value: Container): Container {
 	if (Array.isArray(value)) return Array.from(value);
-	const result: Record<string, JsonValue> = Object.create(
-		Object.getPrototypeOf(value) === null ? null : Object.prototype,
-	);
-	for (const key of Object.keys(value)) put(result, key, value[key]);
-	return result;
+	return Object.getPrototypeOf(value) === null ? Object.assign(Object.create(null), value) : { ...value };
 }
 function branch(
 	root: JsonValue,

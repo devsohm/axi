@@ -1,5 +1,9 @@
 # Objects specification
 
+## JSON revisions
+
+The [JSON revision contract](delta.md) defines draft ownership, preparation, replay and streaming. Published revisions and operations are immutable by contract. Object copies preserve plain and null prototypes, own data properties and unchanged nested values.
+
 ## Identity and declarations
 
 Object identity consists of contract, canonical parameters and principal. Parameter defaults are normalized before identity lookup. Contract declarations own immutable schema snapshots and fingerprints. Equal versions require compatible fingerprints. Accepted older versions use explicit adapters.

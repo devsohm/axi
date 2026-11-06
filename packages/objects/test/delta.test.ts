@@ -15,6 +15,30 @@ import {
 } from "../src/delta/index.ts";
 
 describe("revision transactions", () => {
+	it.each([false, true])(
+		"preserves object ownership and prototype on array leaf updates, null prototype %s",
+		(nullPrototype) => {
+			const record = { count: 0, retained: { marker: true } };
+			const prototypeValue = { label: "data" };
+			Object.defineProperty(record, "__proto__", { value: prototypeValue, enumerable: true });
+			if (nullPrototype) Object.setPrototypeOf(record, null);
+			const base = { rows: [record] };
+			const tracker = track(base);
+			const change = tracker.beginChange();
+			change.state.rows[0].count = 2;
+			const prepared = change.prepare();
+			tracker.adopt(prepared);
+			for (const result of [tracker.value, applyImmutable(base, prepared.ops)]) {
+				const value = result.rows[0];
+				expect(Object.getPrototypeOf(value)).toBe(nullPrototype ? null : Object.prototype);
+				expect(Object.hasOwn(value, "__proto__")).toBe(true);
+				expect(Reflect.get(value, "__proto__")).toBe(prototypeValue);
+				expect(value.retained).toBe(record.retained);
+				expect(value.count).toBe(2);
+			}
+			expect(record.count).toBe(0);
+		},
+	);
 	it("reports draft properties as read-only while preparing their revision", () => {
 		const descriptors: PropertyDescriptor[] = [];
 		let inspect = (): void => {};
