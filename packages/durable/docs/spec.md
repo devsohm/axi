@@ -71,7 +71,7 @@ Retiring a document releases the retired incarnation. Watches and synchronous ob
 
 Stored commits update document observers during ordered publication, after the storage call settles. `observeCommits()` dispatches stored publications one microtask later, before the commit settles. Deferred commits can hold changes to existing conversation documents with `latest` history and an `initial` fork policy. Memory observers see each held change once. Stored publications include the folded held changes when a writing commit reads or changes that document, its persistence deadline expires, its tracker reloads or unloads, or the session closes. Failed sessions do not flush held changes. The default persistence window is 1,000 milliseconds; an infinite window waits for another flush trigger.
 
-A watch reports committed values and operations. Its terminal reason distinguishes explicit stop, cancellation, Session close, retirement, listener failure, and Session failure.
+A watch reports committed values and operations. Retirement is a value call, so the watch can follow a later incarnation. Its terminal reason is `stopped`, `aborted`, `ended`, `listener_error`, or `failed`.
 
 `Conversation.watch()` supplies committed conversation state through asynchronous delivery. Each value call contains the current view, its changes and a retirement flag. Readers render this state directly. Partial output reaches the view through live documents.
 

@@ -100,7 +100,7 @@ Exports from the package root. The linked declarations contain exact signatures.
 | `GenerationInput` | typealias | [`harness/generation.d.ts`](../dist/harness/generation.d.ts) |
 | `GenerationResult` | typealias | [`harness/generation.d.ts`](../dist/harness/generation.d.ts) |
 | `GenerationTask` | const | [`harness/generation.d.ts`](../dist/harness/generation.d.ts) |
-| `Harness` | interface | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
+| `Harness` | value and type | [`harness/harness.d.ts`](../dist/harness/harness.d.ts) |
 | `HarnessInspection` | typealias | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
 | `HarnessOptions` | typealias | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
 | `HarnessSettings` | typealias | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
