@@ -3,6 +3,7 @@ import { createModels } from "../src/models.ts";
 import {
 	AXI_ATTRIBUTION,
 	formatUserAgent,
+	getAttributionHeaders,
 	getIdentityHeaders,
 	getOpenCodeSessionHeaders,
 	mergeClientIdentity,
@@ -41,4 +42,31 @@ it("keeps a mutable model collection mutable through identity wrapping", () => {
 	expect(wrapped.getProviders()).toEqual(models.getProviders());
 	wrapped.clearProviders();
 	expect(models.getProviders()).toEqual([]);
+});
+
+it("uses one attribution snapshot when headers come from accessors", () => {
+	for (const provider of ["nvidia", "openrouter"]) {
+		let names = 0,
+			categories = 0;
+		const attribution = {
+			get name() {
+				return names++ === 0 ? "alpha" : "beta";
+			},
+			url: "https://example.test/client",
+			get categories() {
+				return categories++ === 0 ? ["cli"] : [];
+			},
+		};
+		const headers = getAttributionHeaders({ provider, baseUrl: "https://example.test/v1" }, { attribution });
+		expect(headers).toEqual(
+			provider === "nvidia"
+				? { "X-BILLING-INVOKE-ORIGIN": "Alpha" }
+				: {
+						"HTTP-Referer": attribution.url,
+						"X-OpenRouter-Title": "alpha",
+						"X-OpenRouter-Categories": "cli",
+					},
+		);
+		expect([names, categories]).toEqual([1, 1]);
+	}
 });

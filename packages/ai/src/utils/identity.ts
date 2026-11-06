@@ -58,15 +58,16 @@ function openCode(target: ClientIdentityTarget): boolean {
 export function getAttributionHeaders(target: ClientIdentityTarget, identity?: ClientIdentity): Record<string, string> {
 	const value = identity?.attribution;
 	if (!value) return {};
+	const { name, url, categories } = value;
 	if (target.provider === "openrouter" || target.baseUrl.includes("openrouter.ai"))
 		return {
-			"HTTP-Referer": value.url,
-			"X-OpenRouter-Title": value.name,
-			...(value.categories?.length ? { "X-OpenRouter-Categories": value.categories.join(",") } : {}),
+			"HTTP-Referer": url,
+			"X-OpenRouter-Title": name,
+			...(categories?.length ? { "X-OpenRouter-Categories": categories.join(",") } : {}),
 		};
 	if (target.provider === "nvidia" || hostIs(target.baseUrl, "integrate.api.nvidia.com"))
-		return { "X-BILLING-INVOKE-ORIGIN": value.name.charAt(0).toUpperCase() + value.name.slice(1) };
-	return openCode(target) ? { "x-opencode-client": value.name } : {};
+		return { "X-BILLING-INVOKE-ORIGIN": name.charAt(0).toUpperCase() + name.slice(1) };
+	return openCode(target) ? { "x-opencode-client": name } : {};
 }
 export function getOpenCodeSessionHeaders(
 	target: ClientIdentityTarget,
