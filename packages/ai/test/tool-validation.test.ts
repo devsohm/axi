@@ -1,6 +1,23 @@
-import { expect, test } from "vitest";
+import { expect, expectTypeOf, test } from "vitest";
+import { type Static, Type } from "typebox";
+import { StringEnum } from "@axi/ai/utils/string-enum";
 import { validateToolArguments, validateToolCall } from "../src/utils/validation.ts";
 import type { Tool, ToolCall } from "../src/types.ts";
+
+test("the string enum entry point supplies a typed provider-compatible tool schema", () => {
+	const direction = StringEnum(["up", "down"] as const, { description: "Direction", default: "up" });
+	expectTypeOf<Static<typeof direction>>().toEqualTypeOf<"up" | "down">();
+	expect(JSON.parse(JSON.stringify(direction))).toEqual({
+		type: "string",
+		enum: ["up", "down"],
+		description: "Direction",
+		default: "up",
+	});
+	const move: Tool = { name: "move", description: "Move", parameters: Type.Object({ direction }) };
+	const call: ToolCall = { type: "toolCall", id: "move-1", name: "move", arguments: { direction: "down" } };
+	expect(validateToolArguments(move, call)).toEqual({ direction: "down" });
+	expect(() => validateToolArguments(move, { ...call, arguments: { direction: "left" } })).toThrow("Validation failed");
+});
 
 const tool: Tool = {
 	name: "configure",

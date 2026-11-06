@@ -72,6 +72,8 @@ Responses transports that support system updates and `additional_tools` use `"ch
 
 A `Tool` contains `name`, `description`, and a TypeBox `parameters` schema. The AI package describes calls. The application executes tools and appends their results. `validateToolArguments()` checks and coerces arguments against the declaration.
 
+`StringEnum` from `@axi/ai/utils/string-enum` creates a typed string schema with an `enum` array. Use it with providers that do not accept `anyOf` and `const` enum encodings. It accepts optional `description` and `default` fields.
+
 Constrained sampling accepts JSON-schema preferences or grammar variants. JSON-schema strictness is `prefer` or `require`. Grammar formats are `openai_lark` and `openai_regex`. Support depends on the transport and model metadata.
 
 Google's optional legacy `parameters` conversion removes schema meta-declarations recursively. It copies fields by ordinary JavaScript assignment, so `__proto__` changes the copied object's prototype instead of becoming an own property. Mistral's schema copy uses the same assignment rule. Google's default `parametersJsonSchema` conversion preserves the original schema.

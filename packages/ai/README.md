@@ -38,7 +38,7 @@ console.log(model?.id);
 gpt-4o-mini
 ```
 
-The built-in catalog contains 41 providers. Chat, image and classifier entries share provider authentication but use separate operations. Catalog reads are synchronous. `models.refresh()` updates dynamic providers and can restore their persisted catalogs without network access.
+The built-in catalog contains 42 providers. Chat, image and classifier entries share provider authentication but use separate operations. Catalog reads are synchronous. `models.refresh()` updates dynamic providers and can restore their persisted catalogs without network access.
 
 Transcripts carry system messages and tool changes. The helpers replay the current prompt and tools, or retain updates in place for transports that support them. Event streams expose text, thinking and tool-call updates and return the completed assistant message.
 
