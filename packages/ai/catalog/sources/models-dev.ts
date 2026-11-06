@@ -189,7 +189,7 @@ export function parseModelsDev(value: unknown): SourceCatalog {
 			provider,
 			{
 				models: Object.fromEntries(
-					Object.entries(data.models ?? {}).flatMap(([id, model]) => {
+					Object.values(data.models ?? {}).flatMap((model) => {
 						if (model.type !== "chat") return [];
 						const reasoning = model.capabilities.reasoning;
 						const controls: ModelsDevReasoningOption[] = [];
@@ -200,7 +200,7 @@ export function parseModelsDev(value: unknown): SourceCatalog {
 						}
 						return [
 							[
-								id,
+								model.id,
 								{
 									id: model.id,
 									name: model.name,

@@ -240,6 +240,26 @@ it("uses the listed protocol and endpoint without requiring an SDK name", () => 
 	]);
 });
 
+it("uses the model's declared identity when its listing key differs", () => {
+	const source = parseModelsDev({
+		cerebras: {
+			models: {
+				listing: {
+					id: "served-id",
+					name: "Served model",
+					type: "chat",
+					modalities: { input: ["text"], output: ["text"] },
+					capabilities: { tools: { supported: true }, reasoning: { supported: false } },
+					api: { "chat-completions": { base_url: "https://example.test/v1" } },
+				},
+			},
+		},
+	});
+	expect(buildModelsDevCatalog(source).models.map((model) => [model.id, model.name])).toEqual([
+		["served-id", "Served model"],
+	]);
+});
+
 it("uses the last live NVIDIA model ID for a normalized catalog identity", () => {
 	const catalog = buildModelsDevCatalog(
 		{
