@@ -3,7 +3,7 @@ import { type Context } from "@axi/objects/context";
 import { copyJson, type JsonRepresentation, type JsonValue } from "@axi/objects/json";
 import { type Draft } from "@axi/objects/delta";
 import { awaitWithContext } from "@axi/objects/context";
-import { overlap } from "@axi/objects/delta";
+import { overlap, ownedSlice } from "@axi/objects/delta";
 import { boundOutput, OutputBuffer, type OutputLimits, PROGRESS_BYTES_PER_SECOND, Progress } from "@axi/objects/output";
 import type { ImageContent, TextContent, ToolCall, ToolResultMessage } from "@axi/ai";
 import { validateToolArguments } from "@axi/ai/utils/validation";
@@ -835,10 +835,13 @@ function interrupted(
 function summary(result: NestedToolExecutionResult, output: Content): NestedToolSummary {
 	const errors = result.diagnostics.filter((item) => item.severity === "error");
 	const text = result.isError
-		? (errors.length
-				? errors.map((item) => item.message).join("\n")
-				: output.flatMap((item) => (item.type === "text" ? [item.text] : [])).join("\n")
-			).slice(0, 500)
+		? ownedSlice(
+				errors.length
+					? errors.map((item) => item.message).join("\n")
+					: output.flatMap((item) => (item.type === "text" ? [item.text] : [])).join("\n"),
+				0,
+				500,
+			)
 		: "";
 	return {
 		isError: result.isError,
