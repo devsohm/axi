@@ -119,5 +119,5 @@ export function validateMcpServerConfig(
 	return invalid(`server "${name}" needs either "command" (stdio) or "url" (streamable HTTP)`);
 }
 export function isMcpServerOverride(entry: Record<string, unknown>): boolean {
-	return [entry.command, entry.url, entry.type].every((value) => value === undefined);
+	return entry.command === undefined && entry.url === undefined && entry.type === undefined;
 }
