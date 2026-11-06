@@ -132,11 +132,8 @@ static napi_value virtual_input(napi_env env, napi_callback_info info) {
     napi_value result; napi_get_boolean(env, enabled, &result); return result;
 }
 NAPI_MODULE_INIT() {
+    export_method(env, exports, "enableVirtualTerminalInput", virtual_input, NULL);
+    export_method(env, exports, "isModifierPressed", modifier, NULL);
     export_clipboard(env, exports, 3);
-    napi_property_descriptor methods[] = {
-        {"isModifierPressed", NULL, modifier, NULL, NULL, NULL, napi_default, NULL},
-        {"enableVirtualTerminalInput", NULL, virtual_input, NULL, NULL, NULL, napi_default, NULL},
-    };
-    napi_define_properties(env, exports, 2, methods);
     return exports;
 }

@@ -109,13 +109,15 @@ static napi_value clipboard_call(napi_env env, napi_callback_info info) {
     }
     return promise;
 }
+static void export_method(napi_env env, napi_value exports, const char *name, napi_callback callback, void *data) {
+    napi_value method;
+    if (napi_create_function(env, name, NAPI_AUTO_LENGTH, callback, data, &method) == napi_ok)
+        napi_set_named_property(env, exports, name, method);
+}
 static void export_clipboard(napi_env env, napi_value exports, size_t count) {
-    napi_property_descriptor methods[] = {
-        {"getText", NULL, clipboard_call, NULL, NULL, NULL, napi_default, (void *)(uintptr_t)READ_TEXT},
-        {"getImage", NULL, clipboard_call, NULL, NULL, NULL, napi_default, (void *)(uintptr_t)READ_IMAGE},
-        {"setText", NULL, clipboard_call, NULL, NULL, NULL, napi_default, (void *)(uintptr_t)WRITE_TEXT},
-        {"getFilePaths", NULL, clipboard_call, NULL, NULL, NULL, napi_default, (void *)(uintptr_t)READ_FILES},
-    };
-    napi_define_properties(env, exports, count, methods);
+    export_method(env, exports, "getText", clipboard_call, (void *)(uintptr_t)READ_TEXT);
+    if (count > 2) export_method(env, exports, "setText", clipboard_call, (void *)(uintptr_t)WRITE_TEXT);
+    export_method(env, exports, "getImage", clipboard_call, (void *)(uintptr_t)READ_IMAGE);
+    if (count > 3) export_method(env, exports, "getFilePaths", clipboard_call, (void *)(uintptr_t)READ_FILES);
 }
 #endif

@@ -34,6 +34,14 @@ test("Node-API clipboard bridge transfers values and propagates errors", { skip:
             const assert = require('node:assert/strict');
             const helper = require(process.argv[1]);
             (async () => {
+                assert.deepEqual(Object.keys(helper), ['getText', 'setText', 'getImage', 'getFilePaths']);
+                for (const name of Object.keys(helper)) {
+                    const descriptor = Object.getOwnPropertyDescriptor(helper, name);
+                    assert.equal(descriptor.writable, true);
+                    assert.equal(descriptor.enumerable, true);
+                    assert.equal(descriptor.configurable, true);
+                    assert.equal(helper[name].name, name);
+                }
                 assert.equal(await helper.getText(), 'café');
                 assert.deepEqual(await helper.getImage(), Buffer.from([0, 127, 255]));
                 assert.deepEqual(await helper.getFilePaths(), ['/one', '/two']);

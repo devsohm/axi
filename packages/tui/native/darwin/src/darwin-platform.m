@@ -78,8 +78,7 @@ static napi_value modifier(napi_env env, napi_callback_info info) {
     return value;
 }
 NAPI_MODULE_INIT() {
+    export_method(env, exports, "isModifierPressed", modifier, NULL);
     export_clipboard(env, exports, 4);
-    napi_property_descriptor method = {"isModifierPressed", NULL, modifier, NULL, NULL, NULL, napi_default, NULL};
-    napi_define_properties(env, exports, 1, &method);
     return exports;
 }
