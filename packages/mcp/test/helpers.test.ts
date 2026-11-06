@@ -63,6 +63,19 @@ test("large model output keeps both ends and images and saves the entire origina
 	expect(Buffer.byteLength(first.text)).toBeLessThan(22000);
 });
 
+test("pipe transport captures framing options once at construction", () => {
+	let reads = 0;
+	const transport = new PipeTransport({
+		async open() { throw new Error("No process should start"); },
+		get maxMessageBytes() {
+			if (++reads > 1) throw new Error("Framing options were read again");
+			return 64;
+		},
+	});
+	expect(transport.options.maxMessageBytes).toBe(64);
+	expect(reads).toBe(1);
+});
+
 test("pipe transport exchanges framed messages with a real child and closes its input", async () => {
 	const messages: JsonRpcMessage[] = [];
 	const transport = new PipeTransport({
