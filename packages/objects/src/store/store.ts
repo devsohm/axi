@@ -1,3 +1,4 @@
+import { objectsMetrics } from "../telemetry.ts";
 import { awaitWithContext, type Context } from "../context/index.ts";
 import type { SqliteDatabase, SqliteExecutor, SqliteValue } from "../sqlite/index.ts";
 import { ObjectsError } from "../data/index.ts";
@@ -300,8 +301,8 @@ export class ObjectsStore implements Store {
 		for (const [name, record] of step.tables) this.#catalog.set(name, record);
 	}
 	#notify(step: Step, commit: WaitingCommit): void {
-		commit.context.telemetry.metrics?.counter("objects.store.commits").add(1);
-		commit.context.telemetry.metrics?.counter("objects.store.statements").add(step.statements);
+		objectsMetrics(commit.context.telemetry.metrics).counter("objects.store.commits").add(1);
+		objectsMetrics(commit.context.telemetry.metrics).counter("objects.store.statements").add(step.statements);
 		commit.fence.adopt(step.seq, step.created, step.rows);
 	}
 	async #runAlone(commits: readonly WaitingCommit[]): Promise<void> {
@@ -412,8 +413,8 @@ export class ObjectsStore implements Store {
 			this.#committedId = done.nextId;
 			if (done.catalog) for (const [name, record] of done.catalog) this.#catalog.set(name, record);
 			try {
-				context.telemetry.metrics?.counter("objects.store.commits").add(written);
-				context.telemetry.metrics?.counter("objects.store.statements").add(done.statements);
+				objectsMetrics(context.telemetry.metrics).counter("objects.store.commits").add(written);
+				objectsMetrics(context.telemetry.metrics).counter("objects.store.statements").add(done.statements);
 				for (const [index, receipt] of done.receipts.entries()) receive(index, receipt.seq, receipt.ids);
 			} catch (error) {
 				throw this.#fail(error);

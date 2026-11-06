@@ -1,3 +1,4 @@
+import { objectsMetrics } from "../telemetry.ts";
 import type { Context } from "../context/index.ts";
 import { ObjectsError } from "../data/errors.ts";
 
@@ -63,7 +64,7 @@ export function originPart(
 	if (!compression || json.length <= COMPRESS_ABOVE / 3) return json;
 	const bytes = utf8.encode(json);
 	if (bytes.byteLength <= COMPRESS_ABOVE) return bytes;
-	context.telemetry.metrics?.counter("objects.link.deflates").add(1);
+	objectsMetrics(context.telemetry.metrics).counter("objects.link.deflates").add(1);
 	const compressed = compression.deflate(bytes);
 	return compressed.byteLength < bytes.byteLength
 		? new DeflatedPart(compressed)
@@ -89,7 +90,7 @@ export function openPart(
 	if (!result) {
 		if (!compression)
 			throw new Error("part: a deflated part this host did not inflate");
-		context.telemetry.metrics?.counter("objects.link.inflates").add(1);
+		objectsMetrics(context.telemetry.metrics).counter("objects.link.inflates").add(1);
 		result = compression.inflate(part.bytes, limits.decoded);
 	}
 	if (result.kind === "bytes") return result.bytes;
@@ -103,7 +104,7 @@ export async function inflateAsync(
 	signal: AbortSignal,
 	context: Context,
 ): Promise<void> {
-	context.telemetry.metrics?.counter("objects.link.inflates").add(1);
+	objectsMetrics(context.telemetry.metrics).counter("objects.link.inflates").add(1);
 	const reader = new Blob([part.bytes as Uint8Array<ArrayBuffer>])
 		.stream()
 		.pipeThrough(new DecompressionStream("deflate-raw"))

@@ -1,6 +1,7 @@
 import type { TelemetryMetrics } from "@axi/telemetry";
 import type { Context } from "../context/index.ts";
 import { invalid } from "../data/internal.ts";
+import { objectsMetrics, type ObjectsMetrics } from "../telemetry.ts";
 
 export type BatchError =
 	| { readonly kind: "listener_error"; readonly error: unknown }
@@ -10,7 +11,7 @@ export interface Delivered { deliver(context: Context): void }
 export class Batch {
 	readonly reportListener: (error: unknown) => void;
 	readonly #report: (error: BatchError) => void;
-	readonly #metrics: TelemetryMetrics | undefined;
+	readonly #metrics: ObjectsMetrics;
 	#running = false;
 	#computing = false;
 	#flushing = false;
@@ -21,7 +22,7 @@ export class Batch {
 
 	constructor(report: (error: BatchError) => void, metrics: TelemetryMetrics | undefined) {
 		this.#report = report;
-		this.#metrics = metrics;
+		this.#metrics = objectsMetrics(metrics);
 		this.reportListener = (error) => report({ kind: "listener_error", error });
 	}
 	get running(): boolean { return this.#running }
@@ -81,6 +82,6 @@ export class Batch {
 	changed(source: Delivered): void { this.#deliveries.push(source) }
 	flushing(flush: (context: Context) => void): void { this.#flushes.push(flush) }
 	count(counter: "objects.derive.computes" | "objects.derive.diffs" | "objects.registry.composes" | "objects.registry.adapts" | "objects.contract.adapts"): void {
-		this.#metrics?.counter(counter).add(1);
+		this.#metrics.counter(counter).add(1);
 	}
 }

@@ -1,3 +1,4 @@
+import { objectsMetrics } from "../telemetry.ts";
 import Type from "typebox";
 import type { Context } from "../context/index.ts";
 import {
@@ -170,7 +171,7 @@ export function checkPart(
 	position: number,
 	context: Context,
 ): ArchivePart {
-	context.telemetry.metrics?.counter("objects.data.validations").add(1);
+	objectsMetrics(context.telemetry.metrics).counter("objects.data.validations").add(1);
 	if (!validatorFor(partSchema, context).Check(part))
 		throw invalid("args", `import: part ${position}: not an archive part`);
 	return part as ArchivePart;
@@ -180,7 +181,7 @@ export function checkWrite(
 	what: string,
 	context: Context,
 ): StoreWrite {
-	context.telemetry.metrics?.counter("objects.data.validations").add(1);
+	objectsMetrics(context.telemetry.metrics).counter("objects.data.validations").add(1);
 	if (!validatorFor(writeSchema, context).Check(write))
 		throw invalid("args", `${what}: not a store write`);
 	return write as StoreWrite;

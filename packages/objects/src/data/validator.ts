@@ -1,3 +1,4 @@
+import { objectsMetrics } from "../telemetry.ts";
 import { Compile, type Validator } from "typebox/compile";
 import { ResetExternal, ResetFunctions } from "typebox/schema";
 import { Errors } from "typebox/value";
@@ -37,7 +38,7 @@ function validationSchema(schema: TSchema): TSchema {
 export function validatorFor(owner: Owner, context: Context): Validator {
 	const existing = compiled.get(owner);
 	if (existing) return existing;
-	context.telemetry.metrics?.counter("objects.data.compilations").add(1);
+	objectsMetrics(context.telemetry.metrics).counter("objects.data.compilations").add(1);
 	let validator: Validator;
 	try { validator = Compile(validationSchema(owner.schema)); }
 	finally { ResetFunctions(); ResetExternal(); }
@@ -45,9 +46,9 @@ export function validatorFor(owner: Owner, context: Context): Validator {
 	return validator;
 }
 export function check(validator: Validator, value: unknown, reason: "args" | "params" | "host_address", context: Context): void {
-	context.telemetry.metrics?.counter("objects.data.validations").add(1);
+	objectsMetrics(context.telemetry.metrics).counter("objects.data.validations").add(1);
 	if (validator.Check(value)) return;
-	context.telemetry.metrics?.counter("objects.data.walks").add(1);
+	objectsMetrics(context.telemetry.metrics).counter("objects.data.walks").add(1);
 	const error = Errors(validator.Type(), value)[0]!;
 	const location = error.instancePath;
 	let path = location || "/", problem = error.message;

@@ -1,3 +1,4 @@
+import { objectsMetrics } from "../telemetry.ts";
 import { awaitWithContext, type Context } from "../context/index.ts";
 import type { TelemetryContext } from "@axi/telemetry";
 import { LiveQueries } from "../store/live-query.ts";
@@ -406,7 +407,7 @@ export class ObjectsObject implements LocalTarget {
 	assertNoCycle(dependency: Target, context: Context): void {
 		const visited = new Set<Target>(),
 			cycle = dependency.pathTo(this, visited);
-		context.telemetry.metrics?.counter("objects.cycle.visits").add(visited.size);
+		objectsMetrics(context.telemetry.metrics).counter("objects.cycle.visits").add(visited.size);
 		if (!cycle) {
 			const instance = dependency.activationId;
 			if (instance !== undefined && this.chain.includes(instance))

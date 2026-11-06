@@ -1,3 +1,4 @@
+import { objectsMetrics } from "../telemetry.ts";
 import type { Context } from "../context/index.ts";
 import type { JsonValue } from "../json.ts";
 
@@ -17,7 +18,7 @@ export function principalKey<P extends Principal>(principal: P, context: Context
 	return key;
 }
 export function canonicalJson(value: JsonValue, context: Context): string {
-	context.telemetry.metrics?.counter("objects.data.walks").add(1);
+	objectsMetrics(context.telemetry.metrics).counter("objects.data.walks").add(1);
 	type Work = { value: JsonValue } | { text: string };
 	const stack: Work[] = [{ value }], output: string[] = [];
 	while (stack.length) {

@@ -1,3 +1,4 @@
+import { objectsMetrics } from "../telemetry.ts";
 import type { Context } from "../context/index.ts";
 import type { Op, Prepared } from "../delta/index.ts";
 import {
@@ -98,7 +99,7 @@ export class Persistence {
 			return record === undefined ? undefined : loadDocument(db, record);
 		}, context);
 		if (document)
-			context.telemetry.metrics?.counter("objects.store.loads").add(1);
+			objectsMetrics(context.telemetry.metrics).counter("objects.store.loads").add(1);
 		return document;
 	}
 	decode(

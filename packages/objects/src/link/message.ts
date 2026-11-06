@@ -1,3 +1,4 @@
+import { objectsMetrics } from "../telemetry.ts";
 import Type from "typebox";
 import type { Context } from "../context/index.ts";
 import { arr, int, lit, obj, oneOf, opt, str, union, unknown, type Static, type TSchema } from "../contracts/index.ts";
@@ -137,7 +138,7 @@ export interface Codec {
 }
 const owner = { schema };
 export function checkMessage(message: unknown, context: Context): Message {
-	context.telemetry.metrics?.counter("objects.link.checks").add(1);
+	objectsMetrics(context.telemetry.metrics).counter("objects.link.checks").add(1);
 	if (!validatorFor(owner, context).Check(message)) throw new Error("message: fails the message schema");
 	return message as Message;
 }

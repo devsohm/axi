@@ -1,3 +1,4 @@
+import { objectsMetrics } from "../telemetry.ts";
 import type { Context } from "../context/index.ts";
 import { ObjectsError } from "../data/index.ts";
 import { invalid } from "../data/internal.ts";
@@ -119,7 +120,7 @@ export class LiveQuery extends Source {
 	async load(context: Context): Promise<void> {
 		const revision = this.#revision,
 			{ sql, params } = this.#statement;
-		context.telemetry.metrics?.counter("objects.query.runs").add(1);
+		objectsMetrics(context.telemetry.metrics).counter("objects.query.runs").add(1);
 		const stored = await this.handle.store.read((executor) => executor.all<StoredRow>(sql, ...params), context);
 		const rows = this.decode(stored, context);
 		if (revision === this.#revision) {
@@ -129,7 +130,7 @@ export class LiveQuery extends Source {
 	}
 	async rerun(step: Step, context: Context): Promise<Run> {
 		try {
-			context.telemetry.metrics?.counter("objects.query.runs").add(1);
+			objectsMetrics(context.telemetry.metrics).counter("objects.query.runs").add(1);
 			return {
 				kind: "rows",
 				rows: this.decode(await step.all<StoredRow>(this.#statement.sql, ...this.#statement.params), context),

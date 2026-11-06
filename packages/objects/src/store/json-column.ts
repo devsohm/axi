@@ -1,3 +1,4 @@
+import { objectsMetrics } from "../telemetry.ts";
 import Type, { type TUnsafe } from "typebox";
 import type { Context } from "../context/index.ts";
 import type { JsonValue } from "../json.ts";
@@ -66,7 +67,7 @@ export class JsonColumn {
 				cause === undefined ? undefined : { cause },
 			);
 		}
-		context.telemetry.metrics?.counter("objects.data.validations").add(1);
+		objectsMetrics(context.telemetry.metrics).counter("objects.data.validations").add(1);
 		if (!validatorFor(this, context).Check(migrated))
 			throw new ObjectsError({
 				code: "unavailable",

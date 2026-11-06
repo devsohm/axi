@@ -1,7 +1,39 @@
 import { expect, it, vi } from "vitest";
-import { InMemoryTelemetryContext } from "@axi/telemetry";
+import { InMemoryTelemetryContext, NOOP_TELEMETRY_CONTEXT, NOOP_TELEMETRY_METRICS } from "@axi/telemetry";
 import { BACKGROUND_CONTEXT as context, withTelemetry } from "../src/context/index.ts";
 import { createHost, defineFacet, defineState, int, local, method, obj, str, remote, hostKind, memoryLinkPair, ObjectsError } from "../src/index.ts";
+
+it("reuses described metric instruments while validating and changing state", async () => {
+	const counter = vi.fn(NOOP_TELEMETRY_METRICS.counter);
+	const telemetry = { ...NOOP_TELEMETRY_CONTEXT, metrics: { ...NOOP_TELEMETRY_METRICS, counter } };
+	const measured = withTelemetry(telemetry, context);
+	const Value = local("metric.counter", { version: 1, params: {}, members: { value: int(), add: method(int(), int()) } });
+	const State = defineState("counter", { version: 1, schema: obj({ value: int() }), initial: () => ({ value: 0 }) });
+	const host = createHost({ telemetry, onError(error) { throw error; } });
+	try {
+		await host.load([{ name: "counter", facet: defineFacet(h => h.serve(Value, (_, self) => {
+			const state = self.state(State);
+			return {
+				value: self.derive([state], ([current]) => current.value),
+				add: async (amount, ctx) => {
+					await state.change(draft => { draft.value += amount; }, ctx);
+					return state.value.value;
+				},
+			};
+		})) }], measured);
+		const ref = await host.get(Value, {}, measured);
+		await ref.add(1, measured);
+		expect(await ref.add(2, measured)).toBe(3);
+		ref.release();
+	} finally {
+		await host.close(measured);
+	}
+	const names = counter.mock.calls.map(([name]) => name);
+	expect(names).toContain("objects.data.validations");
+	expect(names).toHaveLength(new Set(names).size);
+	for (const [, options] of counter.mock.calls)
+		expect(options).toHaveProperty("description", expect.any(String));
+});
 
 it.each(["source-fails", "retry", "aborted-error"] as const)("records routine retry events and links for %s", async (mode) => {
 	vi.useFakeTimers({ toFake: ["Date", "setTimeout", "clearTimeout"] });

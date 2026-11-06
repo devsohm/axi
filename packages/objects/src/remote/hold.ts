@@ -262,7 +262,7 @@ export class Hold implements Holder, UnboundRequest {
 		this.#updates = [];
 		this.#failures = [];
 		this.#retirements = NO_RETIRED;
-		context.telemetry.metrics?.counter("objects.link.encodes").add(1);
+		objectsMetrics(context.telemetry.metrics).counter("objects.link.encodes").add(1);
 		return {
 			hold: this.id,
 			variant: variantOrder(contract).indexOf(variant),
@@ -391,7 +391,7 @@ export class Hold implements Holder, UnboundRequest {
 				? retired.filter((index) => failed.some((item) => item.member === index))
 				: NO_RETIRED;
 		const sent = this.#retirements.length ? retired.filter((index) => !this.#retirements.includes(index)) : retired;
-		context.telemetry.metrics?.counter("objects.link.encodes").add(1);
+		objectsMetrics(context.telemetry.metrics).counter("objects.link.encodes").add(1);
 		return { hold: this.id, members, failed, retired: sent };
 	}
 }

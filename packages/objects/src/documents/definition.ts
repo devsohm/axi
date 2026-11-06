@@ -1,3 +1,4 @@
+import { objectsMetrics } from "../telemetry.ts";
 import type { Context } from "../context/index.ts";
 import type { Op } from "../delta/index.ts";
 import type { JsonValue } from "../json.ts";
@@ -123,7 +124,7 @@ export class StateDefinition<
 		return value;
 	}
 	#validate(value: T, operation: string, context: Context): void {
-		context.telemetry.metrics?.counter("objects.data.validations").add(1);
+		objectsMetrics(context.telemetry.metrics).counter("objects.data.validations").add(1);
 		if (!validatorFor(this, context).Check(value))
 			throw new Error(`${this.name}: ${operation} does not match the schema`);
 	}
