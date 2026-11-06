@@ -18,8 +18,46 @@ import { TableHandle } from "../src/store/table-handle.ts";
 import { prepareTables } from "../src/store/table-migration.ts";
 import { TableChanges } from "../src/store/table-changes.ts";
 import type { StagedWrite } from "../src/store/step.ts";
+import { and } from "../src/store/expression.ts";
+import type { StoreWrite } from "../src/store/writes.ts";
 
 const fence = { admit: () => true, adopt: () => {} };
+
+it("counts rows during composite writes and adopts the total once", async () => {
+	const store = (await openStore(sqliteBackend(await openNodeSqliteDatabase(":memory:")), context)) as ObjectsStore;
+	const definition = defineTable("notes", { version: 1, columns: { id: str(), text: str() }, key: ["id"] });
+	const owner = { label: "app", scope: {}, queries: new LiveQueries(), assertLive() {}, fail(error: Error) { throw error; } };
+	try {
+		await prepareTables([{ definition, table: "app:notes" }], store, fence, "app", context);
+		const writes: StagedWrite[] = [];
+		const changes = new TableChanges(new TableHandle(definition, "app:notes", store, owner), writes);
+		changes.put({ id: "a", text: "first" });
+		changes.put({ id: "b", text: "second" });
+		changes.update({ id: "a" }, { text: "updated" });
+		changes.delete({ id: "b" });
+		changes.updateWhere(and(), { text: "bulk" });
+		changes.deleteWhere(and());
+		changes.delete({ id: "absent" });
+		const counts: number[] = [];
+		await store.commit([{
+			order: "write",
+			async apply(step) {
+				const recorded: StoreWrite[] = [];
+				for (const write of writes) {
+					recorded.push(...await write.apply(step));
+					counts.push(step.rows);
+				}
+				return recorded;
+			},
+		}], {
+			admit: () => true,
+			adopt: (_seq, _ids, rows) => expect(rows).toBe(6),
+		}, context);
+		expect(counts).toEqual([1, 2, 3, 4, 5, 6, 6]);
+	} finally {
+		await store.close(context);
+	}
+});
 
 it("preserves rows through a column rename and refuses obsolete table handles", async () => {
 	const store = (await openStore(sqliteBackend(await openNodeSqliteDatabase(":memory:")), context)) as ObjectsStore;

@@ -340,7 +340,7 @@ export class ObjectsStore implements Store {
 	}
 	async commitSeries(
 		commits: readonly SeriesCommit[],
-		receive: (index: number, seq: number, ids: readonly number[], rows: number) => void,
+		receive: (index: number, seq: number, ids: readonly number[]) => void,
 		context: Context,
 	): Promise<SeriesResult> {
 		this.assertUsable();
@@ -356,7 +356,7 @@ export class ObjectsStore implements Store {
 				let catalog: Map<string, TableRecord> | undefined;
 				let last: Step | undefined;
 				let refused: { readonly error: unknown } | undefined;
-				const receipts: { seq: number; ids: readonly number[]; rows: number }[] = [];
+				const receipts: { seq: number; ids: readonly number[] }[] = [];
 				let statementFailed = false;
 				const watch = async <T>(call: () => Promise<T>): Promise<T> => {
 					try {
@@ -388,7 +388,7 @@ export class ObjectsStore implements Store {
 						statements += check.statements;
 					}
 					if (commit.writes.length === 0) {
-						receipts.push({ seq, ids: [], rows: 0 });
+						receipts.push({ seq, ids: [] });
 						continue;
 					}
 					last = new Step(executor, seq + 1, this.#ids, catalog ?? this.#catalog);
@@ -399,7 +399,7 @@ export class ObjectsStore implements Store {
 						catalog ??= new Map(this.#catalog);
 						for (const [name, record] of last.tables) catalog.set(name, record);
 					}
-					receipts.push({ seq, ids: last.created, rows: last.rows });
+					receipts.push({ seq, ids: last.created });
 				}
 				if (last !== undefined) {
 					await this.#writeMeta(last, nextId);
@@ -414,7 +414,7 @@ export class ObjectsStore implements Store {
 			try {
 				context.telemetry.metrics?.counter("objects.store.commits").add(written);
 				context.telemetry.metrics?.counter("objects.store.statements").add(done.statements);
-				for (const [index, receipt] of done.receipts.entries()) receive(index, receipt.seq, receipt.ids, receipt.rows);
+				for (const [index, receipt] of done.receipts.entries()) receive(index, receipt.seq, receipt.ids);
 			} catch (error) {
 				throw this.#fail(error);
 			}
@@ -429,16 +429,6 @@ export class ObjectsStore implements Store {
 			for (const write of writes)
 				if (write.order === order) {
 					const values = await write.apply(step);
-					for (const value of values) {
-						if (value.kind === "put") step.rows++;
-						else if (
-							value.kind === "update" ||
-							value.kind === "delete" ||
-							value.kind === "updateWhere" ||
-							value.kind === "deleteWhere"
-						)
-							step.rows += value.count;
-					}
 					recorded?.push(...values);
 				}
 		await writeCatalog(step);

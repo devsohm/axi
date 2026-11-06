@@ -23,6 +23,7 @@ it("stores an accepted prefix once and delivers receipts before the next queued 
 	const store = (await openStore(sqliteBackend(db), context)) as ObjectsStore;
 	const transaction = db.transaction.bind(db);
 	const events: string[] = [];
+	const receiptArities: number[] = [];
 	db.transaction = async (work) => {
 		events.push("begin");
 		const result = await transaction(work);
@@ -50,7 +51,11 @@ it("stores an accepted prefix once and delivers receipts before the next queued 
 				},
 				create("never"),
 			],
-			(index, seq, ids) => events.push(`receipt ${index} ${seq} ${ids.join(",")}`),
+			(...args) => {
+				receiptArities.push(args.length);
+				const [index, seq, ids] = args;
+				events.push(`receipt ${index} ${seq} ${ids.join(",")}`);
+			},
 			context,
 		);
 		const next = store.commit(
@@ -63,6 +68,7 @@ it("stores an accepted prefix once and delivers receipts before the next queued 
 		);
 		expect(await series).toEqual({ stored: 3, refused: refusal });
 		expect(await next).toBe(3);
+		expect(receiptArities).toEqual([3, 3, 3]);
 		expect(events).toEqual([
 			"begin",
 			"durable",

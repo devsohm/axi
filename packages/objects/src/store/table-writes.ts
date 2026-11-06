@@ -162,6 +162,7 @@ export function stagePut(
 		order: "write",
 		async apply(step) {
 			await step.run(sql, ...row.params);
+			step.rows += 1;
 			return [
 				{ kind: "put", table, row: row.row, version, columns: row.columns },
 			];
@@ -174,9 +175,11 @@ function counted(
 ): StagedWrite {
 	return {
 		order: "write",
-		apply: async (step) => [
-			record(await step.runCounted(statement.sql, ...statement.params)),
-		],
+		async apply(step) {
+			const count = await step.runCounted(statement.sql, ...statement.params);
+			step.rows += count;
+			return [record(count)];
+		},
 	};
 }
 export function stageUpdate(
