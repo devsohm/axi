@@ -84,7 +84,7 @@ describe("SQLite-backed Session", () => {
 			await storage.close(context);
 		}
 	});
-	it("preserves IDs minted during a commit when reopening storage", async () => {
+	it("keeps in-flight ID allocations in memory and reopens at the committed boundary", async () => {
 		const directory = await mkdtemp(join(tmpdir(), "axi-id-allocation-"));
 		const path = join(directory, "session.sqlite");
 		const database = await openNodeSqliteDatabase(path);
@@ -110,9 +110,11 @@ describe("SQLite-backed Session", () => {
 				[{ type: "entry", value: { id, conversationId: ROOT_CONVERSATION_ID, kind: "note" } }],
 				context,
 			);
+			expect(await storage.mintId<EntryId>()).toBe(id + 4);
 			await storage.close(context);
 			storage = await openNodeSqliteStorage(path);
-			expect(await storage.mintId<EntryId>()).toBe(id + 4);
+			expect(await storage.mintId<EntryId>()).toBe(id + 1);
+			expect((await storage.entry(id, context))?.entry.id).toBe(id);
 		} finally {
 			await storage.close(context);
 			await rm(directory, { recursive: true, force: true });

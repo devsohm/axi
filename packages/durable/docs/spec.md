@@ -28,6 +28,8 @@ Closing seals admission and lets admitted work settle before storage closes. Can
 
 Conversation, entry, task, submission, and document IDs are branded numbers. The root conversation ID is `1`. Committed record IDs are not reused. Commit sequences increase, but need not be consecutive.
 
+SQLite keeps new ID allocations in memory until a commit records its allocation boundary. Unused IDs allocated while its final writes are in progress can be reused after reopening; IDs in committed records remain reserved.
+
 | Record | Persistent content |
 |---|---|
 | Conversation | Identity, optional fork point, and optional owning task |

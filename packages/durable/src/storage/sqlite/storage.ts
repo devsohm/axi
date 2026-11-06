@@ -132,7 +132,6 @@ export class SqliteStorage implements T.Storage {
 				}
 			}
 			await pending.flush(tx, this.#schema.tables);
-			nextId = Math.max(nextId, this.#nextId);
 			if (seqs.length)
 				await tx.run(
 					`UPDATE ${this.#schema.tables.durableMetadata} SET next_id = ?, next_seq = ? WHERE singleton = 1`,
