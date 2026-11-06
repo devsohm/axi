@@ -1,4 +1,4 @@
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
 import { BACKGROUND_CONTEXT as context } from "../src/context/index.ts";
 import { keyed, local, int, obj } from "../src/contracts/index.ts";
 import { defineState, type KeyedHandle } from "../src/documents/index.ts";
@@ -40,6 +40,38 @@ async function notes() {
 	};
 }
 const flushed = () => new Promise<void>((resolve) => setImmediate(resolve));
+
+it("keeps a pending key watch open through a failed first startup and retry", async () => {
+	const shape = obj({ n: int() });
+	const document = defineState("docs", { schema: shape, version: 1, keyed: true, initial: () => ({ n: 0 }) });
+	const type = local("test.starting", { version: 1, params: {}, members: { docs: keyed(shape) } });
+	const host = createHost({ onError() {} });
+	let attempts = 0;
+	try {
+		await host.load([{ name: "starting", facet: defineFacet((h) => h.serve(type, (_, self) => {
+			self.open(async () => {
+				if (++attempts === 1) throw new Error("not ready");
+				return null;
+			}, () => {});
+			return { docs: self.state(document) };
+		})) }], context);
+		const ref = host.hold(type, {}, context);
+		const settled: unknown[] = [];
+		const pending = ref.docs.watch("missing", context).then(
+			(watch) => { settled.push(watch); },
+			(error: unknown) => { settled.push(error); },
+		);
+		await vi.waitFor(() => expect(ref.state.value.kind).toBe("failed"));
+		expect(settled).toEqual([]);
+		ref.retry();
+		await pending;
+		expect(settled).toEqual([undefined]);
+		expect(ref.state.value.kind).toBe("live");
+		ref.release();
+	} finally {
+		await host.close(context);
+	}
+});
 
 it("releasing one reference ends its key watch while another reference keeps receiving changes", async () => {
 	const app = await notes();

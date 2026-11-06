@@ -560,7 +560,7 @@ class ReferenceKeyed {
 		return value === undefined || mapping === undefined ? value : mapping(value);
 	}
 	async watch(key: string, context: Context): Promise<Watch<JsonValue> | undefined> {
-		await this.#binding.hydrated(context);
+		await this.#binding.firstValues(context);
 		const slot = this.slot;
 		if (
 			(await slot.get(key, { token: slot.owner.own, version: slot.definition.current.version }, context)) === undefined
