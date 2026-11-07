@@ -76,6 +76,35 @@ test("pipe transport captures framing options once at construction", () => {
 	expect(reads).toBe(1);
 });
 
+test("stderr callbacks receive framing options without process controls", async () => {
+	let receiver: unknown;
+	const chunks: string[] = [];
+	const transport = new PipeTransport({
+		maxMessageBytes: 64,
+		maxStderrBytes: 8,
+		closeTimeoutMs: 10,
+		async open(handlers) {
+			handlers.onStderr(new TextEncoder().encode("diagnostic"));
+			return { write() {}, closeStdin() {}, close() {}, exited: Promise.resolve() };
+		},
+		onStderr(this: unknown, chunk) {
+			receiver = this;
+			chunks.push(chunk);
+		},
+	});
+	await transport.start();
+	await transport.close();
+	expect(chunks).toEqual(["diagnostic"]);
+	expect(transport.stderr).toBe("agnostic");
+	expect(receiver).toEqual({
+		maxMessageBytes: 64,
+		maxStderrBytes: 8,
+		onMessage: expect.any(Function),
+		onError: expect.any(Function),
+		onStderr: expect.any(Function),
+	});
+});
+
 test("pipe transport exchanges framed messages with a real child and closes its input", async () => {
 	const messages: JsonRpcMessage[] = [];
 	const transport = new PipeTransport({

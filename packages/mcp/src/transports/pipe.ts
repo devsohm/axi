@@ -30,7 +30,9 @@ export class PipeTransport extends TransportEvents implements McpTransport {
 		super();
 		this.options = Object.freeze({ ...options });
 		this.#lines = new JsonRpcLineReader({
-			...this.options,
+			maxMessageBytes: this.options.maxMessageBytes,
+			maxStderrBytes: this.options.maxStderrBytes,
+			onStderr: this.options.onStderr,
 			onMessage: (message) => this.emitMessage(message),
 			onError: (error) => this.emitError(error),
 		});
