@@ -48,14 +48,14 @@ type RequestHandler = (params: unknown, context: { signal: AbortSignal }) => unk
 type Pending = {
 	resolve(value: unknown): void;
 	reject(error: unknown): void;
-	controller: AbortController;
-	timeout: number;
-	timer?: ReturnType<typeof setTimeout>;
-	signal?: AbortSignal;
-	abort(): void;
+	timeoutMs: number;
+	timer: ReturnType<typeof setTimeout> | undefined;
+	signal: AbortSignal | undefined;
+	onAbort(): void;
+	sendController: AbortController;
 	cancellable: boolean;
+	onProgress: ((value: ProgressNotification) => void) | undefined;
 	progressToken: JsonRpcId | undefined;
-	progress?: (value: ProgressNotification) => void;
 };
 function invalid(message: string): McpError {
 	return new McpError(JSON_RPC_ERROR_CODES.invalidRequest, message);
@@ -320,23 +320,24 @@ export class McpClient {
 			const pending: Pending = {
 				resolve,
 				reject,
-				controller: new AbortController(),
-				timeout: options.timeoutMs ?? this.options.requestTimeoutMs ?? 30000,
+				timeoutMs: options.timeoutMs ?? this.options.requestTimeoutMs ?? 30000,
+				timer: undefined,
 				signal: options.signal,
-				cancellable: method !== "initialize",
-				progressToken,
-				progress: options.onProgress,
-				abort: () =>
+				onAbort: () =>
 					this.#cancel(id, new McpAbortError(), method !== "initialize", String(options.signal?.reason ?? "Aborted")),
+				sendController: new AbortController(),
+				cancellable: method !== "initialize",
+				onProgress: options.onProgress,
+				progressToken,
 			};
 			this.#requests.set(id, pending);
 			if (progressToken !== undefined) this.#progressRequests.set(progressToken, id);
-			options.signal?.addEventListener("abort", pending.abort, { once: true });
+			options.signal?.addEventListener("abort", pending.onAbort, { once: true });
 			this.#timer(id, pending);
 			void transport
 				.send(
 					{ jsonrpc: "2.0", id, method, ...(requestParams === undefined ? {} : { params: requestParams }) },
-					{ signal: pending.controller.signal },
+					{ signal: pending.sendController.signal },
 				)
 				.catch((error) => this.#cancel(id, error, false));
 		});
@@ -346,17 +347,17 @@ export class McpClient {
 	}
 	#remove(id: JsonRpcId, pending: Pending): void {
 		this.#requests.delete(id);
-		clearTimeout(pending.timer);
+		if (pending.timer) clearTimeout(pending.timer);
 		if (pending.progressToken !== undefined) this.#progressRequests.delete(pending.progressToken);
-		pending.signal?.removeEventListener("abort", pending.abort);
-		pending.controller.abort();
+		pending.signal?.removeEventListener("abort", pending.onAbort);
+		pending.sendController.abort();
 	}
 	#timer(id: JsonRpcId, pending: Pending): void {
-		clearTimeout(pending.timer);
-		if (Number.isFinite(pending.timeout) && pending.timeout > 0)
+		if (pending.timer) clearTimeout(pending.timer);
+		if (Number.isFinite(pending.timeoutMs) && pending.timeoutMs > 0)
 			pending.timer = setTimeout(
-				() => this.#cancel(id, new McpTimeoutError(pending.timeout), pending.cancellable, "Request timed out"),
-				pending.timeout,
+				() => this.#cancel(id, new McpTimeoutError(pending.timeoutMs), pending.cancellable, "Request timed out"),
+				pending.timeoutMs,
 			);
 	}
 	#cancel(id: JsonRpcId, error: unknown, notify: boolean, reason?: string): void {
@@ -400,7 +401,7 @@ export class McpClient {
 				if (id !== undefined && pending) {
 					this.#timer(id, pending);
 					try {
-						pending.progress?.(data as unknown as ProgressNotification);
+						pending.onProgress?.(data as unknown as ProgressNotification);
 					} catch (error) {
 						this.#error(error);
 					}

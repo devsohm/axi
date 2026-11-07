@@ -64,6 +64,47 @@ describe("MCP client", () => {
 			await client.close();
 		}
 	});
+	it("keeps the request receiver of a progress callback through settlement", async () => {
+		const pair = createInMemoryTransportPair();
+		const receivers: unknown[] = [];
+		function progress(this: unknown): void {
+			receivers.push(this);
+		}
+		pair.server.onMessage((message) => {
+			if (!("id" in message) || !("method" in message)) return;
+			if (message.method === "initialize") {
+				void pair.server.send({
+					jsonrpc: "2.0",
+					id: message.id,
+					result: {
+						protocolVersion: LATEST_PROTOCOL_VERSION,
+						capabilities: {},
+						serverInfo: { name: "server", version: "1" },
+					},
+				});
+			} else {
+				void pair.server.send({
+					jsonrpc: "2.0",
+					method: "notifications/progress",
+					params: { progressToken: message.id, progress: 1 },
+				});
+				void pair.server.send({ jsonrpc: "2.0", id: message.id, result: "complete" });
+			}
+		});
+		await pair.server.start();
+		const client = new McpClient({ name: "client", version: "1" });
+		try {
+			await client.connect(pair.client);
+			expect(await client.request("progress", {}, { onProgress: progress, timeoutMs: 0 })).toBe("complete");
+			expect(receivers).toHaveLength(1);
+			expect(receivers[0]).toMatchObject({ onProgress: progress, timeoutMs: 0, timer: undefined });
+			const controller: unknown = Reflect.get(Object(receivers[0]), "sendController");
+			expect(controller).toBeInstanceOf(AbortController);
+			if (controller instanceof AbortController) expect(controller.signal.aborted).toBe(true);
+		} finally {
+			await client.close();
+		}
+	});
 	it("rejects repeated pagination cursors through the transport", async () => {
 		const pair = createInMemoryTransportPair();
 		let pages = 0;
