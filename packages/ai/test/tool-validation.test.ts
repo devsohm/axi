@@ -201,3 +201,58 @@ test("an explicitly undefined optional argument remains absent after argument re
 	expect(validateToolArguments(convert, call)).toEqual({ label: undefined });
 	expect(Object.hasOwn(call.arguments, "label")).toBe(true);
 });
+
+test("JSON tuples convert prefix items and enforce their remaining-item schema", () => {
+	const tuple = { type: "array", prefixItems: [{ type: "integer" }, { type: "boolean" }], items: false };
+	const convert: Tool = {
+		name: "convert",
+		description: "Convert a tuple",
+		parameters: {
+			type: "object",
+			properties: { values: tuple },
+			required: ["values"],
+		},
+	};
+	const call: ToolCall = { type: "toolCall", id: "convert-6", name: "convert", arguments: { values: ["5.8", "TRUE"] } };
+	expect(validateToolArguments(convert, call)).toEqual({ values: [5, true] });
+	expect(call.arguments).toEqual({ values: ["5.8", "TRUE"] });
+	expect(() => validateToolArguments(convert, { ...call, arguments: { values: ["5.8", "TRUE", 1] } })).toThrow(
+		"Validation failed",
+	);
+	const tailed = {
+		...convert,
+		parameters: { ...convert.parameters, properties: { values: { ...tuple, items: { type: "number" } } } },
+	};
+	expect(validateToolArguments(tailed, { ...call, arguments: { values: ["5.8", "TRUE", "9.5"] } })).toEqual({
+		values: [5, true, 9.5],
+	});
+});
+
+test("pattern properties convert matching keys before additional-property rules", () => {
+	const convert: Tool = {
+		name: "convert",
+		description: "Convert a patterned record",
+		parameters: {
+			type: "object",
+			properties: { title: { type: "string" } },
+			patternProperties: { "^count/": { type: "integer" }, "^active/": { type: "boolean" } },
+			additionalProperties: { type: "number" },
+		},
+	};
+	const args = { title: 12, "count/one": "-5.8", "active/one": "TRUE", extra: "9.5" };
+	const original = structuredClone(args);
+	const call: ToolCall = { type: "toolCall", id: "convert-7", name: "convert", arguments: args };
+	expect(validateToolArguments(convert, call)).toEqual({
+		title: "12",
+		"count/one": -5,
+		"active/one": true,
+		extra: 9.5,
+	});
+	expect(call.arguments).toEqual(original);
+	expect(() => validateToolArguments(convert, { ...call, arguments: { "count/one": "invalid" } })).toThrow(
+		"Validation failed",
+	);
+	const closed = { ...convert, parameters: { ...convert.parameters, additionalProperties: false } };
+	expect(validateToolArguments(closed, { ...call, arguments: { "count/one": "5.8" } })).toEqual({ "count/one": 5 });
+	expect(() => validateToolArguments(closed, { ...call, arguments: { extra: 1 } })).toThrow("Validation failed");
+});

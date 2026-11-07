@@ -7,8 +7,10 @@ import type { Tool, ToolCall } from "../types.ts";
 interface Schema {
 	type?: string | string[];
 	properties?: Record<string, Schema>;
+	patternProperties?: Record<string, Schema>;
 	required?: string[];
 	items?: Schema | Schema[];
+	prefixItems?: Schema[];
 	additionalProperties?: boolean | Schema;
 	allOf?: Schema[];
 	anyOf?: Schema[];
@@ -147,7 +149,7 @@ function coerce(value: unknown, schema: Schema, root: Schema): unknown {
 		}
 	if (types.includes("array") && Array.isArray(current)) {
 		for (let index = 0; index < current.length; index++) {
-			const item = Array.isArray(schema.items) ? schema.items[index] : schema.items;
+			const item = schema.prefixItems?.[index] ?? (Array.isArray(schema.items) ? schema.items[index] : schema.items);
 			if (item && typeof item === "object") current[index] = coerce(current[index], item, root);
 		}
 	}
@@ -155,10 +157,25 @@ function coerce(value: unknown, schema: Schema, root: Schema): unknown {
 		const object = current as Record<string, unknown>;
 		for (const [key, property] of Object.entries(schema.properties ?? {}))
 			if (key in object && object[key] !== undefined) object[key] = coerce(object[key], property, root);
-		if (schema.additionalProperties && typeof schema.additionalProperties === "object")
-			for (const [key, value] of Object.entries(object))
-				if (!Object.hasOwn(schema.properties ?? {}, key))
+		const patterns = Object.entries(schema.patternProperties ?? {}).map(
+			([pattern, property]) => [new RegExp(pattern), property] as const,
+		);
+		if (patterns.length || typeof schema.additionalProperties === "object")
+			for (const [key, value] of Object.entries(object)) {
+				let matched = false;
+				for (const [pattern, property] of patterns)
+					if (pattern.test(key)) {
+						matched = true;
+						if (object[key] !== undefined) object[key] = coerce(object[key], property, root);
+					}
+				if (
+					!matched &&
+					!Object.hasOwn(schema.properties ?? {}, key) &&
+					schema.additionalProperties &&
+					typeof schema.additionalProperties === "object"
+				)
 					object[key] = coerce(value, schema.additionalProperties, root);
+			}
 	}
 	return current;
 }
