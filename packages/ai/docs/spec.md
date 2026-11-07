@@ -72,7 +72,7 @@ Responses transports that support system updates and `additional_tools` use `"ch
 
 A `Tool` contains `name`, `description`, and a TypeBox `parameters` schema. The AI package describes calls. The application executes tools and appends their results. `validateToolArguments()` checks and coerces arguments against the declaration.
 
-Validation copies the arguments before conversion. Serialized JSON schemas retain scalar and array conversions, including nested values, tuple prefixes, pattern properties and local schema references. Matching union values remain unchanged. Invalid converted values raise a validation error.
+Validation copies the arguments, removes optional null properties, converts structural values, and then coerces explicitly declared primitive types. Serialized JSON schemas retain these conversions, including tuple prefixes, pattern properties and local references within their schema resource. Matching union values remain unchanged. Invalid converted values raise a validation error.
 
 `StringEnum` from `@axi/ai/utils/string-enum` creates a typed string schema with an `enum` array. Use it with providers that do not accept `anyOf` and `const` enum encodings. It accepts optional `description` and `default` fields.
 

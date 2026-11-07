@@ -256,3 +256,175 @@ test("pattern properties convert matching keys before additional-property rules"
 	expect(validateToolArguments(closed, { ...call, arguments: { "count/one": "5.8" } })).toEqual({ "count/one": 5 });
 	expect(() => validateToolArguments(closed, { ...call, arguments: { extra: 1 } })).toThrow("Validation failed");
 });
+
+test("optional null cleanup reaches tuple, pattern and additional values before conversion", () => {
+	const entry = { type: "object", properties: { label: { type: "string" } } };
+	const convert: Tool = {
+		name: "convert",
+		description: "Prepare containers",
+		parameters: {
+			type: "object",
+			$defs: { entry },
+			properties: {
+				tuple: { type: "array", prefixItems: [entry], items: false },
+				pattern: { type: "object", patternProperties: { "^item$": entry } },
+				extra: { type: "object", additionalProperties: entry },
+				choice: { anyOf: [entry, { type: "null" }] },
+				reference: { $ref: "#/$defs/entry" },
+			},
+		},
+	};
+	const arguments_ = {
+		tuple: [{ label: null }],
+		pattern: { item: { label: null } },
+		extra: { item: { label: null } },
+		choice: { label: null },
+		reference: { label: null },
+	};
+	const before = structuredClone(arguments_);
+	expect(
+		validateToolArguments(convert, { type: "toolCall", id: "containers", name: "convert", arguments: arguments_ }),
+	).toEqual({
+		tuple: [{}],
+		pattern: { item: {} },
+		extra: { item: {} },
+		choice: { label: "null" },
+		reference: { label: "null" },
+	});
+	expect(arguments_).toEqual(before);
+});
+
+test("literal and enum conversions preserve matching values and select the first accepted literal", () => {
+	const convert: Tool = {
+		name: "convert",
+		description: "Read choices",
+		parameters: {
+			type: "object",
+			properties: { literal: { const: true }, choice: { enum: [0, false, "true", null] } },
+			required: ["literal", "choice"],
+		},
+	};
+	const call: ToolCall = {
+		type: "toolCall",
+		id: "choices",
+		name: "convert",
+		arguments: { literal: "TRUE", choice: "false" },
+	};
+	expect(validateToolArguments(convert, call)).toEqual({ literal: true, choice: 0 });
+	expect(validateToolArguments(convert, { ...call, arguments: { literal: 1, choice: false } })).toEqual({
+		literal: true,
+		choice: false,
+	});
+	expect(() => validateToolArguments(convert, { ...call, arguments: { literal: "wrong", choice: 1 } })).toThrow(
+		"Validation failed",
+	);
+});
+
+test("tuples require arrays while schemas declaring only members still convert their values", () => {
+	const parameters = {
+		type: "object",
+		properties: {
+			tuple: { type: "array", prefixItems: [{ type: "integer" }], items: false },
+			array: { items: { type: "integer" } },
+			record: { properties: { count: { type: "integer" } } },
+			choice: { anyOf: [{ type: "object" }, { type: "null" }], properties: { enabled: { type: "boolean" } } },
+		},
+		required: ["tuple", "array", "record", "choice"],
+	};
+	const convert: Tool = { name: "convert", description: "Read containers", parameters };
+	const call: ToolCall = {
+		type: "toolCall",
+		id: "members",
+		name: "convert",
+		arguments: { tuple: ["3.8"], array: "3.8", record: { count: "3.8" }, choice: { enabled: "TRUE" } },
+	};
+	expect(validateToolArguments(convert, call)).toEqual({
+		tuple: [3],
+		array: [3],
+		record: { count: 3 },
+		choice: { enabled: true },
+	});
+	expect(() => validateToolArguments(convert, { ...call, arguments: { ...call.arguments, tuple: "3.8" } })).toThrow(
+		"Validation failed",
+	);
+});
+
+test("declared type arrays use primitive coercion after structural conversions", () => {
+	const convert: Tool = {
+		name: "convert",
+		description: "Read nullable containers",
+		parameters: {
+			type: "object",
+			properties: {
+				record: { type: ["object", "null"], properties: { enabled: { type: "boolean" } } },
+				array: { type: ["array", "null"], items: { type: "integer" } },
+			},
+			required: ["record", "array"],
+		},
+	};
+	const call: ToolCall = {
+		type: "toolCall",
+		id: "nullable",
+		name: "convert",
+		arguments: { record: { enabled: "true" }, array: ["3"] },
+	};
+	expect(validateToolArguments(convert, call)).toEqual({ record: { enabled: true }, array: [3] });
+	expect(validateToolArguments(convert, { ...call, arguments: { record: null, array: null } })).toEqual({
+		record: null,
+		array: null,
+	});
+	expect(() =>
+		validateToolArguments(convert, { ...call, arguments: { ...call.arguments, record: { enabled: "TRUE" } } }),
+	).toThrow("Validation failed");
+	expect(() => validateToolArguments(convert, { ...call, arguments: { ...call.arguments, array: ["3.8"] } })).toThrow(
+		"Validation failed",
+	);
+});
+
+test("an unrestricted union branch keeps values unchanged", () => {
+	const convert: Tool = {
+		name: "convert",
+		description: "Read an unrestricted choice",
+		parameters: { type: "object", properties: { value: { anyOf: [true, { type: "boolean" }] } } },
+	};
+	for (const value of ["true", "FALSE", null, { enabled: "true" }]) {
+		const args = { value };
+		expect(
+			validateToolArguments(convert, { type: "toolCall", id: "choice", name: "convert", arguments: args }),
+		).toEqual(args);
+	}
+});
+
+test("local references belong to their enclosing schema resource", () => {
+	const resource = {
+		$id: "urn:tool:amount",
+		$defs: { amount: { type: "number" } },
+		$ref: "#/$defs/amount",
+	};
+	const convert: Tool = {
+		name: "convert",
+		description: "Read scoped references",
+		parameters: {
+			type: "object",
+			$defs: { amount: { type: "string" } },
+			properties: { scoped: resource, outer: { $ref: "#/$defs/amount" } },
+		},
+	};
+	const call: ToolCall = {
+		type: "toolCall",
+		id: "references",
+		name: "convert",
+		arguments: { scoped: "3.8", outer: 42 },
+	};
+	expect(validateToolArguments(convert, call)).toEqual({ scoped: 3.8, outer: "42" });
+	expect(call.arguments).toEqual({ scoped: "3.8", outer: 42 });
+	const missing = {
+		...convert,
+		parameters: {
+			type: "object",
+			properties: { value: { $defs: { amount: { type: "number" } }, $ref: "#/$defs/amount" } },
+		},
+	};
+	expect(validateToolArguments(missing, { ...call, arguments: {} })).toEqual({});
+	expect(() => validateToolArguments(missing, { ...call, arguments: { value: 3.8 } })).toThrow("Validation failed");
+});
