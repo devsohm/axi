@@ -1,27 +1,20 @@
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { readFile } from "node:fs/promises";
 import { isBuiltin } from "node:module";
 import { tmpdir } from "node:os";
 import { basename, dirname, extname, join, parse, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
 import { build, type Loader, type Plugin } from "esbuild";
-import { metafileInputs } from "../surfaces/bundle.ts";
+import { readRecorded, recordedSources, type BaseInputs } from "../plugins/base-inputs.ts";
+import { conditionsOf } from "../surfaces/bundle.ts";
 
 export interface WorkerBase {
-	readonly inputs: readonly string[];
+	readonly inputs: BaseInputs;
 	file(): string;
 	remove(): void;
 }
 
 export async function buildWorkerBase(entry: string, execArgv: readonly string[]): Promise<WorkerBase> {
-	const conditions: string[] = [];
-	for (let index = 0; index < execArgv.length; index++) {
-		const flag = execArgv[index]!;
-		if (flag === "--conditions" || flag === "-C") {
-			if (index + 1 < execArgv.length) conditions.push(execArgv[++index]!);
-		} else if (flag.startsWith("--conditions=") || flag.startsWith("-C="))
-			conditions.push(flag.slice(flag.indexOf("=") + 1));
-	}
+	const inputs = new Map<string, string>();
 	const root = parse(resolve(entry)).root;
 	const result = await build({
 		entryPoints: { worker: entry },
@@ -35,13 +28,12 @@ export async function buildWorkerBase(entry: string, execArgv: readonly string[]
 		format: "esm",
 		platform: "node",
 		mainFields: ["main"],
-		conditions,
+		conditions: conditionsOf(execArgv),
 		ignoreAnnotations: true,
 		keepNames: true,
 		sourcemap: "inline",
 		sourcesContent: false,
 		sourceRoot: pathToFileURL(root).href,
-		metafile: true,
 		logLevel: "silent",
 		banner: {
 			js: 'import { createRequire as __axiRequire } from "node:module"; const require = __axiRequire(import.meta.url);',
@@ -53,12 +45,29 @@ export async function buildWorkerBase(entry: string, execArgv: readonly string[]
 			__dirname: "__axiSourceDir",
 			__filename: "__axiSourceFile",
 		},
-		plugins: [workerSources()],
+		plugins: [workerSources(inputs), recordedSources(inputs)],
 	});
-	return new Snapshot(result.outputFiles.map(output => ({ name: basename(output.path), bytes: output.contents })), metafileInputs(result.metafile));
+	return new Snapshot(result.outputFiles.map(output => ({ name: basename(output.path), bytes: output.contents })), inputs);
 }
 
-function workerSources(): Plugin {
+export async function nodeBaseInputs(entry: string, conditions: readonly string[]): Promise<BaseInputs> {
+	const inputs = new Map<string, string>(), resolving = Symbol("static-import");
+	await build({
+		entryPoints: [entry], bundle: true, write: false, format: "esm", platform: "node",
+		mainFields: ["main"], conditions: [...conditions], tsconfigRaw: "{}", ignoreAnnotations: true, logLevel: "silent",
+		plugins: [{ name: "axi-static-inputs", setup(build) {
+			build.onResolve({ filter: /.*/ }, async args => {
+				if (args.kind === "entry-point" || args.pluginData === resolving || isBuiltin(args.path)) return;
+				const found = await build.resolve(args.path, { kind: args.kind, importer: args.importer, resolveDir: args.resolveDir, pluginData: resolving });
+				return found.errors.length || found.external || found.path.split(sep).includes("node_modules")
+					? { path: args.path, external: true } : found;
+			});
+		} }, recordedSources(inputs)],
+	});
+	return inputs;
+}
+
+function workerSources(inputs: Map<string, string>): Plugin {
 	const resolving = Symbol("resolve-package");
 	const loaders: Record<string, Loader> = {
 		".js": "js",
@@ -86,9 +95,10 @@ function workerSources(): Plugin {
 					? { path: args.kind.startsWith("require") ? found.path : pathToFileURL(found.path).href, external: true }
 					: found;
 			});
-			builder.onLoad({ filter: /\.(?:[cm]?[jt]s|[jt]sx)$/ }, async ({ path }) => {
-				const source = await readFile(path, "utf8");
-				if (!/import\.meta|__dirname|__filename/.test(source)) return;
+			builder.onLoad({ filter: /\.(?:[cm]?[jt]s|[jt]sx)$/ }, async ({ path, namespace }) => {
+				if (namespace !== "file") return;
+				const bytes = await readRecorded(path, inputs), source = bytes.toString("utf8");
+				if (!/import\.meta|__dirname|__filename/.test(source)) return { contents: bytes, loader: loaders[extname(path)]! };
 				const declarations = `var __axiSourceURL=${JSON.stringify(pathToFileURL(path).href)},__axiSourceDir=${JSON.stringify(dirname(path))},__axiSourceFile=${JSON.stringify(path)};`;
 				return { contents: declarations + source, loader: loaders[extname(path)]! };
 			});
@@ -97,11 +107,11 @@ function workerSources(): Plugin {
 }
 
 class Snapshot implements WorkerBase {
-	readonly inputs: readonly string[];
+	readonly inputs: BaseInputs;
 	readonly #outputs: readonly { readonly name: string; readonly bytes: Uint8Array }[];
 	#directory = "";
 	#file = "";
-	constructor(outputs: readonly { readonly name: string; readonly bytes: Uint8Array }[], inputs: readonly string[]) {
+	constructor(outputs: readonly { readonly name: string; readonly bytes: Uint8Array }[], inputs: BaseInputs) {
 		this.#outputs = outputs;
 		this.inputs = inputs;
 		this.#save();

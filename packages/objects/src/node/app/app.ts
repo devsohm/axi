@@ -1,12 +1,11 @@
-import { statSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { join, resolve, sep } from "node:path";
 import type { TelemetryContext } from "@axi/telemetry";
 import { withAbortSignal, type Context } from "../../context/index.ts";
 import { hostKind, type Address, type HostKind, type KindShape } from "../../contracts/index.ts";
 import type { Principal } from "../../data/index.ts";
-import { canonicalJson } from "../../data/principal.ts";
+import { principalKey, samePrincipal } from "../../data/principal.ts";
 import { createHost, type Host, type HostError, type PluginFacet, type PrincipalAttributes } from "../../host/index.ts";
-import type { JsonValue } from "../../json.ts";
+import { isJsonValue, type JsonValue } from "../../json.ts";
 import { openNodeSqliteDatabase } from "../../sqlite/node.ts";
 import { openStore, sqliteBackend } from "../../store/index.ts";
 import { localeChoiceFacet, themeChoiceFacet, themesFacet, translationsFacet } from "../../surfaces/index.ts";
@@ -15,6 +14,7 @@ import type { Watchable } from "../../watch.ts";
 import { createHttp, type HttpComponent, type HttpError, type ListenAddress } from "../http/index.ts";
 import {
 	createPlugins,
+	type BaseInputs,
 	type HostPackages,
 	type InstallOptions,
 	type PluginSource,
@@ -24,14 +24,14 @@ import {
 	type RolloutResult,
 	type RolloutStep,
 } from "../plugins/index.ts";
-import { tuiSurface, webSurface, WEB_PREFIX, type WebSurfaceOptions } from "../surfaces/index.ts";
-import { createWorkers, processLock, type ProcessLock, type Workers, type WorkersError } from "../workers/index.ts";
+import { processConditions, tuiSurface, webSurface, WEB_PREFIX, type TuiSurfaceOptions, type WebSurfaceOptions } from "../surfaces/index.ts";
+import { createWorkers, nodeBaseInputs, processLock, type ProcessLock, type Workers, type WorkersError } from "../workers/index.ts";
 import { ARCHIVE_FORMAT, packData, unpackData, type ArchiveManifest } from "./archive.ts";
 import { addressParam, HostData } from "./data.ts";
 import { filesFacet, type FilesCaps } from "./files.ts";
 import { appInfoFacet } from "./info.ts";
 import { createLayout, defaultDataDir, openDataDir, privateStore, workerDirectory } from "./layout.ts";
-import { OWNER_PATH, OwnerLink, ownerFacet, ownerTokenFile, type OwnerPrincipal } from "./owner.ts";
+import { OWNER_PATH, OwnerLink, ownerFacet, ownerTokenFile } from "./owner.ts";
 import { Pairings, pairingFacet } from "./pairing.ts";
 import { secretFile } from "./secrets.ts";
 import { createSessions } from "./sessions.ts";
@@ -53,7 +53,8 @@ export type AppError =
 	| { readonly kind: "host"; readonly error: HostError }
 	| { readonly kind: "http"; readonly error: HttpError }
 	| { readonly kind: "workers"; readonly error: WorkersError }
-	| { readonly kind: "plugins"; readonly error: PluginsError };
+	| { readonly kind: "plugins"; readonly error: PluginsError }
+	| { readonly kind: "server_scan"; readonly error: unknown };
 export type AppLimits = {
 	readonly uploads?: number;
 	readonly ephemeralSessions?: number;
@@ -63,7 +64,7 @@ export type AppLimits = {
 	readonly importEntries?: number;
 };
 export type AppTimeouts = { readonly closeTimeout?: number; readonly readyTimeout?: number; readonly reloadDrainTimeout?: number };
-export type AppWeb = Pick<WebSurfaceOptions, "entry" | "page" | "paths" | "public">;
+export type AppWeb = Pick<WebSurfaceOptions, "entry" | "page" | "paths" | "public" | "conditions">;
 export type AppOptions<P extends Principal> = {
 	readonly name: string;
 	readonly dataDir?: string;
@@ -71,19 +72,19 @@ export type AppOptions<P extends Principal> = {
 	readonly listen?: ListenAddress;
 	readonly api: AppApi;
 	readonly kinds: Readonly<Record<string, AppKind>>;
-	readonly principal: { readonly server: P; readonly worker: (address: Address) => P };
+	readonly principal: { readonly server: P; readonly owner: P; readonly worker?: (address: Address) => P };
 	readonly workers?: readonly AppWorkerKind<P>[];
 	readonly files?: FilesCaps;
 	readonly limits?: AppLimits;
 	readonly install?: InstallOptions;
 	readonly web?: AppWeb;
-	readonly tui?: { readonly entry: string };
+	readonly tui?: Pick<TuiSurfaceOptions, "entry" | "conditions">;
 	readonly telemetry?: TelemetryContext & TelemetryIngestTarget;
 	readonly principalAttributes?: PrincipalAttributes<P>;
 	readonly base?: readonly string[];
 	readonly timeouts?: AppTimeouts;
 	readonly onError: (error: AppError) => void;
-} & (OwnerPrincipal extends P ? unknown : { readonly "the app's principal type must have { kind: 'owner' }": never });
+} & ({ readonly workers?: readonly [] } | { readonly principal: { readonly worker: (address: Address) => P } });
 export type AppPlugins = {
 	readonly state: Watchable<PluginsState>;
 	install(source: PluginSource, context: Context): Promise<readonly string[]>;
@@ -116,7 +117,7 @@ export type KitStart = {
 };
 type ClientSurface<P extends Principal> = {
 	readonly name: "web" | "tui";
-	readonly inputs: readonly string[];
+	readonly inputs: BaseInputs;
 	readonly facet: import("../../host/index.ts").Facet<P>;
 	readonly base: string;
 	step(name: string): RolloutStep;
@@ -135,6 +136,10 @@ function linkHost(host: string): string {
 }
 
 export async function startServer<P extends Principal>(options: AppOptions<P>, context: Context): Promise<App<P>> {
+	if (!isJsonValue(options.principal.owner))
+		throw new Error("startServer: principal.owner must be strict JSON (no undefined fields, functions or class instances)");
+	if (samePrincipal(options.principal.owner, options.principal.server, context))
+		throw new Error("startServer: principal.owner must not be the server's principal");
 	const dataDir = await openDataDir(resolve(options.dataDir ?? defaultDataDir(options.name))),
 		deadline = AbortSignal.timeout(1000);
 	const lock = await processLock(`objects-app:${dataDir}`, withAbortSignal(deadline, context)).catch(
@@ -180,13 +185,12 @@ export async function startServer<P extends Principal>(options: AppOptions<P>, c
 		context,
 	);
 	const base = (options.base ?? []).map((path) => resolve(path));
-	const baseDirs = base.filter((path) => statSync(path, { throwIfNoEntry: false })?.isDirectory() === true);
 	const plugins = createPlugins(
 		{
 			roots: [{ path: resolve(options.root ?? "plugins"), required: true }, layout.plugins],
 			api: { name: api.name, versions: api.versions },
 			install: options.install,
-			base: baseDirs,
+			base,
 			publicPath: WEB_PREFIX + "assets/",
 			kinds: Object.fromEntries(
 				Object.entries(options.kinds).map(([name, kind]) => [
@@ -205,9 +209,9 @@ export async function startServer<P extends Principal>(options: AppOptions<P>, c
 		context,
 	);
 	const workers = new Map<string, Workers<HostKind>>(),
-		workerHosts = new Map<string, string>(),
-		serverKey = canonicalJson(options.principal.server as JsonValue, context);
+		workerHosts = new Map<string, string>();
 	async function startWorkers(): Promise<void> {
+		const workerPrincipal = options.principal.worker as (address: Address) => P;
 		for (const config of options.workers ?? []) {
 			const facet = config.facet ?? "worker";
 			workers.set(
@@ -221,11 +225,11 @@ export async function startServer<P extends Principal>(options: AppOptions<P>, c
 						execArgv: config.execArgv,
 						env: config.env,
 						authorize: (principal, address) =>
-							canonicalJson(principal as JsonValue, context) === serverKey || config.authorize(principal, address),
-						principal: options.principal.worker,
+							samePrincipal(principal, options.principal.server, context) || config.authorize(principal, address),
+						principal: workerPrincipal,
 						start: async (address, ctx) => {
-							const principal = options.principal.worker(address) as JsonValue;
-							workerHosts.set(canonicalJson(principal, ctx), address.key);
+							const principal = workerPrincipal(address);
+							workerHosts.set(principalKey(principal, ctx), address.key);
 							const kit: KitStart = {
 								dir: workerDirectory(dataDir, address),
 								facet,
@@ -253,12 +257,12 @@ export async function startServer<P extends Principal>(options: AppOptions<P>, c
 		surfaces: ClientSurface<P>[] = [];
 	const core: PluginFacet<P>[] = [
 		{ name: "objects.http", facet: http.facet },
-		{ name: "objects.app.info", facet: appInfoFacet({ dataDir, name: options.name, version: api.versions[0] ?? "" }) },
+		{ name: "objects.app.info", facet: appInfoFacet({ dataDir, name: options.name, version: api.versions[0] ?? "", owner: options.principal.owner }) },
 		{ name: "objects.app.sessions", facet: sessions.facet },
-		{ name: "objects.app.owner", facet: ownerFacet(owner) },
+		{ name: "objects.app.owner", facet: ownerFacet(owner, options.principal.owner) },
 		{
 			name: "objects.app.pairing",
-			facet: pairingFacet(new Pairings({ maxPending: limits.pendingPairings, perAddress: limits.pairingsPerAddress })),
+			facet: pairingFacet(new Pairings({ maxPending: limits.pendingPairings, perAddress: limits.pairingsPerAddress }), options.principal.owner),
 		},
 		{ name: "objects.app.files", facet: filesFacet(join(layout.server, "files"), options.files, limits.uploads) },
 		{ name: "objects.themes", facet: themesFacet() },
@@ -271,7 +275,7 @@ export async function startServer<P extends Principal>(options: AppOptions<P>, c
 			name: "objects.telemetry",
 			facet: telemetryIngestFacet({
 				target: options.telemetry,
-				workerHost: (principal) => workerHosts.get(canonicalJson(principal as JsonValue, context)),
+				workerHost: (principal) => workerHosts.get(principalKey(principal, context)),
 				principalAttributes: (principal) => host.principalAttributes(principal, context),
 			}),
 		});
@@ -393,21 +397,25 @@ export async function startServer<P extends Principal>(options: AppOptions<P>, c
 		},
 	};
 	try {
+		const entry = process.argv[1];
+		if (entry !== undefined && !entry.split(sep).includes("node_modules")) {
+			await nodeBaseInputs(entry, processConditions(process.execArgv, process.env.NODE_OPTIONS)).then(
+				inputs => plugins.watchBase(inputs),
+				error => onError({ kind: "server_scan", error }),
+			);
+		}
 		await startWorkers();
 		if (options.web) surfaces.push({ name: "web", ...(await webSurface(host, { ...options.web, plugins }, context)) });
 		if (options.tui)
-			surfaces.push({ name: "tui", ...(await tuiSurface(host, { entry: options.tui.entry, plugins }, context)) });
+			surfaces.push({ name: "tui", ...(await tuiSurface(host, { ...options.tui, plugins }, context)) });
 		for (const surface of surfaces) core.push({ name: `objects.${surface.name}`, facet: surface.facet });
-		plugins.watchBase([
-			...base.filter((path) => !baseDirs.includes(path)),
-			...[...surfaces, ...workers.values()].flatMap(({ inputs }) => inputs),
-		]);
+		for (const { inputs } of [...surfaces, ...workers.values()]) plugins.watchBase(inputs);
 		await plugins.load(
 			host,
 			{ kind: "server", core, modules: { ...api.modules, ...options.kinds.server?.packages } },
 			context,
 		);
-		await ownerTokenFile(layout.ownerToken, host, context);
+		await ownerTokenFile(layout.ownerToken, options.principal.owner, host, context);
 		const token = owner.renew(),
 			address = await http.listening(context);
 		link = `http://${linkHost(address.host)}:${address.port}${OWNER_PATH}#${token}`;

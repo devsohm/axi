@@ -1,8 +1,8 @@
 import { randomInt } from "node:crypto";
 import type { Principal } from "../../data/index.ts";
+import { samePrincipal } from "../../data/principal.ts";
 import { defineFacet, type Facet } from "../../host/index.ts";
 import { Http, type HttpRequest, type HttpResponse } from "../http/index.ts";
-import { OWNER } from "./owner.ts";
 import { hashToken, newToken } from "./secrets.ts";
 import { Sessions } from "./sessions.ts";
 export type PairingStarter = { readonly kind: "owner" } | { readonly kind: "anonymous"; readonly address: string };
@@ -73,7 +73,7 @@ async function deviceLabel(request: HttpRequest): Promise<string> {
 	const body = (await request.json(4096)) as { label?: unknown } | null;
 	return typeof body?.label === "string" && body.label.trim() ? body.label.trim().slice(0, 100) : "device";
 }
-export function pairingFacet<P extends Principal>(pairings: Pairings): Facet<P> {
+export function pairingFacet<P extends Principal>(pairings: Pairings, owner: P): Facet<P> {
 	return defineFacet<P>((_host, self) =>
 		self.contribute(Http, {
 			routes: {
@@ -82,7 +82,7 @@ export function pairingFacet<P extends Principal>(pairings: Pairings): Facet<P> 
 					handler: async (request, context) => {
 						const result = pairings.begin(
 							await deviceLabel(request),
-							context.principal?.kind === "owner"
+							samePrincipal(context.principal, owner, context)
 								? { kind: "owner" }
 								: { kind: "anonymous", address: request.remoteAddress ?? "" },
 						);
@@ -104,7 +104,7 @@ export function pairingFacet<P extends Principal>(pairings: Pairings): Facet<P> 
 					},
 				},
 				[`GET ${PAIR_PATH}/:code`]: async (request, context) => {
-					if (context.principal?.kind !== "owner") return { kind: "error", status: 403 };
+					if (!samePrincipal(context.principal, owner, context)) return { kind: "error", status: 403 };
 					const pairing = pairings.waiting(request.params.code ?? "");
 					return pairing
 						? {
@@ -114,11 +114,11 @@ export function pairingFacet<P extends Principal>(pairings: Pairings): Facet<P> 
 						: { kind: "html", status: 404, body: "<p>No such pairing (or it expired).</p>" };
 				},
 				[`POST ${PAIR_PATH}/:code`]: async (request, context) => {
-					if (context.principal?.kind !== "owner") return { kind: "error", status: 403 };
+					if (!samePrincipal(context.principal, owner, context)) return { kind: "error", status: 403 };
 					const pairing = pairings.waiting(request.params.code ?? "");
 					if (!pairing) return { kind: "html", status: 404, body: "<p>No such pairing (or it expired).</p>" };
 					const sessions = await context.get(Sessions, {}),
-						{ token } = await sessions.issue({ principal: OWNER, label: pairing.label, kind: "device" }, context);
+						{ token } = await sessions.issue({ principal: owner, label: pairing.label, kind: "device" }, context);
 					pairing.token = token;
 					return { kind: "html", body: `<p>Approved: ${html(pairing.label)} is signed in as the owner.</p>` };
 				},

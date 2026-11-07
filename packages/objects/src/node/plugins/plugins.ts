@@ -1,4 +1,5 @@
 import type { Context } from "../../context/index.ts";
+import type { BaseInputs } from "./base-inputs.ts";
 import type { Principal } from "../../data/index.ts";
 import type { Host, LoadReport, PluginFacet, ReloadReport } from "../../host/index.ts";
 import { Batch, type BatchError } from "../../state/internal.ts";
@@ -53,7 +54,7 @@ export interface Plugins {
 	reload<P extends Principal>(host: Host<P>, built: Built, context: Context): Promise<ReloadReport>;
 	step<P extends Principal>(name: string, host: Host<P>): RolloutStep;
 	rollout(steps: readonly RolloutStep[], built: Built, context: Context): Promise<RolloutResult>;
-	watchBase(files: readonly string[]): void;
+	watchBase(inputs: BaseInputs): void;
 	installDependencies(name: string, context: Context): Promise<void>;
 	installPlugin(source: PluginSource, root: string, context: Context): Promise<readonly string[]>;
 	close(): void;
@@ -228,8 +229,8 @@ class PluginComponent implements Plugins {
 		return { steps: completed, stopped: undefined };
 	}
 
-	watchBase(files: readonly string[]): void {
-		this.#watcher.baseFiles(files);
+	watchBase(inputs: BaseInputs): void {
+		this.#watcher.recordBase(inputs);
 	}
 
 	async installDependencies(name: string, context: Context): Promise<void> {

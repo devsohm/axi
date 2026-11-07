@@ -6,7 +6,9 @@
 
 `await createWorkers(host, Kind, options, context)` builds the worker entry and registers a route before host loading. A build failure rejects startup. Its `kind` selects the plugin facet kind. Bootstrap options name the entry module, Node arguments and environment overrides. The child inherits the parent environment with those overrides.
 
-All workers of one kind use the code snapshot built at startup. Edits to its source take effect after the server restarts. Installed packages remain external; linked workspace packages are included in the snapshot. Literal dynamic imports become lazy chunks. `inputs` lists the source files used by the build. Source locations and stack traces point to those original files. If a temporary-file cleaner removes an output file, the component recreates the complete snapshot before the next fork.
+All workers of one kind use the code snapshot built at startup. Edits to its source take effect after the server restarts. Installed packages remain external; linked workspace packages are included in the snapshot. Literal dynamic imports become lazy chunks. `inputs` maps each source path to the SHA-256 hash of the bytes the build read. Source locations and stack traces point to those original files. If a temporary-file cleaner removes an output file, the component recreates the complete snapshot before the next fork.
+
+`nodeBaseInputs(entry, conditions)` scans a Node entry's static imports and returns the same input-map format without writing or executing a bundle. Unresolved optional imports are excluded. Other build errors reject the scan. The app host uses this helper to detect edits to its server code.
 
 A variable import resolves against its original source location and stays outside the snapshot. Shared chunks can change the execution order of modules that do not import one another. A running worker cannot import a chunk that was removed before the next fork restores it.
 

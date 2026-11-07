@@ -1,4 +1,4 @@
-export type { BaseBundle } from "./bundle.ts";
+export { type BaseBundle, processConditions } from "./bundle.ts";
 export type { ServedFile } from "./served.ts";
 export {
 	WEB_PREFIX,

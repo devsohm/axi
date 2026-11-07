@@ -1,12 +1,11 @@
 import { chmod } from "node:fs/promises";
 import type { Context } from "../../context/index.ts";
 import type { Principal } from "../../data/index.ts";
+import { samePrincipal } from "../../data/principal.ts";
 import { defineFacet, type Facet, type Host } from "../../host/index.ts";
 import { Http } from "../http/index.ts";
 import { hashToken, matchesHash, newToken, readSecret, writeSecret } from "./secrets.ts";
 import { Sessions } from "./sessions.ts";
-export type OwnerPrincipal = { readonly kind: "owner" };
-export const OWNER: OwnerPrincipal = { kind: "owner" };
 export const OWNER_PATH = "/_objects/owner";
 export class OwnerLink {
 	#current: { hash: string; expiry: number } | undefined;
@@ -25,7 +24,7 @@ export class OwnerLink {
 export function fragmentPage(path: string, nonce: string): string {
 	return `<!doctype html><title>Sign in</title><p id="status">Signing in…</p>\n<script nonce="${nonce}">\nconst token = location.hash.slice(1); history.replaceState(null, '', location.pathname);\nfetch(${JSON.stringify(path)}, {method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({token})}).then(response => {if(response.ok) location.replace('/'); else document.getElementById('status').textContent='This link is used up or expired.';});\n</script>`;
 }
-export function ownerFacet<P extends Principal>(link: OwnerLink): Facet<P> {
+export function ownerFacet<P extends Principal>(link: OwnerLink, owner: P): Facet<P> {
 	return defineFacet<P>((_host, self) =>
 		self.contribute(Http, {
 			routes: {
@@ -41,7 +40,7 @@ export function ownerFacet<P extends Principal>(link: OwnerLink): Facet<P> {
 						const sessions = await context.get(Sessions, {}),
 							issued = await sessions.issue(
 								{
-									principal: OWNER,
+								principal: owner,
 									label: "owner browser",
 									kind: "browser",
 									secure: request.provenance.kind !== "local",
@@ -57,23 +56,23 @@ export function ownerFacet<P extends Principal>(link: OwnerLink): Facet<P> {
 }
 export async function ownerTokenFile<P extends Principal>(
 	path: string,
+	owner: P,
 	host: Host<P>,
 	context: Context,
 ): Promise<string> {
 	const previous = await readSecret(path);
 	return host.root(async (ctx) => {
 		const sessions = await ctx.get(Sessions, {}),
-			principal = previous === undefined ? undefined : await sessions.verify(previous, ctx);
+			principal = previous === undefined ? undefined : (await sessions.verify(previous, ctx)) as P | null;
 		if (
 			previous !== undefined &&
-			principal &&
-			typeof principal === "object" &&
-			Reflect.get(principal, "kind") === "owner"
+			samePrincipal(principal ?? undefined, owner, ctx)
 		) {
 			await chmod(path, 0o600);
 			return previous;
 		}
-		const { token } = await sessions.issue({ principal: OWNER, label: "owner token file", kind: "device" }, ctx);
+		if (previous !== undefined && principal != null) await sessions.revoke(previous.split(".", 1)[0]!, ctx);
+		const { token } = await sessions.issue({ principal: owner, label: "owner token file", kind: "device" }, ctx);
 		await writeSecret(path, token, previous === undefined ? "create" : "replace");
 		return token;
 	}, context);

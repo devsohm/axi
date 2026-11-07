@@ -132,7 +132,11 @@
 				},
 				{
 					"behavior": "facet staging, outgoing-call draining, resource restart and job recovery",
-					"tests": ["packages/objects/test/object-reload.test.ts", "packages/objects/test/reload-draining.test.ts", "packages/objects/test/reload-wire.test.ts"]
+					"tests": [
+						"packages/objects/test/object-reload.test.ts",
+						"packages/objects/test/reload-draining.test.ts",
+						"packages/objects/test/reload-wire.test.ts"
+					]
 				},
 				{
 					"behavior": "HTTP routes, admission, bodies, files, authentication and sockets",
@@ -144,7 +148,11 @@
 				},
 				{
 					"behavior": "plugin discovery, evaluation and installation",
-					"tests": ["packages/objects/test/node-plugins.test.ts", "packages/objects/test/plugin-discovery.test.ts"]
+					"tests": [
+						"packages/objects/test/node-plugins.test.ts",
+						"packages/objects/test/plugin-discovery.test.ts",
+						"packages/objects/test/base-inputs.test.ts"
+					]
 				},
 				{
 					"behavior": "authenticated telemetry ingestion and disconnected delivery",
@@ -155,7 +163,8 @@
 					"tests": [
 						"packages/objects/test/client-surfaces.test.ts",
 						"packages/objects/test/client-bindings.test.ts",
-						"packages/objects/test/tui-optimistic.test.ts"
+						"packages/objects/test/tui-optimistic.test.ts",
+						"packages/objects/test/page-styles.test.ts"
 					]
 				},
 				{
@@ -164,7 +173,8 @@
 						"packages/objects/test/app-foundations.test.ts",
 						"packages/objects/test/files.test.ts",
 						"packages/objects/test/app-host.test.ts",
-						"packages/objects/test/app-archive.test.ts"
+						"packages/objects/test/app-archive.test.ts",
+						"packages/objects/test/app-owner.test.ts"
 					]
 				},
 				{

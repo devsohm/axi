@@ -4,10 +4,12 @@ import {
 	type FacetFunction,
 	type RegisteredScript,
 	type ScriptEntry,
-	type ScriptSet,
 } from "../surfaces/index.ts";
 export type PageBootstrap = {
 	readonly base: string;
+	readonly styles: Readonly<Record<string, string>>;
+	readonly links: Readonly<Record<string, "load" | "error">>;
+	readonly watching: (event: Event) => void;
 	readonly queued: readonly (readonly [string, string, FacetFunction])[];
 };
 export class PageScripts {
@@ -46,17 +48,5 @@ export class PageScripts {
 			element.src = entry.url;
 			document.head.append(element);
 		});
-	}
-}
-export function syncStylesheets(set: ScriptSet, prefix: string): void {
-	const wanted = new Set(set.plugins.flatMap((plugin) => (plugin.css === undefined ? [] : [plugin.css])));
-	for (const link of document.querySelectorAll<HTMLLinkElement>(`link[rel="stylesheet"][href^="${prefix}plugin/"]`)) {
-		if (!wanted.delete(link.getAttribute("href") ?? "")) link.remove();
-	}
-	for (const href of wanted) {
-		const link = document.createElement("link");
-		link.rel = "stylesheet";
-		link.href = href;
-		document.head.append(link);
 	}
 }

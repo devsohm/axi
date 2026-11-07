@@ -1,9 +1,8 @@
 import { BACKGROUND_CONTEXT } from "../../context/index.ts";
 import { method, obj, remote, str, type Address } from "../../contracts/index.ts";
 import { forbidden, type Principal } from "../../data/index.ts";
-import { canonicalJson } from "../../data/principal.ts";
+import { samePrincipal } from "../../data/principal.ts";
 import { defineFacet, type Facet } from "../../host/index.ts";
-import type { JsonValue } from "../../json.ts";
 import type { Store } from "../../store/index.ts";
 import { packStore, type ArchiveManifest } from "./archive.ts";
 export const HostData = remote("objects.app.data", {
@@ -16,10 +15,9 @@ export function addressParam(address: Address): string {
 	return JSON.stringify({ kind: address.kind, params: address.params, key: address.key });
 }
 export function hostDataFacet<P extends Principal>(store: Store, files: string, server: P): Facet<P> {
-	const key = canonicalJson(server as JsonValue, BACKGROUND_CONTEXT);
 	return defineFacet<P>((host) =>
 		host.serve(HostData, (_params, principal) => {
-			if (canonicalJson(principal as JsonValue, BACKGROUND_CONTEXT) !== key)
+			if (!samePrincipal(principal, server, BACKGROUND_CONTEXT))
 				throw forbidden("objects.app.data: the server's only");
 			return {
 				variant: "main",

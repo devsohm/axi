@@ -16,7 +16,8 @@ import {
 import { sendPageTelemetry, TelemetryRecorder } from "../telemetry-ingest/index.ts";
 import { pageEnvironment } from "./environment.ts";
 import { followLanguage } from "./language.ts";
-import { PageScripts, syncStylesheets, type PageBootstrap } from "./scripts.ts";
+import { PageScripts, type PageBootstrap } from "./scripts.ts";
+import { PageStyles } from "./styles.ts";
 import { followThemes } from "./themes.ts";
 
 export type PageOptions<P extends Principal> = {
@@ -35,6 +36,8 @@ export async function startPage<P extends Principal>(options: PageOptions<P>): P
 	if (!bootstrap) throw new Error("startPage: the page has no Objects bootstrap (PageAssets.bootstrap)");
 	const scripts = new PageScripts(bootstrap),
 		onError = options.onError ?? ((error: ClientError) => console.error("objects page:", error));
+	document.removeEventListener("load", bootstrap.watching, true);
+	document.removeEventListener("error", bootstrap.watching, true);
 	let recorder: TelemetryRecorder | undefined;
 	const client = await startClient<P>({
 		scripts: WebScripts,
@@ -64,7 +67,7 @@ export async function startPage<P extends Principal>(options: PageOptions<P>): P
 		outdated: () => location.reload(),
 		canRetry: options.canRetry,
 		onConnection: options.onConnection,
-		applied: (set) => syncStylesheets(set, prefix),
+		styles: new PageStyles(bootstrap.styles, bootstrap.links, onError),
 		environment: pageEnvironment(),
 		onError,
 		telemetry: options.telemetry

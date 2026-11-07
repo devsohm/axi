@@ -4,9 +4,9 @@ import { defineFacet, type Facet } from "../../host/index.ts";
 import type { JsonValue } from "../../json.ts";
 import { constant } from "../../state/index.ts";
 export const AppInfo = local("objects.app.info", {
-	version: 1,
+	version: 2,
 	params: {},
-	members: { dataDir: str(), name: str(), version: str() },
+	members: { dataDir: str(), name: str(), version: str(), owner: unknown() },
 });
 export const WorkerInfo = local("objects.app.worker-info", {
 	version: 1,
@@ -17,12 +17,14 @@ export function appInfoFacet<P extends Principal>(info: {
 	readonly dataDir: string;
 	readonly name: string;
 	readonly version: string;
+	readonly owner: P;
 }): Facet<P> {
 	return defineFacet<P>((host) =>
 		host.serve(AppInfo, () => ({
 			dataDir: constant(info.dataDir),
 			name: constant(info.name),
 			version: constant(info.version),
+			owner: constant(info.owner),
 		})),
 	);
 }

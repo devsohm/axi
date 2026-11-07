@@ -13,6 +13,7 @@ export type ClientError =
 	| { readonly kind: "host"; readonly error: HostError }
 	| { readonly kind: "plugins"; readonly failed: readonly PluginFailure[] }
 	| { readonly kind: "update_failed"; readonly error: unknown }
+	| { readonly kind: "stylesheet_failed"; readonly plugin: string; readonly url: string; readonly reason: "error" | "timeout" }
 	| { readonly kind: "messages"; readonly report: MessagesReport };
 export type ClientOptions<P extends Principal> = {
 	readonly scripts: ScriptsContract;
@@ -26,12 +27,16 @@ export type ClientOptions<P extends Principal> = {
 	readonly outdated: () => void;
 	readonly canRetry?: () => Promise<boolean>;
 	readonly onConnection?: (state: ConnectionState) => void;
-	readonly applied?: (set: ScriptSet) => void;
+	readonly styles?: ClientStyles;
 	readonly environment: LoopEnvironment;
 	readonly telemetry?: (incarnation: () => string) => TelemetryContext;
 	readonly onError: (error: ClientError) => void;
 };
 export type Client<P extends Principal> = { readonly host: Host<P>; stop(context: Context): Promise<void> };
+export type ClientStyles = {
+	prepare(set: ScriptSet, signal: AbortSignal): Promise<void>;
+	settle(set: ScriptSet, kept: ReadonlySet<string>): void;
+};
 
 function shareClose(link: Link): Link {
 	let closed = false;
@@ -78,9 +83,18 @@ export async function startClient<P extends Principal>(options: ClientOptions<P>
 		if (failed.length) options.onError({ kind: "plugins", failed });
 	};
 	reportPlugins(report.failed);
+	const left = new Set(report.failed.map(({ plugin }) => plugin));
+	let scripts = new Map(options.initial.filter(script => !left.has(script.plugin)).map(script => [script.plugin, script]));
+	const abort = new AbortController();
+	let latest: ScriptSet | undefined, cancelRetry: (() => void) | undefined;
+	let applying = Promise.resolve(), pause = 0;
+	const runs = (set: ScriptSet) => set.plugins.length === scripts.size && set.plugins.every(item => scripts.get(item.name)?.digest === item.digest);
 	const loop = keepConnected({
 		environment: options.environment,
-		onState: (state) => options.onConnection?.(state),
+		onState: (state) => {
+			options.onConnection?.(state);
+			if (state === "connected" && latest !== undefined && !runs(latest)) void queue(latest, context);
+		},
 		open(events) {
 			const link = shareClose(options.open(events));
 			host.connect(link, { principal: { kind: "server" } as P }, context);
@@ -95,12 +109,7 @@ export async function startClient<P extends Principal>(options: ClientOptions<P>
 			return (await options.canRetry?.()) ?? true;
 		},
 	});
-	let scripts = new Map(options.initial.map((script) => [script.plugin, script]));
-	const abort = new AbortController(),
-		held = host.hold(options.scripts, {}, context);
-	let latest: ScriptSet | undefined, cancelRetry: (() => void) | undefined;
-	let applying = Promise.resolve(),
-		pause = 0;
+	const held = host.hold(options.scripts, {}, context);
 	function queue(set: ScriptSet, ctx: Context): Promise<void> {
 		applying = applying.then(async () => {
 			if (set !== latest || abort.signal.aborted) return;
@@ -118,27 +127,26 @@ export async function startClient<P extends Principal>(options: ClientOptions<P>
 			options.outdated();
 			return true;
 		}
-		if (
-			set.plugins.length === scripts.size &&
-			set.plugins.every((item) => scripts.get(item.name)?.digest === item.digest)
-		) {
-			options.applied?.(set);
-			return true;
-		}
 		try {
-			const next = new Map<string, RegisteredScript>();
-			for (const item of set.plugins) {
+			const next = new Map<string, RegisteredScript>(), changed = !runs(set);
+			if (changed) for (const item of set.plugins) {
 				const previous = scripts.get(item.name);
 				next.set(item.name, previous?.digest === item.digest ? previous : await options.fetchScript(item));
 			}
-			const result = await loaded.reload(
-				host,
-				Array.from(next.values(), (script) => entry(script, options.modules)),
-				ctx,
-			);
-			scripts = next;
-			reportPlugins(result.failed);
-			options.applied?.(set);
+			await options.styles?.prepare(set, abort.signal);
+			if (abort.signal.aborted) return true;
+			const kept = new Set<string>();
+			if (changed) {
+				const result = await loaded.reload(host, Array.from(next.values(), script => entry(script, options.modules)), ctx);
+				for (const { plugin } of result.failed) {
+					kept.add(plugin);
+					const old = scripts.get(plugin);
+					if (old !== undefined) next.set(plugin, old); else next.delete(plugin);
+				}
+				scripts = next;
+				reportPlugins(result.failed);
+			}
+			options.styles?.settle(set, kept);
 			return true;
 		} catch (error) {
 			options.onError({ kind: "update_failed", error });

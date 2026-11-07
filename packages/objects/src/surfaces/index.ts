@@ -50,4 +50,4 @@ export {
 	type RegisteredScript,
 } from "./registered.ts";
 export { ScriptSet, WebScripts, TuiScripts, type ScriptEntry, type ScriptsContract } from "./scripts.ts";
-export { startClient, type Client, type ClientError, type ClientOptions } from "./client.ts";
+export { startClient, type Client, type ClientError, type ClientOptions, type ClientStyles } from "./client.ts";

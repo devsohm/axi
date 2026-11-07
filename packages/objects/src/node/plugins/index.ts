@@ -1,4 +1,5 @@
 export { type AppApi, type BuildInput, type BuildOptions, type BuiltFacet, buildFacet } from "./build.ts";
+export type { BaseInputs } from "./base-inputs.ts";
 export {
 	type Discovery,
 	type DiscoveryOptions,

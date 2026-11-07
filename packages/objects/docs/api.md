@@ -31,6 +31,7 @@ Exports from the package root. The linked declarations contain exact signatures.
 | `ClientError` | typealias | [`surfaces/client.d.ts`](../dist/surfaces/client.d.ts) |
 | `ClientModules` | typealias | [`surfaces/registered.d.ts`](../dist/surfaces/registered.d.ts) |
 | `ClientOptions` | typealias | [`surfaces/client.d.ts`](../dist/surfaces/client.d.ts) |
+| `ClientStyles` | typealias | [`surfaces/client.d.ts`](../dist/surfaces/client.d.ts) |
 | `coalesce` | function | [`store/expression.d.ts`](../dist/store/expression.d.ts) |
 | `Codec` | interface | [`link/message.d.ts`](../dist/link/message.d.ts) |
 | `ColorDepth` | typealias | [`surfaces/themes.d.ts`](../dist/surfaces/themes.d.ts) |

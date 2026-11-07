@@ -55,6 +55,10 @@ The worker component uses this runtime to evaluate scripts built by its parent p
 - `set` requests discovery after a plugin directory or facet file changes.
 - `base` reports a change in application code that requires the application's restart policy.
 
+`base` compares file contents with the running build. `watchBase(inputs)` adds a `BaseInputs` map from absolute paths to SHA-256 hashes of the bytes the build read. Worker and client bundles expose this map as `inputs`. The watcher checks the map immediately and after file events. An edit followed by a revert clears the flag. A file recorded with different contents by two running bundles stays marked. New source files in `base` directories also set the flag. Files under `node_modules` are excluded.
+
+This content comparison applies to `base`. Plugin `dirty` marks remain set until an applicable rollout clears them, including edits that restore the earlier bytes.
+
 Each mark has a monotonically increasing generation. An old build cannot clear a newer edit. Watchers skip `node_modules` and `.git`, add watches for new directories, and watch linked plugin directories separately. A watch failure is reported once. The application can still build on demand.
 
 ## Test one plugin

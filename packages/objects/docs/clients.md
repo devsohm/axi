@@ -10,6 +10,14 @@ The template receives a nonce and `PageAssets`. Call `pageScripts(assets, nonce)
 
 Call `startPage` from `@axi/objects/web` in the browser entry. Supply the server's WebSocket connection, the modules plugins can import and a render callback. A new plugin script reloads its facet in place. A changed base bundle reloads the page.
 
+An update fetches new plugin stylesheets with `media="not all"` before reloading code. It waits for each load, error or ten-second timeout. Styles remain in plugin order. Accepted code activates its prepared stylesheet. A plugin that keeps its old code also keeps its old stylesheet. Replaced styles leave after the page draws a frame.
+
+`stylesheet_failed` reports a failed or timed-out stylesheet without preventing the code update. A later load can still apply after a timeout. A failed load is retried with the next update, even at the same URL. Stopping the client cancels waits and removes prepared styles. A reconnect retries scripts that previously failed to load or evaluate.
+
+UI contributed by an object can briefly lose its old styling while that object restarts. The old stylesheet leaves after the reload, but the object's old UI remains until its successor becomes live. UI contributed directly by a facet changes with that facet's stylesheet. Reloaded components acquire fresh references and can show their loading state for a round trip.
+
+For a custom client, `ClientOptions.styles` accepts `ClientStyles`: `prepare(set, signal)` fetches inactive styles before reload, and `settle(set, kept)` activates styles for accepted plugins. `kept` identifies plugins retaining their old code. `pageScripts` puts the bootstrap before stylesheets so it can record load failures that occur before `startPage` runs.
+
 ## React
 
 The optional `@axi/objects/react` entry requires React. Wrap components in `HostProvider`. `useHold` acquires and releases a reference with the component. `useWatch`, `useRegistry` and `useRefState` follow values. `usePageState` retains local values across component remounts on the same host.

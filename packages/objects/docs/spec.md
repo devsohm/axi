@@ -84,11 +84,17 @@ Worker starts serialize per address and hold process locks. Stale file locks are
 
 The app host opens one server Store and one Store per worker address. Startup holds a data-directory lock. Closing the app releases that lock after its components close. Persistent device and browser sessions store hashes rather than token secrets. Ephemeral sessions and pending sign-in links remain in memory.
 
+The app chooses `principal.owner`, which must be strict JSON and differ from the server principal. Sign-in, pairing and invites use this value. `AppInfo` version 2 exposes it. Owner comparison uses cached canonical principal keys. Changing the owner revokes the token-file session and replaces that file, leaving other sessions unchanged. Worker kinds require a worker-principal function.
+
+Base bundles record input hashes at the read that supplies the compiler. The restart flag compares current contents with every running base record. It clears after a revert. New source files inside configured base directories set the flag. The server records its entry's static graph when possible; unresolved imports are omitted, while other scan errors report `server_scan` without preventing startup. Browser and terminal bundles inherit the server's resolution conditions unless overridden.
+
 Files contract version 2 stores immutable file versions by space and path. Index mutations serialize per Files object and commit version rows, path counters, blob reference counts and summaries together. Deleting data retains path counters. Moves preserve version identities; copies share blobs without carrying delivery keys. Folder views attach without missing intervening changes and refresh once per affected watched folder. File-only copies export the Files owner's tables and documents while retaining referenced blobs. The previous file index has no automatic migration. See [App host](app.md#files-and-archives).
 
 An address export holds its worker's data through the worker or its process lock. Import requires a new destination, validates archive paths and limits, and publishes the staged directory only after Store import succeeds. Finished files are included; incomplete uploads are not.
 
 Client plugin changes reload facets in place. A changed base bundle restarts the client. React and terminal scopes release their subscriptions and references when disposed. Page state survives component replacement within one client host; it does not survive that host's destruction.
+
+Browser styles are loaded inactive before code reload. Only accepted plugins activate their prepared styles. Old styles remain until the page draws a frame. Failed and timed-out loads report `stylesheet_failed`; cancellation removes prepared styles. A client records the script each plugin actually runs, so reconnect can retry a failed replacement. An object's retained UI can show without its old styling while that object restarts.
 
 The Node terminal launcher retains credentials outside the sandbox. It requires Node 26.5.1 or later and mediates file, browser and clipboard actions through confirmation. It permits drawing escapes and removes terminal configuration escapes from sandbox output. Its bridge bounds frames to 17 MiB and bundle downloads to 8 MiB. Exit restores terminal modes and removes launcher listeners.
 

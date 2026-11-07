@@ -85,13 +85,14 @@ export class PublishedScripts<P extends Principal> {
 			encoder = new TextEncoder();
 		for (const [name, item] of this.#current) {
 			const stem = `${this.#prefix}plugin/${name.replace("/", "~")}.${item.digest}`;
+			const css = item.css === undefined ? undefined : `${stem}.${createHash("sha256").update(item.css).digest("hex").slice(0, 16)}.css`;
 			files.set(stem + ".js", { mime: JAVASCRIPT, bytes: encoder.encode(item.text) });
-			if (item.css !== undefined) files.set(stem + ".css", { mime: CSS, bytes: encoder.encode(item.css) });
+			if (css !== undefined) files.set(css, { mime: CSS, bytes: encoder.encode(item.css!) });
 			plugins.push({
 				name,
 				digest: item.digest,
 				url: stem + ".js",
-				...(item.css === undefined ? {} : { css: stem + ".css" }),
+				...(css === undefined ? {} : { css }),
 			});
 			for (const asset of item.assets)
 				files.set(this.#prefix + "assets/" + asset.name, { mime: mimeOf(asset.name), bytes: asset.bytes });

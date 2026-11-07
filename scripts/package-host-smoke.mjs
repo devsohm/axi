@@ -32,7 +32,7 @@ const options = {
 	dataDir: join(directory, "data"),
 	api: { name: "@example/api", versions: ["v1"], modules: { "@example/api/v1": { ...objects, Http } } },
 	kinds: { server: { platform: "node" } },
-	principal: { server: { kind: "server" }, worker: () => ({ kind: "worker" }) },
+	principal: { server: { kind: "server" }, owner: { kind: "owner" } },
 	onError: (error) => errors.push(error),
 };
 let app;

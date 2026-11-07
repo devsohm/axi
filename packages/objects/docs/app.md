@@ -13,20 +13,24 @@ Call `startServer(options, context)`. Set these options:
 | `root` | Required directory containing application plugins; defaults to `plugins` |
 | `api` | App module name, supported versions and module objects available to plugins |
 | `kinds` | Node and browser facet kinds, with their allowed host packages |
-| `principal` | Server principal and a function assigning each worker its principal |
+| `principal` | Server and owner principals, plus a worker-principal function when worker kinds are configured |
 | `workers` | Worker kinds, entry files, start data, authorization and idle policy |
 | `listen` | Listening host and port; defaults to loopback with an allocated port |
 | `base` | Additional source files or directories to watch for base-code changes |
 | `timeouts` | Host close and ready timeouts, shared by the server and workers |
-| `onError` | Receives host, HTTP, worker and plugin errors |
+| `onError` | Receives host, HTTP, worker, plugin and server-source scan errors |
 
-The principal union must include `{ kind: "owner" }`. Application rules decide which workers a caller may reach. The server's own principal may reach its workers for administration and export.
+`principal.owner` is any principal of the app's type, including an existing user. It must be strict JSON and differ from `principal.server`. Startup rejects an owner with undefined fields, functions or class instances before opening storage. `principal.worker(address)` is required when `workers` can contain worker kinds. A server without workers does not need this function. Application rules decide which workers a caller may reach. The server's own principal may reach its workers for administration and export.
 
-The returned `App` exposes the host, HTTP component, worker pools, plugin component and published client bundles. `AppInfo` reports the app name, API version and data directory. A worker exposes `WorkerInfo` with its address and application start data.
+The returned `App` exposes the host, HTTP component, worker pools, plugin component and published client bundles. `AppInfo` version 2 reports the app name, API version, data directory and configured owner. A worker exposes `WorkerInfo` with its address and application start data.
 
 Use `applyChanges(context)` to build dirty plugins and roll the result through the server, workers and client surfaces. File watching marks changes; it does not apply them automatically. Failed plugin changes keep the prior working implementation. Concurrent calls run in order, including the build step.
 
-The app watches files used by its worker and client bundles. A change sets `plugins.state.base`; it does not replace running base code. Additional `base` directories are watched recursively. The default host close timeout is 30 seconds; the ready timeout is 60 seconds.
+The app records the bytes used by its worker and client bundles. `plugins.state.base` is true while a recorded file differs, disappears, or a new source file exists in a `base` directory. Rewriting unchanged bytes leaves the flag clear. Restoring the original files clears it. This flag does not replace running base code.
+
+The server also scans the static imports of its entry, `process.argv[1]`, without executing or writing a bundle. Literal lazy imports are included. Computed imports, custom-loader modules and unresolved optional imports are not included. A parse failure reports `server_scan` and leaves the server running without that scan. Installed files under `node_modules` are excluded. Explicit `base` files and directories cover code the scan cannot see.
+
+Web and terminal bundles use the server's resolution conditions from its Node flags and `NODE_OPTIONS`. `web.conditions` and `tui.conditions` can override them. Worker bundles use their worker kind's `execArgv`. The default host close timeout is 30 seconds; the ready timeout is 60 seconds.
 
 Call `close(context)` at shutdown. It closes HTTP, workers, the host and Store before releasing the app lock. Repeated calls share the same close promise.
 
@@ -65,6 +69,8 @@ SQLite may also create `-wal` and `-shm` files. They belong to the database. Do 
 ## Sign-in and sessions
 
 `ownerLink()` returns a URL whose fragment carries a single-use, ten-minute sign-in token. The default listener uses loopback. The sign-in page exchanges that token for a signed session cookie. The app also retains a reusable device token in `owner-token`; keep that file private.
+
+The owner link, token file and device pairing all sign in as `principal.owner`. Owner-only routes compare complete canonical JSON, independent of property order. Changing the owner between starts replaces the token file and revokes its previous session. Other sessions for the previous owner keep that principal until the app revokes them explicitly.
 
 `Sessions` issues, lists, verifies and revokes credentials. Stored browser and device sessions retain a secret hash, principal and usage times. Lists omit hashes. Sessions expire after 400 days without use. Cookies are renewed after a day of use. Revocation prevents later authentication with the credential.
 

@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
-import { basename, extname, resolve } from "node:path";
-import { build, type Metafile } from "esbuild";
+import { basename, extname } from "node:path";
+import { build } from "esbuild";
+import { recordedSources, type BaseInputs } from "../plugins/base-inputs.ts";
 import { mimeOf, type ServedFile } from "./served.ts";
 export type BasePlatform = "browser" | "sandbox";
 export type BaseBundle = {
@@ -8,11 +9,13 @@ export type BaseBundle = {
 	readonly script: string;
 	readonly style: string | undefined;
 	readonly files: ReadonlyMap<string, ServedFile>;
-	readonly inputs: readonly string[];
+	readonly inputs: BaseInputs;
 };
-export async function buildBase(entry: string, platform: BasePlatform, prefix: string): Promise<BaseBundle> {
+export async function buildBase(entry: string, platform: BasePlatform, prefix: string, conditions: readonly string[] | undefined): Promise<BaseBundle> {
 	const browser = platform === "browser";
-	const { outputFiles, metafile } = await build({
+	const inputs = new Map<string, string>();
+	const selected = conditions ?? processConditions(process.execArgv, process.env.NODE_OPTIONS);
+	const { outputFiles } = await build({
 		entryPoints: [entry],
 		bundle: true,
 		outdir: "/",
@@ -28,8 +31,9 @@ export async function buildBase(entry: string, platform: BasePlatform, prefix: s
 		tsconfigRaw: "{}",
 		jsx: "automatic",
 		define: { "process.env.NODE_ENV": '"production"' },
+		conditions: browser ? [...selected, "module"] : [...selected],
+		plugins: [recordedSources(inputs)],
 		logLevel: "silent",
-		metafile: true,
 	});
 	const digest = createHash("sha256");
 	for (const file of [...outputFiles].sort((a, b) => (a.path < b.path ? -1 : 1)))
@@ -48,10 +52,34 @@ export async function buildBase(entry: string, platform: BasePlatform, prefix: s
 			else style = path;
 		}
 	}
-	return { hash, files, script, style, inputs: metafileInputs(metafile) };
+	return { hash, files, script, style, inputs };
 }
-export function metafileInputs(metafile: Metafile): string[] {
-	return Object.keys(metafile.inputs)
-		.filter((input) => !/^[a-z-]+:/.test(input))
-		.map((input) => resolve(input));
+export function conditionsOf(args: readonly string[]): string[] {
+	const values: string[] = [];
+	for (let index = 0; index < args.length; index++) {
+		const flag = args[index]!;
+		if (flag === "--conditions" || flag === "-C") {
+			if (index + 1 < args.length) values.push(args[++index]!);
+		} else if (flag.startsWith("--conditions=") || flag.startsWith("-C="))
+			values.push(flag.slice(flag.indexOf("=") + 1));
+	}
+	return values;
+}
+export function processConditions(execArgv: readonly string[], nodeOptions: string | undefined): string[] {
+	const tokens: string[] = [];
+	let token: string | undefined, quote = false;
+	const text = nodeOptions ?? "";
+	for (let index = 0; index < text.length; index++) {
+		const char = text[index]!;
+		if (char === " " && !quote) {
+			if (token !== undefined) tokens.push(token);
+			token = undefined;
+			continue;
+		}
+		token ??= "";
+		if (char === '"') quote = !quote;
+		else token += quote && char === "\\" && index + 1 < text.length ? text[++index]! : char;
+	}
+	if (token !== undefined) tokens.push(token);
+	return conditionsOf([...tokens, ...execArgv]);
 }

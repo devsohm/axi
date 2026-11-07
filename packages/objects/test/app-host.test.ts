@@ -29,7 +29,7 @@ export default defineFacet((_host,self)=>self.contribute(Http,{routes:{
 			root,
 			api: { name: "@example/api", versions: ["v1"], modules: { "@example/api/v1": { ...objects, Http } } },
 			kinds: { server: { platform: "node" } },
-			principal: { server: { kind: "server" }, worker: () => ({ kind: "worker" }) },
+			principal: { server: { kind: "server" }, owner: { kind: "owner" }, worker: () => ({ kind: "worker" }) },
 			onError: (error) => errors.push(error),
 		};
 	let app = await startServer(options, context);
@@ -86,18 +86,18 @@ it("releases startup resources when a worker entry cannot be built", async () =>
 		entry = join(dir, "broken.ts");
 	await mkdir(root);
 	await writeFile(entry, 'import "./absent.ts";');
-	const options: AppOptions<Principal> = {
+	const options = {
 		name: "startup",
 		dataDir: join(dir, "data"),
 		root,
 		api: { name: "@example/api", versions: ["v1"], modules: {} },
 		kinds: { server: { platform: "node" }, worker: { platform: "node" } },
-		principal: { server: { kind: "server" }, worker: () => ({ kind: "worker" }) },
+		principal: { server: { kind: "server" }, owner: { kind: "owner" }, worker: () => ({ kind: "worker" }) },
 		onError() {},
-	};
+	} satisfies AppOptions<Principal>;
 	try {
 		await expect(
-			startServer(
+			startServer<Principal>(
 				{
 					...options,
 					workers: [{ kind: objects.hostKind("broken"), entry, authorize: () => true, start: () => null }],
@@ -105,7 +105,7 @@ it("releases startup resources when a worker entry cannot be built", async () =>
 				context,
 			),
 		).rejects.toThrow('Could not resolve "./absent.ts"');
-		const app = await startServer(options, context);
+		const app = await startServer<Principal>(options, context);
 		await app.close(context);
 	} finally {
 		await rm(dir, { recursive: true, force: true });

@@ -76,7 +76,7 @@ try {
 import * as objects from "@axi/objects";
 import { registerHooks } from "node:module";
 registerHooks({resolve(specifier,context,next){if(specifier==="esbuild") throw new Error("worker imported esbuild");return next(specifier,context);}});
-const { workerMain } = await import("@axi/objects/workers");
+const { workerMain } = await import("@axi/objects/workers/child");
 const Runner=objects.hostKind("packed",{id:objects.str()});
 const Remote=objects.remote("packed.remote",{version:1,params:{id:objects.str()},hostAddress:({id})=>Runner({id}),variants:{ready:{state:{value:objects.int()},methods:{}}}});
 workerMain(async ({address,parent,plugins,onClose},context)=>{

@@ -12,6 +12,7 @@ import { uncrossed, uncrossedReport, type CrossedError, type CrossedReport, type
 import { clearStaleLock } from "./lock.ts";
 import { WorkerProcess, type Exit } from "./process.ts";
 import type { WorkerBase } from "./base.ts";
+import type { BaseInputs } from "../plugins/base-inputs.ts";
 export type WorkersOptions<P extends Principal, K extends KindShape> = {
 	readonly kind: string;
 	readonly entry: string;
@@ -42,7 +43,7 @@ export type WorkersError =
 	| BatchError;
 export interface Workers<K extends KindShape> {
 	readonly state: Watchable<Readonly<Record<string, WorkerState>>>;
-	readonly inputs: readonly string[];
+	readonly inputs: BaseInputs;
 	stop(address: Address<K>, context: Context): Promise<void>;
 	retry(address: Address<K>, context: Context): Promise<void>;
 	step(name: string): RolloutStep;
@@ -134,7 +135,7 @@ class WorkerPool<P extends Principal, K extends KindShape> implements Workers<K>
 		});
 		this.#followClose(context);
 	}
-	get inputs(): readonly string[] {
+	get inputs(): BaseInputs {
 		return this.#base.inputs;
 	}
 	#followClose(context: Context): void {

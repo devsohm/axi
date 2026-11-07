@@ -6,6 +6,7 @@ import { dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { expect, it } from "vitest";
 import { buildWorkerBase } from "../src/node/workers/base.ts";
+import { contentHash } from "../src/node/plugins/base-inputs.ts";
 
 it("loads a lazy snapshot only on demand and restores every chunk after cleanup", async () => {
 	const directory = await mkdtemp(join(tmpdir(), "axi-lazy-base-"));
@@ -46,7 +47,8 @@ it("keeps a worker snapshot and source location after edits and temporary-file c
 			17,
 			pathToFileURL(entry).href,
 		]);
-		expect([...base.inputs].sort()).toEqual([entry, value]);
+		expect([...base.inputs.keys()].sort()).toEqual([entry, value]);
+		expect(base.inputs.get(value)).toBe(contentHash(Buffer.from("export const value = 17;")));
 		base.remove();
 		expect(existsSync(restored)).toBe(false);
 	} finally {

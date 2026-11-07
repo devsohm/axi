@@ -3,6 +3,8 @@ import { basename, dirname, join, resolve, sep } from "node:path";
 import { BACKGROUND_CONTEXT, type Context } from "../../context/index.ts";
 import type { JsonValue } from "../../json.ts";
 import { type Batch, Source } from "../../state/internal.ts";
+import type { BaseInputs } from "./base-inputs.ts";
+import { BaseWatcher, directoryIdentity } from "./base-watcher.ts";
 import { type BuiltFacet, inside } from "./build.ts";
 import { type Discovery, FACET_EXTENSIONS, sameFiles } from "./discover.ts";
 
@@ -31,11 +33,10 @@ function realDirectory(dir: string): string {
 export class PluginWatcher extends Source {
 	readonly #options: WatcherOptions;
 	readonly #roots: readonly string[];
-	readonly #base: readonly string[];
-	readonly #files = new Set<string>();
-	readonly #fileWatches = new Map<string, FSWatcher>();
+	readonly #base: BaseWatcher;
 	readonly #trees = new Set<string>();
 	readonly #directories = new Map<string, FSWatcher>();
+	readonly #identities = new Map<string, string | undefined>();
 	readonly #marks = new Map<string, number>();
 	readonly #install = new Set<string>();
 	readonly #inputs = new Map<string, { readonly plugin: string; readonly files: ReadonlySet<string> }>();
@@ -43,7 +44,6 @@ export class PluginWatcher extends Source {
 	#clock = 1;
 	#set = 0;
 	#manifest = 0;
-	#baseChanged = false;
 	#unavailable = false;
 	#scheduled = false;
 	#cached: JsonValue | undefined;
@@ -51,15 +51,16 @@ export class PluginWatcher extends Source {
 		super(batch);
 		this.#options = options;
 		this.#roots = options.roots.map(realDirectory);
-		this.#base = options.base.map(realDirectory);
-		for (const directory of [...this.#roots, ...this.#base]) this.#tree(directory);
+		for (const directory of this.#roots) this.#tree(directory);
+		this.#base = new BaseWatcher(options.base, () => this.#notify(), error => this.#failure(error));
+		if (this.#unavailable) this.#base.close();
 	}
 	get value(): JsonValue {
 		return (this.#cached ??= {
 			dirty: [...this.#marks.keys()].sort(),
 			install: [...this.#install].sort(),
 			set: this.#set > 0,
-			base: this.#baseChanged,
+			base: this.#base.changed,
 		});
 	}
 	deliver(context: Context): void {
@@ -86,11 +87,11 @@ export class PluginWatcher extends Source {
 		const present = new Set(discovery.plugins.map(({ name }) => name));
 		for (const name of this.#install) if (!present.has(name)) this.#install.delete(name);
 		const linked = discovery.plugins
-			.filter(({ dir }) => !this.#roots.some((root) => inside(root, dir)))
+			.filter(({ dir, layout }) => layout === "directory" && !this.#roots.some((root) => inside(root, dir)))
 			.map(({ dir }) => dir);
 		for (const dir of linked) this.#tree(dir);
 		for (const dir of this.#trees) {
-			if (this.#roots.includes(dir) || this.#base.includes(dir) || linked.includes(dir)) continue;
+			if (this.#roots.includes(dir) || linked.includes(dir)) continue;
 			this.#trees.delete(dir);
 			this.#removeWatches(dir);
 		}
@@ -123,28 +124,15 @@ export class PluginWatcher extends Source {
 		this.#set = this.#clock++;
 		this.#notify();
 	}
-	baseFiles(files: readonly string[]): void {
-		for (const file of files) {
-			const path = realDirectory(file);
-			if (path.split(sep).some(ignored)) continue;
-			this.#files.add(path);
-			const directory = dirname(path);
-			if (this.#fileWatches.has(directory) || this.#unavailable) continue;
-			try {
-				const handle = watch(directory, (_event, file) => {
-					if (file !== null && this.#files.has(join(directory, file))) this.mark(join(directory, file));
-				});
-				handle.on("error", (error) => this.#failure(error));
-				this.#fileWatches.set(directory, handle);
-			} catch (error) {
-				if ((error as NodeJS.ErrnoException).code !== "ENOENT") this.#failure(error);
-			}
-		}
+	recordBase(inputs: BaseInputs): void {
+		this.#base.record(inputs);
 	}
 	mark(path: string): void {
 		if (path.split(sep).some(ignored)) return;
-		if (this.#files.has(path) || this.#base.some((dir) => inside(dir, path))) this.#baseChanged = true;
-		else {
+		if (this.#base.includes(path)) {
+			this.#base.mark(path);
+			return;
+		} else {
 			const stamp = this.#clock++;
 			const owner = this.#known.plugins.find((plugin) =>
 				plugin.layout === "file"
@@ -173,9 +161,10 @@ export class PluginWatcher extends Source {
 		this.#notify();
 	}
 	close(): void {
-		for (const watcher of [...this.#directories.values(), ...this.#fileWatches.values()]) watcher.close();
+		this.#base?.close();
+		for (const watcher of this.#directories.values()) watcher.close();
 		this.#directories.clear();
-		this.#fileWatches.clear();
+		this.#identities.clear();
 		this.#trees.clear();
 	}
 	#tree(dir: string): void {
@@ -196,6 +185,7 @@ export class PluginWatcher extends Source {
 		}
 		handle.on("error", (error) => this.#failure(error));
 		this.#directories.set(dir, handle);
+		this.#identities.set(dir, directoryIdentity(dir));
 		let entries: Dirent[];
 		try {
 			entries = readdirSync(dir, { withFileTypes: true });
@@ -210,8 +200,10 @@ export class PluginWatcher extends Source {
 			try {
 				directory = lstatSync(path, { throwIfNoEntry: false })?.isDirectory() === true;
 			} catch {}
-			if (directory) this.#scan(path);
-			else if (this.#directories.has(path)) this.#removeWatches(path);
+			if (directory) {
+				if (this.#directories.has(path) && directoryIdentity(path) !== this.#identities.get(path)) this.#removeWatches(path);
+				this.#scan(path);
+			} else if (this.#directories.has(path)) this.#removeWatches(path);
 		}
 		this.mark(path);
 	}
@@ -220,6 +212,7 @@ export class PluginWatcher extends Source {
 			if (path === dir || inside(dir, path)) {
 				handle.close();
 				this.#directories.delete(path);
+				this.#identities.delete(path);
 			}
 	}
 	#failure(error: unknown): void {

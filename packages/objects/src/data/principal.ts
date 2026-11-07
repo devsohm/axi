@@ -17,6 +17,10 @@ export function principalKey<P extends Principal>(principal: P, context: Context
 	}
 	return key;
 }
+export function samePrincipal(principal: Principal | undefined, other: Principal, context: Context): boolean {
+	if (principal === undefined) return false;
+	return principalKey(principal, context) === principalKey(other, context);
+}
 export function canonicalJson(value: JsonValue, context: Context): string {
 	objectsMetrics(context.telemetry.metrics).counter("objects.data.walks").add(1);
 	type Work = { value: JsonValue } | { text: string };
