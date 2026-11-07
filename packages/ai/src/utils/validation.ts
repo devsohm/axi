@@ -15,7 +15,10 @@ interface Schema {
 	oneOf?: Schema[];
 	$ref?: string;
 }
-const cache = new WeakMap<object, ReturnType<typeof Compile>>();
+const cache = new WeakMap<
+	object,
+	{ references: Record<string, Tool["parameters"]>; validators: WeakMap<object, ReturnType<typeof Compile>> }
+>();
 const conversions = new Map<string, Tool["parameters"]>([
 	["string", Type.String()],
 	["number", Type.Number()],
@@ -25,26 +28,49 @@ const conversions = new Map<string, Tool["parameters"]>([
 	["array", Type.Array(Type.Unknown())],
 ]);
 function resolve(schema: Schema, root: Schema): Schema {
-	if (!schema.$ref?.startsWith("#/")) return schema;
+	if (schema.$ref !== "#" && !schema.$ref?.startsWith("#/")) return schema;
 	const visited = new Set<Schema>();
-	while (schema.$ref?.startsWith("#/") && !visited.has(schema)) {
+	while ((schema.$ref === "#" || schema.$ref?.startsWith("#/")) && !visited.has(schema)) {
 		visited.add(schema);
-		const target = Value.Pointer.Get(root, schema.$ref.slice(1));
+		const target = schema.$ref === "#" ? root : Value.Pointer.Get(root, schema.$ref.slice(1));
 		if (!Type.IsSchema(target)) break;
 		schema = target;
 	}
 	return schema;
 }
-function validator(schema: Tool["parameters"]): ReturnType<typeof Compile> {
-	const old = cache.get(schema);
+function validator(schema: Tool["parameters"], root: Schema = schema): ReturnType<typeof Compile> {
+	let owner = cache.get(root);
+	if (!owner) {
+		const references: Record<string, Tool["parameters"]> = Object.create(null);
+		const pending: unknown[] = [root];
+		while (pending.length) {
+			const current = pending.pop();
+			if (Array.isArray(current)) pending.push(...current);
+			else if (Type.IsSchema(current)) {
+				if (
+					"$ref" in current &&
+					typeof current.$ref === "string" &&
+					(current.$ref === "#" || current.$ref.startsWith("#/"))
+				) {
+					const reference = { $ref: current.$ref };
+					const target = resolve(reference, root);
+					if (target !== reference) references[current.$ref] = target;
+				}
+				pending.push(...Object.values(current));
+			}
+		}
+		owner = { references, validators: new WeakMap() };
+		cache.set(root, owner);
+	}
+	const old = owner.validators.get(schema);
 	if (old) return old;
-	const compiled = Compile(schema);
-	cache.set(schema, compiled);
+	const compiled = schema === root ? Compile(schema) : Compile(owner.references, schema);
+	owner.validators.set(schema, compiled);
 	return compiled;
 }
-function subValidator(schema: Schema): ReturnType<typeof Compile> | undefined {
+function subValidator(schema: Schema, root: Schema): ReturnType<typeof Compile> | undefined {
 	try {
-		return validator(schema);
+		return validator(schema, root);
 	} catch {
 		return undefined;
 	}
@@ -90,10 +116,10 @@ function primitive(value: unknown, type: string): unknown {
 }
 function union(value: unknown, branches: Schema[], root: Schema): unknown {
 	branches = branches.map((branch) => resolve(branch, root));
-	for (const schema of branches) if (subValidator(schema)?.Check(value)) return value;
+	for (const schema of branches) if (subValidator(schema, root)?.Check(value)) return value;
 	for (const schema of branches) {
 		const result = coerce(structuredClone(value), schema, root);
-		if (subValidator(schema)?.Check(result)) return result;
+		if (subValidator(schema, root)?.Check(result)) return result;
 	}
 	return value;
 }
@@ -128,7 +154,7 @@ function coerce(value: unknown, schema: Schema, root: Schema): unknown {
 	if (types.includes("object") && typeof current === "object" && current !== null && !Array.isArray(current)) {
 		const object = current as Record<string, unknown>;
 		for (const [key, property] of Object.entries(schema.properties ?? {}))
-			if (key in object) object[key] = coerce(object[key], property, root);
+			if (key in object && object[key] !== undefined) object[key] = coerce(object[key], property, root);
 		if (schema.additionalProperties && typeof schema.additionalProperties === "object")
 			for (const [key, value] of Object.entries(object))
 				if (!Object.hasOwn(schema.properties ?? {}, key))
@@ -136,11 +162,11 @@ function coerce(value: unknown, schema: Schema, root: Schema): unknown {
 	}
 	return current;
 }
-function omitOptionalNulls(value: unknown, schema: Schema): void {
+function omitOptionalNulls(value: unknown, schema: Schema, root: Schema = schema): void {
 	if (Array.isArray(value)) {
 		for (let index = 0; index < value.length; index++) {
 			const item = Array.isArray(schema.items) ? schema.items[index] : schema.items;
-			if (item) omitOptionalNulls(value[index], item);
+			if (item) omitOptionalNulls(value[index], item, root);
 		}
 	} else if (typeof value === "object" && value !== null && schema.properties) {
 		const object = value as Record<string, unknown>,
@@ -151,10 +177,10 @@ function omitOptionalNulls(value: unknown, schema: Schema): void {
 				object[key] === null &&
 				!required.has(key) &&
 				typeof property.$ref !== "string" &&
-				subValidator(property)?.Check(null) === false
+				subValidator(property, root)?.Check(null) === false
 			)
 				delete object[key];
-			else omitOptionalNulls(object[key], property);
+			else omitOptionalNulls(object[key], property, root);
 		}
 	}
 }

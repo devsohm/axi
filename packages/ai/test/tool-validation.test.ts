@@ -123,10 +123,16 @@ test("tool conversion follows local references through nested values", () => {
 				"whole/count": { type: "integer" },
 				entry: { type: "object", required: ["label"], properties: { label: { type: "string" } } },
 			},
-			required: ["count", "entries"],
+			required: ["count", "entries", "summary"],
 			properties: {
 				count: { $ref: "#/$defs/whole~1count" },
 				entries: { type: "array", items: { $ref: "#/$defs/entry" } },
+				summary: {
+					anyOf: [
+						{ type: "object", properties: { total: { $ref: "#/$defs/whole~1count" } }, required: ["total"] },
+						{ type: "null" },
+					],
+				},
 			},
 		},
 	};
@@ -134,10 +140,14 @@ test("tool conversion follows local references through nested values", () => {
 		type: "toolCall",
 		id: "convert-2",
 		name: "convert",
-		arguments: { count: "-9.3", entries: [{ label: null }] },
+		arguments: { count: "-9.3", entries: [{ label: null }], summary: { total: "4.75" } },
 	};
-	expect(validateToolArguments(convert, call)).toEqual({ count: -9, entries: [{ label: "null" }] });
-	expect(call.arguments).toEqual({ count: "-9.3", entries: [{ label: null }] });
+	expect(validateToolArguments(convert, call)).toEqual({
+		count: -9,
+		entries: [{ label: "null" }],
+		summary: { total: 4 },
+	});
+	expect(call.arguments).toEqual({ count: "-9.3", entries: [{ label: null }], summary: { total: "4.75" } });
 	expect(() => validateToolArguments(convert, { ...call, arguments: { count: "not a number", entries: [] } })).toThrow(
 		"Validation failed",
 	);
@@ -158,4 +168,36 @@ test("multiple declared JSON types preserve matches and use their declared conve
 	expect(validateToolArguments(convert, { ...call, arguments: { value: false } })).toEqual({ value: false });
 	expect(validateToolArguments(convert, { ...call, arguments: { value: null } })).toEqual({ value: false });
 	expect(() => validateToolArguments(convert, { ...call, arguments: { value: "TRUE" } })).toThrow("Validation failed");
+});
+
+test("recursive local references convert each nested object", () => {
+	const convert: Tool = {
+		name: "convert",
+		description: "Convert a recursive record",
+		parameters: {
+			type: "object",
+			properties: { count: { type: "integer" }, next: { $ref: "#" } },
+			required: ["count"],
+		},
+	};
+	const call: ToolCall = {
+		type: "toolCall",
+		id: "convert-4",
+		name: "convert",
+		arguments: { count: "5.8", next: { count: "-1.8" } },
+	};
+	expect(validateToolArguments(convert, call)).toEqual({ count: 5, next: { count: -1 } });
+	expect(call.arguments).toEqual({ count: "5.8", next: { count: "-1.8" } });
+});
+
+test("an explicitly undefined optional argument remains absent after argument repair", () => {
+	const convert: Tool = {
+		name: "convert",
+		description: "Validate repaired arguments",
+		parameters: Type.Object({ label: Type.Optional(Type.String()) }),
+	};
+	const call: ToolCall = { type: "toolCall", id: "convert-5", name: "convert", arguments: {} };
+	Reflect.set(call.arguments, "label", undefined);
+	expect(validateToolArguments(convert, call)).toEqual({ label: undefined });
+	expect(Object.hasOwn(call.arguments, "label")).toBe(true);
 });
