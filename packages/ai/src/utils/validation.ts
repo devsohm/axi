@@ -1,3 +1,4 @@
+import { Type } from "typebox";
 import { Compile } from "typebox/compile";
 import type { TLocalizedValidationError } from "typebox/error";
 import { Value } from "typebox/value";
@@ -15,6 +16,25 @@ interface Schema {
 	$ref?: string;
 }
 const cache = new WeakMap<object, ReturnType<typeof Compile>>();
+const conversions = new Map<string, Tool["parameters"]>([
+	["string", Type.String()],
+	["number", Type.Number()],
+	["integer", Type.Integer()],
+	["boolean", Type.Boolean()],
+	["null", Type.Null()],
+	["array", Type.Array(Type.Unknown())],
+]);
+function resolve(schema: Schema, root: Schema): Schema {
+	if (!schema.$ref?.startsWith("#/")) return schema;
+	const visited = new Set<Schema>();
+	while (schema.$ref?.startsWith("#/") && !visited.has(schema)) {
+		visited.add(schema);
+		const target = Value.Pointer.Get(root, schema.$ref.slice(1));
+		if (!Type.IsSchema(target)) break;
+		schema = target;
+	}
+	return schema;
+}
 function validator(schema: Tool["parameters"]): ReturnType<typeof Compile> {
 	const old = cache.get(schema);
 	if (old) return old;
@@ -68,26 +88,30 @@ function primitive(value: unknown, type: string): unknown {
 	}
 	return value;
 }
-function union(value: unknown, branches: Schema[]): unknown {
+function union(value: unknown, branches: Schema[], root: Schema): unknown {
+	branches = branches.map((branch) => resolve(branch, root));
 	for (const schema of branches) if (subValidator(schema)?.Check(value)) return value;
 	for (const schema of branches) {
-		const result = coerce(structuredClone(value), schema);
+		const result = coerce(structuredClone(value), schema, root);
 		if (subValidator(schema)?.Check(result)) return result;
 	}
 	return value;
 }
-function coerce(value: unknown, schema: Schema): unknown {
+function coerce(value: unknown, schema: Schema, root: Schema): unknown {
+	schema = resolve(schema, root);
 	let current = value;
-	if (Array.isArray(schema.allOf)) for (const branch of schema.allOf) current = coerce(current, branch);
-	if (Array.isArray(schema.anyOf)) current = union(current, schema.anyOf);
-	if (Array.isArray(schema.oneOf)) current = union(current, schema.oneOf);
+	if (Array.isArray(schema.allOf)) for (const branch of schema.allOf) current = coerce(current, branch, root);
+	if (Array.isArray(schema.anyOf)) current = union(current, schema.anyOf, root);
+	if (Array.isArray(schema.oneOf)) current = union(current, schema.oneOf, root);
 	const types =
 		typeof schema.type === "string"
 			? [schema.type]
 			: Array.isArray(schema.type)
 				? schema.type.filter((type): type is string => typeof type === "string")
 				: [];
-	if (!(types.length > 1 && types.some((type) => matches(current, type))))
+	const conversion = typeof schema.type === "string" ? conversions.get(schema.type) : undefined;
+	if (conversion) current = Value.Convert(conversion, current);
+	else if (!types.some((type) => matches(current, type)))
 		for (const type of types) {
 			const next = primitive(current, type);
 			if (next !== current) {
@@ -98,16 +122,17 @@ function coerce(value: unknown, schema: Schema): unknown {
 	if (types.includes("array") && Array.isArray(current)) {
 		for (let index = 0; index < current.length; index++) {
 			const item = Array.isArray(schema.items) ? schema.items[index] : schema.items;
-			if (item && typeof item === "object") current[index] = coerce(current[index], item);
+			if (item && typeof item === "object") current[index] = coerce(current[index], item, root);
 		}
 	}
 	if (types.includes("object") && typeof current === "object" && current !== null && !Array.isArray(current)) {
 		const object = current as Record<string, unknown>;
 		for (const [key, property] of Object.entries(schema.properties ?? {}))
-			if (key in object) object[key] = coerce(object[key], property);
+			if (key in object) object[key] = coerce(object[key], property, root);
 		if (schema.additionalProperties && typeof schema.additionalProperties === "object")
 			for (const [key, value] of Object.entries(object))
-				if (!Object.hasOwn(schema.properties ?? {}, key)) object[key] = coerce(value, schema.additionalProperties);
+				if (!Object.hasOwn(schema.properties ?? {}, key))
+					object[key] = coerce(value, schema.additionalProperties, root);
 	}
 	return current;
 }
@@ -149,20 +174,11 @@ export function validateToolCall(tools: Tool[], call: ToolCall): any {
 }
 export function validateToolArguments(tool: Tool, call: ToolCall): any {
 	if (call.argumentsError) throw new Error(`Invalid arguments for tool "${call.name}": ${call.argumentsError}`);
-	const args = structuredClone(call.arguments),
+	const input = structuredClone(call.arguments),
 		schema = tool.parameters as Schema;
-	omitOptionalNulls(args, schema);
-	Value.Convert(tool.parameters, args);
+	omitOptionalNulls(input, schema);
+	const args = coerce(Value.Convert(tool.parameters, input), schema, schema);
 	const compiled = validator(tool.parameters);
-	if (!Object.getOwnPropertySymbols(tool.parameters).includes(Symbol.for("TypeBox.Kind"))) {
-		const converted = coerce(args, schema);
-		if (converted !== args) {
-			if (typeof args === "object" && args !== null && typeof converted === "object" && converted !== null) {
-				for (const key of Object.keys(args)) delete args[key];
-				Object.assign(args, converted);
-			} else return compiled.Check(converted) ? converted : args;
-		}
-	}
 	if (compiled.Check(args)) return args;
 	const failures =
 		compiled

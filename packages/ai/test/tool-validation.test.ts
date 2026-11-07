@@ -82,3 +82,80 @@ test("tool validation distinguishes unknown tools, broken JSON and schema failur
 	expect(() => validateToolArguments(tool, call)).toThrow(/Validation failed for tool "configure"/);
 	expect(() => validateToolArguments(tool, call)).toThrow(/count/);
 });
+
+test("serialized tool schemas retain required-value conversions and caller ownership", () => {
+	const parameters = Type.Object({
+		label: Type.String(),
+		enabled: Type.Boolean(),
+		disabled: Type.Boolean(),
+		count: Type.Integer(),
+		amounts: Type.Array(Type.Number()),
+		absent: Type.Null(),
+	});
+	for (const schema of [parameters, JSON.parse(JSON.stringify(parameters))]) {
+		const convert: Tool = { name: "convert", description: "Convert fields", parameters: schema };
+		const call: ToolCall = {
+			type: "toolCall",
+			id: "convert-1",
+			name: "convert",
+			arguments: { label: null, enabled: "1", disabled: "FaLsE", count: " -9.3 ", amounts: "2.75", absent: "null" },
+		};
+		const original = structuredClone(call.arguments);
+		expect(validateToolArguments(convert, call)).toEqual({
+			label: "null",
+			enabled: true,
+			disabled: false,
+			count: -9,
+			amounts: [2.75],
+			absent: null,
+		});
+		expect(call.arguments).toEqual(original);
+	}
+});
+
+test("tool conversion follows local references through nested values", () => {
+	const convert: Tool = {
+		name: "convert",
+		description: "Convert referenced fields",
+		parameters: {
+			type: "object",
+			$defs: {
+				"whole/count": { type: "integer" },
+				entry: { type: "object", required: ["label"], properties: { label: { type: "string" } } },
+			},
+			required: ["count", "entries"],
+			properties: {
+				count: { $ref: "#/$defs/whole~1count" },
+				entries: { type: "array", items: { $ref: "#/$defs/entry" } },
+			},
+		},
+	};
+	const call: ToolCall = {
+		type: "toolCall",
+		id: "convert-2",
+		name: "convert",
+		arguments: { count: "-9.3", entries: [{ label: null }] },
+	};
+	expect(validateToolArguments(convert, call)).toEqual({ count: -9, entries: [{ label: "null" }] });
+	expect(call.arguments).toEqual({ count: "-9.3", entries: [{ label: null }] });
+	expect(() => validateToolArguments(convert, { ...call, arguments: { count: "not a number", entries: [] } })).toThrow(
+		"Validation failed",
+	);
+});
+
+test("multiple declared JSON types preserve matches and use their declared conversion order", () => {
+	const convert: Tool = {
+		name: "convert",
+		description: "Convert a union",
+		parameters: {
+			type: "object",
+			required: ["value"],
+			properties: { value: { type: ["boolean", "number"] } },
+		},
+	};
+	const call: ToolCall = { type: "toolCall", id: "convert-3", name: "convert", arguments: { value: "1" } };
+	expect(validateToolArguments(convert, call)).toEqual({ value: 1 });
+	expect(validateToolArguments(convert, { ...call, arguments: { value: false } })).toEqual({ value: false });
+	expect(validateToolArguments(convert, { ...call, arguments: { value: null } })).toEqual({ value: false });
+	expect(() => validateToolArguments(convert, { ...call, arguments: { value: "TRUE" } })).toThrow("Validation failed");
+});
