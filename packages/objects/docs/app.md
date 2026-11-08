@@ -32,7 +32,7 @@ The app records the bytes used by its worker and client bundles. `plugins.state.
 
 After the builds finish, the server scans the static imports of its entry, `process.argv[1]`, without executing or writing a bundle. Literal lazy imports are included. Computed imports, custom-loader modules and unresolved optional imports are not included. A parse failure reports `server_scan` and leaves the server running without that scan. Installed files under `node_modules` are excluded. Explicit `base` files and directories cover code the scan cannot see.
 
-The server scan cannot recover the bytes Node loaded earlier. A file modified or replaced since process startup therefore sets a restart mark that remains until the process restarts, even after a revert. Timestamps more than five seconds in the future are compared by contents instead. Worker and client bundle records use their exact compiled bytes and clear their marks after a revert.
+The server scan cannot recover the bytes Node loaded earlier. If a file's modification or change time lies after process startup and no more than five seconds beyond the scan, it sets a restart mark that remains until the process restarts, even after a revert. Files whose two timestamps lie outside that range use content comparisons. Coarse or skewed filesystem clocks can hide an edit in that interval. Worker and client bundle records use their exact compiled bytes and clear their marks after a revert.
 
 Web and terminal bundles use the server's resolution conditions from its Node flags and `NODE_OPTIONS`. `web.conditions` and `tui.conditions` can override them. Worker bundles use their worker kind's `execArgv`. The default host close timeout is 30 seconds; the ready timeout is 60 seconds.
 

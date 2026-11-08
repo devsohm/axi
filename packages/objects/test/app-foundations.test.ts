@@ -22,7 +22,10 @@ it("creates private app paths and atomically retains the first secret", async ()
 		expect(matchesHash(value, hashToken(value))).toBe(true);
 		expect(await writeSecret(layout.cookieSecret, "replacement", "create")).toBe("exists");
 		expect((await stat(layout.cookieSecret)).mode & 0o777).toBe(0o600);
-		expect((await readdir(dir)).sort()).toEqual(["logs", "plugins", "server", "workers"]);
+		expect((await readdir(dir)).sort()).toEqual(["cache", "logs", "plugins", "server", "workers"]);
+		expect((await readdir(join(dir, "cache"))).sort()).toEqual(["node", "workers"]);
+		for (const path of [layout.workerBases, layout.compileCache])
+			expect((await stat(path)).mode & 0o777).toBe(0o700);
 		expect(workerDirectory(dir, { kind: "project", key: "project|../A", params: {} })).toBe(
 			join(dir, "workers", "project", "project%7C%2E%2E%2F%41"),
 		);
