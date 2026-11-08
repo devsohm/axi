@@ -187,3 +187,24 @@ it("publishes a content-addressed browser bundle through real HTTP routing", asy
 		await rm(directory, { recursive: true, force: true });
 	}
 });
+
+it("returns separate failed surface outcomes while sharing the original build error", async () => {
+	const directory = await mkdtemp(join(tmpdir(), "axi-surface-failure-")),
+		host = createHost({ onError() {} }),
+		plugins = createPlugins({ roots: [], kinds: { web: { platform: "browser", hostPackages: [] } }, onError() {} }, context);
+	try {
+		const surface = webSurface(host, { plugins, entry: join(directory, "absent.ts"), page: () => "" });
+		expect(surface.built).toBeUndefined();
+		const first = await surface.build(),
+			second = await surface.build();
+		if (first.kind !== "failed" || second.kind !== "failed") throw new Error("expected failed builds");
+		expect(first).not.toBe(second);
+		expect(second.error).toBe(first.error);
+		expect(surface.built).toEqual(first);
+		expect(surface.built).not.toBe(first);
+	} finally {
+		plugins.close();
+		await host.close(context);
+		await rm(directory, { recursive: true, force: true });
+	}
+});

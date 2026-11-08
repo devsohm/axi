@@ -74,7 +74,9 @@ export class SurfaceBuild<P extends Principal> {
 		};
 	}
 	#summary(result: Result<P>): SurfaceBuilt {
-		return result.kind === "failed" ? result : { kind: "built", base: result.base.hash, inputs: result.base.inputs };
+		return result.kind === "failed"
+			? { kind: "failed", error: result.error }
+			: { kind: "built", base: result.base.hash, inputs: result.base.inputs };
 	}
 	#load(): Promise<Result<P>> {
 		return (this.#loading ??= this.#compile().then((result) => {
