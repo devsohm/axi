@@ -1,5 +1,6 @@
 const token = process.argv[process.argv.indexOf("--token") + 1];
 const silent = process.argv.includes("--silent");
+const windows = process.argv.includes("--windows");
 process.stdout.write("shell startup\nAX");
 await new Promise<void>((resolve) => setImmediate(resolve));
 process.stdout.write(`I-ENV ${token}\n`);
@@ -35,13 +36,13 @@ process.stdin.on("data", (chunk: Buffer) => {
 			send(2, id, {
 				protocol: 1,
 				version: "0.0.0",
-				os: "linux",
+				os: windows ? "windows" : "linux",
 				arch: "x86_64",
-				home: "/home/test",
-				tmpdir: "/tmp",
-				separator: "/",
-				cwd: "/",
-				driveCwds: {},
+				home: windows ? "C:\\Users\\Tester" : "/home/test",
+				tmpdir: windows ? "C:\\Temp" : "/tmp",
+				separator: windows ? "\\" : "/",
+				cwd: windows ? "C:\\remote" : "/",
+				driveCwds: windows ? { "D:": "D:\\other", "E:": "C:\\wrong-drive" } : {},
 				pid: process.pid,
 			});
 		else if (silent) continue;

@@ -16,7 +16,7 @@
 				},
 				{
 					"behavior": "metrics and cross-process propagation",
-					"tests": ["packages/telemetry/test/metrics.test.ts"]
+					"tests": ["packages/telemetry/test/metrics.test.ts", "packages/telemetry/test/query-boundaries.test.ts"]
 				},
 				{
 					"behavior": "memory and SQLite read-store contracts",
@@ -32,6 +32,7 @@
 					"behavior": "declarations, contracts, state and delta replay",
 					"tests": [
 						"packages/objects/test/delta.test.ts",
+						"packages/objects/test/delta-model.test.ts",
 						"packages/objects/test/replay-model.test.ts",
 						"packages/objects/test/contracts.test.ts",
 						"packages/objects/test/state-sources.test.ts",
@@ -42,6 +43,8 @@
 					"behavior": "object routing, links and host lifecycle",
 					"tests": [
 						"packages/objects/test/route-controls.test.ts",
+						"packages/objects/test/registry-retry.test.ts",
+						"packages/objects/test/websocket-link.test.ts",
 						"packages/objects/test/runtime-boundaries.test.ts",
 						"packages/objects/test/runtime-tracing.test.ts"
 					]
@@ -52,7 +55,8 @@
 						"packages/objects/test/context.test.ts",
 						"packages/objects/test/output.test.ts",
 						"packages/objects/test/sqlite.test.ts",
-						"packages/objects/test/telemetry-store.test.ts"
+						"packages/objects/test/telemetry-store.test.ts",
+						"packages/objects/test/telemetry-reader.test.ts"
 					]
 				},
 				{
@@ -65,6 +69,7 @@
 						"packages/objects/test/store-rows.test.ts",
 						"packages/objects/test/store-schema.test.ts",
 						"packages/objects/test/store-table.test.ts",
+						"packages/objects/test/table-evolution.test.ts",
 						"packages/objects/test/store-query.test.ts",
 						"packages/objects/test/store-engine.test.ts",
 						"packages/objects/test/store-runtime.test.ts",
@@ -150,6 +155,8 @@
 					"behavior": "plugin discovery, evaluation and installation",
 					"tests": [
 						"packages/objects/test/node-plugins.test.ts",
+						"packages/objects/test/discovery-boundaries.test.ts",
+						"packages/objects/test/plugin-harness.test.ts",
 						"packages/objects/test/plugin-discovery.test.ts",
 						"packages/objects/test/base-inputs.test.ts"
 					]
@@ -162,7 +169,10 @@
 					"behavior": "client reloads, localized messages, persistent preferences, React bindings, terminal scopes, bridge messages and browser bundles",
 					"tests": [
 						"packages/objects/test/client-surfaces.test.ts",
+						"packages/objects/test/active-preferences.test.ts",
 						"packages/objects/test/client-bindings.test.ts",
+						"packages/objects/test/browser-adapters.test.ts",
+						"packages/objects/test/terminal-runtime.test.ts",
 						"packages/objects/test/tui-optimistic.test.ts",
 						"packages/objects/test/page-styles.test.ts"
 					]
@@ -198,6 +208,10 @@
 						"packages/ai/test/model-lifecycle.test.ts",
 						"packages/ai/test/registration.test.ts",
 						"packages/ai/test/catalog.test.ts",
+						"packages/ai/test/catalog-boundaries.test.ts",
+						"packages/ai/test/provider-auth.test.ts",
+						"packages/ai/test/device-auth-contract.test.ts",
+						"packages/ai/test/lazy-factory-contract.test.ts",
 						"packages/ai/test/codex-login.test.ts",
 						"packages/ai/test/oauth-flows.test.ts"
 					]
@@ -215,7 +229,8 @@
 						"packages/ai/test/azure-responses.test.ts",
 						"packages/ai/test/mistral.test.ts",
 						"packages/ai/test/wire.test.ts",
-						"packages/ai/test/tool-history.test.ts"
+						"packages/ai/test/tool-history.test.ts",
+						"packages/ai/test/request-encoding.test.ts"
 					]
 				},
 				{
@@ -247,19 +262,26 @@
 			"areas": [
 				{
 					"behavior": "source parsing and schema declarations",
-					"tests": ["packages/codemode/test/source-declarations.test.ts"]
+					"tests": [
+						"packages/codemode/test/source-declarations.test.ts",
+						"packages/codemode/test/schema-boundaries.test.ts"
+					]
 				},
 				{
 					"behavior": "VM execution, tools, replay, cancellation and lifetime",
 					"tests": [
 						"packages/codemode/test/sandbox.test.ts",
 						"packages/codemode/test/invocation-lifecycle.test.ts",
+						"packages/codemode/test/admission-and-delivery.test.ts",
 						"packages/codemode/test/execution-contract.test.ts"
 					]
 				},
 				{
 					"behavior": "inline and remote execution boundaries",
-					"tests": ["packages/codemode/test/portable-contract.test.ts"]
+					"tests": [
+						"packages/codemode/test/portable-contract.test.ts",
+						"packages/codemode/test/remote-boundaries.test.ts"
+					]
 				}
 			]
 		},
@@ -272,6 +294,7 @@
 					"tests": [
 						"packages/mcp/test/client.test.ts",
 						"packages/mcp/test/client-order.test.ts",
+						"packages/mcp/test/callback-lifecycle.test.ts",
 						"packages/mcp/test/request-boundaries.test.ts"
 					]
 				},
@@ -288,6 +311,8 @@
 					"behavior": "authorization, discovery, callbacks and content conversion",
 					"tests": [
 						"packages/mcp/test/oauth.test.ts",
+						"packages/mcp/test/oauth-contract.test.ts",
+						"packages/mcp/test/configuration.test.ts",
 						"packages/mcp/test/oauth-callback.test.ts",
 						"packages/mcp/test/content-discovery.test.ts",
 						"packages/mcp/test/oauth-lifecycle.test.ts"
@@ -303,10 +328,12 @@
 					"behavior": "records, documents, forks, transactions and backend recovery",
 					"tests": [
 						"packages/durable/test/session.test.ts",
+						"packages/durable/test/transaction-boundaries.test.ts",
 						"packages/durable/test/grouped-commits.test.ts",
 						"packages/durable/test/session-tasks.test.ts",
 						"packages/durable/test/storage.test.ts",
 						"packages/durable/test/testing.test.ts",
+						"packages/durable/test/process-recovery.test.ts",
 						"packages/durable/test/document-checkpoints.test.ts",
 						"packages/durable/test/jsonl.test.ts",
 						"packages/durable/test/sqlite-session.test.ts"
@@ -328,6 +355,7 @@
 						"packages/durable/test/recovery-settings.test.ts",
 						"packages/durable/test/compaction-lifecycle.test.ts",
 						"packages/durable/test/generation-lifecycle.test.ts",
+						"packages/durable/test/streamed-state.test.ts",
 						"packages/durable/test/tool-search.test.ts"
 					]
 				},
@@ -339,6 +367,7 @@
 						"packages/durable/test/node-environment.test.ts",
 						"packages/durable/test/search.test.ts",
 						"packages/durable/test/images.test.ts",
+						"packages/durable/test/image-processing.test.ts",
 						"packages/durable/test/codemode.test.ts",
 						"packages/durable/test/watch-context.test.ts",
 						"packages/durable/test/watch-rescan.test.ts",
@@ -376,6 +405,8 @@
 					"behavior": "filesystem and shell conformance, transfers and error mapping",
 					"tests": [
 						"packages/env/test/environment.test.ts",
+						"packages/env/test/remote-paths.test.ts",
+						"packages/env/test/reader-lifecycle.test.ts",
 						"packages/env/test/transfers.test.ts",
 						"packages/env/test/errors.test.ts",
 						"packages/env/test/filesystem-boundaries.test.ts"
@@ -387,7 +418,7 @@
 				},
 				{
 					"behavior": "SSH host identity and bootstrap behavior",
-					"tests": ["packages/env/test/host-keys.test.ts"]
+					"tests": ["packages/env/test/host-keys.test.ts", "packages/env/test/ssh-bootstrap.test.ts"]
 				}
 			]
 		},
@@ -410,6 +441,8 @@
 					"behavior": "completion, selectors and settings",
 					"tests": [
 						"packages/tui/test/autocomplete.test.ts",
+						"packages/tui/test/completion-boundaries.test.ts",
+						"packages/tui/test/fuzzy-file-completion.test.ts",
 						"packages/tui/test/selectors.test.ts",
 						"packages/tui/test/components.test.ts"
 					]
@@ -418,6 +451,7 @@
 					"behavior": "layout, overlays, scrolling, mouse and search",
 					"tests": [
 						"packages/tui/test/layout-and-search.test.ts",
+						"packages/tui/test/component-lifecycle.test.ts",
 						"packages/tui/test/rendering.test.ts",
 						"packages/tui/test/fullscreen-interactions.test.ts"
 					]
@@ -432,7 +466,7 @@
 				},
 				{
 					"behavior": "real terminal negotiation and cleanup",
-					"tests": ["packages/tui/test/process-terminal.test.ts"]
+					"tests": ["packages/tui/test/process-terminal.test.ts", "packages/tui/test/terminal-lifecycle.test.ts"]
 				}
 			]
 		}

@@ -40,14 +40,16 @@ Coverage output is in `coverage/index.html` and `coverage/coverage-summary.json`
 
 The JavaScript runner selects package tests from the root manifest's eight workspaces and integration tests from `test/*.test.ts`. Measured source files come from the eight workspaces. It resolves workspace package exports to their TypeScript source files. Package imports and direct source imports therefore share one module instance. The resolver honors the package's export restrictions before selecting the source file. Installed archive checks run separately with Node's normal package resolution and exercise the built JavaScript.
 
-The regular coverage command enforces minimum execution coverage of 79% lines,
-64% branches, 77% functions and 75% statements. Raise these limits as the suite
+The regular coverage command enforces minimum execution coverage of 85% lines,
+72% branches, 83% functions and 82% statements. Raise these limits as the suite
 improves. `test:coverage:full` requires 100% for all four metrics and currently
 fails because executable paths remain untested. No source modules are removed
 from measurement to pass either command.
 
 Use `coverage/coverage-final.json` for individual uncovered line, function and
 branch locations. The HTML report displays these locations beside the source.
+
+The verification workflow runs the owned suite on its native platform matrix. Its Linux x64 job also enforces the coverage minimums, validates the behavior report, and uploads the `test-coverage` artifact.
 
 ## Package responsibilities
 
@@ -63,6 +65,10 @@ branch locations. The HTML report displays these locations beside the source.
 | TUI | Input, editing, history, layout, rendering, overlays, mouse interaction, formatting and native helpers | `packages/tui/test` and `packages/tui/native` |
 
 The storage-driver scenarios run against memory, JSONL and SQLite. Terminal rendering scenarios send the library's output through a terminal emulator and inspect the resulting screen. Native clipboard tests use a private virtual display or a test backend, so they do not replace the desktop clipboard.
+
+`packages/durable/test/process-recovery.test.ts` kills its own child process during a run. It reopens SQLite and JSONL sessions, resumes the pending safe tool, checks that a committed effect is not repeated, and verifies submission deduplication. The fixture uses synthetic model responses. It does not terminate running user applications.
+
+Offline provider tests inspect request encoding, device-login polling, token refresh, cancellation and malformed replies using synthetic credentials. Env tests run the generated Unix upload script in a temporary local directory. Windows command tests inspect the protocol and upload framing; native Windows execution still requires a Windows runner. Browser adapter tests use DOM event fixtures; real browser and terminal acceptance remain separate checks.
 
 ## Inspect behavior coverage
 

@@ -1,0 +1,153 @@
+import { expect, test, vi } from "vitest";
+import { Box } from "../src/components/box.ts";
+import { MouseRegion } from "../src/components/mouse-region.ts";
+import { SettingsList, type SettingItem } from "../src/components/settings-list.ts";
+import { dispatchMouseEvent, type Component, type TuiMouseEvent } from "../src/tui.ts";
+
+function mouse(x = 1, y = 1, type: TuiMouseEvent["type"] = "press"): TuiMouseEvent {
+	return {
+		type,
+		button: "left",
+		x,
+		y,
+		screenX: 20 + x,
+		screenY: 30 + y,
+		width: 10,
+		height: 10,
+		shift: false,
+		alt: false,
+		ctrl: false,
+	};
+}
+
+test("mouse regions delegate to handled children and fall back without swallowing unused events", () => {
+	const render = vi.fn(() => ["content"]),
+		invalidate = vi.fn(),
+		fallback = vi.fn(() => ({ handled: true }));
+	const child: Component = { render, invalidate, handleMouse: () => ({ focus: true }) };
+	const region = new MouseRegion(child, fallback);
+	expect(region.render(12)).toEqual(["content"]);
+	expect(render).toHaveBeenCalledWith(12);
+	region.invalidate();
+	expect(invalidate).toHaveBeenCalledOnce();
+	const handled = region.handleMouse(mouse());
+	expect(handled).toMatchObject({
+		handled: true,
+		focus: true,
+		focusTarget: child,
+		target: { component: child, originX: 20, originY: 30 },
+	});
+	expect(fallback).not.toHaveBeenCalled();
+	child.handleMouse = () => ({ render: true });
+	expect(region.handleMouse(mouse())).toEqual({ handled: true });
+	expect(fallback).toHaveBeenCalledOnce();
+	const inert = new MouseRegion({ render, invalidate }, () => undefined);
+	expect(dispatchMouseEvent(inert, mouse())).toBeUndefined();
+});
+
+test("boxes paint padding, update mutable content and background, and remove only their own children", () => {
+	let content = ["one"],
+		color = "a";
+	const child: Component = { render: () => content, invalidate: vi.fn() };
+	const box = new Box(1, 1, (text) => `${color}:${text}`);
+	expect(box.render(8)).toEqual([]);
+	box.addChild(child);
+	expect(box.render(8)).toEqual(["a:        ", "a: one    ", "a:        "]);
+	expect(box.render(8)).toEqual(["a:        ", "a: one    ", "a:        "]);
+	content = ["two", "end"];
+	expect(box.render(8)).toEqual(["a:        ", "a: two    ", "a: end    ", "a:        "]);
+	color = "b";
+	expect(box.render(8)[1]).toBe("b: two    ");
+	box.setBgFn();
+	box.setPaddingX(2);
+	expect(box.render(8)[1]).toBe("  two   ");
+	box.invalidate();
+	expect(child.invalidate).toHaveBeenCalledOnce();
+	box.removeChild({ render: () => [], invalidate() {} });
+	expect(box.children).toEqual([child]);
+	box.removeChild(child);
+	expect(box.render(8)).toEqual([]);
+	box.addChild({ render: () => [], invalidate() {} });
+	expect(box.render(8)).toEqual([]);
+	box.clear();
+	expect(box.children).toEqual([]);
+});
+
+test("box mouse coordinates account for padding and each child's height before and after rendering", () => {
+	const selected = vi.fn(() => ({ handled: true }));
+	const box = new Box(1, 1);
+	box.addChild({ render: () => ["first", "second"], invalidate() {} });
+	const child: Component = { render: () => ["third"], invalidate() {}, handleMouse: selected };
+	box.addChild(child);
+	for (const painted of [false, true]) {
+		if (painted) box.render(10);
+		expect(box.handleMouse(mouse(2, 3))).toMatchObject({ target: { component: child, width: 8, height: 1 } });
+		expect(selected).toHaveBeenLastCalledWith(expect.objectContaining({ x: 1, y: 0, width: 8, height: 1 }));
+		for (const [x, y] of [
+			[0, 1],
+			[9, 1],
+			[1, 0],
+			[2, 4],
+		])
+			expect(box.handleMouse(mouse(x, y))).toBeUndefined();
+	}
+});
+
+test("settings submenus forward input, accept values, navigate between controls and restore selection", () => {
+	const plain = (text: string) => text,
+		changed = vi.fn(),
+		cancelled = vi.fn();
+	let done: Parameters<NonNullable<SettingItem["submenu"]>>[1] | undefined;
+	const submenu: Component = {
+		render: () => ["submenu"],
+		invalidate: vi.fn(),
+		handleInput: vi.fn(),
+		handleMouse: () => ({ handled: true }),
+	};
+	const settings = new SettingsList(
+		[
+			{
+				id: "advanced",
+				label: "Advanced",
+				currentValue: "old",
+				submenu: (_value, finish) => {
+					done = finish;
+					return submenu;
+				},
+			},
+			{ id: "choice", label: "Choice", currentValue: "unknown", values: ["a", "b"] },
+			{ id: "fixed", label: "Fixed", currentValue: "constant" },
+		],
+		2,
+		{ label: plain, value: plain, description: plain, hint: plain, cursor: "> " },
+		changed,
+		cancelled,
+	);
+	settings.handleInput("\r");
+	expect(settings.render(30)).toEqual(["submenu"]);
+	settings.handleInput("x");
+	expect(submenu.handleInput).toHaveBeenCalledWith("x");
+	settings.invalidate();
+	expect(submenu.invalidate).toHaveBeenCalledOnce();
+	expect(settings.handleMouse(mouse())).toEqual({ handled: true, focus: true });
+	if (!done) throw new Error("Submenu did not open");
+	done("new", { navigateTo: "choice" });
+	expect(changed.mock.calls).toEqual([
+		["advanced", "new"],
+		["choice", "a"],
+	]);
+	settings.handleInput("\r");
+	expect(changed).toHaveBeenLastCalledWith("choice", "b");
+	settings.selectItem("fixed");
+	settings.handleInput("\r");
+	expect(changed).toHaveBeenCalledTimes(3);
+	settings.selectItem("advanced");
+	settings.handleInput("\r");
+	done();
+	expect(settings.render(30)[0]).toContain("> Advanced");
+	settings.handleInput("\x1b");
+	expect(cancelled).toHaveBeenCalledOnce();
+	settings.selectItem("absent");
+	settings.updateValue("absent", "ignored");
+	expect(settings.render(30)[0]).toContain("> Advanced");
+});
