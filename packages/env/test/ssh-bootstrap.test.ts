@@ -1,16 +1,18 @@
-import { createHash } from "node:crypto";
+import { createHash, generateKeyPairSync } from "node:crypto";
 import { mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test } from "vitest";
 import {
 	acceptHostKey,
+	connectSsh,
 	deployDaemon,
 	detectPlatform,
 	forgetHostKey,
 	HostKeyChangedError,
 	HostKeyUnknownError,
 	SshError,
+	scanHostKey,
 	type SshTarget,
 	type RemotePlatform,
 } from "../src/ssh.ts";
@@ -33,6 +35,11 @@ for await (const chunk of process.stdin) chunks.push(chunk);
 const input = Buffer.concat(chunks), command = process.argv.at(-1);
 await appendFile(new URL("calls.jsonl", base), JSON.stringify({ args: process.argv.slice(2), command, input: input.toString("base64") }) + "\\n");
 if (!step) { process.stderr.write("Unexpected SSH command"); process.exit(99); }
+if (step.hostKey) {
+ const setting = process.argv.find(value => value.startsWith("UserKnownHostsFile="));
+ const file = setting.slice("UserKnownHostsFile=".length + 1, -1).replaceAll("%%", "%");
+ await writeFile(file, step.hostKey + "\\n");
+}
 if (step.local) {
  const child = spawn("/bin/sh", ["-c", command], { stdio: ["pipe", "inherit", "inherit"] });
  child.stdin.end(input);
@@ -50,7 +57,7 @@ if (step.local) {
 	return {
 		directory,
 		target,
-		async plan(steps: { stdout?: string; stderr?: string; code?: number; local?: boolean }[]) {
+		async plan(steps: { stdout?: string; stderr?: string; code?: number; local?: boolean; hostKey?: string }[]) {
 			await writeFile(plan, JSON.stringify(steps));
 			await writeFile(join(directory, "calls.jsonl"), "");
 		},
@@ -251,3 +258,76 @@ test("concurrent host-key updates preserve other hosts and deduplicate identical
 		await rm(directory, { recursive: true, force: true });
 	}
 });
+
+test.skipIf(process.platform === "win32")(
+	"host-key discovery fingerprints a received key even when authentication is refused",
+	async () => {
+		const peer = await peerFixture();
+		try {
+			const exported = generateKeyPairSync("ed25519").publicKey.export({ type: "spki", format: "der" });
+			const type = Buffer.from("ssh-ed25519"),
+				typeLength = Buffer.alloc(4),
+				keyLength = Buffer.alloc(4);
+			typeLength.writeUInt32BE(type.length);
+			keyLength.writeUInt32BE(32);
+			const encoded = Buffer.concat([typeLength, type, keyLength, exported.subarray(-32)]);
+			const line = `${peer.target.hostKeyAlias} ssh-ed25519 ${encoded.toString("base64")}`;
+			await peer.plan([{ hostKey: line, code: 255, stderr: "Permission denied (publickey)" }]);
+			const scanned = await scanHostKey(peer.target);
+			expect(scanned.lines).toEqual([line]);
+			expect(scanned.fingerprints).toHaveLength(1);
+			expect(scanned.fingerprints[0]).toContain(
+				"SHA256:" + createHash("sha256").update(encoded).digest("base64").replace(/=+$/, ""),
+			);
+			expect((await peer.calls())[0]?.args).toContain("StrictHostKeyChecking=accept-new");
+			await expect(readFile(peer.target.knownHostsFile)).rejects.toMatchObject({ code: "ENOENT" });
+		} finally {
+			await peer.close();
+		}
+	},
+);
+
+test.skipIf(process.platform === "win32")(
+	"host-key discovery rejects missing keys and preserves changed-key failures",
+	async () => {
+		const peer = await peerFixture();
+		try {
+			await peer.plan([{ code: 255, stderr: "No ed25519 host key is known" }]);
+			await expect(scanHostKey(peer.target)).rejects.toThrow("No host key received");
+			await peer.plan([{ code: 255, stderr: "REMOTE HOST IDENTIFICATION HAS CHANGED" }]);
+			await expect(scanHostKey(peer.target)).rejects.toBeInstanceOf(HostKeyChangedError);
+		} finally {
+			await peer.close();
+		}
+	},
+);
+
+test.skipIf(process.platform === "win32")(
+	"eager SSH setup detects and verifies its daemon without opening a protocol stream",
+	async () => {
+		const peer = await peerFixture();
+		try {
+			const binary = join(peer.directory, "bootstrap-binary");
+			await writeFile(binary, "bootstrap fixture");
+			await peer.plan([
+				{ stdout: "AXI-ENV-PROBE\nLinux\naarch64\nAndroid\n/remote-home\n-\n-\n" },
+				{ stdout: "present\n" },
+			]);
+			const warnings: string[] = [];
+			const { remote, connection } = await connectSsh({
+				...peer.target,
+				binary,
+				onLog: (message) => warnings.push(message),
+			});
+			try {
+				expect(remote).toMatchObject({ platform: "android", arch: "arm64", home: "/remote-home" });
+				expect(warnings).toEqual(remote.warnings.map((message) => message + "\n"));
+				expect(await peer.calls()).toHaveLength(2);
+			} finally {
+				connection.close();
+			}
+		} finally {
+			await peer.close();
+		}
+	},
+);

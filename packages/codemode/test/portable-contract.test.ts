@@ -96,3 +96,85 @@ test("a remote execution obeys the server computation cap and exposes transport 
 		await broken.close();
 	}
 });
+
+test.each([undefined, 4 * 1024 * 1024, 16 * 1024 * 1024])(
+	"remote memory caps apply to a requested heap of %s bytes",
+	async (memoryLimitBytes) => {
+		const work: Promise<void>[] = [],
+			cap = 8 * 1024 * 1024;
+		const sandbox = new RemoteCodemodeSandbox({
+			memoryLimitBytes,
+			remote: () => ({
+				execute(request, exchange) {
+					const execution = serveCodemodeRemote(request, exchange, {
+						wasm: loadQuickJSWasm(),
+						maxMemoryLimitBytes: cap,
+					});
+					work.push(execution);
+					return execution;
+				},
+			}),
+		});
+		try {
+			const result = await sandbox.execute("return 'x'.repeat(32 * 1024 * 1024);");
+			expect(result).toMatchObject({ ok: false, error: { kind: "script", message: expect.stringMatching(/memory/i) } });
+			expect(await sandbox.execute("return 42;")).toMatchObject({ ok: true, value: 42 });
+		} finally {
+			await sandbox.close();
+			await Promise.all(work);
+		}
+	},
+);
+
+test("remote output batches flush before the final result without dropping or repeating text", async () => {
+	const work: Promise<void>[] = [],
+		batches: number[] = [];
+	const sandbox = new RemoteCodemodeSandbox({
+		remote: () => ({
+			execute(request, exchange) {
+				const execution = serveCodemodeRemote(
+					request,
+					async (messages) => {
+						batches.push(messages.filter((message) => message.type === "output").length);
+						return exchange(messages);
+					},
+					{ wasm: loadQuickJSWasm() },
+				);
+				work.push(execution);
+				return execution;
+			},
+		}),
+	});
+	try {
+		const result = await sandbox.execute("for(let i = 0; i < 1001; i++) text(String(i)); return 42;");
+		expect(result).toMatchObject({ ok: true, value: 42 });
+		expect(result.output).toEqual(Array.from({ length: 1001 }, (_, index) => ({ type: "text", text: String(index) })));
+		expect(batches.reduce((sum, count) => sum + count, 0)).toBe(1001);
+		expect(batches.some((count) => count >= 999)).toBe(true);
+	} finally {
+		await sandbox.close();
+		await Promise.all(work);
+	}
+});
+
+test("a remote server releases its VM after its exchange rejects a host call", async () => {
+	const received: string[] = [];
+	await serveCodemodeRemote(
+		{
+			data: {
+				code: "return await tools.wait();",
+				tools: [{ name: "wait", jsName: "wait", description: "Await a host result" }],
+				globals: [],
+				memoryLimitBytes: undefined,
+				store: {},
+			},
+		},
+		async (messages) => {
+			received.push(...messages.map((message) => message.type));
+			throw new Error("Exchange disconnected");
+		},
+		{ wasm: loadQuickJSWasm() },
+	);
+	expect(received).toContain("call");
+	expect(received).not.toContain("done");
+});

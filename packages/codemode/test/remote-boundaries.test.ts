@@ -106,6 +106,7 @@ test("cancelling a remote invocation releases its pending reply and cancels its 
 			async execute(_request, exchange) {
 				try {
 					replies.push(await exchange([{ type: "call", id: 1, target: "tool", name: "wait", args: undefined }]));
+					replies.push(await exchange([{ type: "call", id: 2, target: "tool", name: "wait", args: undefined }]));
 				} finally {
 					remoteClosed.resolve();
 				}
@@ -122,7 +123,7 @@ test("cancelling a remote invocation releases its pending reply and cancels its 
 			calls: [{ status: "cancelled" }],
 		});
 		await remoteClosed.promise;
-		expect(replies).toEqual([{ type: "stop" }]);
+		expect(replies).toEqual([{ type: "stop" }, { type: "stop" }]);
 		expect(signal.aborted).toBe(true);
 	} finally {
 		await sandbox.close();

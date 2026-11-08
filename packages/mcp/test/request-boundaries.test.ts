@@ -22,7 +22,7 @@ async function connected(respond: (method: string) => unknown) {
 	await pair.server.start();
 	const client = new McpClient({ name: "test", version: "1", requestTimeoutMs: 1000 });
 	await client.connect(pair.client);
-	return { client, server: pair.server, received };
+	return { client, server: pair.server, transport: pair.client, received };
 }
 
 test("resource and tool helpers validate responses at the transport boundary", async () => {
@@ -123,6 +123,88 @@ test("remote error responses and disconnected pending requests keep their distin
 		await server.close();
 		await expect(interrupted).rejects.toMatchObject({ name: "McpConnectionClosedError" });
 		expect(client.connectionState).toBe("closed");
+	} finally {
+		await client.close();
+	}
+});
+
+test.each([
+	null,
+	{},
+	{ protocolVersion: LATEST_PROTOCOL_VERSION, capabilities: [], serverInfo: { name: "server", version: "1" } },
+	{ protocolVersion: LATEST_PROTOCOL_VERSION, capabilities: {}, serverInfo: { name: "server", version: 1 } },
+	{ protocolVersion: LATEST_PROTOCOL_VERSION, capabilities: {}, serverInfo: { name: 4, version: "1" } },
+	{
+		protocolVersion: LATEST_PROTOCOL_VERSION,
+		capabilities: {},
+		serverInfo: { name: "server", version: "1" },
+		instructions: [],
+	},
+	{ protocolVersion: "unsupported", capabilities: {}, serverInfo: { name: "server", version: "1" } },
+])("invalid initialization closes both transport ends: %j", async (result) => {
+	const pair = createInMemoryTransportPair(),
+		client = new McpClient({ name: "client", version: "1" });
+	let closed = 0;
+	pair.server.onClose(() => {
+		closed++;
+	});
+	pair.server.onMessage((message) => {
+		if ("method" in message && "id" in message) void pair.server.send({ jsonrpc: "2.0", id: message.id, result });
+	});
+	await pair.server.start();
+	try {
+		await expect(client.connect(pair.client)).rejects.toThrow(/initialize|unsupported protocol/);
+		expect(client.connectionState).toBe("closed");
+		expect(closed).toBe(1);
+		await expect(client.request("ping")).rejects.toMatchObject({ name: "McpConnectionClosedError" });
+	} finally {
+		await client.close();
+	}
+});
+
+test("transport errors retain their Error identity and removed listeners stay detached", async () => {
+	const { client, transport } = await connected(() => ({})),
+		errors: Error[] = [],
+		first = new Error("Transport diagnostic");
+	const remove = client.onError((error) => errors.push(error));
+	try {
+		transport.emitError(first);
+		transport.emitError("Second diagnostic");
+		expect(errors[0]).toBe(first);
+		expect(errors[1]).toEqual(new Error("Second diagnostic"));
+		remove();
+		transport.emitError(new Error("Detached"));
+		expect(errors).toHaveLength(2);
+		await expect(client.request("ping")).resolves.toEqual({});
+	} finally {
+		await client.close();
+	}
+});
+
+test("resource page helpers preserve metadata, named items and continuation cursors", async () => {
+	const { client, received } = await connected((method) =>
+		method === "resources/list"
+			? { resources: [{ uri: "file:///one", name: "Document", mimeType: "text/plain" }], nextCursor: "resource-next" }
+			: {
+					resourceTemplates: [{ uriTemplate: "file:///{path}", name: "Files", description: "Project files" }],
+					nextCursor: "template-next",
+				},
+	);
+	try {
+		expect(await client.listResourcesPage("resource-before")).toEqual({
+			resources: [{ uri: "file:///one", name: "Document", mimeType: "text/plain" }],
+			nextCursor: "resource-next",
+		});
+		expect(await client.listResourceTemplatesPage("template-before")).toEqual({
+			resourceTemplates: [{ uriTemplate: "file:///{path}", name: "Files", description: "Project files" }],
+			nextCursor: "template-next",
+		});
+		expect(received).toContainEqual(
+			expect.objectContaining({ method: "resources/list", params: { cursor: "resource-before" } }),
+		);
+		expect(received).toContainEqual(
+			expect.objectContaining({ method: "resources/templates/list", params: { cursor: "template-before" } }),
+		);
 	} finally {
 		await client.close();
 	}

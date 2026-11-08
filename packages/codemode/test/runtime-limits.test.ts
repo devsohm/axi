@@ -47,6 +47,34 @@ test("an incompatible WebAssembly module fails initialization in both runtime mo
 	await Promise.all(exits);
 });
 
+test("a failed worker-start callback terminates the worker and releases its reservation", async () => {
+	const exited: Promise<void>[] = [],
+		failure = new Error("Worker owner unavailable");
+	let reservations = 0;
+	const sandbox = new CodemodeSandbox({
+		acquireWorker() {
+			reservations++;
+			return () => {
+				reservations--;
+			};
+		},
+		onWorkerStarted(exit) {
+			exited.push(exit);
+			throw failure;
+		},
+	});
+	try {
+		expect(await sandbox.execute("return 42;")).toMatchObject({
+			ok: false,
+			error: { kind: "sandbox", message: failure.message },
+		});
+		await Promise.all(exited);
+		expect(reservations).toBe(0);
+	} finally {
+		await sandbox.close();
+	}
+});
+
 test("unbounded asynchronous jobs exhaust their interrupt budget and leave a fresh invocation usable", async () => {
 	const sandbox = new InlineCodemodeSandbox({ wasm: loadQuickJSWasm(), interruptBudget: 5 });
 	try {
