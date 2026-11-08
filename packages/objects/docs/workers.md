@@ -4,9 +4,13 @@
 
 ## Parent process
 
-`await createWorkers(host, Kind, options, context)` builds the worker entry and registers a route before host loading. A build failure rejects startup. Its `kind` selects the plugin facet kind. Bootstrap options name the entry module, Node arguments and environment overrides. The child inherits the parent environment with those overrides.
+`createWorkers(host, Kind, options, context)` registers a route immediately, before host loading. It returns synchronously. Its `kind` selects the plugin facet kind. Bootstrap options name the entry module, Node arguments and environment overrides. The child inherits the parent environment with those overrides.
 
-All workers of one kind use the code snapshot built at startup. Edits to its source take effect after the server restarts. Installed packages remain external; linked workspace packages are included in the snapshot. Literal dynamic imports become lazy chunks. `inputs` maps each source path to the SHA-256 hash of the bytes the build read. Source locations and stack traces point to those original files. If a temporary-file cleaner removes an output file, the component recreates the complete snapshot before the next fork.
+Call `workers.build()` to prepare the entry, or let the first worker start prepare it. Concurrent requests share one build. The `built` property is undefined until the build finishes. Both APIs then report `{ kind: "built", inputs }` or `{ kind: "failed", error }`. A failed build leaves the server available and prevents worker startup before the application's `start` callback runs.
+
+All workers of one kind use the same code snapshot. Edits to its source take effect after the server restarts. Installed packages remain external; linked workspace packages are included in the snapshot. Literal dynamic imports become lazy chunks. The build result's `inputs` maps each source path to the SHA-256 hash of the bytes the build read. Source locations and stack traces point to those original files.
+
+Building keeps the snapshot in memory. The first fork writes it to `baseDir`, or to a private temporary directory when no path is supplied. If a cleaner removes an output file, the component recreates the complete snapshot before the next fork. A build that never forks does not modify or remove an existing directory. `compileCache` supplies `NODE_COMPILE_CACHE` to children; an explicit value in `env` takes precedence.
 
 `nodeBaseInputs(entry, conditions)` scans a Node entry's static imports and returns the same input-map format without writing or executing a bundle. Unresolved optional imports are excluded. Other build errors reject the scan. The app host uses this helper to detect edits to its server code.
 
@@ -34,4 +38,4 @@ A crash or failed start stays failed until retry or a worker rollout. A running 
 
 `workers.step(name)` joins a plugin rollout. It retries earlier failed addresses and ships the current script set to running workers. Results identify each host's report, clean stop or error. Cancelling a rollout wait does not cancel its outstanding child reload.
 
-Shutdown aborts the child's context and runs registered closers in reverse order. The child has three seconds to exit; the parent kills the process group after five seconds. Closing the component removes its snapshot file, cancels starts and stops its children. It waits for pending lock cleanup before it resolves. Process locks wait for the current holder without polling. The serialized starter clears an unheld stale file socket before acquisition and preserves live holders.
+Shutdown aborts the child's context and runs registered closers in reverse order. The child has three seconds to exit; the parent kills the process group after five seconds. Closing the component cancels starts and stops its children. Snapshot files remain available for lazy imports in child close hooks and are removed after every child exits. Close also waits for pending lock cleanup. Process locks wait for the current holder without polling. The serialized starter clears an unheld stale file socket before acquisition and preserves live holders.

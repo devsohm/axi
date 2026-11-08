@@ -80,12 +80,13 @@ export default defineFacet((_host,self)=>self.contribute(Http,{routes:{
 	}
 }, 15000);
 
-it("releases startup resources when a worker entry cannot be built", async () => {
+it("keeps the server available after a failed worker build and releases its data lock at close", async () => {
 	const dir = await mkdtemp(join(tmpdir(), "axi-app-start-"));
 	const root = join(dir, "plugins"),
 		entry = join(dir, "broken.ts");
 	await mkdir(root);
 	await writeFile(entry, 'import "./absent.ts";');
+	const errors: AppError[] = [];
 	const options = {
 		name: "startup",
 		dataDir: join(dir, "data"),
@@ -93,18 +94,27 @@ it("releases startup resources when a worker entry cannot be built", async () =>
 		api: { name: "@example/api", versions: ["v1"], modules: {} },
 		kinds: { server: { platform: "node" }, worker: { platform: "node" } },
 		principal: { server: { kind: "server" }, owner: { kind: "owner" }, worker: () => ({ kind: "worker" }) },
-		onError() {},
+		onError: (error: AppError) => errors.push(error),
 	} satisfies AppOptions<Principal>;
 	try {
-		await expect(
-			startServer<Principal>(
-				{
-					...options,
-					workers: [{ kind: objects.hostKind("broken"), entry, authorize: () => true, start: () => null }],
-				},
-				context,
-			),
-		).rejects.toThrow('Could not resolve "./absent.ts"');
+		const started = await startServer<Principal>(
+			{
+				...options,
+				workers: [{ kind: objects.hostKind("broken"), entry, authorize: () => true, start: () => null }],
+			},
+			context,
+		);
+		try {
+			await started.basesBuilt;
+			expect(errors).toMatchObject([{ kind: "base_build", base: "broken" }]);
+			expect(errors[0]?.kind === "base_build" ? String(errors[0].error) : "").toContain(
+				'Could not resolve "./absent.ts"',
+			);
+			const address = new URL(started.ownerLink()).origin;
+			expect((await fetch(`${address}/_objects/owner`)).status).toBe(200);
+		} finally {
+			await started.close(context);
+		}
 		const app = await startServer<Principal>(options, context);
 		await app.close(context);
 	} finally {

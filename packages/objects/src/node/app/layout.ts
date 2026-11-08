@@ -10,6 +10,8 @@ export type AppLayout = {
 	readonly workers: string;
 	readonly plugins: string;
 	readonly logs: string;
+	readonly workerBases: string;
+	readonly compileCache: string;
 	readonly ownerToken: string;
 	readonly cookieSecret: string;
 };
@@ -37,14 +39,20 @@ export async function createLayout(dataDir: string): Promise<AppLayout> {
 	const server = join(dataDir, "server"),
 		workers = join(dataDir, "workers"),
 		plugins = join(dataDir, "plugins"),
-		logs = join(dataDir, "logs");
-	for (const directory of [dataDir, server, workers, plugins, logs]) await privateDirectory(directory);
+		logs = join(dataDir, "logs"),
+		cache = join(dataDir, "cache"),
+		workerBases = join(cache, "workers"),
+		compileCache = join(cache, "node");
+	for (const directory of [dataDir, server, workers, plugins, logs, cache, workerBases, compileCache])
+		await privateDirectory(directory);
 	return {
 		dataDir,
 		server,
 		workers,
 		plugins,
 		logs,
+		workerBases,
+		compileCache,
 		serverStore: join(server, "store.sqlite"),
 		ownerToken: join(dataDir, "owner-token"),
 		cookieSecret: join(server, "cookie-secret"),

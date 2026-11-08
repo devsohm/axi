@@ -54,7 +54,7 @@ export interface Plugins {
 	reload<P extends Principal>(host: Host<P>, built: Built, context: Context): Promise<ReloadReport>;
 	step<P extends Principal>(name: string, host: Host<P>): RolloutStep;
 	rollout(steps: readonly RolloutStep[], built: Built, context: Context): Promise<RolloutResult>;
-	watchBase(inputs: BaseInputs): void;
+	watchBase(inputs: BaseInputs): Promise<void>;
 	installDependencies(name: string, context: Context): Promise<void>;
 	installPlugin(source: PluginSource, root: string, context: Context): Promise<readonly string[]>;
 	close(): void;
@@ -229,8 +229,8 @@ class PluginComponent implements Plugins {
 		return { steps: completed, stopped: undefined };
 	}
 
-	watchBase(inputs: BaseInputs): void {
-		this.#watcher.recordBase(inputs);
+	watchBase(inputs: BaseInputs): Promise<void> {
+		return this.#watcher.recordBase(inputs);
 	}
 
 	async installDependencies(name: string, context: Context): Promise<void> {

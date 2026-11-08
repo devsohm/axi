@@ -124,8 +124,8 @@ export class PluginWatcher extends Source {
 		this.#set = this.#clock++;
 		this.#notify();
 	}
-	recordBase(inputs: BaseInputs): void {
-		this.#base.record(inputs);
+	recordBase(inputs: BaseInputs): Promise<void> {
+		return this.#base.record(inputs);
 	}
 	mark(path: string): void {
 		if (path.split(sep).some(ignored)) return;

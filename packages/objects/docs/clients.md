@@ -6,6 +6,8 @@ Objects can run a client host in a browser or a terminal sandbox. The host keeps
 
 Use `webSurface` from `@axi/objects/surfaces` on the server. Give it a browser entry file, the plugin component and a page template. Add the returned facet to the server's core facets. Use its rollout step after the server step when publishing plugin changes.
 
+`webSurface(host, options)` and `tuiSurface(host, options)` return synchronously. Load their facets before calling `build()`. The first request or rollout can also start the build. All callers share that work. Until it finishes, `built` is undefined; it then contains either the base hash and source inputs or a failure. Routes that need a failed bundle return HTTP 503. Cancelling a rollout wait leaves the shared build running.
+
 The template receives a nonce and `PageAssets`. Call `pageScripts(assets, nonce)` to include the bootstrap, styles and scripts in the required order. The bundle and plugin URLs contain content hashes. Routes require authentication unless `public: true` is set.
 
 Call `startPage` from `@axi/objects/web` in the browser entry. Supply the server's WebSocket connection, the modules plugins can import and a render callback. A new plugin script reloads its facet in place. A changed base bundle reloads the page.

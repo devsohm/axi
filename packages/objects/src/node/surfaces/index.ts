@@ -1,5 +1,6 @@
 export { type BaseBundle, processConditions } from "./bundle.ts";
 export type { ServedFile } from "./served.ts";
+export type { SurfaceBuilt } from "./surface-build.ts";
 export {
 	WEB_PREFIX,
 	webSurface,

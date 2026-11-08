@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { isBuiltin } from "node:module";
 import { tmpdir } from "node:os";
 import { basename, dirname, extname, join, parse, resolve, sep } from "node:path";
@@ -13,7 +13,7 @@ export interface WorkerBase {
 	remove(): void;
 }
 
-export async function buildWorkerBase(entry: string, execArgv: readonly string[]): Promise<WorkerBase> {
+export async function buildWorkerBase(entry: string, execArgv: readonly string[], dir?: string): Promise<WorkerBase> {
 	const inputs = new Map<string, string>();
 	const root = parse(resolve(entry)).root;
 	const result = await build({
@@ -47,7 +47,11 @@ export async function buildWorkerBase(entry: string, execArgv: readonly string[]
 		},
 		plugins: [workerSources(inputs), recordedSources(inputs)],
 	});
-	return new Snapshot(result.outputFiles.map(output => ({ name: basename(output.path), bytes: output.contents })), inputs);
+	return new Snapshot(
+		result.outputFiles.map(output => ({ name: basename(output.path), bytes: output.contents })),
+		inputs,
+		dir,
+	);
 }
 
 export async function nodeBaseInputs(entry: string, conditions: readonly string[]): Promise<BaseInputs> {
@@ -109,26 +113,34 @@ function workerSources(inputs: Map<string, string>): Plugin {
 class Snapshot implements WorkerBase {
 	readonly inputs: BaseInputs;
 	readonly #outputs: readonly { readonly name: string; readonly bytes: Uint8Array }[];
-	#directory = "";
-	#file = "";
-	constructor(outputs: readonly { readonly name: string; readonly bytes: Uint8Array }[], inputs: BaseInputs) {
+	readonly #named: string | undefined;
+	#directory: string | undefined;
+	constructor(
+		outputs: readonly { readonly name: string; readonly bytes: Uint8Array }[],
+		inputs: BaseInputs,
+		named?: string,
+	) {
 		this.#outputs = outputs;
 		this.inputs = inputs;
-		this.#save();
+		this.#named = named;
 	}
 	file(): string {
-		if (this.#outputs.some(output => !existsSync(join(this.#directory, output.name)))) {
+		const written = this.#directory;
+		if (written === undefined || this.#outputs.some((output) => !existsSync(join(written, output.name)))) {
 			this.remove();
-			this.#save();
+			const destination = this.#named ?? mkdtempSync(join(tmpdir(), "axi-worker-"));
+			if (this.#named !== undefined) {
+				rmSync(destination, { recursive: true, force: true });
+				mkdirSync(destination, { recursive: true, mode: 0o700 });
+			}
+			for (const output of this.#outputs) writeFileSync(join(destination, output.name), output.bytes, { mode: 0o600 });
+			this.#directory = destination;
+			return join(destination, "worker.mjs");
 		}
-		return this.#file;
+		return join(written, "worker.mjs");
 	}
 	remove(): void {
-		rmSync(this.#directory, { recursive: true, force: true });
-	}
-	#save(): void {
-		this.#directory = mkdtempSync(join(tmpdir(), "axi-worker-"));
-		this.#file = join(this.#directory, "worker.mjs");
-		for (const output of this.#outputs) writeFileSync(join(this.#directory, output.name), output.bytes, { mode: 0o600 });
+		if (this.#directory !== undefined) rmSync(this.#directory, { recursive: true, force: true });
+		this.#directory = undefined;
 	}
 }

@@ -109,15 +109,23 @@ it("detects edits before attaching and preserves conflicting records of running 
 	const root = await project({ "file.ts": "later" }),
 		file = join(root, "file.ts"),
 		watcher = watch([]);
-	watcher.recordBase(new Map([[file, contentHash(Buffer.from("earlier"))]]));
-	await vi.waitFor(() => expect(watcher.value).toMatchObject({ base: true }));
+	await watcher.recordBase(new Map([[file, contentHash(Buffer.from("earlier"))]]));
+	expect(watcher.value).toMatchObject({ base: true });
 	await writeFile(file, "earlier");
 	await vi.waitFor(() => expect(watcher.value).toMatchObject({ base: false }));
-	watcher.recordBase(new Map([[file, contentHash(Buffer.from("later"))]]));
-	await vi.waitFor(() => expect(watcher.value).toMatchObject({ base: true }));
+	await watcher.recordBase(new Map([[file, contentHash(Buffer.from("later"))]]));
+	expect(watcher.value).toMatchObject({ base: true });
 	await writeFile(file, "later");
 	await new Promise((resolve) => setTimeout(resolve, 30));
 	expect(watcher.value).toMatchObject({ base: true });
+});
+
+it("ignores source records delivered after the watcher closes", async () => {
+	const root = await project({ "file.ts": "current" }),
+		watcher = watch([]);
+	watcher.close();
+	await watcher.recordBase(new Map([[join(root, "file.ts"), contentHash(Buffer.from("old"))]]));
+	expect(watcher.value).toMatchObject({ base: false });
 });
 
 it("does not publish a watch frame when a base rewrite leaves the bytes unchanged", async () => {

@@ -85,14 +85,17 @@ export class BaseWatcher {
 		if (!hashes) this.#expected.set(path, (hashes = new Set()));
 		hashes.add(hash);
 	}
-	record(inputs: BaseInputs): void {
+	async record(inputs: BaseInputs): Promise<void> {
+		if (this.#closed) return;
+		const comparisons: Promise<void>[] = [];
 		for (const [file, hash] of inputs) {
 			const path = real(file);
 			if (ignored(path)) continue;
 			this.#expect(path, hash);
 			this.#locate(dirname(path));
-			this.#compare(path);
+			comparisons.push(this.#compare(path));
 		}
+		await Promise.all(comparisons);
 	}
 	mark(path: string): void {
 		const files = new Set<string>();
@@ -106,7 +109,7 @@ export class BaseWatcher {
 		}
 		for (const file of files) this.#compare(file);
 	}
-	#compare(path: string): void {
+	#compare(path: string): Promise<void> {
 		const pending = (this.#reads.get(path) ?? Promise.resolve()).then(async () => {
 			let hash: string | undefined;
 			try {
@@ -125,6 +128,7 @@ export class BaseWatcher {
 		void pending.then(() => {
 			if (this.#reads.get(path) === pending) this.#reads.delete(path);
 		});
+		return pending;
 	}
 	#locate(path: string): void {
 		if (this.#locations.has(path) || (this.#inRoot(path) && !this.#roots.includes(path))) return;
@@ -152,7 +156,8 @@ export class BaseWatcher {
 				if (name === null || ignored(name)) return;
 				const file = join(path, name);
 				if (tree) {
-					if (this.#watches.has(file) && directoryIdentity(file) !== this.#watches.get(file)?.identity) this.#drop(file);
+					if (this.#watches.has(file) && directoryIdentity(file) !== this.#watches.get(file)?.identity)
+						this.#drop(file);
 					if (directory(file)) this.#watch(file, true);
 					this.mark(file);
 				} else if (this.#expected.has(file) || this.#different.has(file)) this.mark(file);

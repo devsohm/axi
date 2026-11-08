@@ -1,3 +1,4 @@
+import { statSync } from "node:fs";
 import { join, resolve, sep } from "node:path";
 import type { TelemetryContext } from "@axi/telemetry";
 import { withAbortSignal, type Context } from "../../context/index.ts";
@@ -22,9 +23,11 @@ import {
 	type PluginsError,
 	type PluginsState,
 	type RolloutResult,
-	type RolloutStep,
 } from "../plugins/index.ts";
-import { processConditions, tuiSurface, webSurface, WEB_PREFIX, type TuiSurfaceOptions, type WebSurfaceOptions } from "../surfaces/index.ts";
+import {
+	processConditions, tuiSurface, webSurface, WEB_PREFIX,
+	type TuiSurface, type TuiSurfaceOptions, type WebSurface, type WebSurfaceOptions,
+} from "../surfaces/index.ts";
 import { createWorkers, nodeBaseInputs, processLock, type ProcessLock, type Workers, type WorkersError } from "../workers/index.ts";
 import { ARCHIVE_FORMAT, packData, unpackData, type ArchiveManifest } from "./archive.ts";
 import { addressParam, HostData } from "./data.ts";
@@ -54,6 +57,7 @@ export type AppError =
 	| { readonly kind: "http"; readonly error: HttpError }
 	| { readonly kind: "workers"; readonly error: WorkersError }
 	| { readonly kind: "plugins"; readonly error: PluginsError }
+	| { readonly kind: "base_build"; readonly base: string; readonly error: unknown }
 	| { readonly kind: "server_scan"; readonly error: unknown };
 export type AppLimits = {
 	readonly uploads?: number;
@@ -95,8 +99,10 @@ export interface App<P extends Principal> {
 	readonly http: HttpComponent<P>;
 	readonly workers: ReadonlyMap<string, Workers<HostKind>>;
 	readonly plugins: AppPlugins;
-	readonly web: { readonly base: string } | undefined;
-	readonly tui: { readonly base: string } | undefined;
+	readonly web: { readonly base: string | undefined } | undefined;
+	readonly tui: { readonly base: string | undefined } | undefined;
+	readonly basesBuilt: Promise<void>;
+	readonly baseWatched: Promise<void>;
 	readonly dataDir: string;
 	readonly ownerTokenFile: string;
 	ownerLink(): string;
@@ -117,10 +123,7 @@ export type KitStart = {
 };
 type ClientSurface<P extends Principal> = {
 	readonly name: "web" | "tui";
-	readonly inputs: BaseInputs;
-	readonly facet: import("../../host/index.ts").Facet<P>;
-	readonly base: string;
-	step(name: string): RolloutStep;
+	readonly surface: WebSurface<P> | TuiSurface<P>;
 };
 function workerLock(name: string, dir: string, address: Address): string {
 	return `${name}:${dir}:${address.key}`;
@@ -210,13 +213,13 @@ export async function startServer<P extends Principal>(options: AppOptions<P>, c
 	);
 	const workers = new Map<string, Workers<HostKind>>(),
 		workerHosts = new Map<string, string>();
-	async function startWorkers(): Promise<void> {
+	function startWorkers(): void {
 		const workerPrincipal = options.principal.worker as (address: Address) => P;
 		for (const config of options.workers ?? []) {
 			const facet = config.facet ?? "worker";
 			workers.set(
 				config.kind.kind,
-				await createWorkers(
+				createWorkers(
 					host,
 					config.kind as HostKind,
 					{
@@ -224,6 +227,8 @@ export async function startServer<P extends Principal>(options: AppOptions<P>, c
 						entry: config.entry,
 						execArgv: config.execArgv,
 						env: config.env,
+						baseDir: join(layout.workerBases, config.kind.kind),
+						compileCache: layout.compileCache,
 						authorize: (principal, address) =>
 							samePrincipal(principal, options.principal.server, context) || config.authorize(principal, address),
 						principal: workerPrincipal,
@@ -281,6 +286,8 @@ export async function startServer<P extends Principal>(options: AppOptions<P>, c
 		});
 	let link = "",
 		closing: Promise<void> | undefined;
+	let building: Promise<void> = Promise.resolve(),
+		watching: Promise<void> = Promise.resolve();
 	let applying: Promise<void> = Promise.resolve();
 	async function addressLock(address: Address, ctx: Context): Promise<ProcessLock | undefined> {
 		const timeout = AbortSignal.timeout(2000);
@@ -296,6 +303,12 @@ export async function startServer<P extends Principal>(options: AppOptions<P>, c
 		if (!pool) throw new Error(`app: no worker kind "${address.kind}"`);
 		return pool;
 	}
+	function surfaceBase(name: "web" | "tui"): { readonly base: string | undefined } | undefined {
+		const found = surfaces.find((each) => each.name === name);
+		if (!found) return undefined;
+		const result = found.surface.built;
+		return { base: result?.kind === "built" ? result.base : undefined };
+	}
 	const app: App<P> = {
 		host,
 		http,
@@ -309,10 +322,16 @@ export async function startServer<P extends Principal>(options: AppOptions<P>, c
 			install: (source, ctx) => plugins.installPlugin(source, layout.plugins, ctx),
 		},
 		get web() {
-			return surfaces.find((surface) => surface.name === "web");
+			return surfaceBase("web");
 		},
 		get tui() {
-			return surfaces.find((surface) => surface.name === "tui");
+			return surfaceBase("tui");
+		},
+		get basesBuilt() {
+			return building;
+		},
+		get baseWatched() {
+			return watching;
 		},
 		applyChanges(ctx) {
 			const run = applying.then(async () => {
@@ -321,7 +340,7 @@ export async function startServer<P extends Principal>(options: AppOptions<P>, c
 					[
 						plugins.step("server", host),
 						...Array.from(workers, ([name, worker]) => worker.step(name)),
-						...surfaces.map((surface) => surface.step(surface.name)),
+						...surfaces.map(({ name, surface }) => surface.step(name)),
 					],
 					built,
 					ctx,
@@ -397,19 +416,10 @@ export async function startServer<P extends Principal>(options: AppOptions<P>, c
 		},
 	};
 	try {
-		const entry = process.argv[1];
-		if (entry !== undefined && !entry.split(sep).includes("node_modules")) {
-			await nodeBaseInputs(entry, processConditions(process.execArgv, process.env.NODE_OPTIONS)).then(
-				inputs => plugins.watchBase(inputs),
-				error => onError({ kind: "server_scan", error }),
-			);
-		}
-		await startWorkers();
-		if (options.web) surfaces.push({ name: "web", ...(await webSurface(host, { ...options.web, plugins }, context)) });
-		if (options.tui)
-			surfaces.push({ name: "tui", ...(await tuiSurface(host, { ...options.tui, plugins }, context)) });
-		for (const surface of surfaces) core.push({ name: `objects.${surface.name}`, facet: surface.facet });
-		for (const { inputs } of [...surfaces, ...workers.values()]) plugins.watchBase(inputs);
+		startWorkers();
+		if (options.web) surfaces.push({ name: "web", surface: webSurface(host, { ...options.web, plugins }) });
+		if (options.tui) surfaces.push({ name: "tui", surface: tuiSurface(host, { ...options.tui, plugins }) });
+		for (const { name, surface } of surfaces) core.push({ name: `objects.${name}`, facet: surface.facet });
 		await plugins.load(
 			host,
 			{ kind: "server", core, modules: { ...api.modules, ...options.kinds.server?.packages } },
@@ -419,9 +429,49 @@ export async function startServer<P extends Principal>(options: AppOptions<P>, c
 		const token = owner.renew(),
 			address = await http.listening(context);
 		link = `http://${linkHost(address.host)}:${address.port}${OWNER_PATH}#${token}`;
+		const comparisons: Promise<void>[] = [];
+		building = Promise.all(
+			[
+				...surfaces.map(({ name, surface }) => ({ name, build: () => surface.build() })),
+				...Array.from(workers, ([name, worker]) => ({ name, build: () => worker.build() })),
+			].map(async (base) => {
+				const result = await base.build();
+				if (closing) return;
+				if (result.kind === "built") comparisons.push(plugins.watchBase(result.inputs));
+				else onError({ kind: "base_build", base: base.name, error: result.error });
+			}),
+		).then(() => {});
+		watching = (async () => {
+			await building;
+			if (closing) return;
+			const entry = process.argv[1];
+			if (entry !== undefined && !entry.split(sep).includes("node_modules")) {
+				const inputs = await nodeBaseInputs(entry, processConditions(process.execArgv, process.env.NODE_OPTIONS)).catch(
+					(error) => {
+						if (!closing) onError({ kind: "server_scan", error });
+					},
+				);
+				if (closing) return;
+				if (inputs) comparisons.push(plugins.watchBase(processStartedInputs(inputs)));
+			}
+			await Promise.all(comparisons);
+		})();
 	} catch (error) {
 		await app.close(context);
 		throw error;
 	}
 	return app;
+}
+
+function processStartedInputs(inputs: BaseInputs): BaseInputs {
+	const latest = Date.now() + 5000;
+	const recorded = new Map(inputs);
+	for (const [path] of recorded) {
+		try {
+			const info = statSync(path);
+			if ([info.mtimeMs, info.ctimeMs].some((time) => time > performance.timeOrigin && time <= latest))
+				recorded.set(path, "process-start mismatch");
+		} catch {}
+	}
+	return recorded;
 }

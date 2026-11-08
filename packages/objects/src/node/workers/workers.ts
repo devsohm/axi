@@ -11,13 +11,15 @@ import type { PluginScript } from "../plugins/runtime.ts";
 import { uncrossed, uncrossedReport, type CrossedError, type CrossedReport, type FromWorker } from "./control.ts";
 import { clearStaleLock } from "./lock.ts";
 import { WorkerProcess, type Exit } from "./process.ts";
-import type { WorkerBase } from "./base.ts";
+import { buildWorkerBase, type WorkerBase } from "./base.ts";
 import type { BaseInputs } from "../plugins/base-inputs.ts";
 export type WorkersOptions<P extends Principal, K extends KindShape> = {
 	readonly kind: string;
 	readonly entry: string;
 	readonly execArgv?: readonly string[];
 	readonly env?: Readonly<Record<string, string>>;
+	readonly baseDir?: string;
+	readonly compileCache?: string;
 	readonly authorize: (principal: P, address: Address<K>) => boolean;
 	readonly principal: (address: Address<K>) => P;
 	readonly start: (address: Address<K>, context: Context) => Promise<JsonValue> | JsonValue;
@@ -41,23 +43,25 @@ export type WorkersError =
 			readonly signal: string | null;
 	  }
 	| BatchError;
+export type WorkersBuilt =
+	| { readonly kind: "built"; readonly inputs: BaseInputs }
+	| { readonly kind: "failed"; readonly error: unknown };
 export interface Workers<K extends KindShape> {
 	readonly state: Watchable<Readonly<Record<string, WorkerState>>>;
-	readonly inputs: BaseInputs;
+	readonly built: WorkersBuilt | undefined;
+	build(): Promise<WorkersBuilt>;
 	stop(address: Address<K>, context: Context): Promise<void>;
 	retry(address: Address<K>, context: Context): Promise<void>;
 	step(name: string): RolloutStep;
 	close(context: Context): Promise<void>;
 }
-export async function createWorkers<P extends Principal, N extends string, Q extends Params>(
+export function createWorkers<P extends Principal, N extends string, Q extends Params>(
 	host: Host<P>,
 	kind: HostKind<N, Q>,
 	options: WorkersOptions<P, HostKind<N, Q>>,
 	context: Context,
-): Promise<Workers<HostKind<N, Q>>> {
-	const { buildWorkerBase } = await import("./base.ts");
-	const base = await buildWorkerBase(options.entry, options.execArgv ?? []);
-	return new WorkerPool(options, base, context, (route) => host.route(kind, route, context));
+): Workers<HostKind<N, Q>> {
+	return new WorkerPool(options, context, (route) => host.route(kind, route, context));
 }
 type Failure = { error: CrossedError; at: number };
 type Cause = { error: unknown; public?: CrossedError; killed?: true; lost?: true };
@@ -101,10 +105,13 @@ const scriptKey = (scripts: readonly PluginScript[]): string =>
 		.map(({ plugin, built }) => `${plugin.name}@${built.kind === "script" ? built.digest : "failed"}`)
 		.sort()
 		.join("\n");
+type BuiltWorker = { readonly kind: "built"; readonly base: WorkerBase } | Extract<WorkersBuilt, { kind: "failed" }>;
 class WorkerPool<P extends Principal, K extends KindShape> implements Workers<K> {
 	readonly state: Watchable<Readonly<Record<string, WorkerState>>>;
 	readonly #options: WorkersOptions<P, K>;
-	readonly #base: WorkerBase;
+	readonly #environment: Readonly<Record<string, string>> | undefined;
+	#base: BuiltWorker | undefined;
+	#building: Promise<BuiltWorker> | undefined;
 	readonly #slots = new Map<string, Slot<K>>();
 	readonly #view: WorkerView;
 	readonly #closing = new AbortController();
@@ -112,14 +119,10 @@ class WorkerPool<P extends Principal, K extends KindShape> implements Workers<K>
 	readonly #route: RouteHandle<K>;
 	#routing = false;
 	#idle: ReturnType<typeof setInterval> | undefined;
-	constructor(
-		options: WorkersOptions<P, K>,
-		base: WorkerBase,
-		context: Context,
-		route: (options: RouteOptions<P, K>) => RouteHandle<K>,
-	) {
+	constructor(options: WorkersOptions<P, K>, context: Context, route: (options: RouteOptions<P, K>) => RouteHandle<K>) {
 		this.#options = options;
-		this.#base = base;
+		this.#environment =
+			options.compileCache === undefined ? options.env : { NODE_COMPILE_CACHE: options.compileCache, ...options.env };
 		this.#view = new WorkerView(() => this.#snapshot(), new Batch((error) => options.onError(error), undefined));
 		this.state = this.#view as unknown as Watchable<Readonly<Record<string, WorkerState>>>;
 		this.#route = route({
@@ -135,8 +138,27 @@ class WorkerPool<P extends Principal, K extends KindShape> implements Workers<K>
 		});
 		this.#followClose(context);
 	}
-	get inputs(): BaseInputs {
-		return this.#base.inputs;
+	get built(): WorkersBuilt | undefined {
+		const result = this.#base;
+		if (result === undefined || result.kind === "failed") return result;
+		return { kind: "built", inputs: result.base.inputs };
+	}
+	async build(): Promise<WorkersBuilt> {
+		const result = await this.#ensureBuild();
+		return result.kind === "failed" ? result : { kind: "built", inputs: result.base.inputs };
+	}
+	#ensureBuild(): Promise<BuiltWorker> {
+		return (this.#building ??= (async (): Promise<BuiltWorker> => {
+			let result: BuiltWorker;
+			try {
+				const base = await buildWorkerBase(this.#options.entry, this.#options.execArgv ?? [], this.#options.baseDir);
+				result = { kind: "built", base };
+			} catch (error) {
+				result = { kind: "failed", error };
+			}
+			this.#base = result;
+			return result;
+		})());
 	}
 	#followClose(context: Context): void {
 		if (context.abortSignal && !context.abortSignal.aborted)
@@ -219,19 +241,25 @@ class WorkerPool<P extends Principal, K extends KindShape> implements Workers<K>
 	}
 	async close(context: Context): Promise<void> {
 		if (!this.#closing.signal.aborted) this.#closing.abort(closed());
-		this.#base.remove();
 		clearInterval(this.#idle);
 		this.#idle = undefined;
-		await awaitWithContext(
-			Promise.all([...this.#slots.values()].map((slot) => this.#queue(slot, () => this.#stop(slot)).then(() => slot.queue))),
-			context,
-		);
+		const stopped = Promise.all(
+			[...this.#slots.values()].map((slot) => this.#queue(slot, () => this.#stop(slot)).then(() => slot.queue)),
+		).then(() => {
+			if (this.#base?.kind === "built") this.#base.base.remove();
+		});
+		await awaitWithContext(stopped, context);
 	}
 	async #start(slot: Slot<K>, routing: Context): Promise<{ link: WorkerProcess["link"]; principal: P; trusted: true }> {
 		await slot.child?.process.exited;
 		const previousFailure = slot.failure;
 		if (previousFailure) throw uncrossed(previousFailure.error);
 		if (this.#closing.signal.aborted) throw closed();
+		const built = await awaitWithContext(this.#ensureBuild(), this.#closingContext).catch(() => {
+			throw closed();
+		});
+		if (this.#closing.signal.aborted) throw closed();
+		if (built.kind === "failed") throw this.#fail(slot, { error: built.error, public: startFailed }, undefined);
 		const context = withAbortSignal(this.#closing.signal, routing);
 		let data: JsonValue;
 		try {
@@ -243,7 +271,7 @@ class WorkerPool<P extends Principal, K extends KindShape> implements Workers<K>
 		if (this.#closing.signal.aborted) throw closed();
 		let child: Child;
 		try {
-			child = this.#fork(slot);
+			child = this.#fork(slot, built.base);
 		} catch (error) {
 			throw this.#fail(slot, { error, public: startFailed }, undefined);
 		}
@@ -271,15 +299,15 @@ class WorkerPool<P extends Principal, K extends KindShape> implements Workers<K>
 			clearTimeout(timeout);
 		}
 	}
-	#fork(slot: Slot<K>): Child {
+	#fork(slot: Slot<K>, base: WorkerBase): Child {
 		let child: Child;
 		const options = this.#options;
 		const onOutput = options.onOutput;
 		const process = new WorkerProcess(
 			{
-				entry: this.#base.file(),
+				entry: base.file(),
 				execArgv: ["--enable-source-maps", ...(options.execArgv ?? [])],
-				...(options.env === undefined ? {} : { env: options.env }),
+				...(this.#environment === undefined ? {} : { env: this.#environment }),
 				...(onOutput === undefined ? {} : { onOutput: (stream, chunk) => onOutput(slot.address, stream, chunk) }),
 			},
 			{

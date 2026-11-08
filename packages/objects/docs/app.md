@@ -18,21 +18,25 @@ Call `startServer(options, context)`. Set these options:
 | `listen` | Listening host and port; defaults to loopback with an allocated port |
 | `base` | Additional source files or directories to watch for base-code changes |
 | `timeouts` | Host close and ready timeouts, shared by the server and workers |
-| `onError` | Receives host, HTTP, worker, plugin and server-source scan errors |
+| `onError` | Receives host, HTTP, worker, plugin, base-build and server-source scan errors |
 
 `principal.owner` is any principal of the app's type, including an existing user. It must be strict JSON and differ from `principal.server`. Startup rejects an owner with undefined fields, functions or class instances before opening storage. `principal.worker(address)` is required when `workers` can contain worker kinds. A server without workers does not need this function. Application rules decide which workers a caller may reach. The server's own principal may reach its workers for administration and export.
 
 The returned `App` exposes the host, HTTP component, worker pools, plugin component and published client bundles. `AppInfo` version 2 reports the app name, API version, data directory and configured owner. A worker exposes `WorkerInfo` with its address and application start data.
 
+Startup opens the listener before building worker and client bases. Owner sign-in and API routes are available while those builds run. `app.basesBuilt` settles after all build attempts and their error reports. `app.baseWatched` also waits for the initial source comparisons and the server-entry scan. Neither promise rejects for a failed build. `onError` receives `{ kind: "base_build", base, error }`; the affected client returns HTTP 503 and the affected worker cannot start. Other routes remain available. The configured `app.web.base` and `app.tui.base` values are undefined until their bundles succeed.
+
 Use `applyChanges(context)` to build dirty plugins and roll the result through the server, workers and client surfaces. File watching marks changes; it does not apply them automatically. Failed plugin changes keep the prior working implementation. Concurrent calls run in order, including the build step.
 
 The app records the bytes used by its worker and client bundles. `plugins.state.base` is true while a recorded file differs, disappears, or a new source file exists in a `base` directory. Rewriting unchanged bytes leaves the flag clear. Restoring the original files clears it. This flag does not replace running base code.
 
-The server also scans the static imports of its entry, `process.argv[1]`, without executing or writing a bundle. Literal lazy imports are included. Computed imports, custom-loader modules and unresolved optional imports are not included. A parse failure reports `server_scan` and leaves the server running without that scan. Installed files under `node_modules` are excluded. Explicit `base` files and directories cover code the scan cannot see.
+After the builds finish, the server scans the static imports of its entry, `process.argv[1]`, without executing or writing a bundle. Literal lazy imports are included. Computed imports, custom-loader modules and unresolved optional imports are not included. A parse failure reports `server_scan` and leaves the server running without that scan. Installed files under `node_modules` are excluded. Explicit `base` files and directories cover code the scan cannot see.
+
+The server scan cannot recover the bytes Node loaded earlier. A file modified or replaced since process startup therefore sets a restart mark that remains until the process restarts, even after a revert. Timestamps more than five seconds in the future are compared by contents instead. Worker and client bundle records use their exact compiled bytes and clear their marks after a revert.
 
 Web and terminal bundles use the server's resolution conditions from its Node flags and `NODE_OPTIONS`. `web.conditions` and `tui.conditions` can override them. Worker bundles use their worker kind's `execArgv`. The default host close timeout is 30 seconds; the ready timeout is 60 seconds.
 
-Call `close(context)` at shutdown. It closes HTTP, workers, the host and Store before releasing the app lock. Repeated calls share the same close promise.
+Call `close(context)` at shutdown. It closes HTTP, workers, the host and Store before releasing the app lock. Repeated calls share the same close promise. Close does not wait for a blocked background build or source scan; late results and error reports are discarded.
 
 ## Worker entry
 
@@ -47,6 +51,10 @@ Application code chooses the worker's entry and principal. This helper does not 
 ```text
 <dataDir>/
   owner-token
+  cache/
+    workers/
+      <kind>/
+    node/
   server/
     cookie-secret
     store.sqlite

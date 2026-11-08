@@ -1,13 +1,10 @@
-import type { Context } from "../../context/index.ts";
 import type { Principal } from "../../data/index.ts";
 import { defineFacet, type Facet, type Host } from "../../host/index.ts";
 import { REGISTER } from "../../surfaces/index.ts";
 import { Http, type HttpRequest, type HttpRouteOptions } from "../http/index.ts";
-import type { BaseInputs, Plugins, RolloutStep } from "../plugins/index.ts";
-import { buildBase } from "./bundle.ts";
+import type { Plugins, RolloutStep } from "../plugins/index.ts";
 import { scriptsFacet } from "./current.ts";
-import { PublishedScripts } from "./published.ts";
-import { served } from "./served.ts";
+import { SurfaceBuild, type SurfaceBuilt } from "./surface-build.ts";
 export const WEB_PREFIX = "/_objects/web/";
 export type PageAssets = {
 	readonly bootstrap: string;
@@ -27,44 +24,63 @@ export type WebSurfaceOptions = {
 export type WebSurface<P extends Principal> = {
 	readonly facet: Facet<P>;
 	step(name: string): RolloutStep;
-	readonly base: string;
-	readonly inputs: BaseInputs;
+	readonly built: SurfaceBuilt | undefined;
+	build(): Promise<SurfaceBuilt>;
 };
-export async function webSurface<P extends Principal>(
+export function webSurface<P extends Principal>(
 	server: Host<P>,
 	options: WebSurfaceOptions,
-	context: Context,
-): Promise<WebSurface<P>> {
-	const base = await buildBase(options.entry, "browser", WEB_PREFIX, options.conditions),
-		scripts = new PublishedScripts("web", options.kind ?? "web", WEB_PREFIX, base.hash, options.plugins, server);
-	await scripts.start(context);
-	const assets = (): PageAssets => ({
-		bootstrap: pageBootstrap(base.hash, scripts.set),
-		script: base.script,
-		plugins: scripts.set.combined,
-		styles: [
-			...(base.style === undefined ? [] : [base.style]),
-			...scripts.set.plugins.flatMap((entry) => (entry.css === undefined ? [] : [entry.css])),
-		],
-	});
+): WebSurface<P> {
+	const building = new SurfaceBuild(
+		"web",
+		"browser",
+		WEB_PREFIX,
+		{
+			kind: options.kind ?? "web",
+			entry: options.entry,
+			conditions: options.conditions,
+			plugins: options.plugins,
+		},
+		server,
+	);
 	const facet = defineFacet<P>((host, self) => {
-		scriptsFacet<P>("web", scripts).setup(host, self);
+		scriptsFacet<P>("web", building).setup(host, self);
 		const access = options.public ? { public: true as const } : {};
 		const routes: Record<string, HttpRouteOptions> = {};
 		for (const suffix of [":file", "plugin/:file", "assets/:file"])
 			routes[`GET ${WEB_PREFIX}${suffix}`] = {
 				...access,
-				handler: async (request) => served(base.files.get(request.path) ?? scripts.file(request.path)),
+				handler: async (request) => building.file(request.path),
 			};
 		routes[`GET ${WEB_PREFIX}base`] = {
 			public: true,
-			handler: async () => ({ kind: "json", value: base.hash, headers: { "Cache-Control": "no-store" } }),
+			handler: async () => {
+				const parts = await building.parts();
+				return parts === undefined
+					? { kind: "error", status: 503 }
+					: { kind: "json", value: parts.base.hash, headers: { "Cache-Control": "no-store" } };
+			},
 		};
 		for (const path of options.paths ?? ["/"])
 			routes[`GET ${path}`] = {
 				...access,
 				page: true,
-				handler: async (request) => ({ kind: "html", body: await options.page(request, assets()) }),
+				handler: async (request) => {
+					const parts = await building.parts();
+					if (parts === undefined) return { kind: "error", status: 503 };
+					const { base, published } = parts;
+					const set = published.set;
+					const assets: PageAssets = {
+						bootstrap: pageBootstrap(base.hash, set),
+						script: base.script,
+						plugins: set.combined,
+						styles: [
+							...(base.style === undefined ? [] : [base.style]),
+							...set.plugins.flatMap((entry) => (entry.css === undefined ? [] : [entry.css])),
+						],
+					};
+					return { kind: "html", body: await options.page(request, assets) };
+				},
 			};
 		self.contribute(Http, {
 			routes,
@@ -72,7 +88,14 @@ export async function webSurface<P extends Principal>(
 			scripts: [WEB_PREFIX],
 		});
 	});
-	return { facet, base: base.hash, inputs: base.inputs, step: (name) => scripts.step(name) };
+	return {
+		facet,
+		build: () => building.build(),
+		get built() {
+			return building.built;
+		},
+		step: (name) => building.step(name),
+	};
 }
 export function pageScripts(assets: PageAssets, nonce: string): string {
 	return [

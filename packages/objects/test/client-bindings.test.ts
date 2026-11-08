@@ -5,7 +5,8 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { expect, it, vi } from "vitest";
 import { BACKGROUND_CONTEXT as context } from "../src/context/index.ts";
-import { constant, createHost, createLanguage, defineMessages, FALLBACK_THEMES, hostLanguage, hostKind } from "../src/index.ts";
+import { constant, createHost, createLanguage, defineMessages, FALLBACK_THEMES, hostLanguage, hostKind,
+} from "../src/index.ts";
 import { HostProvider, useMessages, usePageState, watchStore } from "../src/react/index.ts";
 import { NO_TRANSLATIONS } from "../src/surfaces/translations.ts";
 import { SandboxChannel } from "../src/tui/channel.ts";
@@ -149,11 +150,13 @@ it("publishes a content-addressed browser bundle through real HTTP routing", asy
 	try {
 		const entry = join(directory, "main.ts");
 		await writeFile(entry, "globalThis.started = true;");
-		const surface = await webSurface(
-			host,
-			{ plugins, entry, public: true, page: (request, assets) => pageScripts(assets, request.nonce) },
-			context,
-		);
+		const surface = webSurface(host, {
+			plugins,
+			entry,
+			public: true,
+			page: (request, assets) => pageScripts(assets, request.nonce),
+		});
+		expect(surface.built).toBeUndefined();
 		const loaded = await host.load(
 			[
 				{ name: "http", facet: http.facet },
@@ -171,8 +174,10 @@ it("publishes a content-addressed browser bundle through real HTTP routing", asy
 		expect(page.status).toBe(200);
 		expect(await page.text()).toContain("globalThis.objectsPage");
 		const base = await request(`${WEB_PREFIX}base`);
-		expect(await base.json()).toBe(surface.base);
-		const script = await request(`${WEB_PREFIX}base.${surface.base}.js`);
+		const built = await surface.build();
+		if (built.kind !== "built") throw built.error;
+		expect(await base.json()).toBe(built.base);
+		const script = await request(`${WEB_PREFIX}base.${built.base}.js`);
 		expect(script.headers.get("cache-control")).toBe("private, max-age=31536000, immutable");
 		expect(await script.text()).toContain("globalThis.started=!0");
 	} finally {

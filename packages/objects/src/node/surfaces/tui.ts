@@ -1,48 +1,71 @@
-import type { Context } from "../../context/index.ts";
 import type { Principal } from "../../data/index.ts";
 import { defineFacet, type Facet, type Host } from "../../host/index.ts";
 import { Http } from "../http/index.ts";
-import type { BaseInputs, Plugins, RolloutStep } from "../plugins/index.ts";
-import { buildBase } from "./bundle.ts";
+import type { Plugins, RolloutStep } from "../plugins/index.ts";
 import { scriptsFacet } from "./current.ts";
-import { PublishedScripts } from "./published.ts";
-import { served } from "./served.ts";
+import { SurfaceBuild, type SurfaceBuilt } from "./surface-build.ts";
 export const TUI_PREFIX = "/_objects/tui/";
 export type TuiStart = { readonly base: string; readonly script: string; readonly combined: string };
 export type TuiSurfaceOptions = { readonly kind?: string; readonly plugins: Plugins; readonly entry: string; readonly conditions?: readonly string[] };
 export type TuiSurface<P extends Principal> = {
 	readonly facet: Facet<P>;
 	step(name: string): RolloutStep;
-	readonly base: string;
-	readonly inputs: BaseInputs;
+	readonly built: SurfaceBuilt | undefined;
+	build(): Promise<SurfaceBuilt>;
 };
-export async function tuiSurface<P extends Principal>(
+export function tuiSurface<P extends Principal>(
 	server: Host<P>,
 	options: TuiSurfaceOptions,
-	context: Context,
-): Promise<TuiSurface<P>> {
-	const base = await buildBase(options.entry, "sandbox", TUI_PREFIX, options.conditions),
-		scripts = new PublishedScripts("tui", options.kind ?? "tui", TUI_PREFIX, base.hash, options.plugins, server);
-	await scripts.start(context);
+): TuiSurface<P> {
+	const building = new SurfaceBuild(
+		"tui",
+		"sandbox",
+		TUI_PREFIX,
+		{
+			kind: options.kind ?? "tui",
+			entry: options.entry,
+			conditions: options.conditions,
+			plugins: options.plugins,
+		},
+		server,
+	);
 	const facet = defineFacet<P>((host, self) => {
-		scriptsFacet<P>("tui", scripts).setup(host, self);
+		scriptsFacet<P>("tui", building).setup(host, self);
 		self.contribute(Http, {
 			routes: {
-				[`GET ${TUI_PREFIX}start`]: async () => ({
-					kind: "json",
-					value: { base: base.hash, script: base.script, combined: scripts.set.combined } satisfies TuiStart,
-					headers: { "Cache-Control": "no-store" },
-				}),
+				[`GET ${TUI_PREFIX}start`]: async () => {
+					const parts = await building.parts();
+					if (parts === undefined) return { kind: "error", status: 503 };
+					return {
+						kind: "json",
+						value: {
+							base: parts.base.hash,
+							script: parts.base.script,
+							combined: parts.published.set.combined,
+						} satisfies TuiStart,
+						headers: { "Cache-Control": "no-store" },
+					};
+				},
 				[`GET ${TUI_PREFIX}base`]: {
 					public: true,
-					handler: async () => ({ kind: "json", value: base.hash, headers: { "Cache-Control": "no-store" } }),
+					handler: async () => {
+						const parts = await building.parts();
+						return parts === undefined
+							? { kind: "error", status: 503 }
+							: { kind: "json", value: parts.base.hash, headers: { "Cache-Control": "no-store" } };
+					},
 				},
-				[`GET ${TUI_PREFIX}:file`]: async (request) =>
-					served(base.files.get(request.path) ?? scripts.file(request.path)),
-				[`GET ${TUI_PREFIX}plugin/:file`]: async (request) =>
-					served(base.files.get(request.path) ?? scripts.file(request.path)),
+				[`GET ${TUI_PREFIX}:file`]: async (request) => building.file(request.path),
+				[`GET ${TUI_PREFIX}plugin/:file`]: async (request) => building.file(request.path),
 			},
 		});
 	});
-	return { facet, base: base.hash, inputs: base.inputs, step: (name) => scripts.step(name) };
+	return {
+		facet,
+		build: () => building.build(),
+		get built() {
+			return building.built;
+		},
+		step: (name) => building.step(name),
+	};
 }
