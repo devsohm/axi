@@ -47,7 +47,8 @@
 						"packages/objects/test/registry-retry.test.ts",
 						"packages/objects/test/websocket-link.test.ts",
 						"packages/objects/test/runtime-boundaries.test.ts",
-						"packages/objects/test/runtime-tracing.test.ts"
+						"packages/objects/test/runtime-tracing.test.ts",
+						"packages/objects/test/remote-lifecycle.test.ts"
 					]
 				},
 				{
@@ -219,7 +220,8 @@
 						"packages/ai/test/codex-login.test.ts",
 						"packages/ai/test/oauth-flows.test.ts",
 						"packages/ai/test/catalog-auth.test.ts",
-						"packages/ai/test/entrypoints.test.ts"
+						"packages/ai/test/entrypoints.test.ts",
+						"packages/ai/test/compat-dispatch.test.ts"
 					]
 				},
 				{
@@ -249,7 +251,8 @@
 						"packages/ai/test/tool-validation.test.ts",
 						"packages/ai/test/request-telemetry.test.ts",
 						"packages/ai/test/sampling-options.test.ts",
-						"packages/ai/test/provider-boundaries.test.ts"
+						"packages/ai/test/provider-boundaries.test.ts",
+						"packages/ai/test/constrained-inputs.test.ts"
 					]
 				},
 				{
@@ -280,7 +283,8 @@
 						"packages/codemode/test/sandbox.test.ts",
 						"packages/codemode/test/invocation-lifecycle.test.ts",
 						"packages/codemode/test/admission-and-delivery.test.ts",
-						"packages/codemode/test/execution-contract.test.ts"
+						"packages/codemode/test/execution-contract.test.ts",
+						"packages/codemode/test/runtime-limits.test.ts"
 					]
 				},
 				{
@@ -325,7 +329,8 @@
 						"packages/mcp/test/configuration.test.ts",
 						"packages/mcp/test/oauth-callback.test.ts",
 						"packages/mcp/test/content-discovery.test.ts",
-						"packages/mcp/test/oauth-lifecycle.test.ts"
+						"packages/mcp/test/oauth-lifecycle.test.ts",
+						"packages/mcp/test/client-metadata.test.ts"
 					]
 				}
 			]
@@ -346,7 +351,8 @@
 						"packages/durable/test/process-recovery.test.ts",
 						"packages/durable/test/document-checkpoints.test.ts",
 						"packages/durable/test/jsonl.test.ts",
-						"packages/durable/test/sqlite-session.test.ts"
+						"packages/durable/test/sqlite-session.test.ts",
+						"packages/durable/test/interrupted-generation.test.ts"
 					]
 				},
 				{
@@ -369,7 +375,8 @@
 						"packages/durable/test/streamed-state.test.ts",
 						"packages/durable/test/tool-search.test.ts",
 						"packages/durable/test/automatic-compaction.test.ts",
-						"packages/durable/test/generation-hooks.test.ts"
+						"packages/durable/test/generation-hooks.test.ts",
+						"packages/durable/test/generation-controls.test.ts"
 					]
 				},
 				{
@@ -387,7 +394,9 @@
 						"packages/durable/test/file-tools.test.ts",
 						"packages/durable/test/edit-replacements.test.ts",
 						"packages/durable/test/script-services.test.ts",
-						"packages/durable/test/script-recovery.test.ts"
+						"packages/durable/test/script-recovery.test.ts",
+						"packages/durable/test/script-resume-boundaries.test.ts",
+						"packages/durable/test/script-output-files.test.ts"
 					]
 				},
 				{
@@ -422,7 +431,8 @@
 						"packages/env/test/reader-lifecycle.test.ts",
 						"packages/env/test/transfers.test.ts",
 						"packages/env/test/errors.test.ts",
-						"packages/env/test/filesystem-boundaries.test.ts"
+						"packages/env/test/filesystem-boundaries.test.ts",
+						"packages/env/test/operation-lifecycle.test.ts"
 					]
 				},
 				{
@@ -450,6 +460,7 @@
 						"packages/tui/test/input-protocol.test.ts",
 						"packages/tui/test/history.test.ts",
 						"packages/tui/test/editor.test.ts",
+						"packages/tui/test/editor-boundaries.test.ts",
 						"packages/tui/test/input-interactions.test.ts",
 						"packages/tui/test/editor-screen.test.ts"
 					]
@@ -470,6 +481,7 @@
 						"packages/tui/test/layout-and-search.test.ts",
 						"packages/tui/test/component-lifecycle.test.ts",
 						"packages/tui/test/rendering.test.ts",
+						"packages/tui/test/overlay-controls.test.ts",
 						"packages/tui/test/fullscreen-interactions.test.ts",
 						"packages/tui/test/transcript-search.test.ts"
 					]
@@ -478,8 +490,10 @@
 					"behavior": "Markdown, math, ANSI, colors and images",
 					"tests": [
 						"packages/tui/test/formatting.test.ts",
+						"packages/tui/test/markdown-boundaries.test.ts",
 						"packages/tui/test/image-protocol.test.ts",
-						"packages/tui/test/math-layout.test.ts"
+						"packages/tui/test/math-layout.test.ts",
+						"packages/tui/test/color-boundaries.test.ts"
 					]
 				},
 				{

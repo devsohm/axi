@@ -40,8 +40,8 @@ Coverage output is in `coverage/index.html` and `coverage/coverage-summary.json`
 
 The JavaScript runner selects package tests from the root manifest's eight workspaces and integration tests from `test/*.test.ts`. Measured source files come from the eight workspaces. It resolves workspace package exports to their TypeScript source files. Package imports and direct source imports therefore share one module instance. The resolver honors the package's export restrictions before selecting the source file. Installed archive checks run separately with Node's normal package resolution and exercise the built JavaScript.
 
-The regular coverage command enforces minimum execution coverage of 86% lines,
-73% branches, 84% functions and 83% statements. Raise these limits as the suite
+The regular coverage command enforces minimum execution coverage of 87% lines,
+74% branches, 85% functions and 84% statements. Raise these limits as the suite
 improves. `test:coverage:full` requires 100% for all four metrics and currently
 fails because executable paths remain untested. No source modules are removed
 from measurement to pass either command.
@@ -78,6 +78,18 @@ deadlines with a controlled clock. MCP checks cover split UTF-8 streams, message
 limits, peer loss and pipe shutdown. Durable checks include both join policies,
 automatic compaction, overflow recovery and composed request hooks. Fullscreen
 search tests inspect the terminal emulator after navigation, updates and resize.
+
+Editor tests cover completion by keyboard and mouse, paste-marker deletion,
+history limits and Unicode wrapping. Overlay tests cover focus restoration,
+visibility on resize, anchors and terminal color queries. Color tests inspect
+terminal cells for every text-attribute combination and confirm that later text
+does not inherit those attributes.
+
+Generation tests cover parallel and sequential tool calls, turn budgets,
+termination, handoff and rejected after-run task requests. SQLite recovery tests
+restore interrupted requests and deferred polls under both retry policies. Code
+Mode tests reject expired or incompatible saved runs, reuse committed results,
+and retain successful state when saving long output fails.
 
 AI executable checks run in empty temporary directories and confirm that help,
 listing and invalid login choices do not create credentials. Provider protocol

@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { mkdir, mkdtemp, readFile, rename, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { setImmediate as nextTurn } from "node:timers/promises";
 import { afterEach, expect, it, vi } from "vitest";
 import { BACKGROUND_CONTEXT as context } from "../src/context/index.ts";
 import { contentHash } from "../src/node/plugins/base-inputs.ts";
@@ -137,10 +138,24 @@ it("does not publish a watch frame when a base rewrite leaves the bytes unchange
 	watchHandle.start(async (frame) => {
 		frames.push(frame);
 	});
-	await new Promise((resolve) => setTimeout(resolve, 20));
-	const initial = frames.length;
-	await writeFile(file, "original");
-	watcher.mark(file);
-	await new Promise((resolve) => setTimeout(resolve, 40));
-	expect(frames).toHaveLength(initial);
+	const expected = new Map([[file, contentHash(Buffer.from("original"))]]);
+	try {
+		await watcher.recordBase(expected);
+		await nextTurn();
+		const initial = frames.length;
+		const replacement = join(root, "replacement.tmp");
+		await writeFile(replacement, "original");
+		await rename(replacement, file);
+		watcher.mark(file);
+		await watcher.recordBase(expected);
+		await nextTurn();
+		expect(frames).toHaveLength(initial);
+		await writeFile(file, "edited");
+		watcher.mark(file);
+		await watcher.recordBase(expected);
+		await vi.waitFor(() => expect(frames.length).toBeGreaterThan(initial));
+		expect(watcher.value).toMatchObject({ base: true });
+	} finally {
+		watchHandle.abort();
+	}
 });
