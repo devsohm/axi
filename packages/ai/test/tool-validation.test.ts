@@ -101,6 +101,41 @@ test("invalid tool arguments report their received type and each missing field",
 	);
 });
 
+test("tool constraint diagnostics explain the limit and allowed values", () => {
+	for (const [schema, value, expected] of [
+		[Type.String({ minLength: 4 }), "short".slice(0, 2), "expected at least 4 characters"],
+		[Type.Number({ maximum: 2 }), 3, "expected <= 2"],
+		[Type.Array(Type.Number(), { minItems: 2 }), [1], "expected at least 2 items"],
+		[{ enum: ["up", "down"] }, "sideways", 'expected one of ["up","down"]'],
+	] as const) {
+		const inspect: Tool = { name: "inspect", description: "Inspect an input", parameters: Type.Object({ value: schema }) };
+		const call: ToolCall = { type: "toolCall", id: "inspect-2", name: "inspect", arguments: { value } };
+		expect(() => validateToolArguments(inspect, call)).toThrow(`  - value: ${expected}`);
+	}
+});
+
+test("tool diagnostics select the intended union member and report invalid fields before extras", () => {
+	const point = Type.Object({ x: Type.Number() }, { additionalProperties: false });
+	const named = Type.Object({ name: Type.String() }, { additionalProperties: false });
+	const inspect: Tool = { name: "inspect", description: "Inspect a location", parameters: Type.Object({ value: Type.Union([named, point]) }) };
+	const call: ToolCall = { type: "toolCall", id: "inspect-3", name: "inspect", arguments: { value: { x: "bad" } } };
+	expect(() => validateToolArguments(inspect, call)).toThrow(
+		'Validation failed for tool "inspect":\n  - value.x: expected number, got string\n\nReceived arguments:\n{\n  "value": {\n    "x": "bad"\n  }\n}',
+	);
+	const direct = { ...inspect, parameters: Type.Object({ value: point }) };
+	expect(() => validateToolArguments(direct, { ...call, arguments: { value: { x: "bad", z: 2 } } })).toThrow(
+		"  - value.x: expected number, got string\n  - value.z: unknown field",
+	);
+	const tagged: Tool = { ...inspect, parameters: Type.Object({ value: Type.Union([
+		Type.Object({ kind: Type.Literal("a"), title: Type.String() }, { additionalProperties: false }),
+		Type.Object({ kind: Type.Literal("b"), count: Type.Number() }, { additionalProperties: false }),
+	]) }) };
+	expect(() => validateToolArguments(tagged, { ...call, arguments: { value: { kind: "other", count: 1 } } }))
+		.toThrow('  - value.kind: expected one of ["a","b"]');
+	expect(() => validateToolArguments(tagged, { ...call, arguments: { value: { kind: "a", count: 1 } } }))
+		.toThrow("  - value.title: missing\n  - value.count: unknown field");
+});
+
 test("serialized tool schemas retain required-value conversions and caller ownership", () => {
 	const parameters = Type.Object({
 		label: Type.String(),

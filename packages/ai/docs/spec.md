@@ -76,6 +76,8 @@ Validation copies the arguments, removes optional null properties, converts stru
 
 Type errors name the expected and received types. Each missing required field has its own diagnostic. Paths use decoded property names separated by dots. The error ends with the original arguments as formatted JSON, so callers can inspect what the model supplied before conversion.
 
+Constraint errors explain bounds and allowed values. A failing union reports the branch selected by a distinct constant tag, or the branch declaring most of the supplied fields, with the deepest first failure breaking ties. Invalid declared fields appear before unknown fields in the same object.
+
 `StringEnum` from `@axi/ai/utils/string-enum` creates a typed string schema with an `enum` array. Use it with providers that do not accept `anyOf` and `const` enum encodings. It accepts optional `description` and `default` fields.
 
 Constrained sampling accepts JSON-schema preferences or grammar variants. JSON-schema strictness is `prefer` or `require`. Grammar formats are `openai_lark` and `openai_regex`. Support depends on the transport and model metadata.

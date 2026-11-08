@@ -328,10 +328,93 @@ function diagnostic(error: TLocalizedValidationError, value: unknown): string[] 
 		const pointer = `${error.instancePath}/${property.replaceAll("~", "~0").replaceAll("/", "~1")}`;
 		return `  - ${location(pointer)}: missing`;
 	});
-	const message = error.keyword === "type"
-		? `expected ${[error.params.type].flat().join(" or ")}, got ${receivedType(Value.Pointer.Get(value, error.instancePath))}`
-		: error.message;
+	let message = error.message;
+	if (error.keyword === "type") message = `expected ${[error.params.type].flat().join(" or ")}, got ${receivedType(Value.Pointer.Get(value, error.instancePath))}`;
+	else if (error.keyword === "boolean") message = error.schemaPath.endsWith("/additionalProperties") ? "unknown field" : "no value is allowed here";
+	else if (["minLength", "maxLength", "minItems", "maxItems", "minProperties", "maxProperties"].includes(error.keyword) && "limit" in error.params) {
+		const unit = error.keyword.endsWith("Length") ? "characters" : error.keyword.endsWith("Items") ? "items" : "properties";
+		message = `expected at ${error.keyword.startsWith("min") ? "least" : "most"} ${error.params.limit} ${unit}`;
+	}
+	else if (["minimum", "maximum", "exclusiveMinimum", "exclusiveMaximum"].includes(error.keyword) && "comparison" in error.params && "limit" in error.params)
+		message = `expected ${error.params.comparison} ${error.params.limit}`;
+	else if (error.keyword === "pattern") message = `expected to match ${error.params.pattern}`;
+	else if (error.keyword === "multipleOf") message = `expected a multiple of ${error.params.multipleOf}`;
+	else if (error.keyword === "uniqueItems") message = "expected unique items";
+	else if (error.keyword === "const") message = `expected ${JSON.stringify(error.params.allowedValue)}`;
+	else if (error.keyword === "enum") {
+		const allowed = error.params.allowedValues, json = JSON.stringify(allowed.slice(0, 20));
+		message = `expected one of ${allowed.length <= 20 ? json : `${json.slice(0, -1)}, ... and ${allowed.length - 20} more]`}`;
+	}
 	return [`  - ${location(error.instancePath)}: ${message}`];
+}
+
+const errorKeywords = ["type", "enum", "const", "minLength", "maxLength", "pattern", "format", "minimum", "maximum",
+	"exclusiveMinimum", "exclusiveMaximum", "multipleOf", "required", "properties", "patternProperties", "additionalProperties",
+	"minProperties", "maxProperties", "items", "prefixItems", "additionalItems", "minItems", "maxItems", "uniqueItems",
+	"contains", "allOf", "anyOf", "oneOf", "not", "if", "then", "else", "$ref", "unevaluatedProperties", "unevaluatedItems"];
+function errorPosition(error: TLocalizedValidationError, schema: SchemaNode): number[] {
+	const segments = error.schemaPath.slice(2).split("/").filter(Boolean).map(key => key.replaceAll("~1", "/").replaceAll("~0", "~"));
+	let node: unknown = schema, fields = false;
+	return [...segments, error.keyword].map(key => {
+		const keys = typeof node === "object" && node !== null ? Object.keys(node) : [];
+		const position = Array.isArray(node) ? Number(key) : fields ? keys.indexOf(key) : errorKeywords.indexOf(key);
+		node = typeof node === "object" && node !== null ? Reflect.get(node, key) : undefined;
+		fields = ["properties", "patternProperties", "$defs", "definitions"].includes(key);
+		return position < 0 ? errorKeywords.length : position;
+	});
+}
+function comparePosition(a: number[], b: number[]): number {
+	for (let i = 0; i < Math.min(a.length, b.length); i++) if (a[i] !== b[i]) return a[i] - b[i];
+	return a.length - b.length;
+}
+function unionTag(branches: Schema[], input: unknown, root: SchemaNode): { key: string; values: unknown[]; index: number } | undefined {
+	if (typeof input !== "object" || input === null || Array.isArray(input)) return;
+	const members = branches.map(branch => typeof branch === "object" ? resolve(branch, root) : branch);
+	const first = members[0];
+	if (typeof first !== "object") return;
+	for (const key of Object.keys(first.properties ?? {})) {
+		const values = members.map(member => {
+			const field = typeof member === "object" ? member.properties?.[key] : undefined;
+			return typeof field === "object" && Object.hasOwn(field, "const") ? field.const : undefined;
+		});
+		if (values.some(value => value === undefined || value !== null && typeof value === "object") || new Set(values).size !== values.length) continue;
+		return { key, values, index: values.indexOf(Reflect.get(input, key)) };
+	}
+}
+function failures(errors: TLocalizedValidationError[], value: unknown, root: SchemaNode): TLocalizedValidationError[] {
+	for (const error of errors) {
+		if (error.keyword !== "anyOf" && error.keyword !== "oneOf") continue;
+		const prefix = `${error.schemaPath}/${error.keyword}/`;
+		const branches = Value.Pointer.Get(root, `${error.schemaPath.slice(1)}/${error.keyword}`) as Schema[];
+		const input: unknown = Value.Pointer.Get(value, error.instancePath);
+		const tag = unionTag(branches, input, root);
+		if (tag?.index === -1) {
+			errors = errors.filter(child => child !== error && !child.schemaPath.startsWith(prefix));
+			const json = JSON.stringify(tag.values.slice(0, 20));
+			errors.push({ ...error, instancePath: `${error.instancePath}/${tag.key.replaceAll("~", "~0").replaceAll("/", "~1")}`,
+				message: `expected one of ${tag.values.length <= 20 ? json : `${json.slice(0, -1)}, ... and ${tag.values.length - 20} more]`}` });
+			continue;
+		}
+		let selected = tag?.index ?? -1, score = -1, depth = -1;
+		if (!tag) for (const [index, branch] of branches.entries()) {
+			const path = `${prefix}${index}`;
+			const children = errors.filter(child => child.schemaPath === path || child.schemaPath.startsWith(`${path}/`));
+			if (!children.length) continue;
+			const schema = typeof branch === "object" ? resolve(branch, root) : branch;
+			const fields = typeof schema === "object" ? schema.properties : undefined;
+			const declared = fields && typeof input === "object" && input !== null
+				? Object.keys(input).filter(key => Object.hasOwn(fields, key)).length : 0;
+			const first = children.toSorted((a, b) => comparePosition(errorPosition(a, root), errorPosition(b, root)))[0];
+			if (declared > score || declared === score && first.instancePath.length > depth) {
+				selected = index; score = declared; depth = first.instancePath.length;
+			}
+		}
+		if (selected >= 0) errors = errors.filter(child => child !== error && (!child.schemaPath.startsWith(prefix)
+			|| child.schemaPath === `${prefix}${selected}` || child.schemaPath.startsWith(`${prefix}${selected}/`)));
+		else if (error.keyword === "oneOf") error.message = "matches more than one alternative";
+	}
+	return errors.filter(error => error.keyword !== "additionalProperties")
+		.toSorted((a, b) => comparePosition(errorPosition(a, root), errorPosition(b, root)));
 }
 export function validateToolCall(tools: Tool[], call: ToolCall): any {
 	const tool = tools.find((tool) => tool.name === call.name);
@@ -346,12 +429,9 @@ export function validateToolArguments(tool: Tool, call: ToolCall): any {
 	const args = coerceTypes(convert(input, schema, schema), schema, schema);
 	const compiled = validator(tool.parameters, schema);
 	if (compiled.Check(args)) return args;
-	const failures =
-		compiled
-			.Errors(args)
-			.flatMap((error) => diagnostic(error, args))
-			.join("\n") || "Unknown validation error";
+	const problems = failures(compiled.Errors(args), args, schema)
+		.flatMap((error) => diagnostic(error, args)).join("\n") || "Unknown validation error";
 	throw new Error(
-		`Validation failed for tool "${call.name}":\n${failures}\n\nReceived arguments:\n${JSON.stringify(call.arguments, null, 2)}`,
+		`Validation failed for tool "${call.name}":\n${problems}\n\nReceived arguments:\n${JSON.stringify(call.arguments, null, 2)}`,
 	);
 }

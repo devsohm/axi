@@ -10,6 +10,8 @@ Object identity consists of contract, canonical parameters and principal. Parame
 
 `bytes()` returns a plain `{ type: "bytes", minLength?, maxLength? }` marker. Contract validation checks `Uint8Array` values and their byte lengths without adding executable properties to that marker. Invalid arguments report their JSON Pointer path, the expected type and the received type. Missing and unknown fields report their own paths.
 
+Constraint failures explain the limit or allowed values. A union uses its distinct constant tag when available; otherwise it selects the branch declaring most of the supplied fields, then the branch with the deepest first failure. Fragment references resolve within their schema resource. Compiling a missing fragment target fails.
+
 A local contract has one member set. A remote contract has named variants and a host-address function. Placement cannot be overridden by a request. Method arguments and results are checked at dispatch, including local calls. Factories declare synchronously and return an implementation rather than a promise.
 
 ## Host lifecycle

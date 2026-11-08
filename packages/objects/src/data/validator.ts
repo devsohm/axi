@@ -32,12 +32,104 @@ function diagnostic(error: TLocalizedValidationError, value: unknown): Validatio
 	let message = error.message;
 	if (error.keyword === "type") message = `expected ${[error.params.type].flat().join(" or ")}, got ${receivedType(Value.Pointer.Get(value, path))}`;
 	else if (error.keyword === "~refine") message = error.params.message;
-	else if (error.keyword === "boolean" && error.schemaPath.endsWith("/additionalProperties")) message = "unknown field";
+	else if (error.keyword === "boolean") message = error.schemaPath.endsWith("/additionalProperties") ? "unknown field" : "no value is allowed here";
+	else if (["minLength", "maxLength", "minItems", "maxItems", "minProperties", "maxProperties"].includes(error.keyword) && "limit" in error.params) {
+		const unit = error.keyword.endsWith("Length") ? "characters" : error.keyword.endsWith("Items") ? "items" : "properties";
+		message = `expected at ${error.keyword.startsWith("min") ? "least" : "most"} ${error.params.limit} ${unit}`;
+	}
+	else if (["minimum", "maximum", "exclusiveMinimum", "exclusiveMaximum"].includes(error.keyword) && "comparison" in error.params && "limit" in error.params)
+		message = `expected ${error.params.comparison} ${error.params.limit}`;
+	else if (error.keyword === "pattern") message = `expected to match ${error.params.pattern}`;
+	else if (error.keyword === "multipleOf") message = `expected a multiple of ${error.params.multipleOf}`;
+	else if (error.keyword === "uniqueItems") message = "expected unique items";
+	else if (error.keyword === "const") message = `expected ${JSON.stringify(error.params.allowedValue)}`;
+	else if (error.keyword === "enum") message = `expected one of ${listed(error.params.allowedValues)}`;
 	return [{ path, message }];
 }
 
-function validationSchema(schema: TSchema): TSchema {
+function listed(values: unknown[]): string {
+	const json = JSON.stringify(values.slice(0, 20));
+	return values.length <= 20 ? json : `${json.slice(0, -1)}, ... and ${values.length - 20} more]`;
+}
+
+const keywordOrder = ["type", "enum", "const", "minLength", "maxLength", "pattern", "~refine", "minimum", "maximum",
+	"exclusiveMinimum", "exclusiveMaximum", "multipleOf", "required", "properties", "patternProperties", "additionalProperties",
+	"minProperties", "maxProperties", "items", "prefixItems", "additionalItems", "minItems", "maxItems", "uniqueItems", "allOf", "anyOf"];
+function order(error: TLocalizedValidationError, schema: TSchema): number[] {
+	const segments = error.schemaPath.slice(2).split("/").filter(Boolean).map(key => key.replaceAll("~1", "/").replaceAll("~0", "~"));
+	let node: unknown = schema, names = false;
+	const ranks: number[] = [];
+	for (const key of [...segments, error.keyword]) {
+		const keys = typeof node === "object" && node !== null ? Object.keys(node) : [];
+		const rank = Array.isArray(node) ? Number(key) : names ? keys.indexOf(key) : keywordOrder.indexOf(key);
+		ranks.push(rank < 0 ? keywordOrder.length : rank);
+		node = typeof node === "object" && node !== null ? Reflect.get(node, key) : undefined;
+		names = ["properties", "patternProperties", "$defs"].includes(key);
+	}
+	return ranks;
+}
+function properties(schema: unknown): object {
+	if (typeof schema !== "object" || schema === null || !("properties" in schema)) return {};
+	return typeof schema.properties === "object" && schema.properties !== null ? schema.properties : {};
+}
+function unionTag(branches: unknown[], input: unknown): { key: string; values: unknown[]; index: number } | undefined {
+	if (typeof input !== "object" || input === null || Array.isArray(input)) return;
+	for (const key of Object.keys(properties(branches[0]))) {
+		const values = branches.map(branch => {
+			const field: unknown = Reflect.get(properties(branch), key);
+			return typeof field === "object" && field !== null && Object.hasOwn(field, "const") ? Reflect.get(field, "const") : undefined;
+		});
+		if (values.some(value => value === undefined || value !== null && typeof value === "object") || new Set(values).size !== values.length) continue;
+		return { key, values, index: values.indexOf(Reflect.get(input, key)) };
+	}
+}
+function explained(validator: ReturnType<typeof Compile>, value: unknown): ValidationError[] {
+	const schema = validator.Type();
+	let errors = validator.Errors(value);
+	for (const summary of errors) {
+		if (summary.keyword !== "anyOf") continue;
+		const prefix = `${summary.schemaPath}/anyOf/`;
+		const branches = Value.Pointer.Get(schema, `${summary.schemaPath.slice(1)}/anyOf`) as unknown[];
+		const input: unknown = Value.Pointer.Get(value, summary.instancePath);
+		const tag = unionTag(branches, input);
+		if (tag?.index === -1) {
+			errors = errors.filter(error => error !== summary && !error.schemaPath.startsWith(prefix));
+			errors.push({ ...summary, instancePath: `${summary.instancePath}/${tag.key.replaceAll("~", "~0").replaceAll("/", "~1")}`,
+				message: `expected one of ${listed(tag.values)}` });
+			continue;
+		}
+		let selected = tag?.index ?? -1, declared = -1, depth = -1;
+		if (!tag) for (const [index, branch] of branches.entries()) {
+			const path = `${prefix}${index}`;
+			const failures = errors.filter(error => error.schemaPath === path || error.schemaPath.startsWith(`${path}/`));
+			if (!failures.length) continue;
+			const fields = properties(branch);
+			const count = typeof input === "object" && input !== null ? Object.keys(input).filter(key => Object.hasOwn(fields, key)).length : 0;
+			const first = failures.toSorted((a, b) => compareOrder(order(a, schema), order(b, schema)))[0];
+			if (count > declared || count === declared && first.instancePath.length > depth) {
+				selected = index; declared = count; depth = first.instancePath.length;
+			}
+		}
+		if (selected >= 0) errors = errors.filter(error => error !== summary && (!error.schemaPath.startsWith(prefix)
+			|| error.schemaPath === `${prefix}${selected}` || error.schemaPath.startsWith(`${prefix}${selected}/`)));
+	}
+	return errors.filter(error => error.keyword !== "additionalProperties")
+		.toSorted((a, b) => compareOrder(order(a, schema), order(b, schema)))
+		.flatMap(error => diagnostic(error, value));
+}
+function compareOrder(a: number[], b: number[]): number {
+	for (let i = 0; i < Math.min(a.length, b.length); i++) if (a[i] !== b[i]) return a[i] - b[i];
+	return a.length - b.length;
+}
+
+function validationSchema(schema: TSchema, root: TSchema = schema): TSchema {
 	if (typeof schema !== "object" || schema === null) return schema;
+	const scope = typeof Reflect.get(schema, "$id") === "string" ? schema : root;
+	const reference: unknown = Reflect.get(schema, "$ref");
+	if (typeof reference === "string" && reference.startsWith("#/") && Value.Pointer.Get(scope, decodeURIComponent(reference.slice(1))) === undefined) {
+		const base = new URL(Reflect.get(scope, "$id") ?? "https://json-schema.invalid/root.json", "https://json-schema.invalid/root.json");
+		throw new Error(`Unresolved $ref ${reference} in ${base.href}`);
+	}
 	const descriptors = Object.getOwnPropertyDescriptors(schema);
 	for (const descriptor of Object.values(descriptors)) {
 		descriptor.configurable = true;
@@ -48,16 +140,16 @@ function validationSchema(schema: TSchema): TSchema {
 	for (const key of ["items", "additionalItems", "additionalProperties"]) {
 		const child: TSchema | TSchema[] | undefined = Reflect.get(schema, key);
 		if (child !== undefined)
-			Reflect.set(result, key, Array.isArray(child) ? child.map(validationSchema) : validationSchema(child));
+			Reflect.set(result, key, Array.isArray(child) ? child.map(item => validationSchema(item, scope)) : validationSchema(child, scope));
 	}
 	for (const key of ["anyOf", "allOf", "prefixItems"]) {
 		const children: TSchema[] | undefined = Reflect.get(schema, key);
-		if (children !== undefined) Reflect.set(result, key, children.map(validationSchema));
+		if (children !== undefined) Reflect.set(result, key, children.map(child => validationSchema(child, scope)));
 	}
 	for (const key of ["properties", "patternProperties", "$defs"]) {
 		const fields: Record<string, TSchema> | undefined = Reflect.get(schema, key);
 		if (fields !== undefined)
-			Reflect.set(result, key, Object.fromEntries(Object.entries(fields).map(([name, child]) => [name, validationSchema(child)])));
+			Reflect.set(result, key, Object.fromEntries(Object.entries(fields).map(([name, child]) => [name, validationSchema(child, scope)])));
 	}
 	if (Reflect.get(schema, "type") === "bytes") {
 		const marker = schema as BytesMarker, minimum = marker.minLength ?? 0, maximum = marker.maxLength ?? Infinity;
@@ -78,7 +170,7 @@ export function validatorFor(owner: Owner, context: Context): Validator {
 	finally { ResetFunctions(); ResetExternal(); }
 	const checked: Validator = {
 		check: value => validator.Check(value),
-		errors: value => validator.Errors(value).flatMap(error => diagnostic(error, value)),
+		errors: value => explained(validator, value),
 	};
 	compiled.set(owner, checked);
 	return checked;
