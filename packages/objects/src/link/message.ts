@@ -139,6 +139,6 @@ export interface Codec {
 const owner = { schema };
 export function checkMessage(message: unknown, context: Context): Message {
 	objectsMetrics(context.telemetry.metrics).counter("objects.link.checks").add(1);
-	if (!validatorFor(owner, context).Check(message)) throw new Error("message: fails the message schema");
+	if (!validatorFor(owner, context).check(message)) throw new Error("message: fails the message schema");
 	return message as Message;
 }

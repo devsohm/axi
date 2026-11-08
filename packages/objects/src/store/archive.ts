@@ -172,7 +172,7 @@ export function checkPart(
 	context: Context,
 ): ArchivePart {
 	objectsMetrics(context.telemetry.metrics).counter("objects.data.validations").add(1);
-	if (!validatorFor(partSchema, context).Check(part))
+	if (!validatorFor(partSchema, context).check(part))
 		throw invalid("args", `import: part ${position}: not an archive part`);
 	return part as ArchivePart;
 }
@@ -182,7 +182,7 @@ export function checkWrite(
 	context: Context,
 ): StoreWrite {
 	objectsMetrics(context.telemetry.metrics).counter("objects.data.validations").add(1);
-	if (!validatorFor(writeSchema, context).Check(write))
+	if (!validatorFor(writeSchema, context).check(write))
 		throw invalid("args", `${what}: not a store write`);
 	return write as StoreWrite;
 }

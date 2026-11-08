@@ -1,4 +1,3 @@
-import type { Validator } from "typebox/compile";
 import type { Context } from "../context/index.ts";
 import { checkAccepts, type AcceptedVersion, type AcceptsTable } from "../contracts/accepts.ts";
 import { contractData, type Contract, type CurrentVariants } from "../contracts/contract.ts";
@@ -6,7 +5,7 @@ import type { MemberNames, MethodAt } from "../contracts/history.ts";
 import type { Static } from "../contracts/schema.ts";
 import type { Snapshot } from "../contracts/snapshot.ts";
 import { invalid, ObjectsError } from "./errors.ts";
-import { check, validatorFor } from "./validator.ts";
+import { check, validatorFor, type Validator } from "./validator.ts";
 
 export type Value = null | boolean | number | string | Uint8Array | Value[] | { [key: string]: Value };
 export type Provider<C extends Contract> = {

@@ -115,7 +115,7 @@ it("keeps schema snapshots and rejects missing version mappings even for a repea
 	expect(() => contractData({ ...original })).toThrow("not a declared contract");
 	const payload = snapshotArguments(obj({ chunks: map(bytes({ max: 2 })) }), "upload");
 	const validator = validatorFor(payload, context);
-	expect(() => check(validator, { chunks: { "a/b~1": new Uint8Array(3) } }, "args", context)).toThrow("args/chunks/a~1b~01: expected bytes");
+	expect(() => check(validator, { chunks: { "a/b~1": new Uint8Array(3) } }, "args", context)).toThrow("args/chunks/a~1b~01: expected at most 2 bytes");
 });
 
 it("preserves protocol error fields and bounded dependency messages", () => {

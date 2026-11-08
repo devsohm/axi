@@ -83,6 +83,24 @@ test("tool validation distinguishes unknown tools, broken JSON and schema failur
 	expect(() => validateToolArguments(tool, call)).toThrow(/count/);
 });
 
+test("invalid tool arguments report their received type and each missing field", () => {
+	const inspect: Tool = {
+		name: "inspect", description: "Inspect coordinates",
+		parameters: Type.Object({ x: Type.Number(), y: Type.Number() }),
+	};
+	const call: ToolCall = { type: "toolCall", id: "inspect-1", name: "inspect", arguments: { x: "bad", y: 1 } };
+	expect(() => validateToolArguments(inspect, call)).toThrow(
+		'Validation failed for tool "inspect":\n  - x: expected number, got string\n\nReceived arguments:\n{\n  "x": "bad",\n  "y": 1\n}',
+	);
+	expect(() => validateToolArguments(inspect, { ...call, arguments: {} })).toThrow(
+		'Validation failed for tool "inspect":\n  - x: missing\n  - y: missing\n\nReceived arguments:\n{}',
+	);
+	const escaped: Tool = { ...inspect, parameters: Type.Object({ "x/~": Type.Number() }) };
+	expect(() => validateToolArguments(escaped, { ...call, arguments: { "x/~": "bad" } })).toThrow(
+		"  - x/~: expected number, got string",
+	);
+});
+
 test("serialized tool schemas retain required-value conversions and caller ownership", () => {
 	const parameters = Type.Object({
 		label: Type.String(),

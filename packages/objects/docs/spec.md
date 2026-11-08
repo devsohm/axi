@@ -8,6 +8,8 @@ The [JSON revision contract](delta.md) defines draft ownership, preparation, rep
 
 Object identity consists of contract, canonical parameters and principal. Parameters are required and cannot declare defaults. Contract declarations own immutable schema snapshots and fingerprints. Equal versions require compatible fingerprints. Accepted older versions use explicit adapters. Schema `format` fields describe values without validating their format; constraints such as `pattern` still apply.
 
+`bytes()` returns a plain `{ type: "bytes", minLength?, maxLength? }` marker. Contract validation checks `Uint8Array` values and their byte lengths without adding executable properties to that marker. Invalid arguments report their JSON Pointer path, the expected type and the received type. Missing and unknown fields report their own paths.
+
 A local contract has one member set. A remote contract has named variants and a host-address function. Placement cannot be overridden by a request. Method arguments and results are checked at dispatch, including local calls. Factories declare synchronously and return an implementation rather than a promise.
 
 ## Host lifecycle

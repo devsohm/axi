@@ -68,7 +68,7 @@ export class JsonColumn {
 			);
 		}
 		objectsMetrics(context.telemetry.metrics).counter("objects.data.validations").add(1);
-		if (!validatorFor(this, context).Check(migrated))
+		if (!validatorFor(this, context).check(migrated))
 			throw new ObjectsError({
 				code: "unavailable",
 				message: `${what}: migrate from version ${version} does not match the schema`,

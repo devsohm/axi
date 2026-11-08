@@ -74,6 +74,8 @@ A `Tool` contains `name`, `description`, and a TypeBox `parameters` schema. The 
 
 Validation copies the arguments, removes optional null properties, converts structural values, and then coerces explicitly declared primitive types. Serialized JSON schemas retain these conversions, including tuple prefixes, pattern properties and local references within their schema resource. Matching union values remain unchanged. Invalid converted values raise a validation error.
 
+Type errors name the expected and received types. Each missing required field has its own diagnostic. Paths use decoded property names separated by dots. The error ends with the original arguments as formatted JSON, so callers can inspect what the model supplied before conversion.
+
 `StringEnum` from `@axi/ai/utils/string-enum` creates a typed string schema with an `enum` array. Use it with providers that do not accept `anyOf` and `const` enum encodings. It accepts optional `description` and `default` fields.
 
 Constrained sampling accepts JSON-schema preferences or grammar variants. JSON-schema strictness is `prefer` or `require`. Grammar formats are `openai_lark` and `openai_regex`. Support depends on the transport and model metadata.

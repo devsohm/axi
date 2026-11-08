@@ -1,5 +1,5 @@
 import { isJsonValue, type JsonValue } from "../json.ts";
-import { type BytesMarker, type TSchema, withBytesCheck } from "./schema.ts";
+import type { TSchema } from "./schema.ts";
 
 export type Snapshot = { readonly schema: TSchema; readonly normal: JsonValue; readonly bytes: boolean };
 const annotations = new Set(["title", "description", "examples", "$comment", "deprecated"]);
@@ -20,7 +20,12 @@ function entries(value: object, path: string): [string, unknown][] {
 		if (typeof key !== "string") throw new Error(`${path}: symbol keys are not supported`);
 		const descriptor = Object.getOwnPropertyDescriptor(value, key)!;
 		if (!("value" in descriptor)) throw new Error(`${path}.${key}: accessors are not supported`);
-		if (descriptor.enumerable) result.push([key, descriptor.value]);
+		if (!descriptor.enumerable) {
+			if (key === "~optional" && descriptor.value === true) continue;
+			if (key === "~kind" && typeof descriptor.value === "string") continue;
+			throw new Error(`${path}.${key}: non-enumerable keys are not supported`);
+		}
+		result.push([key, descriptor.value]);
 	}
 	return result.sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0);
 }
@@ -42,9 +47,6 @@ function snapshot(source: unknown, path: string, closed: boolean): Snapshot {
 		if (raw["~optional"] === true && !property) throw new Error(`${at}: expected a schema`);
 		if (ancestors.has(raw)) throw new Error(`${at}: cyclic schema; use $defs and $ref for recursion`);
 		const bytes = raw.type === "bytes";
-		for (const key of ["~refine", "~codec", "~unsafe"])
-			if (Object.hasOwn(raw, key) && (!bytes || key === "~codec"))
-				throw new Error(`${at}: TypeBox refinements, codecs and unsafe types are not supported`);
 		ancestors.add(raw);
 		const owned: [string, unknown][] = [], normal: [string, JsonValue][] = [];
 		let containsBytes = bytes;
@@ -93,7 +95,7 @@ function snapshot(source: unknown, path: string, closed: boolean): Snapshot {
 				if (value !== undefined && (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0))
 					throw new Error(`${at}: bytes bounds must be non-negative integers`);
 		}
-		return [bytes ? withBytesCheck(schema as BytesMarker) : schema, Object.fromEntries(normal), containsBytes];
+		return [schema, Object.fromEntries(normal), containsBytes];
 	}
 	const [schema, normal, bytes] = node(source, path);
 	return { schema: schema as TSchema, normal, bytes };

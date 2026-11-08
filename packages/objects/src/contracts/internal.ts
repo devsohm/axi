@@ -1,4 +1,4 @@
-export { Method, KeyedMember, withBytesCheck, type BytesMarker } from "./schema.ts";
+export { Method, KeyedMember } from "./schema.ts";
 export * from "./contract.ts";
 export * from "./fingerprint.ts";
 export * from "./history.ts";

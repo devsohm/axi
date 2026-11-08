@@ -313,14 +313,25 @@ function omitOptionalNulls(value: unknown, schema: Schema, root: SchemaNode): un
 			delete object[key];
 	return objectMembers(value, schema, visit);
 }
-function location(error: TLocalizedValidationError): string {
-	const base = error.instancePath.replace(/^\//, "").replaceAll("/", ".");
-	if (error.keyword === "required" && "requiredProperties" in error.params) {
-		const properties = error.params.requiredProperties;
-		if (Array.isArray(properties) && typeof properties[0] === "string" && properties[0])
-			return base ? `${base}.${properties[0]}` : properties[0];
-	}
-	return base || "root";
+function location(pointer: string): string {
+	return pointer ? pointer.slice(1).split("/").map(key => key.replaceAll("~1", "/").replaceAll("~0", "~")).join(".") : "root";
+}
+function receivedType(value: unknown): string {
+	if (value === null) return "null";
+	if (Array.isArray(value)) return "array";
+	if (value instanceof Uint8Array) return "bytes";
+	if (typeof value === "number") return Number.isInteger(value) ? "integer" : Number.isFinite(value) ? "number" : String(value);
+	return typeof value;
+}
+function diagnostic(error: TLocalizedValidationError, value: unknown): string[] {
+	if (error.keyword === "required") return error.params.requiredProperties.map(property => {
+		const pointer = `${error.instancePath}/${property.replaceAll("~", "~0").replaceAll("/", "~1")}`;
+		return `  - ${location(pointer)}: missing`;
+	});
+	const message = error.keyword === "type"
+		? `expected ${[error.params.type].flat().join(" or ")}, got ${receivedType(Value.Pointer.Get(value, error.instancePath))}`
+		: error.message;
+	return [`  - ${location(error.instancePath)}: ${message}`];
 }
 export function validateToolCall(tools: Tool[], call: ToolCall): any {
 	const tool = tools.find((tool) => tool.name === call.name);
@@ -338,7 +349,7 @@ export function validateToolArguments(tool: Tool, call: ToolCall): any {
 	const failures =
 		compiled
 			.Errors(args)
-			.map((error) => `  - ${location(error)}: ${error.message}`)
+			.flatMap((error) => diagnostic(error, args))
 			.join("\n") || "Unknown validation error";
 	throw new Error(
 		`Validation failed for tool "${call.name}":\n${failures}\n\nReceived arguments:\n${JSON.stringify(call.arguments, null, 2)}`,

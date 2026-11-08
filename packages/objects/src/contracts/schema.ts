@@ -48,16 +48,8 @@ export function map<S extends TSchema>(value: S): TRecord<"^.*$", S> { return Ty
 export function opt<S extends TSchema>(schema: S): TOptional<S> { return Type.Optional(schema) as TOptional<S>; }
 export function unknown(): TUnknown { return Type.Unknown(); }
 export type BytesMarker = { readonly type: "bytes"; readonly minLength?: number; readonly maxLength?: number };
-export function withBytesCheck(marker: BytesMarker): TUnsafe<Uint8Array> {
-	const minimum = marker.minLength ?? 0, maximum = marker.maxLength ?? Infinity;
-	Object.defineProperty(marker, "~refine", { value: [{
-		check(value: unknown) { return value instanceof Uint8Array && value.length >= minimum && value.length <= maximum; },
-		error() { return "expected bytes of the declared length"; },
-	}] });
-	return marker as unknown as TUnsafe<Uint8Array>;
-}
 export function bytes(options: Bounds = {}): TUnsafe<Uint8Array> {
-	return withBytesCheck({ type: "bytes", ...bounds(options, ["minLength", "maxLength"]) });
+	return { type: "bytes", ...bounds(options, ["minLength", "maxLength"]) } as unknown as TUnsafe<Uint8Array>;
 }
 export class Method<A extends TSchema = TSchema, R extends TSchema = TSchema> {
 	readonly args: A;
