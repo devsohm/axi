@@ -2,6 +2,48 @@ import { createHash } from "node:crypto";
 import { expect, test } from "vitest";
 import { adaptOAuthProvider, authorizeMcp, McpOAuthProvider, type OAuthClientMetadata } from "../src/oauth/index.ts";
 import type { McpFetch } from "../src/index.ts";
+import { createMcpAuthProvider } from "../src/oauth/auth-provider.ts";
+import type { McpOAuthServerStore } from "../src/oauth/client-settings.ts";
+
+test("an auth provider retains its state store when the caller changes the options object", async () => {
+	const serverUrl = "https://mcp.example.test";
+	const store = (token: string): McpOAuthServerStore => ({
+		load: () => ({ serverUrl, tokens: { access_token: token, token_type: "Bearer" } }),
+		save() {},
+		withRefreshLock: async (fn) => fn(),
+	});
+	const options = { serverUrl, clientName: "test", store: store("initial"), settings: () => ({}), onChallenge() {} };
+	const provider = createMcpAuthProvider(options);
+	expect(await provider.token()).toBe("initial");
+	options.store = store("replacement");
+	expect(await provider.token()).toBe("initial");
+	await provider.settled();
+});
+
+test("refresh keeps the redirect URI selected when the auth provider was created", async () => {
+	const serverUrl = "https://mcp.example.test", seen: string[] = [];
+	const store: McpOAuthServerStore = {
+		load: () => ({ serverUrl, tokens: { access_token: "old", refresh_token: "rotate", token_type: "Bearer" } }),
+		save() {},
+		withRefreshLock: async (fn) => fn(),
+	};
+	const options = {
+		serverUrl, clientName: "test", store, settings: () => ({}), onChallenge() {},
+		redirectUrl: "https://app.example.test/original",
+		clientMetadataDocuments: {
+			baseUrl: "https://app.example.test",
+			listsRedirectUrl(url: string) { seen.push(url); return false; },
+		},
+	};
+	const provider = createMcpAuthProvider(options);
+	options.redirectUrl = "https://app.example.test/replacement";
+	await expect(provider.onUnauthorized?.({
+		response: new Response(null, { status: 401 }), serverUrl: new URL(serverUrl), token: "old",
+		fetch: async () => { throw new Error("No network in this test"); },
+	})).rejects.toThrow();
+	expect(seen[0]).toBe("https://app.example.test/original");
+	await provider.settled();
+});
 
 test("authorization exchanges a PKCE code, preserves scopes and shares rotating-token recovery", async () => {
 	const origin = "https://login.example.test";

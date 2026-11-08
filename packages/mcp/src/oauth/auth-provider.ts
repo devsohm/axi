@@ -45,17 +45,18 @@ export function createMcpAuthProvider(
 		redirectUrl?: string;
 	},
 ): McpAuthProvider {
+	const { store, redirectUrl } = options;
 	let pending: Promise<void> | undefined;
 	const refresh = (stale: string | undefined, fetch?: McpFetch, challenge?: OAuthChallenge): Promise<void> => {
-		pending ??= options.store
+		pending ??= store
 			.withRefreshLock(async () => {
-				const stored = await options.store.load();
+				const stored = await store.load();
 				if (stored?.tokens?.access_token !== stale) return;
 				if (!stored?.tokens?.refresh_token) throw new McpOAuthAuthorizationRequiredError();
 				const result = await refreshStoredTokens({ ...options, settings: options.settings() }, stored, {
 					fetch,
 					challenge,
-					redirectUrl: options.redirectUrl,
+					redirectUrl,
 				});
 				if (result !== "AUTHORIZED") throw new McpOAuthAuthorizationRequiredError();
 			})
@@ -67,7 +68,7 @@ export function createMcpAuthProvider(
 	return {
 		token: async () => {
 			await pending?.catch(() => undefined);
-			const stored = await options.store.load();
+			const stored = await store.load();
 			if (
 				stored?.tokensExpireAt === undefined ||
 				stored.tokensExpireAt > Date.now() + 30000 ||
@@ -75,7 +76,7 @@ export function createMcpAuthProvider(
 			)
 				return stored?.tokens?.access_token;
 			await refresh(stored.tokens.access_token).catch(() => undefined);
-			return (await options.store.load())?.tokens?.access_token;
+			return (await store.load())?.tokens?.access_token;
 		},
 		onUnauthorized: async (context) => {
 			const challenge = parseWwwAuthenticate(context.response.headers.get("www-authenticate"));
