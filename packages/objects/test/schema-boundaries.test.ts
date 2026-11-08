@@ -13,6 +13,8 @@ it("keeps byte contracts as plain data while validating their values at invocati
 		const ref = await host.get(contract, {}, context);
 		for (const [value, message] of [
 			[[1, 2], "expected bytes, got array"],
+			["x", "expected bytes, got string"],
+			["longer", "expected bytes, got string"],
 			[new Uint8Array(1), "expected at least 2 bytes"],
 			[new Uint8Array(5), "expected at most 4 bytes"],
 		] as const) {

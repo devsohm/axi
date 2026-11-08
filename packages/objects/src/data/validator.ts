@@ -172,6 +172,8 @@ function validationSchema(schema: TSchema, root: TSchema = schema): TSchema {
 	}
 	if (Reflect.get(schema, "type") === "bytes") {
 		const marker = schema as BytesMarker, minimum = marker.minLength ?? 0, maximum = marker.maxLength ?? Infinity;
+		Reflect.deleteProperty(result, "minLength");
+		Reflect.deleteProperty(result, "maxLength");
 		return Type.Refine(result,
 			(value: unknown) => value instanceof Uint8Array && value.length >= minimum && value.length <= maximum,
 			(value: unknown) => !(value instanceof Uint8Array) ? `expected bytes, got ${receivedType(value)}`
