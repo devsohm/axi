@@ -106,7 +106,8 @@ function explained(validator: ReturnType<typeof Compile>, value: unknown): Valid
 	for (const summary of errors) {
 		if (summary.keyword !== "anyOf") continue;
 		const prefix = `${summary.schemaPath}/anyOf/`;
-		const branches = Reflect.get(schemaAt(schema, summary.schemaPath) as object, "anyOf") as unknown[];
+		const alternatives = Reflect.get(schemaAt(schema, summary.schemaPath) as object, "anyOf") as unknown[];
+		const branches = alternatives.map((_, index) => schemaAt(schema, `${summary.schemaPath}/anyOf/${index}`));
 		const input: unknown = Value.Pointer.Get(value, summary.instancePath);
 		const tag = unionTag(branches, input);
 		if (tag?.index === -1) {
