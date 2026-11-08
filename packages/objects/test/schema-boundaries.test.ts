@@ -52,10 +52,11 @@ it("reports declaration constraints before unknown fields and selects the releva
 		write: method(obj({ label: str({ min: 3 }), count: int({ min: 2 }) })),
 		choose: method(union([obj({ title: str() }), obj({ count: int() })])),
 		tagged: method(union([obj({ kind: lit("a"), title: str() }), obj({ kind: lit("b"), count: int() })])),
+		tie: method(union([obj({ field: int(), veryLongMissingField: str() }), obj({ field: str() })])),
 	} });
 	const host = createHost({ onError() {} });
 	try {
-		await host.load([{ name: "settings", facet: defineFacet(facet => facet.serve(contract, () => ({ write: async () => null, choose: async () => null, tagged: async () => null }))) }], context);
+		await host.load([{ name: "settings", facet: defineFacet(facet => facet.serve(contract, () => ({ write: async () => null, choose: async () => null, tagged: async () => null, tie: async () => null }))) }], context);
 		const ref = await host.get(contract, {}, context);
 		await expect(ref.write({ label: "ok", count: 2 } as never, context)).rejects.toThrow("args/label: expected at least 3 characters");
 		await expect(ref.write({ label: "valid", count: 1 } as never, context)).rejects.toThrow("args/count: expected >= 2");
@@ -63,6 +64,7 @@ it("reports declaration constraints before unknown fields and selects the releva
 		await expect(ref.choose({ count: "bad" } as never, context)).rejects.toThrow("args/count: expected integer, got string");
 		await expect(ref.tagged({ kind: "unknown", count: 1 } as never, context)).rejects.toThrow('args/kind: expected one of ["a","b"]');
 		await expect(ref.tagged({ kind: "a", count: 1 } as never, context)).rejects.toThrow("args/title: missing");
+		await expect(ref.tie({ field: [] } as never, context)).rejects.toThrow("args/veryLongMissingField: missing");
 		ref.release();
 	} finally { await host.close(context); }
 });
@@ -81,6 +83,24 @@ it("resolves fragment references in their schema resource and refuses a missing 
 	} });
 	expect(() => checkArgs(bindProvider(invalid, {}), "write", { value: 1 }, 1, context))
 		.toThrow("Unresolved $ref #/$defs/count in https://json-schema.invalid/root.json");
+});
+
+it("reports an invalid union through nested references without losing its schema", () => {
+	const contract = local("nested", { version: 1, params: {}, members: { write: method({
+		type: "object", $defs: { choice: { anyOf: [{ type: "number" }, { type: "boolean" }] },
+			container: { type: "object", properties: { nested: { $ref: "#/$defs/choice" } }, required: ["nested"], additionalProperties: false } },
+		properties: { value: { $ref: "#/$defs/container" } }, required: ["value"], additionalProperties: false,
+	}) } });
+	const bound = bindProvider(contract, {});
+	expect(() => checkArgs(bound, "write", { value: { nested: {} } }, 1, context)).toThrow("args/value/nested: expected number, got object");
+	expect(() => checkArgs(bound, "write", { value: { nested: 2 } }, 1, context)).not.toThrow();
+	const choose = local("choose", { version: 1, params: {}, members: { write: method({
+		type: "object", $defs: { left: { type: "object", properties: { x: { type: "string" } }, required: ["x"], additionalProperties: false },
+			right: { type: "object", properties: { y: { type: "integer" } }, required: ["y"], additionalProperties: false } },
+		properties: { value: { anyOf: [{ $ref: "#/$defs/left" }, { $ref: "#/$defs/right" }] } }, required: ["value"], additionalProperties: false,
+	}) } });
+	expect(() => checkArgs(bindProvider(choose, {}), "write", { value: { y: "bad" } }, 1, context))
+		.toThrow("args/value/y: expected integer, got string");
 });
 
 it("preserves escaped JSON pointers for invalid and missing argument keys", async () => {

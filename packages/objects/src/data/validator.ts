@@ -55,15 +55,32 @@ function listed(values: unknown[]): string {
 const keywordOrder = ["type", "enum", "const", "minLength", "maxLength", "pattern", "~refine", "minimum", "maximum",
 	"exclusiveMinimum", "exclusiveMaximum", "multipleOf", "required", "properties", "patternProperties", "additionalProperties",
 	"minProperties", "maxProperties", "items", "prefixItems", "additionalItems", "minItems", "maxItems", "uniqueItems", "allOf", "anyOf"];
+function schemaAt(root: TSchema, pointer: string): unknown {
+	let node: unknown = root, scope: object = root;
+	const keys = pointer === "#" ? [] : pointer.slice(2).split("/").map(key => key.replaceAll("~1", "/").replaceAll("~0", "~"));
+	for (const key of [...keys, undefined]) {
+		const seen = new Set<object>();
+		while (typeof node === "object" && node !== null && !seen.has(node)) {
+			if (typeof Reflect.get(node, "$id") === "string") scope = node;
+			const ref: unknown = Reflect.get(node, "$ref");
+			if (typeof ref !== "string" || ref !== "#" && !ref.startsWith("#/")) break;
+			seen.add(node);
+			node = ref === "#" ? scope : Value.Pointer.Get(scope, ref.slice(1));
+		}
+		if (key === undefined) return node;
+		node = typeof node === "object" && node !== null ? Reflect.get(node, key) : undefined;
+	}
+}
 function order(error: TLocalizedValidationError, schema: TSchema): number[] {
-	const segments = error.schemaPath.slice(2).split("/").filter(Boolean).map(key => key.replaceAll("~1", "/").replaceAll("~0", "~"));
-	let node: unknown = schema, names = false;
+	const segments = error.schemaPath === "#" ? [] : error.schemaPath.slice(2).split("/").map(key => key.replaceAll("~1", "/").replaceAll("~0", "~"));
+	let names = false;
 	const ranks: number[] = [];
-	for (const key of [...segments, error.keyword]) {
+	for (const [index, key] of [...segments, error.keyword].entries()) {
+		const prefix = segments.slice(0, index).map(segment => segment.replaceAll("~", "~0").replaceAll("/", "~1"));
+		const node = schemaAt(schema, index ? `#/${prefix.join("/")}` : "#");
 		const keys = typeof node === "object" && node !== null ? Object.keys(node) : [];
 		const rank = Array.isArray(node) ? Number(key) : names ? keys.indexOf(key) : keywordOrder.indexOf(key);
 		ranks.push(rank < 0 ? keywordOrder.length : rank);
-		node = typeof node === "object" && node !== null ? Reflect.get(node, key) : undefined;
 		names = ["properties", "patternProperties", "$defs"].includes(key);
 	}
 	return ranks;
@@ -89,7 +106,7 @@ function explained(validator: ReturnType<typeof Compile>, value: unknown): Valid
 	for (const summary of errors) {
 		if (summary.keyword !== "anyOf") continue;
 		const prefix = `${summary.schemaPath}/anyOf/`;
-		const branches = Value.Pointer.Get(schema, `${summary.schemaPath.slice(1)}/anyOf`) as unknown[];
+		const branches = Reflect.get(schemaAt(schema, summary.schemaPath) as object, "anyOf") as unknown[];
 		const input: unknown = Value.Pointer.Get(value, summary.instancePath);
 		const tag = unionTag(branches, input);
 		if (tag?.index === -1) {
@@ -106,8 +123,9 @@ function explained(validator: ReturnType<typeof Compile>, value: unknown): Valid
 			const fields = properties(branch);
 			const count = typeof input === "object" && input !== null ? Object.keys(input).filter(key => Object.hasOwn(fields, key)).length : 0;
 			const first = failures.toSorted((a, b) => compareOrder(order(a, schema), order(b, schema)))[0];
-			if (count > declared || count === declared && first.instancePath.length > depth) {
-				selected = index; declared = count; depth = first.instancePath.length;
+			const pathLength = diagnostic(first, value)[0].path.length;
+			if (count > declared || count === declared && pathLength > depth) {
+				selected = index; declared = count; depth = pathLength;
 			}
 		}
 		if (selected >= 0) errors = errors.filter(error => error !== summary && (!error.schemaPath.startsWith(prefix)

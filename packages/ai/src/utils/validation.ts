@@ -352,13 +352,27 @@ const errorKeywords = ["type", "enum", "const", "minLength", "maxLength", "patte
 	"exclusiveMinimum", "exclusiveMaximum", "multipleOf", "required", "properties", "patternProperties", "additionalProperties",
 	"minProperties", "maxProperties", "items", "prefixItems", "additionalItems", "minItems", "maxItems", "uniqueItems",
 	"contains", "allOf", "anyOf", "oneOf", "not", "if", "then", "else", "$ref", "unevaluatedProperties", "unevaluatedItems"];
+function errorSchema(root: SchemaNode, pointer: string): unknown {
+	let node: unknown = root, scope = root;
+	const keys = pointer === "#" ? [] : pointer.slice(2).split("/").map(key => key.replaceAll("~1", "/").replaceAll("~0", "~"));
+	for (const key of [...keys, undefined]) {
+		if (typeof node === "object" && node !== null && !Array.isArray(node)) {
+			const schema = node as SchemaNode;
+			if (typeof schema.$id === "string") scope = schema;
+			if (typeof schema.$ref === "string") node = resolve(schema, scope);
+		}
+		if (key === undefined) return node;
+		node = typeof node === "object" && node !== null ? Reflect.get(node, key) : undefined;
+	}
+}
 function errorPosition(error: TLocalizedValidationError, schema: SchemaNode): number[] {
-	const segments = error.schemaPath.slice(2).split("/").filter(Boolean).map(key => key.replaceAll("~1", "/").replaceAll("~0", "~"));
-	let node: unknown = schema, fields = false;
-	return [...segments, error.keyword].map(key => {
+	const segments = error.schemaPath === "#" ? [] : error.schemaPath.slice(2).split("/").map(key => key.replaceAll("~1", "/").replaceAll("~0", "~"));
+	let fields = false;
+	return [...segments, error.keyword].map((key, index) => {
+		const prefix = segments.slice(0, index).map(segment => segment.replaceAll("~", "~0").replaceAll("/", "~1"));
+		const node = errorSchema(schema, index ? `#/${prefix.join("/")}` : "#");
 		const keys = typeof node === "object" && node !== null ? Object.keys(node) : [];
 		const position = Array.isArray(node) ? Number(key) : fields ? keys.indexOf(key) : errorKeywords.indexOf(key);
-		node = typeof node === "object" && node !== null ? Reflect.get(node, key) : undefined;
 		fields = ["properties", "patternProperties", "$defs", "definitions"].includes(key);
 		return position < 0 ? errorKeywords.length : position;
 	});
@@ -385,7 +399,7 @@ function failures(errors: TLocalizedValidationError[], value: unknown, root: Sch
 	for (const error of errors) {
 		if (error.keyword !== "anyOf" && error.keyword !== "oneOf") continue;
 		const prefix = `${error.schemaPath}/${error.keyword}/`;
-		const branches = Value.Pointer.Get(root, `${error.schemaPath.slice(1)}/${error.keyword}`) as Schema[];
+		const branches = Reflect.get(errorSchema(root, error.schemaPath) as object, error.keyword) as Schema[];
 		const input: unknown = Value.Pointer.Get(value, error.instancePath);
 		const tag = unionTag(branches, input, root);
 		if (tag?.index === -1) {
@@ -405,8 +419,10 @@ function failures(errors: TLocalizedValidationError[], value: unknown, root: Sch
 			const declared = fields && typeof input === "object" && input !== null
 				? Object.keys(input).filter(key => Object.hasOwn(fields, key)).length : 0;
 			const first = children.toSorted((a, b) => comparePosition(errorPosition(a, root), errorPosition(b, root)))[0];
-			if (declared > score || declared === score && first.instancePath.length > depth) {
-				selected = index; score = declared; depth = first.instancePath.length;
+			const firstPath = first.keyword === "required"
+				? `${first.instancePath}/${first.params.requiredProperties[0].replaceAll("~", "~0").replaceAll("/", "~1")}` : first.instancePath;
+			if (declared > score || declared === score && firstPath.length > depth) {
+				selected = index; score = declared; depth = firstPath.length;
 			}
 		}
 		if (selected >= 0) errors = errors.filter(child => child !== error && (!child.schemaPath.startsWith(prefix)

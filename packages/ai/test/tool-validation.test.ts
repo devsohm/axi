@@ -134,6 +134,23 @@ test("tool diagnostics select the intended union member and report invalid field
 		.toThrow('  - value.kind: expected one of ["a","b"]');
 	expect(() => validateToolArguments(tagged, { ...call, arguments: { value: { kind: "a", count: 1 } } }))
 		.toThrow("  - value.title: missing\n  - value.count: unknown field");
+	const tied: Tool = { ...inspect, parameters: Type.Object({ value: Type.Union([
+		Type.Object({ field: Type.Number(), veryLongMissingField: Type.String() }, { additionalProperties: false }),
+		Type.Object({ field: Type.Integer() }, { additionalProperties: false }),
+	]) }) };
+	expect(() => validateToolArguments(tied, { ...call, arguments: { value: { field: [] } } }))
+		.toThrow("  - value.veryLongMissingField: missing\n  - value.field: expected number, got array");
+});
+
+test("invalid values in referenced unions retain validation diagnostics", () => {
+	const inspect: Tool = { name: "inspect", description: "Inspect a referenced value", parameters: {
+		type: "object", $defs: { choice: { anyOf: [{ type: "number" }, { type: "boolean" }] },
+			container: { type: "object", properties: { nested: { $ref: "#/$defs/choice" } }, required: ["nested"] } },
+		properties: { value: { $ref: "#/$defs/container" } }, required: ["value"],
+	} };
+	const call: ToolCall = { type: "toolCall", id: "inspect-4", name: "inspect", arguments: { value: { nested: {} } } };
+	expect(() => validateToolArguments(inspect, call)).toThrow("  - value.nested: expected number, got object");
+	expect(validateToolArguments(inspect, { ...call, arguments: { value: { nested: 2 } } })).toEqual({ value: { nested: 2 } });
 });
 
 test("serialized tool schemas retain required-value conversions and caller ownership", () => {
