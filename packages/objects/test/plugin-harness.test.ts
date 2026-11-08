@@ -53,7 +53,9 @@ test("the plugin harness reports discovery, build, evaluation and activation fai
 			'import {defineFacet} from "@axi/objects"; export default defineFacet(() => {throw new Error("activation failed")});',
 		);
 		await expect(testPlugin(plugin, options, context)).rejects.toThrow(/setup failed.*activation failed/);
-		await expect(testPlugin(directory, options, context)).rejects.toThrow(/no plugin/);
+		const empty = join(directory, "empty");
+		await mkdir(empty);
+		await expect(testPlugin(empty, options, context)).rejects.toThrow(/no plugin/);
 		await expect(testPlugin(plugin, { ...options, modules: { "app/v2": {} } }, context)).rejects.toThrow(/pass api/);
 	} finally {
 		await rm(directory, { recursive: true, force: true });

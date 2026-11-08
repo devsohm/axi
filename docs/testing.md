@@ -40,8 +40,8 @@ Coverage output is in `coverage/index.html` and `coverage/coverage-summary.json`
 
 The JavaScript runner selects package tests from the root manifest's eight workspaces and integration tests from `test/*.test.ts`. Measured source files come from the eight workspaces. It resolves workspace package exports to their TypeScript source files. Package imports and direct source imports therefore share one module instance. The resolver honors the package's export restrictions before selecting the source file. Installed archive checks run separately with Node's normal package resolution and exercise the built JavaScript.
 
-The regular coverage command enforces minimum execution coverage of 85% lines,
-72% branches, 83% functions and 82% statements. Raise these limits as the suite
+The regular coverage command enforces minimum execution coverage of 86% lines,
+73% branches, 84% functions and 83% statements. Raise these limits as the suite
 improves. `test:coverage:full` requires 100% for all four metrics and currently
 fails because executable paths remain untested. No source modules are removed
 from measurement to pass either command.
@@ -65,6 +65,24 @@ The verification workflow runs the owned suite on its native platform matrix. It
 | TUI | Input, editing, history, layout, rendering, overlays, mouse interaction, formatting and native helpers | `packages/tui/test` and `packages/tui/native` |
 
 The storage-driver scenarios run against memory, JSONL and SQLite. Terminal rendering scenarios send the library's output through a terminal emulator and inspect the resulting screen. Native clipboard tests use a private virtual display or a test backend, so they do not replace the desktop clipboard.
+
+Array range checks compare 1,200 combinations with native JavaScript and replay
+each resulting revision. Store import and replication checks reject malformed
+schemas, rows, conditions and expressions, then confirm that rejected writes did
+not change the stored state. Login and invitation tests run through the HTTP
+component, including authentication, single-use links and expiration.
+
+Daemon protocol checks use a real child process. They send corrupt frames,
+exercise cancellation and reconnects, and advance handshake and heartbeat
+deadlines with a controlled clock. MCP checks cover split UTF-8 streams, message
+limits, peer loss and pipe shutdown. Durable checks include both join policies,
+automatic compaction, overflow recovery and composed request hooks. Fullscreen
+search tests inspect the terminal emulator after navigation, updates and resize.
+
+AI executable checks run in empty temporary directories and confirm that help,
+listing and invalid login choices do not create credentials. Provider protocol
+tests use synthetic credentials and controlled responses; they do not establish
+that a live provider accepts a request.
 
 `packages/durable/test/process-recovery.test.ts` kills its own child process during a run. It reopens SQLite and JSONL sessions, resumes the pending safe tool, checks that a committed effect is not repeated, and verifies submission deduplication. The fixture uses synthetic model responses. It does not terminate running user applications.
 

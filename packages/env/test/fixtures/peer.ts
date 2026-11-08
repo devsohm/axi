@@ -1,6 +1,9 @@
 const token = process.argv[process.argv.indexOf("--token") + 1];
 const silent = process.argv.includes("--silent");
 const windows = process.argv.includes("--windows");
+const watchEventsAt = process.argv.indexOf("--watch-events");
+const protocolAt = process.argv.indexOf("--protocol");
+if (process.argv.includes("--long-preamble")) process.stdout.write("x".repeat(2 * 1024 * 1024));
 process.stdout.write("shell startup\nAX");
 await new Promise<void>((resolve) => setImmediate(resolve));
 process.stdout.write(`I-ENV ${token}\n`);
@@ -32,9 +35,10 @@ process.stdin.on("data", (chunk: Buffer) => {
 			continue;
 		}
 		if (type !== 1) continue;
+		if (json.op === "hello" && process.argv.includes("--no-hello")) continue;
 		if (json.op === "hello")
 			send(2, id, {
-				protocol: 1,
+				protocol: protocolAt < 0 ? 1 : Number(process.argv[protocolAt + 1]),
 				version: "0.0.0",
 				os: windows ? "windows" : "linux",
 				arch: "x86_64",
@@ -50,6 +54,17 @@ process.stdin.on("data", (chunk: Buffer) => {
 			send(4, id, { kind: "progress" }, payload);
 			send(2, id, { value: json.value }, payload);
 		} else if (json.op === "drop") process.exit(0);
+		else if (json.op === "raw") {
+			process.stdout.write(payload);
+			send(2, id, { accepted: true });
+		} else if (json.op === "remote-error") send(3, id, json.error);
+		else if (json.op === "watch" && process.argv.includes("--watch-denied"))
+			send(3, id, { code: "EACCES", message: "watch denied" });
+		else if (json.op === "watch" && watchEventsAt >= 0) {
+			for (const event of JSON.parse(process.argv[watchEventsAt + 1]!)) send(4, id, event);
+			send(2, id, {});
+		} else if (json.op === "watch" && process.argv.includes("--watch-hold"))
+			send(4, id, { kind: "ready", mode: "native" });
 		else if (json.op === "bad") send(2, id, []);
 		else if (json.op !== "hold") send(3, id, { code: "EINVAL", message: "unknown operation" });
 	}

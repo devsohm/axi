@@ -36,7 +36,8 @@
 						"packages/objects/test/replay-model.test.ts",
 						"packages/objects/test/contracts.test.ts",
 						"packages/objects/test/state-sources.test.ts",
-						"packages/objects/test/schema-boundaries.test.ts"
+						"packages/objects/test/schema-boundaries.test.ts",
+						"packages/objects/test/delta-boundaries.test.ts"
 					]
 				},
 				{
@@ -73,7 +74,8 @@
 						"packages/objects/test/store-query.test.ts",
 						"packages/objects/test/store-engine.test.ts",
 						"packages/objects/test/store-runtime.test.ts",
-						"packages/objects/test/store-replication.test.ts"
+						"packages/objects/test/store-replication.test.ts",
+						"packages/objects/test/store-record-validation.test.ts"
 					]
 				},
 				{
@@ -158,7 +160,8 @@
 						"packages/objects/test/discovery-boundaries.test.ts",
 						"packages/objects/test/plugin-harness.test.ts",
 						"packages/objects/test/plugin-discovery.test.ts",
-						"packages/objects/test/base-inputs.test.ts"
+						"packages/objects/test/base-inputs.test.ts",
+						"packages/objects/test/plugin-css.test.ts"
 					]
 				},
 				{
@@ -184,7 +187,8 @@
 						"packages/objects/test/files.test.ts",
 						"packages/objects/test/app-host.test.ts",
 						"packages/objects/test/app-archive.test.ts",
-						"packages/objects/test/app-owner.test.ts"
+						"packages/objects/test/app-owner.test.ts",
+						"packages/objects/test/app-auth-routes.test.ts"
 					]
 				},
 				{
@@ -213,7 +217,9 @@
 						"packages/ai/test/device-auth-contract.test.ts",
 						"packages/ai/test/lazy-factory-contract.test.ts",
 						"packages/ai/test/codex-login.test.ts",
-						"packages/ai/test/oauth-flows.test.ts"
+						"packages/ai/test/oauth-flows.test.ts",
+						"packages/ai/test/catalog-auth.test.ts",
+						"packages/ai/test/entrypoints.test.ts"
 					]
 				},
 				{
@@ -230,7 +236,8 @@
 						"packages/ai/test/mistral.test.ts",
 						"packages/ai/test/wire.test.ts",
 						"packages/ai/test/tool-history.test.ts",
-						"packages/ai/test/request-encoding.test.ts"
+						"packages/ai/test/request-encoding.test.ts",
+						"packages/ai/test/responses-replay.test.ts"
 					]
 				},
 				{
@@ -280,7 +287,8 @@
 					"behavior": "inline and remote execution boundaries",
 					"tests": [
 						"packages/codemode/test/portable-contract.test.ts",
-						"packages/codemode/test/remote-boundaries.test.ts"
+						"packages/codemode/test/remote-boundaries.test.ts",
+						"packages/codemode/test/runtime-failures.test.ts"
 					]
 				}
 			]
@@ -304,7 +312,9 @@
 						"packages/mcp/test/stdio-session.test.ts",
 						"packages/mcp/test/http-session.test.ts",
 						"packages/mcp/test/transport.test.ts",
-						"packages/mcp/test/stream-recovery.test.ts"
+						"packages/mcp/test/stream-recovery.test.ts",
+						"packages/mcp/test/pipe-lifecycle.test.ts",
+						"packages/mcp/test/stream-boundaries.test.ts"
 					]
 				},
 				{
@@ -344,7 +354,8 @@
 					"tests": [
 						"packages/durable/test/scheduler.test.ts",
 						"packages/durable/test/timers.test.ts",
-						"packages/durable/test/tool-task.test.ts"
+						"packages/durable/test/tool-task.test.ts",
+						"packages/durable/test/join-policies.test.ts"
 					]
 				},
 				{
@@ -356,7 +367,9 @@
 						"packages/durable/test/compaction-lifecycle.test.ts",
 						"packages/durable/test/generation-lifecycle.test.ts",
 						"packages/durable/test/streamed-state.test.ts",
-						"packages/durable/test/tool-search.test.ts"
+						"packages/durable/test/tool-search.test.ts",
+						"packages/durable/test/automatic-compaction.test.ts",
+						"packages/durable/test/generation-hooks.test.ts"
 					]
 				},
 				{
@@ -399,7 +412,7 @@
 			"areas": [
 				{
 					"behavior": "connection framing, retry, process loss and stale handles",
-					"tests": ["packages/env/test/connection.test.ts"]
+					"tests": ["packages/env/test/connection.test.ts", "packages/env/test/protocol-boundaries.test.ts"]
 				},
 				{
 					"behavior": "filesystem and shell conformance, transfers and error mapping",
@@ -414,7 +427,11 @@
 				},
 				{
 					"behavior": "terminal lifecycle and watcher recovery",
-					"tests": ["packages/env/test/terminal.test.ts", "packages/env/test/watch-recovery.test.ts"]
+					"tests": [
+						"packages/env/test/terminal.test.ts",
+						"packages/env/test/watch-recovery.test.ts",
+						"packages/env/test/watch-events.test.ts"
+					]
 				},
 				{
 					"behavior": "SSH host identity and bootstrap behavior",
@@ -453,7 +470,8 @@
 						"packages/tui/test/layout-and-search.test.ts",
 						"packages/tui/test/component-lifecycle.test.ts",
 						"packages/tui/test/rendering.test.ts",
-						"packages/tui/test/fullscreen-interactions.test.ts"
+						"packages/tui/test/fullscreen-interactions.test.ts",
+						"packages/tui/test/transcript-search.test.ts"
 					]
 				},
 				{
