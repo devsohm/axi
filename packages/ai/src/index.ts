@@ -20,6 +20,7 @@ export type {
 } from "./api/options.ts";
 export * from "./models-store.ts";
 export * from "./models.ts";
+export * from "./cache-warming.ts";
 export * from "./providers/faux.ts";
 export * from "./auth/context.ts";
 export * from "./auth/credential-store.ts";

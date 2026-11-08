@@ -78,6 +78,12 @@ The generator lives in `catalog/generate.ts`. It reads models.dev v2, OpenRouter
 
 The [API contracts](docs/spec.md) describe collection methods, events, transcript changes, authentication, catalog publication, and session cleanup.
 
+## Prompt cache warming
+
+The package exports cache-warming policy helpers. `getPromptCacheTtlMs()` reads the request's retention and the model's cache lifetime. `getCacheWarmingDelayMs()` chooses a refresh delay. `isCacheWarmingReplayable()` checks whether a one-token replay can preserve the cache. `evaluateCacheWarming()` estimates the refresh cost and expected saving in USD.
+
+Your application owns timers, request history, cancellation and sending refreshes. Check the lifetime, replay eligibility and economic decision before sending. Use `getCacheWarmingRequestOptions(options, signal)` to preserve request settings while limiting output to one token, disabling retries and avoiding changes to continuation checkpoints. Stop or replace a pending refresh when its conversation changes. See [cache-warming contracts](docs/spec.md#prompt-cache-warming) for the limits and calculations.
+
 ## Request telemetry
 
 Pass a callback span as the request option `telemetry`. Keep the root adapter in your application. Model streams and deferred-response polls emit `axi.ai.request` and `axi.ai.poll` spans from authentication until the terminal result is observed. `AI_TELEMETRY_SCHEMA`, exported from the model module, describes the emitted fields.

@@ -42,6 +42,13 @@ Exports from the package root. The linked declarations contain exact signatures.
 | `BedrockOptions` | interface | [`api/options.d.ts`](../dist/api/options.d.ts) |
 | `BedrockThinkingDisplay` | typealias | [`api/options.d.ts`](../dist/api/options.d.ts) |
 | `CacheRetention` | typealias | [`providers/model-schema.d.ts`](../dist/providers/model-schema.d.ts) |
+| `CacheWarmingAction` | typealias | [`cache-warming.d.ts`](../dist/cache-warming.d.ts) |
+| `CacheWarmingDecision` | interface | [`cache-warming.d.ts`](../dist/cache-warming.d.ts) |
+| `CacheWarmingPhase` | typealias | [`cache-warming.d.ts`](../dist/cache-warming.d.ts) |
+| `CACHE_WARMING_IDLE_CONTINUATION_PROBABILITY` | const | [`cache-warming.d.ts`](../dist/cache-warming.d.ts) |
+| `CACHE_WARMING_MAX_AGE_MS` | const | [`cache-warming.d.ts`](../dist/cache-warming.d.ts) |
+| `CACHE_WARMING_MAX_IDLE_AGE_MS` | const | [`cache-warming.d.ts`](../dist/cache-warming.d.ts) |
+| `CACHE_WARMING_MINIMUM_EXPECTED_SAVINGS` | const | [`cache-warming.d.ts`](../dist/cache-warming.d.ts) |
 | `calculateCost` | function | [`models.d.ts`](../dist/models.d.ts) |
 | `ChatTemplateKwargValue` | typealias | [`providers/compat-schema.d.ts`](../dist/providers/compat-schema.d.ts) |
 | `clampThinkingLevel` | function | [`models.d.ts`](../dist/models.d.ts) |
@@ -87,6 +94,7 @@ Exports from the package root. The linked declarations contain exact signatures.
 | `DeferredHandle` | interface | [`types.d.ts`](../dist/types.d.ts) |
 | `DiagnosticErrorInfo` | interface | [`utils/diagnostics.d.ts`](../dist/utils/diagnostics.d.ts) |
 | `envApiKeyAuth` | function | [`auth/helpers.d.ts`](../dist/auth/helpers.d.ts) |
+| `evaluateCacheWarming` | function | [`cache-warming.d.ts`](../dist/cache-warming.d.ts) |
 | `EventStream` | class | [`utils/event-stream.d.ts`](../dist/utils/event-stream.d.ts) |
 | `extractDiagnosticError` | function | [`utils/diagnostics.d.ts`](../dist/utils/diagnostics.d.ts) |
 | `fauxAssistantMessage` | function | [`providers/faux.d.ts`](../dist/providers/faux.d.ts) |
@@ -105,6 +113,8 @@ Exports from the package root. The linked declarations contain exact signatures.
 | `formatThrownValue` | function | [`utils/diagnostics.d.ts`](../dist/utils/diagnostics.d.ts) |
 | `formatUserAgent` | function | [`utils/identity.d.ts`](../dist/utils/identity.d.ts) |
 | `getAttributionHeaders` | function | [`utils/identity.d.ts`](../dist/utils/identity.d.ts) |
+| `getCacheWarmingDelayMs` | function | [`cache-warming.d.ts`](../dist/cache-warming.d.ts) |
+| `getCacheWarmingRequestOptions` | function | [`cache-warming.d.ts`](../dist/cache-warming.d.ts) |
 | `getClientVersion` | function | [`utils/identity.d.ts`](../dist/utils/identity.d.ts) |
 | `getCurrentSystemMessage` | function | [`utils/transcript.d.ts`](../dist/utils/transcript.d.ts) |
 | `getCurrentSystemPrompt` | function | [`utils/transcript.d.ts`](../dist/utils/transcript.d.ts) |
@@ -115,6 +125,7 @@ Exports from the package root. The linked declarations contain exact signatures.
 | `getModelType` | function | [`utils/model-operations.d.ts`](../dist/utils/model-operations.d.ts) |
 | `getOpenCodeSessionHeaders` | function | [`utils/identity.d.ts`](../dist/utils/identity.d.ts) |
 | `getOverflowPatterns` | function | [`utils/overflow.d.ts`](../dist/utils/overflow.d.ts) |
+| `getPromptCacheTtlMs` | function | [`cache-warming.d.ts`](../dist/cache-warming.d.ts) |
 | `getSupportedThinkingLevels` | function | [`models.d.ts`](../dist/models.d.ts) |
 | `getSystemMessageText` | function | [`utils/text.d.ts`](../dist/utils/text.d.ts) |
 | `getToolStateChanges` | function | [`utils/transcript.d.ts`](../dist/utils/transcript.d.ts) |
@@ -137,6 +148,7 @@ Exports from the package root. The linked declarations contain exact signatures.
 | `ImagesStopReason` | typealias | [`types.d.ts`](../dist/types.d.ts) |
 | `InMemoryCredentialStore` | class | [`auth/credential-store.d.ts`](../dist/auth/credential-store.d.ts) |
 | `InMemoryModelsStore` | class | [`models-store.d.ts`](../dist/models-store.d.ts) |
+| `isCacheWarmingReplayable` | function | [`cache-warming.d.ts`](../dist/cache-warming.d.ts) |
 | `isContextOverflow` | function | [`utils/overflow.d.ts`](../dist/utils/overflow.d.ts) |
 | `isModelType` | function | [`utils/model-operations.d.ts`](../dist/utils/model-operations.d.ts) |
 | `isRecoverableLength` | function | [`utils/overflow.d.ts`](../dist/utils/overflow.d.ts) |

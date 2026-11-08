@@ -109,6 +109,20 @@ Simple requests merge model sampling defaults, thinking-level defaults, and requ
 
 The model collection resolves authentication before invoking a provider. Per-request headers override resolved headers without regard to case. `transformHeaders` receives the combined headers before dispatch. An `onPayload` callback does not replace the authentication operation.
 
+## Prompt cache warming
+
+These helpers calculate policy. They do not start timers, make requests or modify session state.
+
+- `getPromptCacheTtlMs(model, options)` converts the selected `model.promptCache` lifetime from seconds to milliseconds. An explicit `cacheRetention` takes precedence. Otherwise, `AXI_CACHE_RETENTION=long` selects long retention; other values select short retention. Request `env` values take precedence over the process environment when nonempty. `none` or an unknown lifetime returns `undefined`.
+- `getCacheWarmingDelayMs(ttlMs)` returns `undefined` for a lifetime of at most 10 seconds. Otherwise it returns the earlier of 90% of the lifetime and 10 seconds before expiry, rounded down to milliseconds, with a minimum of 1 millisecond.
+- `isCacheWarmingReplayable(model, options)` rejects Anthropic Messages requests with reasoning unless `compat.forceAdaptiveThinking` is true. Budget-based thinking can change the cached request when the output limit changes. Other requests are replayable.
+- `getCacheWarmingRequestOptions(options, signal)` returns a new options object with `maxTokens: 1`, `maxRetries: 0`, `disableContinuation: true` and the supplied cancellation signal. Other fields keep their values.
+- `evaluateCacheWarming(model, promptTokens, phase)` returns costs, a continuation estimate, expected savings, whether economics are available and a `warm` or `stop` action. All costs use `calculateCost()`, including model pricing tiers.
+
+A refresh costs one cache read plus one output token. The miss cost is the extra cost of a future cache miss over a cache hit, with a minimum of zero. It uses cache-write pricing when positive and input pricing otherwise. The continuation probability is 1 for `streaming` and 0.15 for `idle`. Expected savings equal continuation probability times miss cost, minus refresh cost. Savings of at least USD 0.05 select `warm`. Economics are available only with a positive prompt size and a positive cache-hit or cache-miss price.
+
+Applications schedule and cancel refreshes. The exported limits are `CACHE_WARMING_MAX_AGE_MS` (one hour), `CACHE_WARMING_MAX_IDLE_AGE_MS` (30 minutes), `CACHE_WARMING_MINIMUM_EXPECTED_SAVINGS` (USD 0.05), and `CACHE_WARMING_IDLE_CONTINUATION_PROBABILITY` (0.15). The helpers do not enforce the age limits; an application must apply them to its timers and stop warming when the request is replaced or the conversation ends.
+
 ## Authentication and storage
 
 `Credential` is either an `api_key` record or an `oauth` record. API-key records contain an optional key and provider environment values. OAuth records contain access and refresh tokens, an expiry timestamp, and provider fields.

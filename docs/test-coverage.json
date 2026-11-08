@@ -188,6 +188,10 @@
 			"directory": "packages/ai",
 			"areas": [
 				{
+					"behavior": "prompt cache retention, replay safety, refresh timing and cost decisions",
+					"tests": ["packages/ai/test/cache-warming.test.ts"]
+				},
+				{
 					"behavior": "catalogs, registration, authentication and refresh races",
 					"tests": [
 						"packages/ai/test/models.test.ts",
