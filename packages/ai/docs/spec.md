@@ -74,6 +74,8 @@ A `Tool` contains `name`, `description`, and a TypeBox `parameters` schema. The 
 
 Validation copies the arguments, removes optional null properties, converts structural values, and then coerces explicitly declared primitive types. Serialized JSON schemas retain these conversions, including tuple prefixes, pattern properties and local references within their schema resource. Matching union values remain unchanged. Invalid converted values raise a validation error.
 
+Local reference fragments decode URI escapes before JSON Pointer escapes. An unresolved or malformed reference rejects values at that field and names the reference in the diagnostic. An absent optional field does not fail because its reference is unresolved.
+
 Type errors name the expected and received types. Each missing required field has its own diagnostic. Paths use decoded property names separated by dots. The error ends with the original arguments as formatted JSON, so callers can inspect what the model supplied before conversion.
 
 Constraint errors explain bounds and allowed values. A failing union reports the branch selected by a distinct constant tag, or the branch declaring most of the supplied fields, with the deepest first failure breaking ties. Invalid declared fields appear before unknown fields in the same object.

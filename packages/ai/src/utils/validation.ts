@@ -41,7 +41,10 @@ function resolve(schema: SchemaNode, root: SchemaNode): Schema {
 	const visited = new Set<Schema>();
 	while ((schema.$ref === "#" || schema.$ref?.startsWith("#/")) && !visited.has(schema)) {
 		visited.add(schema);
-		const target = schema.$ref === "#" ? root : Value.Pointer.Get(root, schema.$ref.slice(1));
+		let pointer: string;
+		try { pointer = decodeURIComponent(schema.$ref.slice(1)); }
+		catch { break; }
+		const target = pointer === "" ? root : Value.Pointer.Get(root, pointer);
 		if (typeof target === "boolean") return target;
 		if (!Type.IsSchema(target)) break;
 		schema = target;
@@ -323,12 +326,17 @@ function receivedType(value: unknown): string {
 	if (typeof value === "number") return Number.isInteger(value) ? "integer" : Number.isFinite(value) ? "number" : String(value);
 	return typeof value;
 }
-function diagnostic(error: TLocalizedValidationError, value: unknown): string[] {
+function diagnostic(error: TLocalizedValidationError, value: unknown, root: SchemaNode): string[] {
 	if (error.keyword === "required") return error.params.requiredProperties.map(property => {
 		const pointer = `${error.instancePath}/${property.replaceAll("~", "~0").replaceAll("/", "~1")}`;
 		return `  - ${location(pointer)}: missing`;
 	});
 	let message = error.message;
+	if (error.keyword === "not") {
+		const schema = errorSchema(root, error.schemaPath);
+		if (typeof schema === "object" && schema !== null && "$ref" in schema && typeof schema.$ref === "string")
+			message = `unresolved reference ${schema.$ref}`;
+	}
 	if (error.keyword === "type") message = `expected ${[error.params.type].flat().join(" or ")}, got ${receivedType(Value.Pointer.Get(value, error.instancePath))}`;
 	else if (error.keyword === "boolean") message = error.schemaPath.endsWith("/additionalProperties") ? "unknown field" : "no value is allowed here";
 	else if (["minLength", "maxLength", "minItems", "maxItems", "minProperties", "maxProperties"].includes(error.keyword) && "limit" in error.params) {
@@ -446,7 +454,7 @@ export function validateToolArguments(tool: Tool, call: ToolCall): any {
 	const compiled = validator(tool.parameters, schema);
 	if (compiled.Check(args)) return args;
 	const problems = failures(compiled.Errors(args), args, schema)
-		.flatMap((error) => diagnostic(error, args)).join("\n") || "Unknown validation error";
+		.flatMap((error) => diagnostic(error, args, schema)).join("\n") || "Unknown validation error";
 	throw new Error(
 		`Validation failed for tool "${call.name}":\n${problems}\n\nReceived arguments:\n${JSON.stringify(call.arguments, null, 2)}`,
 	);

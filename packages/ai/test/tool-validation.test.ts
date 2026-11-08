@@ -498,3 +498,28 @@ test("local references belong to their enclosing schema resource", () => {
 	expect(validateToolArguments(missing, { ...call, arguments: {} })).toEqual({});
 	expect(() => validateToolArguments(missing, { ...call, arguments: { value: 3.8 } })).toThrow("Validation failed");
 });
+
+test("local reference fragments decode URI escapes before JSON Pointer escapes", () => {
+	for (const [key, ref] of [["a b", "a%20b"], ["α", "%CE%B1"], ["a/b", "a~1b"], ["a~b", "a~0b"], ["%20", "%2520"]]) {
+		const inspect: Tool = {
+			name: "inspect", description: "Read a referenced number",
+			parameters: { type: "object", $defs: { [key]: { type: "number" } }, properties: { value: { $ref: `#/$defs/${ref}` } } },
+		};
+		const call: ToolCall = { type: "toolCall", id: "fragment", name: "inspect", arguments: { value: "4.5" } };
+		expect(validateToolArguments(inspect, call)).toEqual({ value: 4.5 });
+		expect(call.arguments).toEqual({ value: "4.5" });
+		expect(() => validateToolArguments(inspect, { ...call, arguments: { value: [] } })).toThrow("value: expected number, got array");
+	}
+});
+
+test("unresolved or malformed reference fragments fail only when their field is present", () => {
+	for (const ref of ["#/$defs/missing", "#/$defs/%", "#/$defs/%CE"]) {
+		const inspect: Tool = {
+			name: "inspect", description: "Read an optional reference",
+			parameters: { type: "object", properties: { value: { $ref: ref } } },
+		};
+		const call: ToolCall = { type: "toolCall", id: "missing-fragment", name: "inspect", arguments: {} };
+		expect(validateToolArguments(inspect, call)).toEqual({});
+		expect(() => validateToolArguments(inspect, { ...call, arguments: { value: 4 } })).toThrow(`value: unresolved reference ${ref}`);
+	}
+});
