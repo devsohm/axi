@@ -1,4 +1,4 @@
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
 import { BACKGROUND_CONTEXT as context } from "../src/context/index.ts";
 import { ObjectsError } from "../src/data/index.ts";
 import {
@@ -254,4 +254,97 @@ it("keeps a run's original visible arguments when a replacement adapter throws",
 		records.drop();
 		app.documents.end();
 	}
+});
+
+it("rejects schema drift without a version bump while preserving the original declaration", () => {
+	const app = owner(), records = new JobRecords(task, app);
+	try {
+		const changed = defineJob("work", { version: 1, args: int(), result: str() });
+		expect(() => records.check(changed)).toThrow(/schema changed without a version bump/);
+		expect(records.definition).toBe(task);
+		expect(() => records.check(task)).not.toThrow();
+	} finally { records.drop(); app.documents.end(); }
+});
+
+it.each([false, true])("adding state during reload initializes only newly admitted runs, persisted: %s", async (persisted) => {
+	const disk = persisted ? await openStore(sqliteBackend(await openNodeSqliteDatabase(":memory:")), context) : undefined;
+	if (disk && !(disk instanceof ObjectsStore)) throw new Error("Unexpected Store");
+	const app = owner(disk);
+	const first = defineJob("state-added", { version: 1, args: int(), result: int(), persist: persisted ? { resume: "rerun" } : undefined });
+	const next = defineJob("state-added", { version: 2, args: int(), result: int(), state: progress, persist: persisted ? { resume: "rerun" } : undefined, accepts: { 1: { args: (value: number) => value, result: (value: number) => value } } });
+	const records = new JobRecords(first, app);
+	try {
+		const previous = await app.documents.tx((tx) => records.stage(tx, 1, context, {}), app.documents.own, context);
+		records.check(next); records.redefine(next);
+		const current = await app.documents.tx((tx) => records.stage(tx, 2, context, {}), app.documents.own, context);
+		expect(records.stateOf(previous.id)).toBeUndefined();
+		expect(records.stateOf(current.id)).toEqual({ n: 0 });
+		const states = records.states; if (!states) throw new Error("Missing newly installed run state");
+		await app.documents.tx(async (tx) => { (await tx.draftSlot(states, current.id)).n = 4; }, app.documents.own, context);
+		expect(records.running.value).toMatchObject([{ id: previous.id, args: 1 }, { id: current.id, args: 2, state: { n: 4 } }]);
+		if (disk) expect((await new Persistence(disk, "app", "objects.job-states", "state-added").read(current.id, context))?.value).toEqual({ n: 4 });
+	} finally { records.drop(); app.documents.end(); await disk?.close(context); }
+});
+
+it("undeclared queued work remains blocked until the same declaration returns", async () => {
+	const app = owner(), records = new JobRecords(task, app), invoked = Promise.withResolvers<JobRun>();
+	try {
+		const handle = await app.documents.tx((tx) => records.stage(tx, { text: "queued" }, context, {}), app.documents.own, context);
+		records.undeclare(); records.undeclare();
+		await vi.waitFor(() => expect(records.running.value).toMatchObject([{ id: handle.id, phase: "blocked", reason: "version" }]));
+		await records.retryBlocked(context);
+		expect(records.running.value).toMatchObject([{ phase: "blocked" }]);
+		records.redefine(task); records.attach({ invoke: (run) => invoked.resolve(run), finish() {} });
+		await records.retryBlocked(context);
+		expect((await invoked.promise).id).toBe(handle.id);
+		expect(records.running.value).toMatchObject([{ id: handle.id, args: { text: "queued" }, phase: "running" }]);
+	} finally { records.drop(); app.documents.end(); }
+});
+
+it.each(["done", "failed"] as const)("a version adapter maps a %s outcome without changing the stored run", async (kind) => {
+	const app = owner(), first = defineJob("adapt-outcome", { version: 1, args: int(), result: int() });
+	const records = new JobRecords(first, app), invoked = Promise.withResolvers<JobRun>();
+	records.attach({ invoke: (run) => invoked.resolve(run), finish() {} });
+	try {
+		await app.documents.tx((tx) => records.stage(tx, 9, context, {}), app.documents.own, context);
+		const run = await invoked.promise;
+		const outcome = kind === "done" ? { id: run.id, args: 9, state: undefined, kind, result: 7 } : { id: run.id, args: 9, state: undefined, kind, error: { kind: "aborted", reason: "abort" } as const };
+		await app.documents.tx((tx) => records.change(tx, { kind: "outcome", run, outcome }), app.documents.own, context);
+		const next = defineJob("adapt-outcome", { version: 2, args: int(), result: int(), accepts: { 1: { args: (value: number) => value + 100, result: (value: number) => value * 10 } } });
+		records.check(next); records.redefine(next);
+		const mapped = records.outcomeOf(run, context);
+		expect(mapped).toEqual(kind === "done" ? { id: run.id, args: 109, state: undefined, kind, result: 70 } : { id: run.id, args: 109, state: undefined, kind, error: { kind: "aborted", reason: "abort" } });
+		expect(records.outcomeOf(run, context)).toBe(mapped);
+		expect(run.outcome).toEqual(outcome); expect(run.args).toBe(9);
+	} finally { records.drop(); app.documents.end(); }
+});
+
+it.each([false, true])("aborting blocked work retires its record and state, persisted: %s", async (persisted) => {
+	const disk = persisted ? await openStore(sqliteBackend(await openNodeSqliteDatabase(":memory:")), context) : undefined;
+	if (disk && !(disk instanceof ObjectsStore)) throw new Error("Unexpected Store");
+	const app = owner(disk), definition = defineJob("blocked-abort", { version: 1, args: int(), result: int(), state: progress, persist: persisted ? { resume: "rerun" } : undefined });
+	const records = new JobRecords(definition, app);
+	try {
+		const handle = await app.documents.tx((tx) => records.stage(tx, 1, context, {}), app.documents.own, context);
+		records.undeclare(); await vi.waitFor(() => expect(records.running.value).toMatchObject([{ phase: "blocked" }]));
+		expect(await records.abort(handle.id, context)).toBe("marked");
+		await expect(handle.outcome(context)).rejects.toMatchObject({ code: "aborted" });
+		expect(records.running.value).toEqual([]); expect(records.stateOf(handle.id)).toBeUndefined();
+		expect(await records.abort(handle.id, context)).toBe("terminal");
+		if (disk) for (const table of ["objects.jobs", "objects.job-states"]) expect(await new Persistence(disk, "app", table, definition.name).read(handle.id, context)).toBeUndefined();
+	} finally { records.drop(); app.documents.end(); await disk?.close(context); }
+});
+
+it("a discarded admission rejects its handle and does not reserve its key or concurrency slot", async () => {
+	const app = owner(), records = new JobRecords(task, app); let discarded: ReturnType<JobRecords["stage"]> | undefined;
+	try {
+		await expect(app.documents.tx((tx) => { discarded = records.stage(tx, { text: "discard" }, context, { key: "same" }); throw new Error("Caller rolled back"); }, app.documents.own, context)).rejects.toThrow("Caller rolled back");
+		if (!discarded) throw new Error("Missing discarded handle");
+		await expect(discarded.outcome(context)).rejects.toMatchObject({ code: "released", reason: "discarded" });
+		expect(records.running.value).toEqual([]); expect(app.counts).toEqual([]);
+		const accepted = await app.documents.tx((tx) => records.stage(tx, { text: "accepted" }, context, { key: "same" }), app.documents.own, context);
+		expect(accepted.id).not.toBe(discarded.id);
+		expect(records.running.value).toMatchObject([{ id: accepted.id, args: { text: "accepted" } }]);
+		expect(app.counts).toEqual([1]);
+	} finally { records.drop(); app.documents.end(); }
 });

@@ -57,7 +57,9 @@
 					"tests": [
 						"packages/objects/test/context.test.ts",
 						"packages/objects/test/output.test.ts",
+						"packages/objects/test/output-boundaries.test.ts",
 						"packages/objects/test/sqlite.test.ts",
+						"packages/objects/test/sqlite-cloudflare.test.ts",
 						"packages/objects/test/telemetry-store.test.ts",
 						"packages/objects/test/telemetry-reader.test.ts"
 					]
@@ -126,6 +128,7 @@
 					"tests": [
 						"packages/objects/test/link-messages.test.ts",
 						"packages/objects/test/text-codec.test.ts",
+						"packages/objects/test/text-codec-boundaries.test.ts",
 						"packages/objects/test/binary-codec.test.ts",
 						"packages/objects/test/channel.test.ts"
 					]
@@ -195,7 +198,10 @@
 				},
 				{
 					"behavior": "trusted terminal frame boundaries, credentials, consent, sandbox isolation and exit cleanup",
-					"tests": ["packages/objects/test/terminal-launcher.test.ts"]
+					"tests": [
+						"packages/objects/test/terminal-launcher.test.ts",
+						"packages/objects/test/terminal-launcher-lifecycle.test.ts"
+					]
 				}
 			]
 		},
@@ -211,6 +217,7 @@
 					"behavior": "catalogs, registration, authentication and refresh races",
 					"tests": [
 						"packages/ai/test/models.test.ts",
+						"packages/ai/test/identity-forwarding.test.ts",
 						"packages/ai/test/model-lifecycle.test.ts",
 						"packages/ai/test/registration.test.ts",
 						"packages/ai/test/catalog.test.ts",
@@ -219,6 +226,7 @@
 						"packages/ai/test/device-auth-contract.test.ts",
 						"packages/ai/test/lazy-factory-contract.test.ts",
 						"packages/ai/test/codex-login.test.ts",
+						"packages/ai/test/codex-login-boundaries.test.ts",
 						"packages/ai/test/oauth-flows.test.ts",
 						"packages/ai/test/catalog-auth.test.ts",
 						"packages/ai/test/entrypoints.test.ts",
@@ -234,6 +242,7 @@
 						"packages/ai/test/completions.test.ts",
 						"packages/ai/test/codex.test.ts",
 						"packages/ai/test/google.test.ts",
+						"packages/ai/test/google-contracts.test.ts",
 						"packages/ai/test/google-response.test.ts",
 						"packages/ai/test/bedrock.test.ts",
 						"packages/ai/test/azure-responses.test.ts",
@@ -320,7 +329,8 @@
 						"packages/mcp/test/transport.test.ts",
 						"packages/mcp/test/stream-recovery.test.ts",
 						"packages/mcp/test/pipe-lifecycle.test.ts",
-						"packages/mcp/test/stream-boundaries.test.ts"
+						"packages/mcp/test/stream-boundaries.test.ts",
+						"packages/mcp/test/http-retry-boundaries.test.ts"
 					]
 				},
 				{
@@ -330,6 +340,7 @@
 						"packages/mcp/test/oauth-contract.test.ts",
 						"packages/mcp/test/configuration.test.ts",
 						"packages/mcp/test/oauth-callback.test.ts",
+						"packages/mcp/test/loopback-boundaries.test.ts",
 						"packages/mcp/test/content-discovery.test.ts",
 						"packages/mcp/test/oauth-lifecycle.test.ts",
 						"packages/mcp/test/client-metadata.test.ts"
@@ -364,6 +375,8 @@
 					"tests": [
 						"packages/durable/test/scheduler.test.ts",
 						"packages/durable/test/scheduler-recovery-boundaries.test.ts",
+						"packages/durable/test/scheduler-timers.test.ts",
+						"packages/durable/test/task-graph-boundaries.test.ts",
 						"packages/durable/test/scheduler-definition-lifecycle.test.ts",
 						"packages/durable/test/timers.test.ts",
 						"packages/durable/test/tool-task.test.ts",
@@ -394,6 +407,7 @@
 						"packages/durable/test/search.test.ts",
 						"packages/durable/test/images.test.ts",
 						"packages/durable/test/image-processing.test.ts",
+						"packages/durable/test/image-format-boundaries.test.ts",
 						"packages/durable/test/codemode.test.ts",
 						"packages/durable/test/watch-context.test.ts",
 						"packages/durable/test/watch-rescan.test.ts",
@@ -447,7 +461,8 @@
 					"tests": [
 						"packages/env/test/terminal.test.ts",
 						"packages/env/test/watch-recovery.test.ts",
-						"packages/env/test/watch-events.test.ts"
+						"packages/env/test/watch-events.test.ts",
+						"packages/env/test/listing-boundaries.test.ts"
 					]
 				},
 				{
@@ -468,6 +483,7 @@
 						"packages/tui/test/history.test.ts",
 						"packages/tui/test/editor.test.ts",
 						"packages/tui/test/editor-boundaries.test.ts",
+						"packages/tui/test/editor-model.test.ts",
 						"packages/tui/test/input-interactions.test.ts",
 						"packages/tui/test/editor-screen.test.ts"
 					]

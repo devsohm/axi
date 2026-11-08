@@ -24,6 +24,7 @@
 		"test:workers": "node test/workers/run.mjs && node test/workers/codemode-example.mjs",
 		"test:coverage": "vitest run --coverage --reporter=default --reporter=json --outputFile=coverage/test-results.json && node scripts/coverage-summary.mjs && node scripts/test-coverage.mjs",
 		"test:coverage:full": "vitest run --coverage --coverage.thresholds.100",
+		"coverage:gaps": "node scripts/coverage-summary.mjs --gaps",
 		"verify": "node scripts/verify.mjs"
 	},
 	"devDependencies": {

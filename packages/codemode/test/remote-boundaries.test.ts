@@ -160,3 +160,46 @@ test("worker startup failures settle execution and release the worker", async ()
 		await Promise.all(exited);
 	}
 });
+
+test("worker import-watch notifications cannot interrupt a valid execution result", async () => {
+	const exits: Promise<void>[] = [];
+	const source = `import { parentPort } from 'node:worker_threads';
+		parentPort.postMessage({'watch:import':'dependency.ts'});
+		parentPort.postMessage({'watch:require':'dependency.cjs'});
+		parentPort.postMessage({type:'done',ok:true,value:'42',writes:'[]'});`;
+	const sandbox = new CodemodeSandbox({
+		workerUrl: new URL(`data:text/javascript,${encodeURIComponent(source)}`),
+		onWorkerStarted: (exit) => exits.push(exit),
+	});
+	try {
+		expect(await sandbox.execute("return 42;")).toMatchObject({ ok: true, value: 42, calls: [], output: [] });
+	} finally {
+		await sandbox.close();
+		await Promise.all(exits);
+	}
+});
+
+test("a worker that exits without sending a terminal result rejects without retaining its reservation", async () => {
+	let reservations = 0;
+	const exits: Promise<void>[] = [];
+	const sandbox = new CodemodeSandbox({
+		workerUrl: new URL("data:text/javascript,process.exit(7)"),
+		acquireWorker() {
+			reservations++;
+			return () => {
+				reservations--;
+			};
+		},
+		onWorkerStarted: (exit) => exits.push(exit),
+	});
+	try {
+		expect(await sandbox.execute("return 42;")).toMatchObject({
+			ok: false,
+			error: { kind: "sandbox", message: "Worker exited with code 7 before the script settled" },
+		});
+		await Promise.all(exits);
+		expect(reservations).toBe(0);
+	} finally {
+		await sandbox.close();
+	}
+});

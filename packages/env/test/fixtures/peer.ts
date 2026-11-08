@@ -3,6 +3,8 @@ const silent = process.argv.includes("--silent");
 const windows = process.argv.includes("--windows");
 const watchEventsAt = process.argv.indexOf("--watch-events");
 const protocolAt = process.argv.indexOf("--protocol");
+const featuresAt = process.argv.indexOf("--features");
+const listingAt = process.argv.indexOf("--listing");
 if (process.argv.includes("--long-preamble")) process.stdout.write("x".repeat(2 * 1024 * 1024));
 process.stdout.write("shell startup\nAX");
 await new Promise<void>((resolve) => setImmediate(resolve));
@@ -48,8 +50,16 @@ process.stdin.on("data", (chunk: Buffer) => {
 				cwd: windows ? "C:\\remote" : "/",
 				driveCwds: windows ? { "D:": "D:\\other", "E:": "C:\\wrong-drive" } : {},
 				pid: process.pid,
+				...(featuresAt < 0 ? {} : { features: JSON.parse(process.argv[featuresAt + 1]!) }),
 			});
 		else if (silent) continue;
+		else if (json.op === "listFiles" && listingAt >= 0)
+			send(
+				2,
+				id,
+				{ truncated: process.argv.includes("--truncated") },
+				Buffer.from(process.argv[listingAt + 1]!, "base64"),
+			);
 		else if (json.op === "echo") {
 			send(4, id, { kind: "progress" }, payload);
 			send(2, id, { value: json.value }, payload);

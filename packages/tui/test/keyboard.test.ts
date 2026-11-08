@@ -1,10 +1,23 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { KeybindingsManager, TUI_KEYBINDINGS, type KeybindingDefinitions } from "../src/keybindings.ts";
 import { WheelScrollAccelerator } from "../src/wheel-scroll.ts";
-import { decodePrintableKey, matchesKey, parseKey, setKittyProtocolActive } from "../src/keys.ts";
+import { decodePrintableKey, Key, matchesKey, parseKey, setKittyProtocolActive } from "../src/keys.ts";
 import { parseKeyboardProtocolNegotiationSequence, resolveEscapeTimeoutMs } from "../src/terminal.ts";
 
 afterEach(() => setKittyProtocolActive(false));
+
+it("public modifier constructors match their Kitty keyboard protocol reports", () => {
+	for (const [construct, modifier] of [
+		[Key.ctrl, 5], [Key.shift, 2], [Key.alt, 3], [Key.super, 9],
+		[Key.ctrlShift, 6], [Key.shiftCtrl, 6], [Key.ctrlAlt, 7], [Key.altCtrl, 7],
+		[Key.shiftAlt, 4], [Key.altShift, 4], [Key.ctrlSuper, 13], [Key.superCtrl, 13],
+		[Key.shiftSuper, 10], [Key.superShift, 10], [Key.altSuper, 11], [Key.superAlt, 11],
+		[Key.ctrlShiftAlt, 8], [Key.ctrlShiftSuper, 14],
+	] as const) {
+		expect(matchesKey(`\x1b[97;${modifier}u`, construct("a"))).toBe(true);
+		expect(matchesKey(`\x1b[98;${modifier}u`, construct("a"))).toBe(false);
+	}
+});
 
 describe("keyboard identity", () => {
 	it("keeps uppercase text separate from an unmodified lowercase binding", () => {

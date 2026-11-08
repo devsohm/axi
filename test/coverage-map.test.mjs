@@ -12,6 +12,65 @@ const run = promisify(execFile);
 const source = new URL("../scripts/test-coverage.mjs", import.meta.url);
 const manifest = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8"));
 
+for (const [args, expected] of [
+	[["--gaps", "main.ts", "2"], "function submit"],
+	[["--gaps", "absent", "2"], "0 uncovered locations"],
+	[["--gaps", "main.ts", "50"], "<unmapped>"],
+	[["--gaps", "main.ts", "0"], "Coverage gap limit must be a positive integer"],
+])
+	test(`coverage gap command handles ${args.join(" ")}`, async () => {
+		const root = await mkdtemp(join(tmpdir(), "axi-coverage-gaps-"));
+		try {
+			for (const directory of ["scripts", "coverage", "packages/sample/src"])
+				await mkdir(join(root, directory), { recursive: true });
+			await copyFile(
+				new URL("../scripts/coverage-summary.mjs", import.meta.url),
+				join(root, "scripts/coverage-summary.mjs"),
+			);
+			await writeFile(join(root, "package.json"), JSON.stringify({ workspaces: ["packages/sample"] }));
+			await writeFile(join(root, "packages/sample/package.json"), JSON.stringify({ name: "@axi/sample" }));
+			const file = join(root, "packages/sample/src/main.ts");
+			await writeFile(file, "function submit() {}\nif (flag) submit();\nelse fallback();\n");
+			const metric = { total: 2, covered: 1, skipped: 0, pct: 50 };
+			await writeFile(
+				join(root, "coverage/coverage-summary.json"),
+				JSON.stringify({ [file]: { lines: metric, functions: metric, branches: metric } }),
+			);
+			const location = (line) => ({ start: { line, column: 0 }, end: { line, column: 10 } });
+			await writeFile(
+				join(root, "coverage/coverage-final.json"),
+				JSON.stringify({
+					[file]: {
+						s: { 0: 0 },
+						statementMap: { 0: location(3) },
+						f: { 0: 0 },
+						fnMap: { 0: { name: "submit", decl: location(1) } },
+						b: { 0: [0, 1], ...(args.at(-1) === "50" ? { 1: [0], 2: [0] } : {}) },
+						branchMap: {
+							0: { locations: [location(2), location(3)] },
+							...(args.at(-1) === "50"
+								? { 1: { locations: [location(0)], loc: location(3) }, 2: { locations: [location(0)] } }
+								: {}),
+						},
+					},
+				}),
+			);
+			const execution = run(process.execPath, ["scripts/coverage-summary.mjs", ...args], { cwd: root });
+			if (args.at(-1) === "0")
+				await assert.rejects(execution, (error) => error.code === 1 && error.stderr.includes(expected));
+			else {
+				const { stdout } = await execution;
+				assert.ok(stdout.includes(expected));
+				if (args[1] === "main.ts" && args.at(-1) === "2") {
+					assert.ok(stdout.includes("if (flag) submit();"));
+					assert.ok(!stdout.includes("else fallback();"));
+				}
+			}
+		} finally {
+			await rm(root, { recursive: true, force: true });
+		}
+	});
+
 test("the JavaScript runner selects every owned package and integration test", async () => {
 	const config = (await import("../vitest.config.ts")).default;
 	const root = fileURLToPath(new URL("..", import.meta.url));

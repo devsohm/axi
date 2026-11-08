@@ -15,7 +15,10 @@ import {
 	registerEnvConformance,
 	registerStorageConformance,
 	seedStorageBenchmark,
+	seedStorageWriteBenchmark,
+	storageBenchmarkPrimaryRecordCount,
 	STORAGE_READ_BENCHMARKS,
+	STORAGE_WRITE_BENCHMARKS,
 } from "../src/testing/index.ts";
 
 it("rejects a reader that returns a byte-order mark for an empty range", async () => {
@@ -207,9 +210,65 @@ it("seeds a storage dataset that every read benchmark can consume", async () => 
 			documentCount: 5,
 		});
 		const values = [];
-		for (const benchmark of STORAGE_READ_BENCHMARKS) values.push(await benchmark.run(storage, data));
+		for (const benchmark of STORAGE_READ_BENCHMARKS) {
+			const value = await benchmark.run(storage, data);
+			expect(value, benchmark.name).toBe(benchmark.expected(data));
+			values.push(value);
+		}
 		expect(values).toEqual([2, 100, 3, 227, 0, 16, 128, 1024, 128, 256, 100, 2]);
+		const conversations = (await storage.scanConversations({}, 100, undefined, context)).items;
+		const entries = new Set(
+			(
+				await Promise.all(
+					conversations.map(({ id }) => storage.scanEntries({ conversationId: id }, 1000, undefined, context)),
+				)
+			).flatMap((page) => page.items.map(({ id }) => id)),
+		);
+		const tasks = (await storage.scanTasks({}, 1000, undefined, context)).items;
+		const documents = (
+			await storage.scanDocuments({ scope: { kind: "session" }, at: "current" }, 1000, undefined, context)
+		).items;
+		const conversationDocuments = (
+			await storage.scanDocuments(
+				{ scope: { kind: "conversation", conversationId: conversations[0]!.id }, at: "current" },
+				1000,
+				undefined,
+				context,
+			)
+		).items;
+		expect(conversations.length + entries.size + tasks.length + documents.length + conversationDocuments.length).toBe(
+			storageBenchmarkPrimaryRecordCount({ name: "small", entryCount: 100, taskCount: 121, documentCount: 5 }),
+		);
 	} finally {
 		await storage.close(context);
 	}
 });
+
+it.each([
+	{ index: 0, entries: 101, tasks: 0, submissions: 0, documents: 0 },
+	{ index: 1, entries: 200, tasks: 0, submissions: 0, documents: 0 },
+	{ index: 2, entries: 101, tasks: 1, submissions: 1, documents: 1 },
+])(
+	"storage write scenario $index persists the records it reports",
+	async ({ index, entries, tasks, submissions, documents }) => {
+		const storage = new MemoryStorage(),
+			scenario = STORAGE_WRITE_BENCHMARKS[index];
+		if (!scenario) throw new Error("Missing storage scenario");
+		try {
+			await seedStorageWriteBenchmark(storage);
+			expect(await scenario.run(storage)).toBe(scenario.expected);
+			const conversation = (await storage.scanConversations({}, 10, undefined, context)).items[0];
+			if (!conversation) throw new Error("Missing baseline conversation");
+			expect(
+				(await storage.scanEntries({ conversationId: conversation.id }, 1000, undefined, context)).items,
+			).toHaveLength(entries);
+			expect((await storage.scanTasks({}, 100, undefined, context)).items).toHaveLength(tasks);
+			expect((await storage.scanSubmissions({}, 100, undefined, context)).items).toHaveLength(submissions);
+			expect(
+				(await storage.scanDocuments({ scope: { kind: "session" }, at: "current" }, 100, undefined, context)).items,
+			).toHaveLength(documents);
+		} finally {
+			await storage.close(context);
+		}
+	},
+);
