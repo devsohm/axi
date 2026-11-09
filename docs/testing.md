@@ -41,8 +41,8 @@ Coverage output is in `coverage/index.html` and `coverage/coverage-summary.json`
 
 The JavaScript runner selects package tests from the root manifest's eight workspaces and integration tests from `test/*.test.ts`. Measured source files come from the eight workspaces. It resolves workspace package exports to their TypeScript source files. Package imports and direct source imports therefore share one module instance. The resolver honors the package's export restrictions before selecting the source file. Installed archive checks run separately with Node's normal package resolution and exercise the built JavaScript.
 
-The regular coverage command enforces minimum execution coverage of 89% lines,
-77% branches, 87% functions and 86% statements. Raise these limits as the suite
+The regular coverage command enforces minimum execution coverage of 90% lines,
+78% branches, 88% functions and 87% statements. Raise these limits as the suite
 improves. `test:coverage:full` requires 100% for all four metrics and currently
 fails because executable paths remain untested. No source modules are removed
 from measurement to pass either command.
@@ -60,6 +60,15 @@ Unicode edits and cursor positions with a plain-text model after every action.
 The SQLite adapter checks confirm rollback, transaction queue isolation and
 expired transaction handles. Storage-helper checks inspect the records written
 by each workload; they make no performance claim.
+
+Task-runtime checks cover child ownership, abort controls, document history,
+entry paging and invocation cleanup. SQL expression cases compare known results
+with both the in-process evaluator and SQLite. Terminal checks cover negotiation,
+exit restoration, Unicode deletion, character search and paste handling. MCP
+credential checks exercise concurrent refresh, token rotation and failed refresh
+recovery. Filesystem checks cancel reads after the daemon replies and confirm
+that the connection remains usable. App checks cover dormant worker archives,
+invalid imports and exclusive data-directory locks.
 
 The verification workflow runs the owned suite on its native platform matrix. Its Linux x64 job also enforces the coverage minimums, validates the behavior report, and uploads the `test-coverage` artifact.
 

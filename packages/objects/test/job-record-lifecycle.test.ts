@@ -348,3 +348,35 @@ it("a discarded admission rejects its handle and does not reserve its key or con
 		expect(app.counts).toEqual([1]);
 	} finally { records.drop(); app.documents.end(); }
 });
+
+it.each(["deadline", "close"] as const)("deferred job state is persisted at %s without retiring the running job", async (mode) => {
+	const disk = await openStore(sqliteBackend(await openNodeSqliteDatabase(":memory:")), context);
+	if (!(disk instanceof ObjectsStore)) throw new Error("Unexpected Store");
+	const app = owner(disk);
+	const definition = defineJob("deferred-flush", { version: 1, args: int(), result: int(), state: progress, persist: { resume: "rerun" } });
+	const records = new JobRecords(definition, app);
+	const saved = new Persistence(disk, "app", "objects.job-states", definition.name);
+	try {
+		const handle = await app.documents.tx((tx) => records.stage(tx, 1, context, {}), app.documents.own, context);
+		const states = records.states;
+		if (!states) throw new Error("Missing job state");
+		expect(records.nextDeadline()).toBe(Infinity);
+		await records.flushHeld(0);
+		await app.documents.tx(async (tx) => { (await tx.draftSlot(states, handle.id)).n = 7; }, app.documents.own, context, { kind: "deferred", withinMs: 10000 });
+		const deadline = records.nextDeadline();
+		expect(Number.isFinite(deadline)).toBe(true);
+		expect(records.stateOf(handle.id)).toEqual({ n: 7 });
+		expect((await saved.read(handle.id, context))?.value).toEqual({ n: 0 });
+		await records.flushHeld(deadline - 1);
+		expect(records.nextDeadline()).toBe(deadline);
+		expect((await saved.read(handle.id, context))?.value).toEqual({ n: 0 });
+		if (mode === "deadline") await records.flushHeld(deadline);
+		else await records.writeAtClose(context);
+		expect(records.nextDeadline()).toBe(Infinity);
+		expect((await saved.read(handle.id, context))?.value).toEqual({ n: 7 });
+		expect(records.running.value).toMatchObject([{ id: handle.id, state: { n: 7 } }]);
+		await records.flushHeld(Infinity);
+		await records.writeAtClose(context);
+		expect((await saved.read(handle.id, context))?.value).toEqual({ n: 7 });
+	} finally { records.drop(); app.documents.end(); await disk.close(context); }
+});

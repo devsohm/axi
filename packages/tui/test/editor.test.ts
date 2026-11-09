@@ -169,3 +169,82 @@ test("forward deletion keeps the preferred column for the next wrapped-line move
 	input.handleInput("\x1b[B");
 	expect(input.getCursor()).toEqual({ line: 0, col: 6 });
 });
+
+test("character search can be cancelled and a control key still edits after cancelling search", () => {
+	const input = editor();
+	input.setText("a界b界c");
+	input.handleInput("\x01");
+	input.handleInput("\x1d");
+	input.handleInput("界");
+	expect(input.getCursor()).toEqual({ line: 0, col: 1 });
+	input.handleInput("\x1d");
+	input.handleInput("\x1d");
+	input.handleInput("x");
+	expect(input.getText()).toBe("ax界b界c");
+	input.handleInput("\x1d");
+	input.handleInput("\x05");
+	expect(input.getCursor()).toEqual({ line: 0, col: 6 });
+});
+
+test("shifted character deletion removes one grapheme and undo restores it", () => {
+	const input = editor();
+	input.setText("A🙂界B");
+	input.handleInput("\x1b[D");
+	input.handleInput("\x1b[127;2u");
+	expect(input.getText()).toBe("A🙂B");
+	input.handleInput("\x1f");
+	expect(input.getText()).toBe("A🙂界B");
+	input.handleInput("\x01");
+	input.handleInput("\x1b[3;2~");
+	expect(input.getText()).toBe("🙂界B");
+	input.handleInput("\x1f");
+	expect(input.getText()).toBe("A🙂界B");
+});
+
+test("enter-as-newline bindings allow a trailing backslash to submit without retaining it", () => {
+	setKeybindings(
+		new KeybindingsManager(TUI_KEYBINDINGS, { "tui.input.newLine": "enter", "tui.input.submit": "shift+enter" }),
+	);
+	const input = editor(),
+		submitted: string[] = [];
+	input.onSubmit = (text) => submitted.push(text);
+	input.setText("first");
+	input.handleInput("\r");
+	expect(input.getText()).toBe("first\n");
+	input.handleInput("second\\");
+	input.handleInput("\r");
+	expect(submitted).toEqual(["first\nsecond"]);
+	expect(input.getText()).toBe("");
+});
+
+test("bracketed paste filters encoded control letters and processes text following its end marker", () => {
+	const input = editor();
+	input.handleInput("\x1b[200~B\x1b[65;5uC\x1b[97;5uD\x1b[201~tail");
+	expect(input.getText()).toBe("BCDtail");
+	input.handleInput("\x1b[200~\x1b[201~end");
+	expect(input.getText()).toBe("BCDtailend");
+	input.handleInput("\x1b[32;2u");
+	expect(input.getText()).toBe("BCDtailend ");
+});
+
+test("copy and empty kill-ring shortcuts leave the draft unchanged", () => {
+	const input = editor();
+	input.setText("draft");
+	for (const key of ["\x19", "\x1by", "\x03"]) input.handleInput(key);
+	expect(input.getText()).toBe("draft");
+	expect(input.getCursor()).toEqual({ line: 0, col: 5 });
+	input.invalidate();
+	expect(input.render(20).join("\n")).toContain("draft");
+});
+
+test("page navigation reaches both ends of a multiline draft without changing text", () => {
+	const input = editor();
+	const text = Array.from({ length: 15 }, (_, i) => `row${i}`).join("\n");
+	input.setText(text);
+	input.render(25);
+	for (let i = 0; i < 20; i++) input.handleInput("\x1b[5~");
+	expect(input.getCursor()).toEqual({ line: 0, col: 4 });
+	for (let i = 0; i < 20; i++) input.handleInput("\x1b[6~");
+	expect(input.getCursor()).toEqual({ line: 14, col: 5 });
+	expect(input.getText()).toBe(text);
+});

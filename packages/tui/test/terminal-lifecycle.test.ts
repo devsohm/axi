@@ -1,4 +1,5 @@
 import { mkdtemp, readFile, readdir, rm } from "node:fs/promises";
+import { closeSync, openSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, test, vi } from "vitest";
@@ -114,4 +115,132 @@ test("escape deadlines and native return normalization use explicit connection a
 		expect(normalizeNativeShiftEnterInput(text, true, false)).toBe(text);
 	}
 	expect(normalizeNativeShiftEnterInput("a", true, true)).toBe("a");
+});
+
+test("terminal cursor and clearing helpers write only their requested control sequences", () => {
+	const write = vi.spyOn(process.stdout, "write").mockReturnValue(true),
+		terminal = new ProcessTerminal();
+	terminal.moveBy(0);
+	terminal.moveBy(-3);
+	terminal.moveBy(2);
+	terminal.hideCursor();
+	terminal.showCursor();
+	terminal.clearLine();
+	terminal.clearFromCursor();
+	terminal.clearScreen();
+	expect(write.mock.calls.map(([data]) => data)).toEqual([
+		"\x1b[3A",
+		"\x1b[2B",
+		"\x1b[?25l",
+		"\x1b[?25h",
+		"\x1b[K",
+		"\x1b[J",
+		"\x1b[2J\x1b[H",
+	]);
+});
+
+test("terminal dimensions prefer stdout, then environment values, then defaults", () => {
+	const columns = Object.getOwnPropertyDescriptor(process.stdout, "columns"),
+		rows = Object.getOwnPropertyDescriptor(process.stdout, "rows");
+	try {
+		Object.defineProperty(process.stdout, "columns", { value: 0, configurable: true });
+		Object.defineProperty(process.stdout, "rows", { value: 0, configurable: true });
+		vi.stubEnv("COLUMNS", "96");
+		vi.stubEnv("LINES", "48");
+		const terminal = new ProcessTerminal();
+		expect([terminal.columns, terminal.rows]).toEqual([96, 48]);
+		Object.defineProperty(process.stdout, "columns", { value: 72, configurable: true });
+		Object.defineProperty(process.stdout, "rows", { value: 20, configurable: true });
+		expect([terminal.columns, terminal.rows]).toEqual([72, 20]);
+		Object.defineProperty(process.stdout, "columns", { value: 0, configurable: true });
+		Object.defineProperty(process.stdout, "rows", { value: 0, configurable: true });
+		vi.stubEnv("COLUMNS", "invalid");
+		vi.stubEnv("LINES", "");
+		expect([terminal.columns, terminal.rows]).toEqual([80, 24]);
+	} finally {
+		if (columns) Object.defineProperty(process.stdout, "columns", columns);
+		else Reflect.deleteProperty(process.stdout, "columns");
+		if (rows) Object.defineProperty(process.stdout, "rows", rows);
+		else Reflect.deleteProperty(process.stdout, "rows");
+	}
+});
+
+test.each(["fresh", "fallback", "kitty"] as const)(
+	"synchronous exit restoration writes %s modes to the real output descriptor",
+	async (mode) => {
+		const directory = await mkdtemp(join(tmpdir(), "axi-terminal-exit-")),
+			path = join(directory, "exit.txt");
+		const { terminal } = isolateTerminal();
+		vi.stubEnv("AXI_PROGRAM_STATUS", "0");
+		const original = Object.getOwnPropertyDescriptor(process.stdout, "fd");
+		if (!original) throw new Error("Missing stdout descriptor");
+		const descriptor = openSync(path, "w+");
+		try {
+			if (mode !== "fresh") {
+				terminal.start(
+					() => {},
+					() => {},
+				);
+				process.stdin.emit("data", mode === "kitty" ? "\x1b[?7u" : "\x1b[?0u");
+				terminal.setProgress(true);
+			}
+			try {
+				Object.defineProperty(process.stdout, "fd", { ...original, value: descriptor });
+				terminal.restoreOnExit("before", "after");
+			} finally {
+				Object.defineProperty(process.stdout, "fd", original);
+			}
+			expect(readFileSync(path, "utf8")).toBe(
+				"before" +
+					(mode === "fresh" ? "" : "\x1b]9;4;0\x07") +
+					"\x1b[?2004l" +
+					(mode === "fresh" ? "" : "\x1b[<u") +
+					(mode === "fallback" ? "\x1b[>4;0m" : "") +
+					"after",
+			);
+		} finally {
+			terminal.stop();
+			closeSync(descriptor);
+			await rm(directory, { recursive: true, force: true });
+		}
+	},
+);
+
+test("a preselected program status is advertised immediately when support is configured", () => {
+	vi.stubEnv("AXI_PROGRAM_STATUS", "1");
+	const { terminal, write } = isolateTerminal();
+	try {
+		terminal.setProgramStatus({ state: "working" });
+		terminal.start(
+			() => {},
+			() => {},
+		);
+		expect(write.mock.calls.map(([data]) => data)).toContain("\x1b]7501;state=working\x1b\\");
+	} finally {
+		terminal.stop();
+	}
+});
+
+test("device replies end status negotiation and repeated keyboard reports cannot enable modes twice", () => {
+	vi.stubEnv("AXI_PROGRAM_STATUS", "");
+	const { terminal, write } = isolateTerminal(),
+		input = vi.fn();
+	try {
+		terminal.setProgramStatus({ state: "working" });
+		terminal.start(input, () => {});
+		process.stdin.emit("data", "\x1b[?1;2c");
+		process.stdin.emit("data", "\x1b]7501;?supported\x1b\\");
+		process.stdin.emit("data", "\x1b[?0u");
+		process.stdin.emit("data", "\x1b[?0u");
+		expect(write.mock.calls.filter(([data]) => data === "\x1b[>4;2m")).toHaveLength(1);
+		expect(write.mock.calls.map(([data]) => data)).not.toContain("\x1b]7501;state=working\x1b\\");
+		process.stdin.emit("data", "\x1b[?1;2c");
+		expect(input).toHaveBeenLastCalledWith("\x1b[?1;2c");
+		process.stdin.emit("data", "\x1b[?7u");
+		process.stdin.emit("data", "\x1b[?0u");
+		expect(terminal.kittyProtocolActive).toBe(true);
+		expect(terminal.modifyOtherKeysActive).toBe(false);
+	} finally {
+		terminal.stop();
+	}
 });

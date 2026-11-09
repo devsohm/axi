@@ -45,6 +45,7 @@
 					"behavior": "object routing, links and host lifecycle",
 					"tests": [
 						"packages/objects/test/route-controls.test.ts",
+						"packages/objects/test/host-contract-boundaries.test.ts",
 						"packages/objects/test/registry-retry.test.ts",
 						"packages/objects/test/websocket-link.test.ts",
 						"packages/objects/test/runtime-boundaries.test.ts",
@@ -76,6 +77,7 @@
 						"packages/objects/test/store-table.test.ts",
 						"packages/objects/test/table-evolution.test.ts",
 						"packages/objects/test/store-query.test.ts",
+						"packages/objects/test/store-expression-behavior.test.ts",
 						"packages/objects/test/store-engine.test.ts",
 						"packages/objects/test/store-runtime.test.ts",
 						"packages/objects/test/store-replication.test.ts",
@@ -191,6 +193,7 @@
 						"packages/objects/test/app-foundations.test.ts",
 						"packages/objects/test/files.test.ts",
 						"packages/objects/test/app-host.test.ts",
+						"packages/objects/test/app-data-lifecycle.test.ts",
 						"packages/objects/test/app-archive.test.ts",
 						"packages/objects/test/app-owner.test.ts",
 						"packages/objects/test/app-auth-routes.test.ts"
@@ -247,6 +250,7 @@
 						"packages/ai/test/bedrock.test.ts",
 						"packages/ai/test/azure-responses.test.ts",
 						"packages/ai/test/mistral.test.ts",
+						"packages/ai/test/mistral-history.test.ts",
 						"packages/ai/test/wire.test.ts",
 						"packages/ai/test/tool-history.test.ts",
 						"packages/ai/test/request-encoding.test.ts",
@@ -303,7 +307,8 @@
 					"tests": [
 						"packages/codemode/test/portable-contract.test.ts",
 						"packages/codemode/test/remote-boundaries.test.ts",
-						"packages/codemode/test/runtime-failures.test.ts"
+						"packages/codemode/test/runtime-failures.test.ts",
+						"packages/codemode/test/vm-delivery.test.ts"
 					]
 				}
 			]
@@ -343,6 +348,7 @@
 						"packages/mcp/test/loopback-boundaries.test.ts",
 						"packages/mcp/test/content-discovery.test.ts",
 						"packages/mcp/test/oauth-lifecycle.test.ts",
+						"packages/mcp/test/stored-auth-races.test.ts",
 						"packages/mcp/test/client-metadata.test.ts"
 					]
 				}
@@ -378,6 +384,7 @@
 						"packages/durable/test/scheduler-timers.test.ts",
 						"packages/durable/test/task-graph-boundaries.test.ts",
 						"packages/durable/test/scheduler-definition-lifecycle.test.ts",
+						"packages/durable/test/task-runtime-boundaries.test.ts",
 						"packages/durable/test/timers.test.ts",
 						"packages/durable/test/tool-task.test.ts",
 						"packages/durable/test/join-policies.test.ts"
@@ -450,6 +457,7 @@
 						"packages/env/test/environment.test.ts",
 						"packages/env/test/remote-paths.test.ts",
 						"packages/env/test/reader-lifecycle.test.ts",
+						"packages/env/test/read-cancellation.test.ts",
 						"packages/env/test/transfers.test.ts",
 						"packages/env/test/errors.test.ts",
 						"packages/env/test/filesystem-boundaries.test.ts",
