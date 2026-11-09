@@ -1,4 +1,4 @@
-import { expect, test, vi } from "vitest";
+import { afterEach, expect, test, vi } from "vitest";
 import {
 	adaptOAuthProvider,
 	authorizeMcp,
@@ -6,10 +6,13 @@ import {
 	McpOAuthProvider,
 	MemoryOAuthStateStore,
 	OAuthInsecureEndpointError,
+	registerClient,
 	type McpOAuthState,
 	type OAuthClientProvider,
 } from "../src/oauth/index.ts";
 import type { McpFetch } from "../src/index.ts";
+
+afterEach(() => vi.unstubAllGlobals());
 
 const serverUrl = "https://tools.example/mcp";
 const metadata = {
@@ -255,3 +258,94 @@ test.each([undefined, "read", "read write"])(
 		expect(redirect.mock.calls[0]?.[0].searchParams.get("scope")).toBe(scope ? "read write admin" : "write admin");
 	},
 );
+
+test("an explicit metadata endpoint overrides cached discovery without replacing that cache", async () => {
+	const { store, provider, redirect } = setup();
+	const before = saved(store).discovery;
+	const selected = { ...metadata, issuer: "https://other.example", token_endpoint: "https://other.example/token" };
+	const requests: string[] = [];
+	const fetch: McpFetch = async (input) => {
+		requests.push(String(input));
+		if (String(input) === "https://metadata.example/selected.json") return Response.json(selected);
+		if (String(input) === selected.token_endpoint)
+			return Response.json({ access_token: "selected-access", token_type: "Bearer" });
+		return discovery(input);
+	};
+	expect(
+		await authorizeMcp(provider, {
+			serverUrl,
+			fetch,
+			authorizationServerMetadataUrl: new URL("https://metadata.example/selected.json"),
+		}),
+	).toBe("AUTHORIZED");
+	expect(requests).toEqual([
+		"https://tools.example/.well-known/oauth-protected-resource/mcp",
+		"https://metadata.example/selected.json",
+		selected.token_endpoint,
+	]);
+	expect(saved(store).discovery).toEqual(before);
+	expect(saved(store).tokens?.access_token).toBe("selected-access");
+	expect(redirect).not.toHaveBeenCalled();
+});
+
+test("challenge resource metadata is discovered at its given URL and saved for later requests", async () => {
+	const { store, provider, redirect } = setup();
+	store.save({ ...saved(store), discovery: undefined, tokens: undefined });
+	const resourceMetadataUrl = new URL("https://tools.example/auth/resource.json");
+	const fetch: McpFetch = async (input) =>
+		String(input) === resourceMetadataUrl.href
+			? Response.json({ resource: serverUrl, authorization_servers: [metadata.issuer] })
+			: discovery(input);
+	expect(await authorizeMcp(provider, { serverUrl, fetch, resourceMetadataUrl })).toBe("REDIRECT");
+	expect(saved(store).discovery?.resourceMetadataUrl).toBe(resourceMetadataUrl.href);
+	expect(redirect.mock.calls[0]?.[0].searchParams.get("resource")).toBe(serverUrl);
+});
+
+test("code exchange refuses a redirect URI different from the original authorization request", async () => {
+	const { provider } = setup();
+	const fetch = vi.fn<McpFetch>();
+	await expect(
+		authorizeMcp(provider, {
+			serverUrl,
+			fetch,
+			authorizationCode: "local-code",
+			authorizationRedirectUrl: "http://localhost/other",
+		}),
+	).rejects.toThrow("authorization request used http://localhost/other");
+	expect(fetch).not.toHaveBeenCalled();
+});
+
+test("an OAuth error that is not recoverable leaves the saved client and tokens available", async () => {
+	const { store, provider, redirect } = setup();
+	const before = saved(store);
+	const fetch: McpFetch = async () =>
+		Response.json({ error: "access_denied", error_description: "not permitted" }, { status: 403 });
+	await expect(authorizeMcp(provider, { serverUrl, fetch })).rejects.toMatchObject({
+		code: "access_denied",
+		message: "not permitted",
+	});
+	expect(saved(store)).toEqual(before);
+	expect(redirect).not.toHaveBeenCalled();
+});
+
+test("registration uses the default fetch and classifies malformed redirects as web clients", async () => {
+	const request = vi.fn<McpFetch>(async (_input, init) => {
+		expect(JSON.parse(String(init?.body))).toEqual({ redirect_uris: ["invalid-url"], application_type: "web" });
+		return Response.json({ client_id: "registered" });
+	});
+	vi.stubGlobal("fetch", request);
+	expect(await registerClient(metadata.issuer, { clientMetadata: { redirect_uris: ["invalid-url"] } })).toEqual({
+		client_id: "registered",
+		redirect_uris: [],
+	});
+	expect(String(request.mock.calls[0]?.[0])).toBe(metadata.registration_endpoint);
+});
+
+test("refresh uses the default fetch when no request adapter was supplied", async () => {
+	const { provider } = setup();
+	const request = vi.fn<McpFetch>(async () => Response.json({ access_token: "default-access", token_type: "Bearer" }));
+	vi.stubGlobal("fetch", request);
+	expect(await authorizeMcp(provider, { serverUrl })).toBe("AUTHORIZED");
+	expect((await provider.tokens())?.access_token).toBe("default-access");
+	expect(String(request.mock.calls[0]?.[0])).toBe(metadata.token_endpoint);
+});
