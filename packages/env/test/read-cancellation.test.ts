@@ -1,0 +1,137 @@
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { BACKGROUND_CONTEXT as context } from "@axi/objects/context";
+import { getOrThrow } from "@axi/durable/env";
+import { expect, test } from "vitest";
+import { Connection, localDaemon, RemoteExecutionEnv } from "../src/index.ts";
+
+test.each(["binary", "text", "directory"] as const)(
+	"cancellation after a %s response does not expose its data",
+	async (kind) => {
+		const cwd = await mkdtemp(join(tmpdir(), "axi-read-cancel-"));
+		const connection = new Connection({ command: [localDaemon()] });
+		const env = new RemoteExecutionEnv({ connection, id: "read-cancel", cwd });
+		const controller = new AbortController();
+		const request = connection.request.bind(connection);
+		try {
+			await writeFile(join(cwd, "data"), "one\ntwo\n");
+			connection.request = async (op, fields, options) => {
+				const response = await request(op, fields, options);
+				if (op === "pread" || op === "readdir") controller.abort();
+				return response;
+			};
+			const call = { ...context, abortSignal: controller.signal };
+			if (kind === "binary") {
+				const reader = getOrThrow(await env.openBinaryReader("data", undefined, context));
+				try {
+					expect(await reader.read(0, 4, call)).toMatchObject({ ok: false, error: { code: "aborted" } });
+				} finally {
+					await reader.close(context);
+				}
+			} else if (kind === "text") {
+				const reader = getOrThrow(await env.openTextLineReader("data", context));
+				try {
+					expect(await reader.readLine(call)).toMatchObject({ ok: false, error: { code: "aborted" } });
+				} finally {
+					await reader.close(context);
+				}
+			} else {
+				const reader = getOrThrow(await env.openDirReader(".", context));
+				try {
+					expect(await reader.next(1, call)).toMatchObject({ ok: false, error: { code: "aborted" } });
+				} finally {
+					await reader.close(context);
+				}
+			}
+			connection.request = request;
+			expect(getOrThrow(await env.readTextFile("data", context))).toBe("one\ntwo\n");
+		} finally {
+			connection.request = request;
+			connection.close();
+			await rm(cwd, { recursive: true, force: true });
+		}
+	},
+);
+
+test.each(["ENOENT", "EACCES", "unsupported"] as const)(
+	"directory readers handle entries that disappear, fail or have unsupported types: %s",
+	async (code) => {
+		const cwd = await mkdtemp(join(tmpdir(), "axi-read-dir-entry-"));
+		const connection = new Connection({ command: [localDaemon()] });
+		const env = new RemoteExecutionEnv({ connection, id: "directory-errors", cwd });
+		const request = connection.request.bind(connection);
+		try {
+			await writeFile(join(cwd, "visible"), "data");
+			const reader = getOrThrow(await env.openDirReader(".", context));
+			connection.request = async (op, fields, options) => {
+				const response = await request(op, fields, options);
+				if (op !== "readdir") return response;
+				return {
+					...response,
+					json: {
+						...response.json,
+						entries: [
+							code === "unsupported"
+								? { name: "special", info: { name: "special", kind: "other", size: 0, mtimeSec: 0, mtimeNsec: 0 } }
+								: { name: "inaccessible", error: { code, message: "Directory entry unavailable" } },
+							...(response.json.entries as unknown[]),
+						],
+						done: true,
+					},
+				};
+			};
+			try {
+				const result = await reader.next(10, context);
+				if (code === "EACCES")
+					expect(result).toMatchObject({
+						ok: false,
+						error: { code: "permission_denied", path: join(cwd, "inaccessible") },
+					});
+				else
+					expect(getOrThrow(result)).toMatchObject({
+						entries: [{ name: "visible", path: join(cwd, "visible"), kind: "file" }],
+						done: true,
+					});
+			} finally {
+				await reader.close(context);
+			}
+		} finally {
+			connection.request = request;
+			connection.close();
+			await rm(cwd, { recursive: true, force: true });
+		}
+	},
+);
+
+test("closed readers reject further operations without sending another request", async () => {
+	const cwd = await mkdtemp(join(tmpdir(), "axi-read-closed-"));
+	const connection = new Connection({ command: [localDaemon()] });
+	const env = new RemoteExecutionEnv({ connection, id: "closed-readers", cwd });
+	const request = connection.request.bind(connection);
+	try {
+		await writeFile(join(cwd, "data"), "one\n");
+		const binary = getOrThrow(await env.openBinaryReader("data", undefined, context));
+		const text = getOrThrow(await env.openTextLineReader("data", context));
+		const directory = getOrThrow(await env.openDirReader(".", context));
+		await Promise.all([binary.close(context), text.close(context), directory.close(context)]);
+		let requests = 0;
+		connection.request = (...args) => {
+			requests++;
+			return request(...args);
+		};
+		for (const result of [
+			await binary.info(context),
+			await binary.scanLines({ startLine: 0 }, context),
+			await text.readLine(context),
+			await directory.next(1, context),
+		])
+			expect(result).toMatchObject({ ok: false, error: { code: "invalid" } });
+		await Promise.all([binary.close(context), text.close(context), directory.close(context)]);
+		expect(requests).toBe(0);
+	} finally {
+		connection.request = request;
+		connection.close();
+		await rm(cwd, { recursive: true, force: true });
+	}
+});

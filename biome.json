@@ -1,0 +1,6 @@
+{
+	"$schema": "https://biomejs.dev/schemas/2.3.5/schema.json",
+	"formatter": { "indentStyle": "tab", "lineWidth": 120 },
+	"javascript": { "formatter": { "quoteStyle": "double" } },
+	"files": { "includes": ["**", "!**/dist", "!**/node_modules", "!**/target", "!packages/ai/src/providers/data"] }
+}
