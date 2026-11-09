@@ -6,6 +6,40 @@ afterEach(() => vi.useRealTimers());
 const initialized = { jsonrpc: "2.0", method: "notifications/initialized" } as const;
 const request = { jsonrpc: "2.0", id: 1, method: "ping" } as const;
 
+test("discarding an accepted notification body contains cancellation failure and preserves later requests", async () => {
+	let cancellations = 0;
+	const transport = new StreamableHttpTransport({
+		url: "https://peer.invalid/mcp",
+		fetch: async (_url, init) => {
+			const message = JSON.parse(String(init?.body));
+			if ("id" in message) return Response.json({ jsonrpc: "2.0", id: message.id, result: {} });
+			return new Response(
+				new ReadableStream({
+					cancel() {
+						cancellations++;
+						throw new Error("peer already disconnected");
+					},
+				}),
+				{ status: 202 },
+			);
+		},
+	});
+	const messages: unknown[] = [],
+		errors: Error[] = [];
+	transport.onMessage((message) => messages.push(message));
+	transport.onError((error) => errors.push(error));
+	try {
+		await transport.start();
+		await transport.send({ jsonrpc: "2.0", method: "notice" });
+		await transport.send(request);
+		expect(cancellations).toBe(1);
+		expect(errors).toEqual([]);
+		expect(messages).toEqual([{ jsonrpc: "2.0", id: 1, result: {} }]);
+	} finally {
+		await transport.close();
+	}
+});
+
 test.each([
 	{ status: 408, retry: true },
 	{ status: 429, retry: true },

@@ -32,6 +32,48 @@ function unauthorized(fetch: McpFetch, token = "old", challenge = "Bearer"): Una
 	};
 }
 
+test("token readers and settled waiters survive a rejected refresh lock and a later request retries", async () => {
+	let state = initial(),
+		locks = 0;
+	const entered = Promise.withResolvers<void>(),
+		release = Promise.withResolvers<void>();
+	const failure = new Error("refresh lock unavailable");
+	const store: McpOAuthServerStore = {
+		load: () => structuredClone(state),
+		save(next) {
+			state = next;
+		},
+		async withRefreshLock(fn) {
+			if (++locks === 1) {
+				entered.resolve();
+				await release.promise;
+			}
+			return fn();
+		},
+	};
+	const provider = createMcpAuthProvider({
+		serverUrl,
+		store,
+		clientName: "test",
+		settings: () => ({}),
+		onChallenge() {},
+	});
+	const fetch: McpFetch = async () => Response.json({ access_token: "replacement", token_type: "Bearer" });
+	const pending = provider.onUnauthorized?.(unauthorized(fetch));
+	const rejected = expect(pending).rejects.toBe(failure);
+	await entered.promise;
+	const token = provider.token(),
+		settled = provider.settled();
+	release.reject(failure);
+	await rejected;
+	expect(await token).toBe("old");
+	await settled;
+	expect(locks).toBe(1);
+	await provider.onUnauthorized?.(unauthorized(fetch));
+	expect(await provider.token()).toBe("replacement");
+	expect(locks).toBe(2);
+});
+
 test("a second process's rotated token is used after acquiring the refresh lock", async () => {
 	let state = initial();
 	let locks = 0,

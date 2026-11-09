@@ -7,6 +7,28 @@ function child(script: string, extra: Partial<ConstructorParameters<typeof Stdio
 	return new StdioTransport({ command: process.execPath, args: ["-e", script], closeTimeoutMs: 50, ...extra });
 }
 
+test("a peer closing stdin reports the write failure and can still be shut down cleanly", async () => {
+	const transport = child(`
+		require("node:fs").closeSync(0);
+		process.stdout.write(JSON.stringify({ jsonrpc: "2.0", method: "ready" }) + "\\n");
+		setInterval(() => {}, 1000);
+	`);
+	const ready = Promise.withResolvers<void>(),
+		errors: Error[] = [];
+	transport.onMessage(() => ready.resolve());
+	transport.onError((error) => errors.push(error));
+	try {
+		await transport.start();
+		await ready.promise;
+		await expect(transport.send({ jsonrpc: "2.0", method: "notice" })).rejects.toMatchObject({ code: "EPIPE" });
+		await vi.waitFor(() => expect(errors).toContainEqual(expect.objectContaining({ code: "EPIPE" })));
+		await transport.close();
+		expect(transport.pid).toBeUndefined();
+	} finally {
+		await transport.close();
+	}
+});
+
 test("closing an unstarted stdio transport prevents spawning and emits close once", async () => {
 	const transport = child("throw new Error('Must not spawn')");
 	const closed = vi.fn();

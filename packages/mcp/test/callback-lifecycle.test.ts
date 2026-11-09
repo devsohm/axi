@@ -47,6 +47,45 @@ async function fixture(options: Partial<McpClientOptions> = {}) {
 	};
 }
 
+test.each(["unknown-method", "handler-error", "cancel-notification"] as const)(
+	"failed %s sends report their transport error and later peer requests still work",
+	async (mode) => {
+		const f = await fixture();
+		const failure = new Error("outbound write unavailable"),
+			errors: Error[] = [];
+		f.client.onError((error) => errors.push(error));
+		const send = f.transport.send.bind(f.transport);
+		const intercepted = vi.spyOn(f.transport, "send").mockImplementation((message) => {
+			if (
+				mode === "cancel-notification"
+					? "method" in message && message.method === "notifications/cancelled"
+					: "error" in message
+			)
+				return Promise.reject(failure);
+			return send(message);
+		});
+		try {
+			if (mode === "cancel-notification")
+				await expect(f.client.request("unanswered", undefined, { timeoutMs: 5 })).rejects.toMatchObject({
+					name: "McpTimeoutError",
+				});
+			else {
+				if (mode === "handler-error")
+					f.client.setRequestHandler("fault", () => {
+						throw new Error("handler failed");
+					});
+				await f.server.send({ jsonrpc: "2.0", id: 500, method: mode === "handler-error" ? "fault" : "unknown" });
+			}
+			await vi.waitFor(() => expect(errors).toEqual([failure]));
+			intercepted.mockRestore();
+			expect(await f.invoke("ping")).toMatchObject({ result: {} });
+		} finally {
+			intercepted.mockRestore();
+			await f.client.close();
+		}
+	},
+);
+
 test("peer requests receive ping and current roots, and initialization advertises their capability", async () => {
 	for (const dynamic of [true, false]) {
 		const roots = [{ uri: "file:///project", name: "Project" }];

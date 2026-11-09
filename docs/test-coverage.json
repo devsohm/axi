@@ -38,7 +38,8 @@
 						"packages/objects/test/state-sources.test.ts",
 						"packages/objects/test/schema-boundaries.test.ts",
 						"packages/objects/test/delta-boundaries.test.ts",
-						"packages/objects/test/delta-array-lifecycle.test.ts"
+						"packages/objects/test/delta-array-lifecycle.test.ts",
+						"packages/objects/test/delta-scale-lifecycle.test.ts"
 					]
 				},
 				{
@@ -52,6 +53,7 @@
 						"packages/objects/test/runtime-boundaries.test.ts",
 						"packages/objects/test/runtime-tracing.test.ts",
 						"packages/objects/test/remote-lifecycle.test.ts",
+						"packages/objects/test/remote-wire-recovery.test.ts",
 						"packages/objects/test/remote-publication.test.ts"
 					]
 				},
@@ -142,6 +144,7 @@
 					"behavior": "host activation, remote reconnection, interrupted calls and report retention",
 					"tests": [
 						"packages/objects/test/object-host.test.ts",
+						"packages/objects/test/activation-recovery.test.ts",
 						"packages/objects/test/object-attempt.test.ts",
 						"packages/objects/test/object-runtime.test.ts",
 						"packages/objects/test/remote-state.test.ts"
@@ -157,7 +160,7 @@
 				},
 				{
 					"behavior": "HTTP routes, admission, bodies, files, authentication and sockets",
-					"tests": ["packages/objects/test/http-server.test.ts"]
+					"tests": ["packages/objects/test/http-server.test.ts", "packages/objects/test/http-link-lifecycle.test.ts"]
 				},
 				{
 					"behavior": "worker processes, recovery, rollout, idle cleanup and locks",
@@ -401,6 +404,7 @@
 						"packages/durable/test/task-runtime-boundaries.test.ts",
 						"packages/durable/test/timers.test.ts",
 						"packages/durable/test/tool-task.test.ts",
+						"packages/durable/test/tool-hook-boundaries.test.ts",
 						"packages/durable/test/join-policies.test.ts",
 						"packages/durable/test/scheduler-inbox-cancellation.test.ts"
 					]
