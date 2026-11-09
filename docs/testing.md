@@ -114,6 +114,9 @@ and retain successful state when saving long output fails.
 
 Scheduler tests cover abandoned work after restart, incompatible task
 definitions, phase handover, abort failures and background cancellation.
+Queued-input checks verify cancellation across task-owned conversations while
+retaining queued writes and inputs outside the selected scope. Compaction checks
+cover retry limits, unavailable models, custom summaries and request cancellation.
 Document tests check deferred deadlines, migration, unloading, observer
 cancellation, retirement and historical entry boundaries.
 
@@ -129,7 +132,11 @@ listing and invalid login choices do not create credentials. Provider protocol
 tests use synthetic credentials and controlled responses; they do not establish
 that a live provider accepts a request.
 
-`packages/durable/test/process-recovery.test.ts` kills its own child process during a run. It reopens SQLite and JSONL sessions, resumes the pending safe tool, checks that a committed effect is not repeated, and verifies submission deduplication. The fixture uses synthetic model responses. It does not terminate running user applications.
+`packages/durable/test/process-recovery.test.ts` kills its own child process during
+a run. It checks direct tools and Code Mode on SQLite and JSONL. After reopening,
+the test resumes the pending safe tool and verifies submission deduplication.
+Completed tool effects and nested Code Mode calls are not repeated. The resumed
+script saves its final values. The fixture uses synthetic model responses.
 
 Offline provider tests inspect request encoding, device-login polling, token refresh, cancellation and malformed replies using synthetic credentials. Env tests run the generated Unix upload script in a temporary local directory. Windows command tests inspect the protocol and upload framing; native Windows execution still requires a Windows runner. Browser adapter tests use DOM event fixtures; real browser and terminal acceptance remain separate checks.
 

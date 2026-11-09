@@ -394,7 +394,8 @@
 						"packages/durable/test/task-runtime-boundaries.test.ts",
 						"packages/durable/test/timers.test.ts",
 						"packages/durable/test/tool-task.test.ts",
-						"packages/durable/test/join-policies.test.ts"
+						"packages/durable/test/join-policies.test.ts",
+						"packages/durable/test/scheduler-inbox-cancellation.test.ts"
 					]
 				},
 				{
@@ -409,7 +410,8 @@
 						"packages/durable/test/tool-search.test.ts",
 						"packages/durable/test/automatic-compaction.test.ts",
 						"packages/durable/test/generation-hooks.test.ts",
-						"packages/durable/test/generation-controls.test.ts"
+						"packages/durable/test/generation-controls.test.ts",
+						"packages/durable/test/compaction-failures.test.ts"
 					]
 				},
 				{
