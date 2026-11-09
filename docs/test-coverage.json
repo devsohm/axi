@@ -46,6 +46,7 @@
 					"tests": [
 						"packages/objects/test/route-controls.test.ts",
 						"packages/objects/test/host-contract-boundaries.test.ts",
+						"packages/objects/test/factory-failures.test.ts",
 						"packages/objects/test/registry-retry.test.ts",
 						"packages/objects/test/websocket-link.test.ts",
 						"packages/objects/test/runtime-boundaries.test.ts",
@@ -118,6 +119,7 @@
 						"packages/objects/test/job-state-persistence.test.ts",
 						"packages/objects/test/job-records.test.ts",
 						"packages/objects/test/job-record-lifecycle.test.ts",
+						"packages/objects/test/host-job-persistence.test.ts",
 						"packages/objects/test/job-execution.test.ts",
 						"packages/objects/test/runtime-tracing.test.ts"
 					]
@@ -244,6 +246,7 @@
 					"behavior": "provider request and stream contracts",
 					"tests": [
 						"packages/ai/test/anthropic.test.ts",
+						"packages/ai/test/anthropic-request-boundaries.test.ts",
 						"packages/ai/test/responses.test.ts",
 						"packages/ai/test/responses-stream-boundaries.test.ts",
 						"packages/ai/test/completions.test.ts",
@@ -354,6 +357,7 @@
 						"packages/mcp/test/loopback-boundaries.test.ts",
 						"packages/mcp/test/content-discovery.test.ts",
 						"packages/mcp/test/oauth-lifecycle.test.ts",
+						"packages/mcp/test/oauth-recovery.test.ts",
 						"packages/mcp/test/stored-auth-races.test.ts",
 						"packages/mcp/test/client-metadata.test.ts"
 					]
@@ -369,6 +373,7 @@
 					"tests": [
 						"packages/durable/test/session.test.ts",
 						"packages/durable/test/session-deferred-boundaries.test.ts",
+						"packages/durable/test/record-cache-lifecycle.test.ts",
 						"packages/durable/test/document-history-boundaries.test.ts",
 						"packages/durable/test/transaction-boundaries.test.ts",
 						"packages/durable/test/grouped-commits.test.ts",
@@ -473,6 +478,7 @@
 						"packages/env/test/errors.test.ts",
 						"packages/env/test/filesystem-boundaries.test.ts",
 						"packages/env/test/operation-lifecycle.test.ts",
+						"packages/env/test/environment-lifecycle.test.ts",
 						"packages/env/test/transfer-failures.test.ts"
 					]
 				},
@@ -531,6 +537,7 @@
 						"packages/tui/test/overlay-controls.test.ts",
 						"packages/tui/test/fullscreen-interactions.test.ts",
 						"packages/tui/test/fullscreen-boundaries.test.ts",
+						"packages/tui/test/fullscreen-navigation.test.ts",
 						"packages/tui/test/scrollback-boundaries.test.ts",
 						"packages/tui/test/transcript-search.test.ts"
 					]
