@@ -2,6 +2,15 @@
 
 Typed libraries for agent applications.
 
+Build an agent runtime with Durable, AI, tools, and a storage backend. Add MCP,
+Code Mode, execution environments, or a terminal interface as the application
+needs them. Objects also provides hosts and communication for applications that
+need objects across processes.
+
+Start with the [architecture overview](docs/architecture.md), then choose a
+package in the [documentation index](docs/api.md). The
+[testing guide](docs/testing.md) explains local checks and their limits.
+
 `@axi/objects` provides typed object contracts, state, resources, registries, reloads and communication between hosts. It includes memory, IPC and WebSocket transports, Node worker management, invocation contexts, bounded output and SQLite adapters.
 
 ```sh

@@ -23,4 +23,4 @@ The package pages list project exports from each root entry. Public declaration 
 
 ## Work on the toolkit
 
-Read [installation](install.md), [testing](testing.md), [release builds](releases.md), and [contributing](contributing.md).
+Read the [architecture overview](architecture.md), [installation](install.md), [testing](testing.md), [release builds](releases.md), and [contributing](contributing.md).
