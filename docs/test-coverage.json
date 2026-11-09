@@ -165,6 +165,7 @@
 					"behavior": "plugin discovery, evaluation and installation",
 					"tests": [
 						"packages/objects/test/node-plugins.test.ts",
+						"packages/objects/test/plugin-build-rules.test.ts",
 						"packages/objects/test/discovery-boundaries.test.ts",
 						"packages/objects/test/plugin-harness.test.ts",
 						"packages/objects/test/plugin-discovery.test.ts",
@@ -221,6 +222,7 @@
 					"behavior": "catalogs, registration, authentication and refresh races",
 					"tests": [
 						"packages/ai/test/models.test.ts",
+						"packages/ai/test/provider-dispatch.test.ts",
 						"packages/ai/test/identity-forwarding.test.ts",
 						"packages/ai/test/model-lifecycle.test.ts",
 						"packages/ai/test/registration.test.ts",
@@ -234,7 +236,8 @@
 						"packages/ai/test/oauth-flows.test.ts",
 						"packages/ai/test/catalog-auth.test.ts",
 						"packages/ai/test/entrypoints.test.ts",
-						"packages/ai/test/compat-dispatch.test.ts"
+						"packages/ai/test/compat-dispatch.test.ts",
+						"packages/ai/test/cli-auth.test.ts"
 					]
 				},
 				{
@@ -255,7 +258,8 @@
 						"packages/ai/test/wire.test.ts",
 						"packages/ai/test/tool-history.test.ts",
 						"packages/ai/test/request-encoding.test.ts",
-						"packages/ai/test/responses-replay.test.ts"
+						"packages/ai/test/responses-replay.test.ts",
+						"packages/ai/test/codex-protocol-boundaries.test.ts"
 					]
 				},
 				{
@@ -336,7 +340,8 @@
 						"packages/mcp/test/stream-recovery.test.ts",
 						"packages/mcp/test/pipe-lifecycle.test.ts",
 						"packages/mcp/test/stream-boundaries.test.ts",
-						"packages/mcp/test/http-retry-boundaries.test.ts"
+						"packages/mcp/test/http-retry-boundaries.test.ts",
+						"packages/mcp/test/stdio-lifecycle.test.ts"
 					]
 				},
 				{
@@ -374,7 +379,8 @@
 						"packages/durable/test/document-checkpoints.test.ts",
 						"packages/durable/test/jsonl.test.ts",
 						"packages/durable/test/sqlite-session.test.ts",
-						"packages/durable/test/interrupted-generation.test.ts"
+						"packages/durable/test/interrupted-generation.test.ts",
+						"packages/durable/test/fork-transactions.test.ts"
 					]
 				},
 				{
@@ -417,6 +423,8 @@
 						"packages/durable/test/image-processing.test.ts",
 						"packages/durable/test/image-format-boundaries.test.ts",
 						"packages/durable/test/codemode.test.ts",
+						"packages/durable/test/codemode-integration.test.ts",
+						"packages/durable/test/codemode-recovery.test.ts",
 						"packages/durable/test/watch-context.test.ts",
 						"packages/durable/test/watch-rescan.test.ts",
 						"packages/durable/test/file-tools.test.ts",
@@ -462,7 +470,8 @@
 						"packages/env/test/transfers.test.ts",
 						"packages/env/test/errors.test.ts",
 						"packages/env/test/filesystem-boundaries.test.ts",
-						"packages/env/test/operation-lifecycle.test.ts"
+						"packages/env/test/operation-lifecycle.test.ts",
+						"packages/env/test/transfer-failures.test.ts"
 					]
 				},
 				{
@@ -476,7 +485,11 @@
 				},
 				{
 					"behavior": "SSH host identity and bootstrap behavior",
-					"tests": ["packages/env/test/host-keys.test.ts", "packages/env/test/ssh-bootstrap.test.ts"]
+					"tests": [
+						"packages/env/test/host-keys.test.ts",
+						"packages/env/test/ssh-bootstrap.test.ts",
+						"packages/env/test/ssh-arguments.test.ts"
+					]
 				}
 			]
 		},
@@ -527,7 +540,10 @@
 						"packages/tui/test/markdown-boundaries.test.ts",
 						"packages/tui/test/image-protocol.test.ts",
 						"packages/tui/test/math-layout.test.ts",
-						"packages/tui/test/color-boundaries.test.ts"
+						"packages/tui/test/color-boundaries.test.ts",
+						"packages/tui/test/colors.test.ts",
+						"packages/tui/test/ansi-state.test.ts",
+						"packages/tui/test/math-boundaries.test.ts"
 					]
 				},
 				{

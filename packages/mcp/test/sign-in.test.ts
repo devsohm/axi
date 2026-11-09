@@ -4,6 +4,7 @@ import {
 	createMcpAuthProvider,
 	listenForLoopbackSignIn,
 	MemoryOAuthStateStore,
+	McpRefreshLockBusyError,
 	McpSignInCancelledError,
 	responseFromRedirectUrl,
 	startMcpSignIn,
@@ -160,4 +161,176 @@ test("the loopback callback wins over a pending manual prompt and cancels that p
 	} finally {
 		await listening.callback.close();
 	}
+});
+
+test("a pre-cancelled sign-in does not read credentials or acquire a refresh lock", async () => {
+	let reads = 0,
+		locks = 0;
+	const state = store();
+	state.load = () => {
+		reads++;
+		return undefined;
+	};
+	state.withRefreshLock = async (fn) => {
+		locks++;
+		return fn();
+	};
+	await expect(
+		startMcpSignIn({
+			serverUrl: initial().serverUrl,
+			store: state,
+			clientName: "test",
+			settings: {},
+			redirectUrl: "http://localhost/login",
+			signal: AbortSignal.abort(),
+		}),
+	).rejects.toBeInstanceOf(McpSignInCancelledError);
+	expect({ reads, locks }).toEqual({ reads: 0, locks: 0 });
+});
+
+test("sign-in uses a stored refresh token without opening a browser authorization", async () => {
+	const state = store();
+	await state.save({
+		...initial(),
+		clientInformation: { client_id: "configured" },
+		tokens: { access_token: "old", refresh_token: "refresh", token_type: "Bearer" },
+	});
+	let requests = 0;
+	vi.stubGlobal("fetch", async (url: string | URL, request: RequestInit) => {
+		requests++;
+		expect(String(url)).toBe(metadata.token_endpoint);
+		expect(new URLSearchParams(String(request.body)).get("grant_type")).toBe("refresh_token");
+		return Response.json({ access_token: "new", token_type: "Bearer" });
+	});
+	expect(
+		await startMcpSignIn({
+			serverUrl: initial().serverUrl,
+			store: state,
+			clientName: "test",
+			settings: {},
+			redirectUrl: "http://localhost/login",
+		}),
+	).toEqual({ kind: "authorized" });
+	expect(requests).toBe(1);
+	expect((await state.load())?.tokens).toMatchObject({ access_token: "new", refresh_token: "refresh" });
+	expect((await state.load())?.oauthState).toBeUndefined();
+});
+
+test("a busy refresh lock falls back to authorization while other lock failures remain visible", async () => {
+	for (const error of [new McpRefreshLockBusyError(), new Error("Credential file unavailable")]) {
+		const state = store();
+		await state.save(initial());
+		state.withRefreshLock = async () => {
+			throw error;
+		};
+		const pending = startMcpSignIn({
+			serverUrl: initial().serverUrl,
+			store: state,
+			clientName: "test",
+			settings: { clientId: "configured" },
+			redirectUrl: "http://localhost/login",
+		});
+		if (error instanceof McpRefreshLockBusyError) expect(await pending).toMatchObject({ kind: "redirect" });
+		else await expect(pending).rejects.toBe(error);
+	}
+});
+
+test.each(["response", "stored"] as const)(
+	"the %s state must match before an authorization code can be exchanged",
+	async (mismatch) => {
+		const state = store();
+		await state.save({ ...initial(), oauthState: mismatch === "stored" ? "newer-sign-in" : "expected" });
+		let requests = 0;
+		vi.stubGlobal("fetch", async () => {
+			requests++;
+			throw new Error("Unexpected request");
+		});
+		await expect(
+			completeMcpSignIn({
+				serverUrl: initial().serverUrl,
+				store: state,
+				clientName: "test",
+				settings: { clientId: "configured" },
+				redirectUrl: "http://localhost/login",
+				authorization: {
+					kind: "redirect",
+					state: "expected",
+					redirectUrl: "http://localhost/login",
+					authorizationUrl: metadata.authorization_endpoint,
+				},
+				response: { state: mismatch === "response" ? "wrong" : "expected", code: "code" },
+			}),
+		).rejects.toThrow(mismatch === "response" ? "different sign-in" : "Another sign-in");
+		expect(requests).toBe(0);
+		expect((await state.load())?.oauthState).toBe(mismatch === "stored" ? "newer-sign-in" : "expected");
+	},
+);
+
+test("a changed redirect discards unusable registration and tokens before registering again", async () => {
+	const state = store();
+	await state.save({
+		...initial(),
+		discovery: {
+			authorizationServerUrl: metadata.issuer,
+			authorizationServerMetadata: { ...metadata, registration_endpoint: "https://issuer.invalid/register" },
+		},
+		clientInformation: { client_id: "old-client", redirect_uris: ["http://localhost/old"], response_types: ["code"] },
+		tokens: { access_token: "old", token_type: "Bearer" },
+		tokensExpireAt: 10,
+		oauthState: "old-state",
+	});
+	let requests = 0;
+	vi.stubGlobal("fetch", async (url: string | URL) => {
+		requests++;
+		expect(String(url)).toBe("https://issuer.invalid/register");
+		return Response.json({ client_id: "new-client", redirect_uris: ["http://localhost/new"] });
+	});
+	const result = await startMcpSignIn({
+		serverUrl: initial().serverUrl,
+		store: state,
+		clientName: "test",
+		settings: {},
+		redirectUrl: "http://localhost/new",
+	});
+	if (result.kind !== "redirect") throw new Error("Missing browser step");
+	expect(new URL(result.authorizationUrl).searchParams.get("client_id")).toBe("new-client");
+	expect(requests).toBe(1);
+	expect((await state.load())?.tokens).toBeUndefined();
+	expect((await state.load())?.tokensExpireAt).toBeUndefined();
+	expect((await state.load())?.oauthState).toBe(result.state);
+});
+
+test("explicit client metadata registration discards a previous dynamic registration and skips its refresh", async () => {
+	const state = store();
+	await state.save({
+		...initial(),
+		discovery: {
+			authorizationServerUrl: metadata.issuer,
+			authorizationServerMetadata: {
+				...metadata,
+				client_id_metadata_document_supported: true,
+				token_endpoint_auth_methods_supported: ["none"],
+				authorization_response_iss_parameter_supported: true,
+			},
+		},
+		clientInformation: { client_id: "old-client", redirect_uris: ["http://localhost/login"], response_types: ["code"] },
+		tokens: { access_token: "old", refresh_token: "refresh", token_type: "Bearer" },
+	});
+	vi.stubGlobal("fetch", async () => {
+		throw new Error("Unexpected refresh or registration");
+	});
+	const result = await startMcpSignIn({
+		serverUrl: initial().serverUrl,
+		store: state,
+		clientName: "test",
+		settings: { clientRegistration: "cimd" },
+		redirectUrl: "http://localhost/login",
+		clientMetadataDocuments: {
+			baseUrl: "https://app.invalid",
+			listsRedirectUrl: (url) => url === "http://localhost/login",
+		},
+	});
+	if (result.kind !== "redirect") throw new Error("Missing browser step");
+	expect(new URL(result.authorizationUrl).searchParams.get("client_id")).toBe("https://app.invalid/client.json");
+	expect((await state.load())?.tokens).toBeUndefined();
 });

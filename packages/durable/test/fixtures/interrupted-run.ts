@@ -1,18 +1,27 @@
 import { appendFile } from "node:fs/promises";
 import { join } from "node:path";
 import { createModels, fauxAssistantMessage, fauxProvider, fauxToolCall, Type } from "@axi/ai";
+import { InlineCodemodeSandbox, loadQuickJSWasm } from "@axi/codemode";
 import { BACKGROUND_CONTEXT as context } from "@axi/objects/context";
 import { createRegistry, defineTool, Harness } from "../../src/index.ts";
+import { createCodemodeExtension } from "../../src/codemode/index.ts";
 import { openNodeJsonlStorage } from "../../src/storage/jsonl/node.ts";
 import { openNodeSqliteStorage } from "../../src/storage/sqlite/node.ts";
 
-const [directory, backend] = process.argv.slice(2);
+const [directory, backend, mode] = process.argv.slice(2);
 if (!directory) throw new Error("Session directory is required");
 const models = createModels(),
 	provider = fauxProvider(),
 	registry = createRegistry();
 const waiting = Promise.withResolvers<void>();
 models.setProvider(provider.provider);
+if (mode === "codemode")
+	registry.install(
+		createCodemodeExtension({
+			sandbox: new InlineCodemodeSandbox({ wasm: loadQuickJSWasm() }),
+			models: false,
+		}),
+	);
 registry.install({
 	name: "crash-tools",
 	tools: [
@@ -20,6 +29,7 @@ registry.install({
 			name: "effect",
 			description: "Record a completed effect",
 			parameters: Type.Object({}),
+			replay: "safe",
 			async execute() {
 				await appendFile(join(directory, "effects.log"), "effect\n");
 				return { output: [{ type: "text", text: "effect committed" }] };
@@ -39,10 +49,27 @@ registry.install({
 		}),
 	],
 });
-provider.setResponses([
-	fauxAssistantMessage([fauxToolCall("effect", {}, { id: "effect-call" })], { stopReason: "toolUse" }),
-	fauxAssistantMessage([fauxToolCall("wait", {}, { id: "wait-call" })], { stopReason: "toolUse" }),
-]);
+provider.setResponses(
+	mode === "codemode"
+		? [
+				fauxAssistantMessage(
+					[
+						fauxToolCall(
+							"codemode",
+							{
+								code: 'const first=await tools.effect({}); const second=await tools.wait({}); store("answer",{first,second}); return second;',
+							},
+							{ id: "code-call" },
+						),
+					],
+					{ stopReason: "toolUse" },
+				),
+			]
+		: [
+				fauxAssistantMessage([fauxToolCall("effect", {}, { id: "effect-call" })], { stopReason: "toolUse" }),
+				fauxAssistantMessage([fauxToolCall("wait", {}, { id: "wait-call" })], { stopReason: "toolUse" }),
+			],
+);
 try {
 	const storage =
 		backend === "jsonl"
