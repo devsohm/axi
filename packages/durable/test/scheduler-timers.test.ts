@@ -1,7 +1,15 @@
 import { createModels } from "@axi/ai";
 import { BACKGROUND_CONTEXT as context } from "@axi/objects/context";
 import { expect, test, vi } from "vitest";
-import { createRegistry, defineExtension, defineTask, Harness, MemoryStorage, type SetTimer } from "../src/index.ts";
+import {
+	createRegistry,
+	defineExtension,
+	defineTask,
+	Harness,
+	MemoryStorage,
+	type Report,
+	type SetTimer,
+} from "../src/index.ts";
 
 test.each(["advance", "close"])("sleeping work owns a foreground wake timer until %s", async (action) => {
 	let now = 1000,
@@ -71,4 +79,84 @@ test.each(["advance", "close"])("sleeping work owns a foreground wake timer unti
 		await harness.close(context);
 	}
 	expect(timers.filter((timer) => timer.active)).toEqual([]);
+});
+
+test("a failing host wake callback is reported without preventing durable task completion", async () => {
+	const failure = new Error("Wake handler failed"),
+		reports: Report[] = [];
+	const task = defineTask<number, { phase: "run" }, number>({
+		name: "wake-failure",
+		version: 1,
+		initial: () => ({ phase: "run" }),
+		phases: {
+			async run(record, runtime, ctx) {
+				await runtime.commit(
+					() => ({ status: "terminal", outcome: { status: "completed", result: record.input + 1 } }),
+					ctx,
+				);
+			},
+		},
+		async abort() {},
+	});
+	const registry = createRegistry(),
+		storage = new MemoryStorage();
+	registry.install(defineExtension({ name: "wake-failure", tasks: [task] }));
+	const harness = await Harness.open(
+		storage,
+		{
+			models: createModels(),
+			registry,
+			onWake() {
+				throw failure;
+			},
+			onReport: (report) => reports.push(report),
+		},
+		context,
+	);
+	try {
+		const root = await harness.root(context);
+		const id = await root.commit((tx) => tx.createTask(task, 41, { ownership: { kind: "conversation" } }), context);
+		harness.resume();
+		await vi.waitFor(async () =>
+			expect((await storage.task(id, context))?.state).toEqual({
+				status: "terminal",
+				outcome: { status: "completed", result: 42 },
+			}),
+		);
+		expect(reports).toContainEqual({ kind: "host_error", callback: "onWake", error: failure });
+		expect(reports.every((report) => report.kind === "host_error" && report.callback === "onWake")).toBe(true);
+	} finally {
+		await harness.close(context);
+	}
+});
+
+test("a registry unsubscribe failure is reported after its listener detaches and does not prevent closing", async () => {
+	const failure = new Error("Registry cleanup failed"),
+		reports: Report[] = [],
+		definitions = createRegistry();
+	const harness = await Harness.open(
+		new MemoryStorage(),
+		{
+			models: createModels(),
+			registry: {
+				snapshot: () => definitions.snapshot(),
+				subscribe(listener) {
+					const stop = definitions.subscribe(listener);
+					return () => {
+						stop();
+						throw failure;
+					};
+				},
+			},
+			onReport: (report) => reports.push(report),
+		},
+		context,
+	);
+	try {
+		await harness.close(context);
+		expect(reports).toContainEqual({ kind: "host_error", callback: "registry", error: failure });
+		await expect(harness.root(context)).rejects.toThrow(/closed/);
+	} finally {
+		await harness.close(context);
+	}
 });

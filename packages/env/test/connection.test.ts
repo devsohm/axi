@@ -93,3 +93,18 @@ it("fails corrupt frames and retries a command factory after startup failure", a
 	}
 	await expect(connection.info()).rejects.toMatchObject({ code: "unknown", message: "Connection closed" });
 });
+
+it("reports an actual spawn failure and can start a later daemon on the same connection", async () => {
+	let starts = 0;
+	const connection = new Connection({
+		command: async () =>
+			++starts === 1 ? [fileURLToPath(new URL("./fixtures/no-such-daemon", import.meta.url))] : command,
+	});
+	try {
+		await expect(connection.info()).rejects.toMatchObject({ code: "spawn_error", fields: { lost: true } });
+		expect((await connection.request("echo", { value: "reconnected" })).json.value).toBe("reconnected");
+		expect(starts).toBe(2);
+	} finally {
+		connection.close();
+	}
+});

@@ -47,6 +47,34 @@ async function fixture(options: Partial<McpClientOptions> = {}) {
 	};
 }
 
+test("initialization preserves the peer's error when transport cleanup also fails", async () => {
+	const { client: transport, server } = createInMemoryTransportPair();
+	const client = new McpClient({ name: "client", version: "1" });
+	server.onMessage((message) => {
+		if ("method" in message && "id" in message && message.method === "initialize")
+			void server.send({
+				jsonrpc: "2.0",
+				id: message.id,
+				error: { code: -32001, message: "Peer refused initialization", data: { retry: false } },
+			});
+	});
+	await server.start();
+	const close = vi.spyOn(transport, "close").mockRejectedValue(new Error("Transport cleanup failed"));
+	try {
+		await expect(client.connect(transport)).rejects.toMatchObject({
+			code: -32001,
+			message: "Peer refused initialization",
+			data: { retry: false },
+		});
+		expect(client.connectionState).toBe("closed");
+		await expect(client.request("ping")).rejects.toMatchObject({ name: "McpConnectionClosedError" });
+	} finally {
+		close.mockRestore();
+		await transport.close();
+		await client.close();
+	}
+});
+
 test.each(["unknown-method", "handler-error", "cancel-notification"] as const)(
 	"failed %s sends report their transport error and later peer requests still work",
 	async (mode) => {

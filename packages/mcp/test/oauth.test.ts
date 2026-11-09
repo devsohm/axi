@@ -82,6 +82,41 @@ it("does not stringify the issuer again when its validation is disabled", async 
 	expect(metadata?.issuer).toBe("https://issuer.example.test");
 });
 
+it("continues metadata discovery when discarding an unavailable endpoint's body fails", async () => {
+	const issuer = "https://issuer.example.test/team";
+	const metadata = {
+		issuer,
+		authorization_endpoint: "https://issuer.example.test/authorize",
+		token_endpoint: "https://issuer.example.test/token",
+		response_types_supported: ["code"],
+	};
+	const requests: string[] = [];
+	let discarded = false;
+	expect(
+		await discoverAuthorizationServerMetadata(issuer, {
+			fetch: async (url) => {
+				requests.push(String(url));
+				if (requests.length > 1) return Response.json(metadata);
+				return new Response(
+					new ReadableStream({
+						cancel() {
+							discarded = true;
+							throw new Error("Failed body cleanup");
+						},
+					}),
+					{ status: 404 },
+				);
+			},
+		}),
+	).toEqual(metadata);
+	await new Promise<void>((resolve) => setImmediate(resolve));
+	expect(discarded).toBe(true);
+	expect(requests).toEqual([
+		"https://issuer.example.test/.well-known/oauth-authorization-server/team",
+		"https://issuer.example.test/.well-known/openid-configuration/team",
+	]);
+});
+
 it("captures the optional registration endpoint once after copying metadata", () => {
 	let reads = 0;
 	const metadata = parseAuthorizationServerMetadata({

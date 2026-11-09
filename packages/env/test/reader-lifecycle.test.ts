@@ -5,6 +5,7 @@ import { BACKGROUND_CONTEXT as context } from "@axi/objects/context";
 import { getOrThrow } from "@axi/durable/env";
 import { expect, test } from "vitest";
 import { Connection, localDaemon, RemoteExecutionEnv } from "../src/index.ts";
+import { RemoteError } from "../src/connection.ts";
 
 test("cancellation after remote open closes every newly acquired reader handle", async () => {
 	const directory = await mkdtemp(join(tmpdir(), "axi-reader-admission-"));
@@ -58,6 +59,79 @@ test("oversized files fail before allocation and a later read on the same connec
 		getOrThrow(await env.writeFile("small", "still working", context));
 		expect(getOrThrow(await env.readTextFile("small", context))).toBe("still working");
 	} finally {
+		connection.close();
+		await rm(directory, { recursive: true, force: true });
+	}
+});
+
+test.each(["binary", "text", "directory"] as const)(
+	"a lost close acknowledgement leaves the %s reader closed and releases its remote handle",
+	async (kind) => {
+		const directory = await mkdtemp(join(tmpdir(), "axi-reader-close-"));
+		const connection = new Connection({ command: [localDaemon()] });
+		const env = new RemoteExecutionEnv({ connection, id: "reader-close", cwd: directory });
+		const request = connection.request.bind(connection);
+		try {
+			await writeFile(join(directory, "data"), "retained");
+			const reader =
+				kind === "binary"
+					? getOrThrow(await env.openBinaryReader("data", undefined, context))
+					: kind === "text"
+						? getOrThrow(await env.openTextLineReader("data", context))
+						: getOrThrow(await env.openDirReader(".", context));
+			const released: number[] = [];
+			connection.request = async (op, fields, options) => {
+				const reply = await request(op, fields, options);
+				if (op === "close" && typeof fields?.handle === "number") {
+					released.push(fields.handle);
+					throw new RemoteError({ code: "unknown", message: "Close acknowledgement lost" });
+				}
+				return reply;
+			};
+			await reader.close(context);
+			await reader.close(context);
+			expect(released).toHaveLength(1);
+			await expect(
+				request(kind === "directory" ? "readdir" : "fstat", { handle: released[0], max: 1 }),
+			).rejects.toMatchObject({ code: "EBADF" });
+			const result =
+				"read" in reader
+					? await reader.read(0, 1, context)
+					: "readLine" in reader
+						? await reader.readLine(context)
+						: await reader.next(1, context);
+			expect(result).toMatchObject({ ok: false, error: { code: "invalid" } });
+			expect(getOrThrow(await env.readTextFile("data", context))).toBe("retained");
+		} finally {
+			connection.request = request;
+			connection.close();
+			await rm(directory, { recursive: true, force: true });
+		}
+	},
+);
+
+test("an EOF read remains successful when later prefetched reads fail", async () => {
+	const directory = await mkdtemp(join(tmpdir(), "axi-reader-prefetch-"));
+	const connection = new Connection({ command: [localDaemon()] });
+	const env = new RemoteExecutionEnv({ connection, id: "reader-prefetch", cwd: directory });
+	const request = connection.request.bind(connection);
+	try {
+		await writeFile(join(directory, "empty"), "");
+		const reader = getOrThrow(await env.openBinaryReader("empty", undefined, context));
+		connection.request = async (op, fields, options) => {
+			if (op === "pread" && typeof fields?.offset === "number" && fields.offset > 0)
+				throw new RemoteError({ code: "EIO", message: "Speculative read failed" });
+			return request(op, fields, options);
+		};
+		try {
+			expect(getOrThrow(await reader.read(0, 1_048_576, context))).toEqual(new Uint8Array());
+			await new Promise<void>((resolve) => setImmediate(resolve));
+			expect(getOrThrow(await reader.info(context)).size).toBe(0);
+		} finally {
+			await reader.close(context);
+		}
+	} finally {
+		connection.request = request;
 		connection.close();
 		await rm(directory, { recursive: true, force: true });
 	}

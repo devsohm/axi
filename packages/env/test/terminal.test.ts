@@ -95,6 +95,17 @@ test.skipIf(process.platform === "win32")(
 				onData() {},
 			});
 			expect(await terminal.exited).toBe(7);
+			terminal.write("late input");
+			terminal.resize(100, 30);
+			await new Promise<void>((resolve) => setImmediate(resolve));
+			const next = await openTerminal(connection, {
+				cwd,
+				cols: 80,
+				rows: 24,
+				argv: ["sh", "-c", "exit 0"],
+				onData() {},
+			});
+			expect(await next.exited).toBe(0);
 		} finally {
 			connection.close();
 			await rm(cwd, { recursive: true, force: true });

@@ -4,6 +4,7 @@ import { fauxAssistantMessage } from "../src/providers/faux.ts";
 import { anthropicReply, anthropicRequest } from "../src/api/anthropic-request.ts";
 import type { AssistantMessage, Model, Tool } from "../src/types.ts";
 import { normalizeContext } from "../src/utils/transcript.ts";
+import type { AnthropicOptions } from "../src/api/options.ts";
 
 const model: Model<"anthropic-messages"> = {
 	id: "wire-fixture",
@@ -21,6 +22,100 @@ const tool: Tool = { name: "read", description: "Read a value", parameters: Type
 function assistant(content: AssistantMessage["content"]): AssistantMessage {
 	return { ...fauxAssistantMessage(content), api: model.api, provider: model.provider, model: model.id };
 }
+
+test("multimodal user input drops blank text, sanitizes text and places its cache marker on the final image", () => {
+	const context = normalizeContext({
+		messages: [
+			{ role: "user", content: [{ type: "text", text: " \n " }], timestamp: 0 },
+			{
+				role: "user",
+				content: [
+					{ type: "text", text: "  " },
+					{ type: "text", text: "Describe\ud800" },
+					{ type: "image", data: "AA==", mimeType: "image/png" },
+				],
+				timestamp: 1,
+			},
+		],
+	});
+	const before = structuredClone(context);
+	expect(anthropicRequest(model, context, { cacheRetention: "long" }, false, false).body.messages).toEqual([
+		{
+			role: "user",
+			content: [
+				{ type: "text", text: "Describe" },
+				{
+					type: "image",
+					source: { type: "base64", media_type: "image/png", data: "AA==" },
+					cache_control: { type: "ephemeral", ttl: "1h" },
+				},
+			],
+		},
+	]);
+	expect(context).toEqual(before);
+});
+
+test("tool IDs from a different provider are normalized consistently in calls, results and reply serialization", () => {
+	const prior = {
+		...assistant([{ type: "toolCall", id: "foreign/call:1", name: "read", arguments: { path: "data" } }]),
+		provider: "different-provider",
+	};
+	const context = normalizeContext({
+		tools: [tool],
+		messages: [
+			prior,
+			{
+				role: "toolResult",
+				toolCallId: "foreign/call:1",
+				toolName: "read",
+				content: [{ type: "text", text: "result" }],
+				isError: false,
+				timestamp: 1,
+			},
+		],
+	});
+	const before = structuredClone(context);
+	const body = anthropicRequest(model, context, { cacheRetention: "none" }, false, false).body;
+	expect(body.messages).toEqual([
+		{ role: "assistant", content: [{ type: "tool_use", id: "foreign_call_1", name: "read", input: { path: "data" } }] },
+		{
+			role: "user",
+			content: [{ type: "tool_result", tool_use_id: "foreign_call_1", is_error: false, content: "result" }],
+		},
+	]);
+	expect(anthropicReply(model, prior, false)).toEqual([body.messages[0]]);
+	expect(context).toEqual(before);
+});
+
+test.each([
+	{ label: "disabled", options: { thinkingEnabled: false }, thinking: { type: "disabled" } },
+	{
+		label: "budget",
+		options: { thinkingEnabled: true, thinkingBudgetTokens: 1536, thinkingDisplay: "omitted" },
+		thinking: { type: "enabled", budget_tokens: 1536, display: "omitted" },
+	},
+	{
+		label: "adaptive",
+		options: { thinkingEnabled: true, effort: "medium" },
+		thinking: { type: "adaptive", display: "summarized" },
+	},
+] satisfies { label: string; options: AnthropicOptions; thinking: object }[])(
+	"explicit $label reasoning and provider controls reach the request",
+	({ label, options, thinking }) => {
+		const context = normalizeContext({ messages: [{ role: "user", content: "answer", timestamp: 0 }] });
+		const body = anthropicRequest(
+			{ ...model, compat: { forceAdaptiveThinking: label === "adaptive" } },
+			context,
+			{ ...options, metadata: { user_id: "request-owner" }, toolChoice: { type: "tool", name: "read" } },
+			false,
+			false,
+		).body;
+		expect(body.thinking).toEqual(thinking);
+		expect(body.metadata).toEqual({ user_id: "request-owner" });
+		expect(body.tool_choice).toEqual({ type: "tool", name: "read" });
+		if (label === "adaptive") expect(body.output_config).toEqual({ effort: "medium" });
+	},
+);
 
 test.each([false, true])(
 	"successful image tool results preserve images and add a caption only when needed, text=%s",

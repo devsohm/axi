@@ -52,6 +52,8 @@ Timeouts are positive, finite seconds, with a maximum of 2,147,483.647 seconds. 
 
 On Unix, each command owns a new process group with reset signals. Timeout, abort and environment cleanup kill that group. A signal exit code is 128 plus the signal number. Aborting returns `aborted`. Cleanup kills without marking the request aborted, so a killed command can return exit code 137.
 
+During daemon shutdown, a command's signal exit result can arrive before the connection closes. If that reply does not arrive, the pending request reports connection loss instead. Either outcome must leave the command stopped.
+
 After the program exits, output drains until both pipes end or remain idle for 100 milliseconds. The timeout still applies during that drain. Each output stream has its own UTF-8 decoder, which removes only an initial byte-order mark.
 
 An output callback failure takes precedence over execution errors. Timeout takes precedence over abort, followed by spill failure and the exit result. A spill starts after either configured raw-byte or line threshold is crossed. The file contains complete raw output and uses `axi-output-<uuid>.log` inside a fresh temporary directory.

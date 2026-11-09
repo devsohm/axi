@@ -1,7 +1,16 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { KeybindingsManager, TUI_KEYBINDINGS, type KeybindingDefinitions } from "../src/keybindings.ts";
 import { WheelScrollAccelerator } from "../src/wheel-scroll.ts";
-import { decodePrintableKey, Key, matchesKey, parseKey, setKittyProtocolActive } from "../src/keys.ts";
+import {
+	decodePrintableKey,
+	isKeyRelease,
+	isKeyRepeat,
+	isKittyProtocolActive,
+	Key,
+	matchesKey,
+	parseKey,
+	setKittyProtocolActive,
+} from "../src/keys.ts";
 import { parseKeyboardProtocolNegotiationSequence, resolveEscapeTimeoutMs } from "../src/terminal.ts";
 
 afterEach(() => setKittyProtocolActive(false));
@@ -76,6 +85,45 @@ describe("terminal negotiation", () => {
 });
 
 describe("keybinding configuration", () => {
+	it("reports explicit conflicts without treating shared defaults or unknown actions as conflicts", () => {
+		const manager = new KeybindingsManager(TUI_KEYBINDINGS);
+		expect(manager.getConflicts()).toEqual([]);
+		manager.setUserBindings({
+			"tui.input.submit": ["ctrl+s", "ctrl+s"],
+			"tui.select.confirm": "ctrl+s",
+			"unknown.action": "ctrl+s",
+		});
+		const conflicts = manager.getConflicts();
+		expect(conflicts).toEqual([{ key: "ctrl+s", keybindings: ["tui.input.submit", "tui.select.confirm"] }]);
+		conflicts[0].keybindings.push("mutated");
+		conflicts.length = 0;
+		expect(manager.getConflicts()).toEqual([
+			{ key: "ctrl+s", keybindings: ["tui.input.submit", "tui.select.confirm"] },
+		]);
+		expect(manager.getKeys("tui.input.submit")).toEqual(["ctrl+s"]);
+		manager.setUserBindings({ "tui.input.submit": [], "tui.select.confirm": "ctrl+s" });
+		expect(manager.getConflicts()).toEqual([]);
+		expect(manager.matches("\x13", "tui.input.submit")).toBe(false);
+		expect(manager.matches("\x13", "tui.select.confirm")).toBe(true);
+	});
+	it("configuration can be inspected and reloaded without exported maps changing active bindings", () => {
+		const definitions = {
+			"tui.input.submit": { defaultKeys: "enter", description: "Send input" },
+			"tui.input.tab": { defaultKeys: "tab", description: "Complete input" },
+		} satisfies KeybindingDefinitions;
+		const manager = new KeybindingsManager(definitions, { "tui.input.submit": "ctrl+s" });
+		expect(manager.getDefinition("tui.input.submit")).toEqual({ defaultKeys: "enter", description: "Send input" });
+		const saved = manager.getUserBindings();
+		const restored = new KeybindingsManager(definitions, saved);
+		expect(restored.matches("\x13", "tui.input.submit")).toBe(true);
+		expect(restored.matches("\r", "tui.input.submit")).toBe(false);
+		saved["tui.input.submit"] = "ctrl+x";
+		const resolved = manager.getResolvedBindings();
+		resolved["tui.input.submit"] = "ctrl+q";
+		expect(manager.getUserBindings()).toEqual({ "tui.input.submit": "ctrl+s" });
+		expect(manager.matches("\x13", "tui.input.submit")).toBe(true);
+		expect(manager.matches("\t", "tui.input.tab")).toBe(true);
+	});
 	it("reports current definition names after the catalog changes", () => {
 		const definitions: KeybindingDefinitions = { first: { defaultKeys: "enter" } };
 		const manager = new KeybindingsManager(definitions);
@@ -91,6 +139,23 @@ describe("keybinding configuration", () => {
 		expect(manager.matches("\r", "tui.input.submit")).toBe(false);
 		expect(manager.matches("\x13", "tui.input.submit")).toBe(true);
 	});
+});
+
+it("distinguishes keyboard repeats and releases from bracketed paste contents", () => {
+	setKittyProtocolActive(true);
+	expect(isKittyProtocolActive()).toBe(true);
+	for (const [data, repeated, released] of [
+		["\x1b[97;1u", false, false],
+		["\x1b[97;1:2u", true, false],
+		["\x1b[97;1:3u", false, true],
+		["\x1b[200~pasted \x1b[97;1:2u\x1b[201~", false, false],
+		["\x1b[200~pasted \x1b[97;1:3u\x1b[201~", false, false],
+	] as const) {
+		expect(isKeyRepeat(data)).toBe(repeated);
+		expect(isKeyRelease(data)).toBe(released);
+	}
+	setKittyProtocolActive(false);
+	expect(isKittyProtocolActive()).toBe(false);
 });
 
 it("restarts wheel acceleration after a non-orderable clock sample", () => {
