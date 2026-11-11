@@ -50,10 +50,13 @@ async function scan(
 	id: ConversationId,
 	query: Omit<EntryQuery, "conversationId">,
 	context: Context,
+	session?: SessionImpl,
 ): Promise<EntryRecord[]> {
 	const items: EntryRecord[] = [];
 	let cursor: Cursor | undefined;
 	do {
+		// The first page was admitted with its bounds; a later page must not start after shutdown seals admission.
+		if (cursor !== undefined) session?.assertUsable();
 		const page = await storage.scanEntries({ ...query, conversationId: id }, 256, cursor, context);
 		items.push(...page.items);
 		cursor = page.next;
@@ -163,8 +166,9 @@ export async function deriveContext(
 	id: ConversationId,
 	bounds: ContextBounds | undefined,
 	context: Context,
+	session?: SessionImpl,
 ): Promise<ContextView> {
-	return bounds === undefined ? empty() : derive(bounds, await scan(storage, id, query(bounds), context)).view;
+	return bounds === undefined ? empty() : derive(bounds, await scan(storage, id, query(bounds), context, session)).view;
 }
 export async function readContext(
 	session: SessionImpl,
@@ -178,6 +182,7 @@ export async function readContext(
 		id,
 		await session.readOnLine((line) => captureContextBounds(session, line, id, context, at)),
 		context,
+		session,
 	);
 }
 export async function readContextFrom(
@@ -194,7 +199,7 @@ export async function readContextFrom(
 	freeze(bounds.head);
 	let range: ContextRange;
 	if (!previous || previous.bounds.head?.id !== bounds.head?.id)
-		range = derive(bounds, freeze(await scan(storage, id, query(bounds), context)), at === undefined);
+		range = derive(bounds, freeze(await scan(storage, id, query(bounds), context, session)), at === undefined);
 	else if (bounds.tail === previous.bounds.tail) range = previous;
 	else if (bounds.tail < previous.bounds.tail)
 		range = derive(
@@ -214,6 +219,7 @@ export async function readContextFrom(
 						maxEntryId: bounds.tail,
 					},
 					context,
+					session,
 				),
 			),
 			at === undefined,

@@ -3,6 +3,45 @@ import { BACKGROUND_CONTEXT as context } from "@axi/objects/context";
 import { expect, test } from "vitest";
 import { createRegistry, defineExtension, defineTask, GenerationTask, Harness, hook, LiveDoc, MemoryStorage, hookTask, type RunSummary } from "../src/index.ts";
 
+test("closing a session drains the current context page and refuses a later page", async () => {
+	const entered = Promise.withResolvers<void>(), release = Promise.withResolvers<void>();
+	const calls: string[] = [];
+	let armed = false;
+	class Storage extends MemoryStorage {
+		override async scanEntries(...args: Parameters<MemoryStorage["scanEntries"]>) {
+			if (armed && args[1] > 1) {
+				calls.push(args[2] === undefined ? "first" : "next");
+				if (args[2] === undefined) { entered.resolve(); await release.promise; }
+			}
+			return super.scanEntries(...args);
+		}
+		override async close(ctx: Parameters<MemoryStorage["close"]>[0]) {
+			calls.push("close");
+			await super.close(ctx);
+		}
+	}
+	const harness = await Harness.open(new Storage(), { models: createModels(), registry: createRegistry() }, context);
+	try {
+		const conversation = await harness.root(context);
+		await conversation.commit(async tx => {
+			for (let index = 0; index < 333; index++) await tx.appendEntry(conversation.id, { kind: "entry", data: index });
+		}, context);
+		armed = true;
+		const reading = conversation.context(context);
+		const rejected = expect(reading).rejects.toThrow("Session is closed");
+		await entered.promise;
+		const closing = harness.close(context);
+		release.resolve();
+		await rejected;
+		await closing;
+		expect(calls).toEqual(["first", "close"]);
+		expect(await harness.closed).toEqual({ kind: "closed" });
+	} finally {
+		release.resolve();
+		await harness.close(context);
+	}
+});
+
 test("continues a failed run and settles its answer before draining after-run work", async () => {
 	const models = createModels(), provider = fauxProvider(), registry = createRegistry();
 	models.setProvider(provider.provider);

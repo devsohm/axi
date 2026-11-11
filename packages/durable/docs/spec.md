@@ -24,6 +24,8 @@ Table reads must precede the first table write in a transaction. A later table r
 
 Closing seals admission and lets admitted work settle before storage closes. Cancellation of a waiting caller does not undo an admitted storage operation. A storage failure makes the open Session unusable. `closed` reports either `closed` or `failed`.
 
+A context read can finish the page already admitted when close begins. It cannot start another history page after admission closes. The backend stays open until the admitted page finishes.
+
 ## Record identity
 
 Conversation, entry, task, submission, and document IDs are branded numbers. The root conversation ID is `1`. Committed record IDs are not reused. Commit sequences increase, but need not be consecutive.
