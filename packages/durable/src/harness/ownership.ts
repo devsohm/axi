@@ -293,6 +293,21 @@ export class OwnershipTree {
 			if (at === undefined) yield { kind: "unknown" };
 		}
 	}
+	addConversationAncestors(start: ConversationId, scopes: Set<ConversationId>): boolean {
+		let id = start;
+		while (!scopes.has(id)) {
+			scopes.add(id);
+			this.#coordination.read(conversationKey(id));
+			const owner = this.#conversations.get(id);
+			if (owner === undefined) return false;
+			if (owner === null) return true;
+			const task = this.#task(owner);
+			if (task === undefined) return false;
+			// Child tasks stay in their owner's conversation, so their owner chain adds no scopes.
+			id = task.conversationId;
+		}
+		return true;
+	}
 	nearest(task: TaskLink, overlay?: OwnershipOverlay): StoredTask | undefined {
 		if (task.background) return;
 		for (const step of this.ancestors(taskParent(task), overlay)) {

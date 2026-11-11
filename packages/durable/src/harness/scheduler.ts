@@ -757,7 +757,7 @@ export class TaskScheduler {
 			if (
 				(old === undefined || task.state.status === "terminal" || parkedTask(old) !== parkedTask(task)) &&
 				scopes !== undefined &&
-				!this.#addIdleScopes(task, scopes)
+				!this.#tree.addConversationAncestors(task.conversationId, scopes)
 			) {
 				scopes = undefined;
 			}
@@ -790,15 +790,6 @@ export class TaskScheduler {
 			this.#settleIdle(scopes);
 			this.#kick();
 		}
-	}
-	#addIdleScopes(task: StoredTask, scopes: Set<ConversationId>): boolean {
-		for (const step of this.#tree.ancestors(taskParent(task))) {
-			if (step.kind === "unknown") return false;
-			if (step.kind !== "conversation") continue;
-			if (scopes.has(step.id)) return true;
-			scopes.add(step.id);
-		}
-		return true;
 	}
 	#advanceContexts(publication: ObservedCommit): void {
 		const added = new Map<ConversationId, EntryRecord[]>();

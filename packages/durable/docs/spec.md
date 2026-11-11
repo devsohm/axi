@@ -26,6 +26,8 @@ Closing seals admission and lets admitted work settle before storage closes. Can
 
 A context read can finish the page already admitted when close begins. It cannot start another history page after admission closes. The backend stays open until the admitted page finishes.
 
+A changed task affects idleness in its own conversation and the conversations that own it. Child tasks stay in their owner's conversation, so this check skips task-owner chains within the same conversation. Unknown ownership falls back to a complete idle check.
+
 ## Record identity
 
 Conversation, entry, task, submission, and document IDs are branded numbers. The root conversation ID is `1`. Committed record IDs are not reused. Commit sequences increase, but need not be consecutive.
