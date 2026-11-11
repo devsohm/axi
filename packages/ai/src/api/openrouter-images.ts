@@ -22,16 +22,15 @@ export const generateImages: ImagesFunction<ImagesOptions> = async (model, conte
 	try {
 		const apiKey = options.apiKey;
 		if (!apiKey) throw new Error(`No API key for provider: ${model.provider}`);
+		const headers = options.headers,
+			fetch = options.fetch,
+			identity = options.identity;
 		const client = new OpenAI({
 			apiKey,
 			baseURL: model.baseUrl,
 			dangerouslyAllowBrowser: true,
-			fetch: options.fetch,
-			defaultHeaders: providerHeadersToRecord(
-				getIdentityHeaders(model, options.identity),
-				model.headers,
-				options.headers,
-			),
+			fetch,
+			defaultHeaders: providerHeadersToRecord(getIdentityHeaders(model, identity), model.headers, headers),
 		});
 		const content: ChatCompletionContentPart[] = context.input.map((block) =>
 			block.type === "text"

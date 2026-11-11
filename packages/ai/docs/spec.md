@@ -170,6 +170,8 @@ Chat Completions requests omit `tools` when no tools are declared. Set `compat.r
 
 `ImagesContext` contains text and image input. `AssistantImages` returns text and image output with `stop`, `error`, or `aborted` status. Images carry base64 data and MIME types.
 
+Image requests resolve request headers before selecting their fetch implementation and client identity.
+
 `ClassifierContext` contains JSON `state`, named `questions`, and optional images. Questions request a choice, a score, or a boolean probability. Answers retain those types. Classifier support and image input support depend on the selected model.
 
 System One classifiers select their image encoding through `compat.imageInput`. `assets` sends referenced PNG or JPEG assets. `images` sends up to four PNG, JPEG or WebP data URLs. `state-image-urls` places image URL parts before the state. Missing settings are detected from provider, endpoint and model ID. `compat.sendImageOptInHeader` controls the experimental TypeSafe image header; requests without images do not add it. Text-only models reject image input before sending a request.

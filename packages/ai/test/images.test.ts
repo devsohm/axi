@@ -7,7 +7,7 @@ import { generateImages } from "../src/images.ts";
 import { getImagesApiProvider, registerImagesApiProvider } from "../src/images-api-registry.ts";
 import { IMAGE_MODELS } from "../src/models.generated.ts";
 import { createModels, createProvider } from "../src/models.ts";
-import type { ImageModel, ImagesContext } from "../src/types.ts";
+import type { ImageModel, ImagesContext, ImagesOptions } from "../src/types.ts";
 
 const model: ImageModel<"openrouter-images"> = {
 	type: "image",
@@ -54,6 +54,34 @@ function answer(): Response {
 }
 
 describe("Image generation", () => {
+	it("selects image transport and identity after dynamic request headers", async () => {
+		let initialCalls = 0,
+			selectedCalls = 0,
+			userAgent: string | null = null;
+		const options: ImagesOptions = {
+			apiKey: "test",
+			identity: { userAgent: { custom: "initial-client" } },
+			fetch: async () => {
+				initialCalls++;
+				return answer();
+			},
+			get headers() {
+				options.identity = { userAgent: { custom: "selected-client" } };
+				options.fetch = async (_url, init) => {
+					selectedCalls++;
+					userAgent = new Headers(init?.headers).get("user-agent");
+					return answer();
+				};
+				return {};
+			},
+		};
+		expect((await direct(model, context, options)).stopReason).toBe("stop");
+		expect({ initialCalls, selectedCalls, userAgent }).toEqual({
+			initialCalls: 0,
+			selectedCalls: 1,
+			userAgent: "selected-client",
+		});
+	});
 	it.each([{}, 3])("reports a non-iterable image collection as a provider error: %j", async (images) => {
 		const result = await direct(model, context, {
 			apiKey: "test",
