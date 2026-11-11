@@ -350,6 +350,7 @@ export class McpClient {
 		if (pending.timer) clearTimeout(pending.timer);
 		if (pending.progressToken !== undefined) this.#progressRequests.delete(pending.progressToken);
 		pending.signal?.removeEventListener("abort", pending.onAbort);
+		// A reply can arrive before its HTTP event stream ends. Release that stream with the request.
 		pending.sendController.abort();
 	}
 	#timer(id: JsonRpcId, pending: Pending): void {

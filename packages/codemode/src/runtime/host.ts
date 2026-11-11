@@ -24,6 +24,7 @@ function launcher(options: CodemodeSandboxOptions): VmLauncher {
 			release?.();
 			throw new Error(`Failed to start worker: ${errorMessage(error)}`);
 		}
+		// A script result can settle before worker shutdown. Its capacity stays reserved until exit.
 		if (release) worker.once("exit", release);
 		worker.on("message", (message: unknown) => {
 			if (typeof message === "object" && message !== null && ("watch:import" in message || "watch:require" in message))

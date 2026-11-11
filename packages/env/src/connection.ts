@@ -325,6 +325,7 @@ export class Connection {
 				return;
 			}
 			const payload = new Uint8Array(body.subarray(jsonLength + 9));
+			// A cancelled request can still send frames. Drain them before looking for a waiting caller.
 			session.consume(length + 4);
 			const pending = session.pending.get(id);
 			if (type === 4) pending?.onEvent?.(json, payload);
