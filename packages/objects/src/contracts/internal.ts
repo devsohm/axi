@@ -4,7 +4,7 @@ export * from "./fingerprint.ts";
 export * from "./history.ts";
 export * from "./params.ts";
 export { checkKeys, checkMembers, entriesOf, memberPath, readMethod } from "./declare.ts";
-export { addressKey, kindParams } from "./host-kind.ts";
+export { addressKey, kindParams, keyOfAddress, addressOfKey, kindOfKey } from "./host-kind.ts";
 export { snapshotSchema, snapshotArguments, type Snapshot } from "./snapshot.ts";
 export { editWith } from "./evolve.ts";
 export { checkAccepts, type AcceptedVersion } from "./accepts.ts";

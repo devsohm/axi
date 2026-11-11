@@ -35,6 +35,7 @@
 						"packages/objects/test/delta-model.test.ts",
 						"packages/objects/test/replay-model.test.ts",
 						"packages/objects/test/contracts.test.ts",
+						"packages/objects/test/host-address-keys.test.ts",
 						"packages/objects/test/state-sources.test.ts",
 						"packages/objects/test/schema-boundaries.test.ts",
 						"packages/objects/test/delta-boundaries.test.ts",

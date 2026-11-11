@@ -14,6 +14,8 @@ Constraint failures explain the limit or allowed values. A union uses its distin
 
 A local contract has one member set. A remote contract has named variants and a host-address function. Placement cannot be overridden by a request. Method arguments and results are checked at dispatch, including local calls. Factories declare synchronously and return an implementation rather than a promise.
 
+Host address keys encode the kind and parameter values in declaration order. Separators and backslashes in values are escaped. Key conversion checks field types and enum choices and computes the key from parameters, rather than trusting a supplied key. Routing checks the remaining parameter constraints. Stored keys decode numeric and boolean fields to their declared types.
+
 ## Host lifecycle
 
 `load()` runs once. Local acquisition before loading fails with `not_ready`. Loading publishes accepted declarations together and starts empty-parameter local objects. Its report waits for their first outcome. Failed setup excludes that plugin. Invalid plugin names reject before host state changes.
