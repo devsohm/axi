@@ -405,7 +405,7 @@ async function settleFromSlot(
 			input.kind === "model" && input.unoffered
 				? undefined
 				: await findTool(runtime, input, call.name, context).catch(() => undefined);
-		const index = slot?.diagnostics?.length ?? 0;
+		const index = (slot?.diagnostics?.length ?? 0) + 1;
 		const trim = (slot?.droppedBytes ?? 0) > 0 ? built.diagnostics?.[index] : undefined;
 		const base =
 			trim === undefined ? built : { ...built, diagnostics: built.diagnostics?.filter((_, at) => at !== index) };
@@ -881,7 +881,11 @@ function outputError(tool: ToolRegistration, result: ToolExecutionResult): strin
 	}
 	if (validator.Check(output)) return;
 	const first = validator.Errors(output)[0],
-		path = first?.instancePath.replace(/^\//, "").replace(/\//g, ".") || "root";
+		path = first?.instancePath
+			.slice(1)
+			.split("/")
+			.map((part) => part.replace(/~[01]/g, (escape) => escape === "~1" ? "/" : "~"))
+			.join(".") || "root";
 	return `Tool ${tool.name} returned structuredOutput that does not match its schema: ${path}: ${first?.message ?? "invalid"}`;
 }
 async function prepareResult(
@@ -1116,14 +1120,14 @@ function interrupted(
 	code: string,
 	message: string,
 ): ToolExecutionResult {
-	const diagnostics = [...(slot?.diagnostics ?? [])];
+	const diagnostics = [...(slot?.diagnostics ?? []), diagnostic(code, message)];
 	if ((slot?.droppedBytes ?? 0) > 0)
 		diagnostics.push(truncation({ droppedBytes: slot!.droppedBytes!, droppedLines: slot!.droppedLines ?? 0 }));
 	return {
 		output: slot?.output ? [{ type: "text", text: slot.output }] : [],
 		isError: true,
 		...(slot?.details === undefined ? {} : { details: slot.details }),
-		diagnostics: [...diagnostics, diagnostic(code, message)],
+		diagnostics,
 	};
 }
 function summary(result: NestedToolExecutionResult, output: Content): NestedToolSummary {

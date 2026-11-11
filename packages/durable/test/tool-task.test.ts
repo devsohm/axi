@@ -310,6 +310,19 @@ describe("durable tool execution", () => {
 		expect(settled.message).toMatchObject({ role: "toolResult", content: [{ type: "text", text: "3" }] });
 		expect((await opened.session.snapshot(LiveDoc, opened.conversation, context))?.nestedTools).toBeUndefined();
 	});
+	it("reports structured output property names without JSON pointer escaping", async () => {
+		const tool = textTool(
+			async () => ({ output: [], structuredOutput: { "output/total~value": "invalid" } }),
+			{ structuredOutputSchema: Type.Object({ "output/total~value": Type.Number() }) },
+		);
+		const opened = await openTools([tool]),
+			id = await call(opened, "echo", { text: "x" });
+		opened.scheduler.resume();
+		expect((await result(opened, id)).task.state.outcome.status).toBe("completed");
+		expect(opened.reports).toMatchObject([
+			{ error: { message: expect.stringContaining("schema: output/total~value:") }, info: { kind: "extension_error", extension: "tools" } },
+		]);
+	});
 	it.each(["safe", "unsafe"] as const)("recovers %s tool intent after a clean close", async (replay) => {
 		const directory = await mkdtemp(join(tmpdir(), "axi-tool-"));
 		directories.push(directory);
@@ -364,5 +377,50 @@ describe("durable tool execution", () => {
 			models: {},
 			tools: { echo: usage },
 		});
+	});
+	it.each([0, 4])("retains diagnostic order after recovery with %i interrupted abort attempts", async (restarts) => {
+		const directory = await mkdtemp(join(tmpdir(), "axi-tool-abort-"));
+		directories.push(directory);
+		const path = join(directory, "session.sqlite");
+		const execute = vi.fn(async () => ({})),
+			afterTool = vi.fn(() => undefined);
+		const tool = textTool(execute);
+		const first = await openTools([tool], { storage: await openNodeSqliteStorage(path) }),
+			id = await call(first, "echo", { text: "x" });
+		await first.session.commitWith(async (tx) => {
+			const record = await tx.task(id);
+			if (!record) throw new Error("The interrupted tool is missing");
+			tx.setTask({
+				...record,
+				restarts,
+				abortRequested: true,
+				state: { status: "pending", checkpoint: { phase: "execute", arguments: { text: "x" }, replay: "unsafe" } },
+			});
+			const slot = (await tx.doc(LiveDoc, first.conversation)).tools?.[0];
+			if (!slot) throw new Error("The interrupted output is missing");
+			slot.output = "kept";
+			slot.droppedBytes = 8;
+			slot.droppedLines = 1;
+			slot.diagnostics = [{ severity: "info", code: "progress", message: "Saved progress" }];
+		}, context);
+		await first.session.close(context);
+		const restored = await openTools([tool], {
+			storage: await openNodeSqliteStorage(path),
+			extensions: [{ name: "observer", hooks: [{ task: ToolTask.definition.name, handlers: { afterTool } }] }],
+		});
+		restored.conversation = first.conversation;
+		restored.scheduler.resume();
+		const settled = await result(restored, id);
+		expect(settled.task.state.outcome.status).toBe("aborted");
+		expect(settled.entry?.data).toMatchObject({
+			diagnostics: [
+				{ code: "progress", message: "Saved progress" },
+				{ code: "aborted", message: "Tool echo was aborted" },
+				{ code: "truncated", message: "Output truncated: 1 lines, 8 bytes dropped" },
+			],
+		});
+		expect(settled.message).toMatchObject({ role: "toolResult", isError: true, content: [{ type: "text", text: "kept" }, expect.anything()] });
+		expect(execute).not.toHaveBeenCalled();
+		expect(afterTool).toHaveBeenCalledTimes(restarts === 0 ? 1 : 0);
 	});
 });

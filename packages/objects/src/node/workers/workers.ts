@@ -283,8 +283,9 @@ class WorkerPool<P extends Principal, K extends KindShape> implements Workers<K>
 			const scripts = await this.#options.plugins.scripts(this.#options.kind, context);
 			child.shipped = scriptKey(scripts);
 			const lock = this.#options.lock(slot.address);
-			child.lock = lock;
 			await clearStaleLock(lock, context);
+			// Exit cleanup owns this lock only after its initial clearance succeeds.
+			child.lock = lock;
 			child.process.send({ kind: "start", address: slot.address, start: data, scripts, lock });
 			await awaitWithContext(child.started.promise, this.#closingContext);
 			return { link: child.process.link, principal: this.#options.principal(slot.address), trusted: true };

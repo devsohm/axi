@@ -254,6 +254,7 @@
 						"packages/ai/test/catalog.test.ts",
 						"packages/ai/test/catalog-boundaries.test.ts",
 						"packages/ai/test/provider-auth.test.ts",
+						"packages/ai/test/environment-credentials.test.ts",
 						"packages/ai/test/device-auth-contract.test.ts",
 						"packages/ai/test/lazy-factory-contract.test.ts",
 						"packages/ai/test/codex-login.test.ts",

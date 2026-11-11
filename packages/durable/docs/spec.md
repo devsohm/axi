@@ -165,6 +165,8 @@ The tool API exposes its conversation and task identities, model collection, res
 
 `ToolTask` persists call arguments and the original replay policy before execution. An interrupted invocation repeats only when both recorded and current policies permit replay. Results and bounded progress are saved through the Session.
 
+Recovered results keep saved diagnostics first, then the interruption or cancellation diagnostic, then any retained-output warning. This order also applies when repeated interruption forces the last abort attempt to skip result hooks. Structured-output error paths show property names with JSON Pointer escapes decoded.
+
 A tool can return `ToolPark` instead of a result: `sleep` for signals or a deadline, or `wait` for tasks it owns. A park releases the invocation, saves the checkpoint, and leaves children running. The next invocation receives `api.wake` and `api.checkpoint`. An unsafe tool can remain parked across reopen; the replay rule applies when execution was interrupted, rather than while it waited. `cancel()` cleans up external work when a parked call is aborted. Cleanup may repeat and must be idempotent. It cannot start nested calls or tasks.
 
 Parked slots keep details and diagnostics and clear streaming output. Woken runs add to that retained information. Result duration includes the entire interval from task start, including parks, restarts, and downtime. Wrappers pass a base tool's park object through unchanged. Mixed result/park objects and invalid waits produce `invalid_park` through the final tool hook.
