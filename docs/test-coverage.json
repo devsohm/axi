@@ -455,6 +455,7 @@
 						"packages/durable/test/atomic-submission.test.ts",
 						"packages/durable/test/run-lifecycle.test.ts",
 						"packages/durable/test/session-observers.test.ts",
+						"packages/durable/test/session-publication-scope.test.ts",
 						"packages/durable/test/document-observation-lifecycle.test.ts",
 						"packages/durable/test/conversation-window.test.ts",
 						"packages/durable/test/registry-reader.test.ts"

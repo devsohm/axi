@@ -876,6 +876,8 @@ export class ObjectsHost<P extends Principal = Principal, R extends JsonValue = 
 		const replaced = new Set([...changed, ...removed]),
 			publishing = new Set([...added, ...changed]);
 		if (context.abortSignal?.aborted) throw aborted();
+		// This batch accepts the reload. Cancellation afterward can stop waiting
+		// for readiness, but cannot roll back the published declarations.
 		this.batch.commit(() => {
 			for (const name of replaced) {
 				const previous = this.#plugins.get(name)!;

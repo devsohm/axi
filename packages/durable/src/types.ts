@@ -457,6 +457,7 @@ export interface Storage {
 		receive: (index: number, seq: Seq) => void,
 		context: Context,
 	): Promise<CommitResult>;
+	/** Optional backend notification scope. The commit waits until publish is invoked. */
 	publishing?(publish: () => void, context: Context): void;
 	mintId<RecordId extends Id<string>>(): Promise<RecordId>;
 	conversation(id: ConversationId, context: Context): Promise<ConversationRecord | undefined>;

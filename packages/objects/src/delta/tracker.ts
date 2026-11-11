@@ -1079,6 +1079,8 @@ function emit(scope: Scope): Op[] {
 		if (!Array.isArray(nodeBase(node)) && reservedMutation(node)) folds.set(node, path);
 		const reserved = path.findIndex((key) => typeof key === "string" && RESERVED_SEGMENTS.has(key));
 		if (reserved >= 0) {
+			// These keys are valid JSON data but forbidden replay paths. Replace the
+			// nearest safe ancestor to preserve the data without traversing that key.
 			let ancestor = node;
 			for (let depth = path.length; depth > reserved; depth--) ancestor = parentOf(ancestor)!;
 			folds.set(ancestor, path.slice(0, reserved));

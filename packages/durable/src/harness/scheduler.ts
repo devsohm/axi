@@ -197,6 +197,8 @@ export class TaskScheduler {
 	readonly #resumed = new Set<TaskId>();
 	readonly #options: TaskSchedulerOptions;
 	readonly #tree: OwnershipTree;
+	// Invocations are process-local. Saved task checkpoints, not these handles,
+	// determine the phase entered after recovery; external effects can repeat.
 	readonly #runs = new Map<TaskId, Invocation>();
 	readonly #ready = new Set<TaskId>();
 	readonly #sleeping = new Set<TaskId>();

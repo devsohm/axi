@@ -171,6 +171,8 @@ class ConversationImpl<T extends ToolRegistration> implements Conversation {
 export const DEFAULT_HARNESS_IDENTITY: ClientIdentity = { attribution: AXI_ATTRIBUTION };
 function modelsGetter(models: HarnessOptions["models"], identity?: ClientIdentity): () => Models {
 	const resolved = mergeClientIdentity(DEFAULT_HARNESS_IDENTITY, identity) ?? DEFAULT_HARNESS_IDENTITY;
+	// Keep host factories lazy so their model and authentication changes can take
+	// effect without reopening the Harness.
 	if (typeof models === "function") return () => withClientIdentity(models(), resolved);
 	const wrapped = withClientIdentity(models, resolved);
 	return () => wrapped;

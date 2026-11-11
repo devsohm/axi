@@ -2,7 +2,7 @@ import { createHash, generateKeyPairSync } from "node:crypto";
 import { mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { expect, test } from "vitest";
+import { expect, test, vi } from "vitest";
 import {
 	acceptHostKey,
 	connectSsh,
@@ -26,13 +26,16 @@ async function peerFixture() {
 		`#!/usr/bin/env node
 import { readFile, writeFile, appendFile } from "node:fs/promises";
 import { spawn } from "node:child_process";
+import { closeSync } from "node:fs";
 const base = new URL("./", import.meta.url);
 const commands = JSON.parse(await readFile(new URL("plan.json", base), "utf8"));
 const step = commands.shift();
 await writeFile(new URL("plan.json", base), JSON.stringify(commands));
 const chunks = [];
-for await (const chunk of process.stdin) chunks.push(chunk);
+if (step?.closeInput) closeSync(0);
+else for await (const chunk of process.stdin) chunks.push(chunk);
 const input = Buffer.concat(chunks), command = process.argv.at(-1);
+if (step?.hold) await new Promise(resolve => process.stderr.write("SSH probe still running\\n", resolve));
 await appendFile(new URL("calls.jsonl", base), JSON.stringify({ args: process.argv.slice(2), command, input: input.toString("base64") }) + "\\n");
 if (!step) { process.stderr.write("Unexpected SSH command"); process.exit(99); }
 if (step.hostKey) {
@@ -44,6 +47,8 @@ if (step.local) {
  const child = spawn("/bin/sh", ["-c", command], { stdio: ["pipe", "inherit", "inherit"] });
  child.stdin.end(input);
  child.on("exit", code => process.exit(code ?? 1));
+} else if (step.hold) {
+ setTimeout(() => process.exit(98), 10000);
 } else { process.stdout.write(step.stdout ?? ""); process.stderr.write(step.stderr ?? ""); process.exitCode = step.code ?? 0; }
 `,
 		{ mode: 0o700 },
@@ -57,7 +62,7 @@ if (step.local) {
 	return {
 		directory,
 		target,
-		async plan(steps: { stdout?: string; stderr?: string; code?: number; local?: boolean; hostKey?: string }[]) {
+		async plan(steps: { stdout?: string; stderr?: string; code?: number; local?: boolean; hostKey?: string; hold?: boolean; closeInput?: boolean }[]) {
 			await writeFile(plan, JSON.stringify(steps));
 			await writeFile(join(directory, "calls.jsonl"), "");
 		},
@@ -71,6 +76,72 @@ if (step.local) {
 		close: () => rm(directory, { recursive: true, force: true }),
 	};
 }
+
+test.skipIf(process.platform === "win32")(
+	"stalled SSH platform probes terminate at their deadlines and retain diagnostic output",
+	async () => {
+		const peer = await peerFixture();
+		vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+		try {
+			await peer.plan([{ hold: true }, { hold: true }]);
+			const pending = detectPlatform(peer.target);
+			const rejected = expect(pending).rejects.toMatchObject({
+				exitCode: null,
+				stderr: "SSH probe still running\n",
+				message: expect.stringContaining("did not finish within 60 s"),
+			});
+			await vi.waitFor(async () => expect(await peer.calls()).toHaveLength(1));
+			await vi.advanceTimersByTimeAsync(60_000);
+			await vi.waitFor(async () => expect(await peer.calls()).toHaveLength(2));
+			await vi.advanceTimersByTimeAsync(60_000);
+			await rejected;
+		} finally {
+			vi.useRealTimers();
+			await peer.close();
+		}
+	},
+);
+
+test("a refused host-key change does not block a queued update or later removal", async () => {
+	const directory = await mkdtemp(join(tmpdir(), "axi-host-key-recovery-"));
+	const file = join(directory, "known_hosts");
+	const original = { host: "one", hostKeyAlias: "one", knownHostsFile: file };
+	const next = { host: "two", hostKeyAlias: "two", knownHostsFile: file };
+	try {
+		await acceptHostKey(original, ["one ssh-ed25519 AAAA"]);
+		const refused = acceptHostKey(original, ["one ssh-ed25519 AQAB"]);
+		const accepted = acceptHostKey(next, ["two ssh-ed25519 AQAB"]);
+		await expect(refused).rejects.toBeInstanceOf(HostKeyChangedError);
+		await accepted;
+		expect((await readFile(file, "utf8")).trim().split("\n")).toEqual([
+			"one ssh-ed25519 AAAA", "two ssh-ed25519 AQAB",
+		]);
+		await forgetHostKey(original);
+		await forgetHostKey(next);
+		expect(await readFile(file, "utf8")).toBe("");
+	} finally {
+		await rm(directory, { recursive: true, force: true });
+	}
+});
+
+test.skipIf(process.platform === "win32")(
+	"an SSH upload that closes stdin preserves its remote failure and a later deployment can succeed",
+	async () => {
+		const peer = await peerFixture();
+		try {
+			const binary = join(peer.directory, "upload-binary");
+			await writeFile(binary, Buffer.alloc(4 * 1024 * 1024, 7));
+			const remote = { platform: "linux", arch: "x64", home: "/remote", warnings: [] } satisfies RemotePlatform;
+			await peer.plan([{ stdout: "missing\n" }, { closeInput: true, stderr: "upload declined", code: 19 }]);
+			await expect(deployDaemon(peer.target, remote, binary)).rejects.toMatchObject({ exitCode: 19, stderr: "upload declined" });
+			await peer.plan([{ stdout: "present\n" }]);
+			expect(await deployDaemon(peer.target, remote, binary)).toMatch(/^\/remote\/\.axi\/env\/bin\/axi-env-/);
+			expect(await peer.calls()).toHaveLength(1);
+		} finally {
+			await peer.close();
+		}
+	},
+);
 
 test.skipIf(process.platform === "win32")(
 	"SSH probes detect supported systems, Windows shells and Android warnings",

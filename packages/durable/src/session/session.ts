@@ -362,6 +362,8 @@ export class SessionImpl implements T.Session {
 			throw new ReadOnlySession("a commit with writes");
 		}
 		if (within !== undefined) {
+			// Only eligible documents can publish ahead of persistence. Record writes
+			// still take the stored path, which also absorbs any held document changes.
 			const candidates = tx.holdable();
 			if (candidates !== undefined) {
 				const part = this.#writer.admit({
@@ -1117,6 +1119,8 @@ export class SessionImpl implements T.Session {
 			return undefined;
 		}
 		const done = Promise.withResolvers<void>();
+		// A backend can defer publication to its own notification scope. A repeated
+		// or late callback must not adopt the same revision twice.
 		let ran = false;
 		const once = () => {
 			if (ran) return;

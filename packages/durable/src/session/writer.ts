@@ -97,6 +97,8 @@ export class Writer {
 		const stored = parts.filter(
 			(part): part is Pending & { writes: readonly StorageWrite[] } => part.writes !== undefined,
 		);
+		// Receipts establish durability, not visibility. Wait for storage to settle
+		// before adopting each accepted batch, including a refused group's stored prefix.
 		const seqs = new Map<number, Seq>();
 		let result: CommitResult | undefined, rejection: { error: unknown } | undefined;
 		if (stored.length) {
