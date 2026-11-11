@@ -408,6 +408,7 @@
 						"packages/durable/test/task-runtime-boundaries.test.ts",
 						"packages/durable/test/timers.test.ts",
 						"packages/durable/test/tool-task.test.ts",
+						"packages/durable/test/tool-parking.test.ts",
 						"packages/durable/test/tool-hook-boundaries.test.ts",
 						"packages/durable/test/join-policies.test.ts",
 						"packages/durable/test/scheduler-inbox-cancellation.test.ts"

@@ -111,6 +111,8 @@ export type TaskSchedulerOptions = {
 	readonly writeAtClose: (writes: () => readonly StorageWrite[]) => Promise<void>;
 	readonly report: (error: unknown, info: ReportInfo, context?: Context) => void;
 	readonly limitsRestarts?: (kind: string) => boolean;
+	readonly keepsAbandoned?: (owner: StoredTask) => boolean;
+	readonly gated?: (record: StoredTask) => boolean;
 	readonly settleOutcome: (tx: Transaction, task: StoredTask, outcome: SchedulerOutcome) => Promise<void>;
 	readonly withdrawInputs: (tx: Transaction, id: ConversationId) => Promise<void>;
 	readonly conversation: (
@@ -136,6 +138,7 @@ type Invocation = {
 	readonly done: Promise<void>;
 	readonly finish: () => void;
 	ended: boolean;
+	publication: number;
 };
 type Reservation = { readonly invocation: Invocation; readonly task: AnyTask; readonly snapshot: RegistrySnapshot };
 type Fit =
@@ -171,6 +174,11 @@ function failed(record: StoredTask): boolean {
 }
 function intent(record: StoredTask): boolean {
 	return record.state.status !== "terminal" && (record.abortRequested || failed(record));
+}
+function parkedTask(record: StoredTask): boolean {
+	return (
+		record.state.status === "sleeping" || record.state.status === "waiting" || record.state.status === "completing"
+	);
 }
 function progress(record: StoredTask): StoredTask {
 	const { restarts: _, ...rest } = record;
@@ -213,6 +221,9 @@ export class TaskScheduler {
 	readonly #runs = new Map<TaskId, Invocation>();
 	#ready = new Set<TaskId>();
 	readonly #sleeping = new Set<TaskId>();
+	readonly #gateWakes = new Set<TaskId>();
+	#publications = 0;
+	readonly #closed = new AbortController();
 	readonly #abandoned = new Set<TaskId>();
 	readonly #cancelling = new Set<TaskId>();
 	readonly #holders = new Set<TaskId>();
@@ -369,7 +380,12 @@ export class TaskScheduler {
 		session.followCommits((publication, context) => this.#observe(publication, context));
 		session.subscribeClose(() => this.#seal());
 		this.#unsubscribe = registry.subscribe(() => {
+			this.#publications++;
 			this.#notifyBlocked();
+			for (const id of this.#sleeping) {
+				const task = this.#tree.live.get(id);
+				if (task) this.#wakeGate(task);
+			}
 			this.#kick();
 		});
 		await session.commitWith(async (tx) => {
@@ -380,6 +396,7 @@ export class TaskScheduler {
 				for (const task of records) {
 					this.#track(task);
 					if (this.#options.readOnly) continue;
+					this.#wakeGate(task);
 					this.#resumed.add(task.id);
 					if (task.abandonOnRestart) this.#abandoned.add(task.id);
 					if (task.state.status === "running") {
@@ -479,8 +496,16 @@ export class TaskScheduler {
 		task: StoredTask,
 	): task is StoredTask & { readonly state: Extract<TaskState<JsonValue, JsonValue>, { status: "sleeping" }> } {
 		return (
-			task.state.status === "sleeping" && !task.abortRequested && !sleepDue(task.state, task.memos, this.#options.now())
+			task.state.status === "sleeping" &&
+			!task.abortRequested &&
+			!this.#gateWakes.has(task.id) &&
+			!sleepDue(task.state, task.memos, this.#options.now())
 		);
+	}
+	#wakeGate(task: StoredTask): void {
+		if (!this.#options.gated?.(task)) return;
+		this.#gateWakes.add(task.id);
+		this.#ready.add(task.id);
 	}
 	#due(): void {
 		for (const id of this.#sleeping) {
@@ -571,6 +596,7 @@ export class TaskScheduler {
 			this.#hostError(error, "registry");
 		}
 		const error = closedError(this.#options.session);
+		this.#closed.abort(error);
 		this.#taskWaiters.rejectAll(error);
 		this.#idleWaiters.rejectAll(error);
 		this.#contexts.clear();
@@ -678,6 +704,8 @@ export class TaskScheduler {
 				if (!group?.size) this.#dependents.delete(on);
 			}
 		this.#tree.track(task);
+		if (task.state.status !== "sleeping") this.#gateWakes.delete(task.id);
+		else if ((this.#runs.get(task.id)?.publication ?? this.#publications) < this.#publications) this.#wakeGate(task);
 		if (task.state.status === "terminal") {
 			this.#ready.delete(task.id);
 			this.#sleeping.delete(task.id);
@@ -727,7 +755,7 @@ export class TaskScheduler {
 				old = this.#tree.live.get(task.id);
 			this.#track(task, context);
 			if (
-				(old === undefined || task.state.status === "terminal") &&
+				(old === undefined || task.state.status === "terminal" || parkedTask(old) !== parkedTask(task)) &&
 				scopes !== undefined &&
 				!this.#addIdleScopes(task, scopes)
 			) {
@@ -1016,7 +1044,13 @@ export class TaskScheduler {
 				if (this.#abandoned.size) {
 					const ids = [...this.#abandoned];
 					const tasks = await this.#region(() =>
-						ids.map((id) => this.#liveRecord(id)).filter((task) => task !== undefined && !task.abortRequested),
+						ids
+							.map((id) => this.#liveRecord(id))
+							.filter((task) => {
+								if (task === undefined || task.abortRequested) return false;
+								const owner = task.owner === undefined ? undefined : this.#liveRecord(task.owner);
+								return owner === undefined || !this.#options.keepsAbandoned?.(owner);
+							}),
 					);
 					for (const task of tasks) tx.setTask(abortMark(task!, "restart"));
 					abandoned = ids;
@@ -1030,6 +1064,7 @@ export class TaskScheduler {
 					this.#reconcileSoon();
 				}
 				let snapshot: RegistrySnapshot | undefined;
+				let publication = this.#publications;
 				for (const task of plan.ready) {
 					const id = task.id;
 					if (
@@ -1049,7 +1084,10 @@ export class TaskScheduler {
 						faults.push({ task, error });
 						continue;
 					}
-					snapshot ??= this.#options.registry.snapshot();
+					if (snapshot === undefined) {
+						snapshot = this.#options.registry.snapshot();
+						publication = this.#publications;
+					}
 					const resolved = this.#resolve(task as Runnable, snapshot);
 					if ("reason" in resolved) {
 						if (task.abortRequested && task.abortReason === undefined)
@@ -1094,6 +1132,7 @@ export class TaskScheduler {
 						done: completion.promise,
 						finish: completion.resolve,
 						ended: false,
+						publication,
 					};
 					this.#runs.set(id, invocation);
 					this.#ready.delete(id);
@@ -1217,6 +1256,7 @@ export class TaskScheduler {
 			};
 		const handover = (tx: Transaction, current: Running): boolean => {
 			phase.snapshot = this.#options.registry.snapshot();
+			run.publication = this.#publications;
 			const replacement = phase.snapshot.task(current.kind);
 			if (replacement !== phase.task) {
 				if (
@@ -1731,7 +1771,7 @@ export class TaskScheduler {
 						!run.ended &&
 						(kept === undefined || kept.range.bounds.tail <= range.bounds.tail)
 					) {
-						if (!this.#tree.idle(id)) {
+						if (!this.#inactive(id)) {
 							this.#contexts.set(id, { range, idleSince: undefined });
 							this.#expiryOrder.delete(id);
 						}
@@ -1778,7 +1818,11 @@ export class TaskScheduler {
 			},
 		};
 		providerSessionsByRuntime.set(runtime, this.providerSessionIds);
+		closeSignals.set(runtime, this.#closed.signal);
 		return runtime;
+	}
+	#inactive(id: ConversationId): boolean {
+		return this.#tree.idle(id, (task) => !parkedTask(task));
 	}
 	#retention(): number {
 		try {
@@ -1799,7 +1843,7 @@ export class TaskScheduler {
 		for (const id of all ? [...this.#contexts.keys()] : scopes) {
 			const kept = this.#contexts.get(id);
 			if (kept === undefined) continue;
-			if (!this.#tree.idle(id)) {
+			if (!this.#inactive(id)) {
 				if (kept.idleSince === undefined) continue;
 				kept.idleSince = undefined;
 				this.#expiryOrder.delete(id);
@@ -1862,7 +1906,7 @@ export class TaskScheduler {
 		let idleMismatches = 0;
 		for (const [id, kept] of this.#contexts) {
 			if (kept.idleSince !== undefined) idleContexts++;
-			if ((kept.idleSince !== undefined) !== this.#tree.idle(id)) idleMismatches++;
+			if ((kept.idleSince !== undefined) !== this.#inactive(id)) idleMismatches++;
 			if (this.#expiryOrder.get(id) !== kept.idleSince) idleMismatches++;
 		}
 		let previous = Number.NEGATIVE_INFINITY;
@@ -1913,6 +1957,10 @@ function forward(
 	return (session[method] as (...args: readonly unknown[]) => Promise<unknown>).call(session, ...args);
 }
 
+const closeSignals = new WeakMap<object, AbortSignal>();
+export function closeSignal(runtime: object): AbortSignal {
+	return closeSignals.get(runtime)!;
+}
 const crashEndings = new WeakMap<object, string>();
 export function endedByCrashes<T extends object>(state: T, message: string): T {
 	crashEndings.set(state, message);

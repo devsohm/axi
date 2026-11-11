@@ -130,6 +130,7 @@ Exports from the package root. The linked declarations contain exact signatures.
 | `NestedCallDoc` | const | [`harness/tool.d.ts`](../dist/harness/tool.d.ts) |
 | `NestedCallState` | typealias | [`harness/tool.d.ts`](../dist/harness/tool.d.ts) |
 | `NestedToolExecutionResult` | typealias | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
+| `NestedToolCall` | typealias | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
 | `NestedToolSlot` | typealias | [`harness/live.d.ts`](../dist/harness/live.d.ts) |
 | `NestedToolSummary` | typealias | [`harness/live.d.ts`](../dist/harness/live.d.ts) |
 | `NextTaskState` | typealias | [`types.d.ts`](../dist/types.d.ts) |
@@ -222,6 +223,8 @@ Exports from the package root. The linked declarations contain exact signatures.
 | `ToolExecutionApi` | interface | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
 | `ToolExecutionMode` | typealias | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
 | `ToolExecutionResult` | typealias | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
+| `ToolPark` | typealias | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
+| `GateSleep` | typealias | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
 | `ToolHookCall` | typealias | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
 | `ToolHooks` | interface | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
 | `ToolRegistration` | typealias | [`harness/types.d.ts`](../dist/harness/types.d.ts) |

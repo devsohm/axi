@@ -2,7 +2,7 @@ import { cutOffTooOften, cutOffCount, salvageable } from "./live.ts";
 import { type Context } from "@axi/objects/context";
 import { copyJson, type JsonRepresentation, type JsonValue } from "@axi/objects/json";
 import { type Draft } from "@axi/objects/delta";
-import { awaitWithContext } from "@axi/objects/context";
+import { awaitWithContext, withAbortSignal, withoutAbortSignal } from "@axi/objects/context";
 import { overlap, ownedSlice } from "@axi/objects/delta";
 import { boundOutput, OutputBuffer, type OutputLimits, PROGRESS_BYTES_PER_SECOND, Progress } from "@axi/objects/output";
 import type { ImageContent, TextContent, ToolCall, ToolResultMessage } from "@axi/ai";
@@ -22,14 +22,17 @@ import type {
 	TaskId,
 	TaskOptions,
 	TaskOutcome,
+	TaskRecord,
 	TaskRuntime,
 	Tx,
 	TypedEntry,
+	WakeReason,
 } from "../types.ts";
 import { toolExtension } from "./agent.ts";
 import { assignJson, jsonEqual } from "./json.ts";
 import {
 	clearProgress,
+	clearOutput,
 	finishSlot,
 	LiveDoc,
 	type NestedToolSlot,
@@ -39,6 +42,8 @@ import {
 	toolSlot,
 } from "./live.ts";
 import type {
+	GateSleep,
+	NestedToolCall,
 	NestedToolExecutionResult,
 	ToolControl,
 	ToolDiagnostic,
@@ -47,7 +52,10 @@ import type {
 	ToolHookCall,
 	ToolHooks,
 	ToolRegistration,
+	ToolPark,
 } from "./types.ts";
+import { invalidPark, isToolPark, parkOrigins, type ParkCarrier } from "./parks.ts";
+import { closeSignal } from "./scheduler.ts";
 import { recordUsage } from "./usage.ts";
 import { optionalExtension } from "./util.ts";
 
@@ -63,10 +71,12 @@ export type ToolTaskInput =
 	  };
 export type ToolTaskCheckpoint =
 	| { phase: "call" }
-	| { phase: "execute"; arguments: JsonObject; replay: "safe" | "unsafe" };
+	| { phase: "execute"; arguments: JsonObject; replay: "safe" | "unsafe"; wake?: WakeReason; checkpoint?: JsonValue }
+	| { phase: "parked"; arguments: JsonObject; replay: "safe" | "unsafe"; checkpoint?: JsonValue };
 export type ToolTaskResult = { kind: "model"; entryId: EntryId; control?: ToolControl } | { kind: "nested" };
 export type NestedCallState = {
-	taskId?: TaskId<ToolTaskResult>;
+	kind?: "nested" | "task";
+	taskId?: TaskId;
 	result?: JsonRepresentation<NestedToolExecutionResult>;
 };
 export const NestedCallDoc = defineDocFamily<NestedCallState, null>({
@@ -93,7 +103,7 @@ const completed: Ending = { status: "completed" };
 
 export const ToolTask = defineTask<ToolTaskInput, ToolTaskCheckpoint, ToolTaskResult, ToolHooks>({
 	name: "axi.tool",
-	version: 3,
+	version: 4,
 	initial: () => ({ phase: "call" }),
 	migrate: (input, checkpoint, fromVersion) => ({
 		input:
@@ -142,11 +152,13 @@ export const ToolTask = defineTask<ToolTaskInput, ToolTaskCheckpoint, ToolTaskRe
 				return reject(runtime, task.input, call, tool, harnessError("invalid_arguments", checked.error), context);
 			let args = checked.args,
 				block: string | undefined;
+			let sleep: GateSleep | undefined;
 			await runtime.hooks.each("beforeTool", async (hook) => {
-				if (block !== undefined) return;
+				if (block !== undefined || sleep !== undefined) return;
 				try {
 					const decision = await hook({ ...call, arguments: args }, runtime, context);
 					if (decision?.block !== undefined) block = decision.block;
+					else if (decision?.sleep !== undefined) sleep = decision.sleep;
 					else if (decision?.arguments !== undefined) args = decision.arguments;
 				} catch (error) {
 					if (runtime.signal.aborted) throw error;
@@ -155,29 +167,83 @@ export const ToolTask = defineTask<ToolTaskInput, ToolTaskCheckpoint, ToolTaskRe
 			});
 			if (block !== undefined)
 				return reject(runtime, task.input, call, tool, harnessError("blocked", `Tool call blocked: ${block}`), context);
+			if (sleep !== undefined) {
+				const { until, signals } = sleep;
+				try {
+					await runtime.commit(async (tx) => {
+						const slot = toolSlot(await tx.doc(LiveDoc, runtime.conversationId), runtime.taskId);
+						if (slot) slot.status = "sleeping";
+						return {
+							status: "sleeping",
+							checkpoint: { phase: "call" },
+							...(until === undefined ? {} : { until }),
+							...(signals === undefined ? {} : { signals }),
+						};
+					}, context);
+				} catch (error) {
+					if (runtime.signal.aborted || closeSignal(runtime).aborted) throw error;
+					await reject(
+						runtime,
+						task.input,
+						call,
+						tool,
+						harnessError("invalid_park", `Tool call ${call.id} cannot wait at its gates: ${errorMessage(error)}`),
+						context,
+					);
+				}
+				return;
+			}
 			const final = checkArguments(tool, call, args);
 			if ("error" in final)
 				return reject(runtime, task.input, call, tool, harnessError("invalid_arguments", final.error), context);
 			const prepared = copyJson(final.args, { omitUndefinedProperties: true }) as JsonObject;
-			await runtime.commit(
-				async (tx) => {
-					const slot = toolSlot(await tx.doc(LiveDoc, runtime.conversationId), runtime.taskId);
-					if (slot !== undefined) {
-						slot.status = "running";
-						if ("parentTaskId" in slot) slot.arguments = prepared;
-					}
-					return undefined;
+			await commitIntent(runtime, { phase: "execute", arguments: prepared, replay: tool.replay ?? "unsafe" }, context);
+			await execute(runtime, task.input, call, tool, prepared, {}, context);
+		},
+		parked: async (task, runtime, context) => {
+			const call = await readCall(runtime, task.input, context);
+			if (cutOffTooOften(task, runtime)) {
+				const message = `Tool ${call.name} was interrupted ${cutOffCount(task)}; it is not run again`;
+				return settleFromSlot(
+					runtime,
+					task.input,
+					call,
+					{ status: "failed", message, reason: "restart_limit" },
+					"restart_limit",
+					message,
+					context,
+					salvageable(task, runtime),
+				);
+			}
+			const tool = await findTool(runtime, task.input, call.name, context);
+			if (!tool) {
+				const message = `Tool ${call.name} is not available`;
+				runtime.report(new Error(`${message}: its parked call ${call.id} cannot run again`));
+				return settleFromSlot(
+					runtime,
+					task.input,
+					call,
+					{ status: "failed", message },
+					"tool_unavailable",
+					message,
+					context,
+					true,
+				);
+			}
+			const { arguments: args, checkpoint } = task.state.checkpoint;
+			const wake = task.state.wake;
+			await commitIntent(
+				runtime,
+				{
+					phase: "execute",
+					arguments: args,
+					replay: tool.replay ?? "unsafe",
+					...(wake === undefined ? {} : { wake }),
+					...(checkpoint === undefined ? {} : { checkpoint }),
 				},
 				context,
-				{ persistence: { kind: "deferred" } },
 			);
-			await runtime.commit(() => {
-				return {
-					status: "running",
-					checkpoint: { phase: "execute", arguments: prepared, replay: tool.replay ?? "unsafe" },
-				};
-			}, context);
-			await execute(runtime, task.input, call, tool, prepared, context);
+			return execute(runtime, task.input, call, tool, args, { wake, checkpoint }, context);
 		},
 		execute: async (task, runtime, context) => {
 			const call = await readCall(runtime, task.input, context);
@@ -199,14 +265,33 @@ export const ToolTask = defineTask<ToolTaskInput, ToolTaskCheckpoint, ToolTaskRe
 				await runtime.commit(async (tx) => {
 					const slot = toolSlot(await tx.doc(LiveDoc, runtime.conversationId), runtime.taskId);
 					if (slot) {
-						clearProgress(slot);
+						if (task.state.checkpoint.wake === undefined) clearProgress(slot);
+						else clearOutput(slot);
 						slot.status = "running";
 						if ("parentTaskId" in slot) slot.arguments = task.state.checkpoint.arguments;
 					}
 					return undefined;
 				}, context);
-				return execute(runtime, task.input, call, tool, task.state.checkpoint.arguments, context);
+				return execute(
+					runtime,
+					task.input,
+					call,
+					tool,
+					task.state.checkpoint.arguments,
+					task.state.checkpoint,
+					context,
+				);
 			}
+			if (task.state.checkpoint.wake !== undefined && tool !== undefined)
+				await cancelTool(
+					runtime,
+					task.input,
+					call,
+					tool,
+					task.state.checkpoint.arguments,
+					task.state.checkpoint.checkpoint,
+					context,
+				);
 			const message = `Tool ${call.name} was interrupted and may have partially run`;
 			await settleFromSlot(
 				runtime,
@@ -232,9 +317,19 @@ export const ToolTask = defineTask<ToolTaskInput, ToolTaskCheckpoint, ToolTaskRe
 		} else if (task.state.checkpoint.phase === "execute") {
 			code = "interrupted";
 			text = `Tool ${call.name} was interrupted by a restart and may have partially run`;
+		} else if (task.state.checkpoint.phase === "parked") {
+			code = "abandoned";
+			text = `Tool ${call.name} was parked: its caller ended with a restart`;
 		} else {
 			code = "abandoned";
 			text = `Tool ${call.name} was not started: its caller ended with a restart`;
+		}
+		const checkpoint = task.state.checkpoint;
+		if (checkpoint.phase === "parked" || (checkpoint.phase === "execute" && checkpoint.wake !== undefined)) {
+			const tool = await findTool(runtime, task.input, call.name, context).catch(() => undefined);
+			if (tool) await cancelTool(runtime, task.input, call, tool, checkpoint.arguments, checkpoint.checkpoint, context);
+			else
+				runtime.report(new Error(`Tool ${call.name} is not available: its parked call ${call.id} was not cancelled`));
 		}
 		await settleFromSlot(
 			runtime,
@@ -248,6 +343,37 @@ export const ToolTask = defineTask<ToolTaskInput, ToolTaskCheckpoint, ToolTaskRe
 		);
 	},
 });
+
+export function gatedCall(record: TaskRecord<JsonValue, JsonValue, JsonValue>): boolean {
+	return (
+		record.kind === ToolTask.definition.name &&
+		record.state.status === "sleeping" &&
+		(record.state.checkpoint as ToolTaskCheckpoint).phase === "call"
+	);
+}
+export function keepsChildren(record: TaskRecord<JsonValue, JsonValue, JsonValue>): boolean {
+	const phase = (record.state.checkpoint as ToolTaskCheckpoint | undefined)?.phase;
+	return record.kind === ToolTask.definition.name && (phase === "call" || phase === "parked");
+}
+async function commitIntent(
+	runtime: Runtime,
+	checkpoint: Extract<ToolTaskCheckpoint, { phase: "execute" }>,
+	context: Context,
+): Promise<void> {
+	await runtime.commit(
+		async (tx) => {
+			const slot = toolSlot(await tx.doc(LiveDoc, runtime.conversationId), runtime.taskId);
+			if (slot) {
+				slot.status = "running";
+				if ("parentTaskId" in slot) slot.arguments = checkpoint.arguments;
+			}
+			return undefined;
+		},
+		context,
+		{ persistence: { kind: "deferred" } },
+	);
+	await runtime.commit(() => ({ status: "running", checkpoint }), context);
+}
 
 async function reject(
 	runtime: Runtime,
@@ -354,41 +480,111 @@ function checkArguments(
 	}
 }
 
+type Resumed = { readonly wake?: WakeReason; readonly checkpoint?: JsonValue };
+type Attempt = {
+	readonly api: ToolExecutionApi & ParkCarrier;
+	readonly reported: Reported;
+	readonly progress: Progress;
+	env: ExecutionEnv | undefined;
+	ended: boolean;
+	end(): Promise<PromiseWithResolvers<void>[]>;
+};
 async function execute(
 	runtime: Runtime,
 	input: ToolTaskInput,
 	call: ToolHookCall,
 	tool: ToolRegistration,
 	args: JsonObject,
+	resumed: Resumed,
 	context: Context,
 ): Promise<void> {
+	const attempt = await createAttempt(runtime, input, call, tool, resumed, context);
+	let result: ToolExecutionResult | ToolPark,
+		ending = completed,
+		durationMs: number | undefined;
+	try {
+		attempt.env = await runtime.env(context);
+		const start = performance.now();
+		try {
+			result = await tool.execute(args, attempt.api, context);
+		} finally {
+			durationMs = Math.round(performance.now() - start);
+		}
+	} catch (error) {
+		if (runtime.signal.aborted) {
+			attempt.ended = true;
+			for (const waiter of await attempt.progress.stop()) waiter.reject(error);
+			throw error;
+		}
+		result = { isError: true, diagnostics: [diagnostic("tool_error", errorMessage(error))] };
+		ending = { status: "failed", message: `Tool ${call.name} threw` };
+	}
+	const waiters = await attempt.end();
+	try {
+		if (isToolPark(result)) {
+			const error = await storePark(runtime, input, call, tool, args, result, attempt, context);
+			if (error === undefined) {
+				for (const waiter of waiters) waiter.resolve();
+				return;
+			}
+			result = harnessError("invalid_park", `Tool ${call.name} returned an invalid park: ${error}`);
+			ending = { status: "failed", message: `Tool ${call.name} returned an invalid park` };
+		}
+		const value = await prepareResult(runtime, input, call, tool, result, attempt.reported, context);
+		await settle(runtime, input, call, ending, () => value, context, durationMs);
+	} catch (error) {
+		for (const waiter of waiters) waiter.reject(error);
+		throw error;
+	}
+	for (const waiter of waiters) waiter.resolve();
+}
+async function createAttempt(
+	runtime: Runtime,
+	input: ToolTaskInput,
+	call: ToolHookCall,
+	tool: ToolRegistration,
+	resumed: Resumed,
+	context: Context,
+): Promise<Attempt> {
 	const limits: OutputLimits = {
 		maxBytes: tool.outputLimits?.maxBytes ?? DEFAULT_MAX_BYTES,
 		maxLines: tool.outputLimits?.maxLines ?? DEFAULT_MAX_LINES,
 		retain: tool.outputLimits?.retain ?? "head",
 	};
-	const reported: Reported = { output: new OutputBuffer(limits), limits, diagnostics: [], details: undefined };
-	const progress = publish(runtime, reported, input.kind === "model" || input.progress !== false, context);
+	const streams = input.kind === "model" || input.progress !== false;
+	const live =
+		resumed.wake !== undefined && streams
+			? await runtime.snapshot(LiveDoc, runtime.conversationId, context)
+			: undefined;
+	const kept = live === undefined ? undefined : toolSlot(live, runtime.taskId);
+	const reported: Reported = {
+		output: new OutputBuffer(limits),
+		limits,
+		diagnostics: [...(kept?.diagnostics ?? [])],
+		details: kept?.details,
+	};
+	const progress = publish(runtime, reported, streams, context);
 	const admissions: Promise<unknown>[] = [];
 	const resumes = tool.replay === "safe";
 	let sequence = 0,
-		memoWrite: Promise<unknown> | undefined,
-		ended = false,
-		env: ExecutionEnv | undefined;
+		memoWrite: Promise<unknown> | undefined;
 	const assertLive = () => {
-		if (ended) throw new Error(`Tool call ${call.id} has settled`);
+		if (attempt.ended) throw new Error(`Tool call ${call.id} has settled`);
 	};
-	const api: ToolExecutionApi = {
+	const api: ToolExecutionApi & ParkCarrier = {
+		[parkOrigins]: new WeakSet(),
 		taskId: runtime.taskId,
 		conversationId: runtime.conversationId,
 		callId: call.id,
+		wake: resumed.wake,
+		checkpoint: resumed.checkpoint,
 		registry: runtime.registry,
 		agent: runtime.agent,
 		get models() {
 			return runtime.models;
 		},
 		get env() {
-			return env;
+			return attempt.env;
 		},
 		now: () => runtime.now(),
 		output: (chunk, skipped) => {
@@ -431,16 +627,34 @@ async function execute(
 			return value as Awaited<ReturnType<typeof change>>;
 		},
 		memo: runtime.memo,
+		readSignal: runtime.readSignal,
 		createTask: async <I, S extends { phase: string }, R, H extends object>(
 			task: Task<I, S, R, H>,
 			value: I,
-			options: Omit<TaskOptions, "conversationId">,
+			{ key, ...options }: Omit<TaskOptions, "conversationId"> & { readonly key?: string },
 			ctx: Context,
 		): Promise<TaskId<R>> => {
+			if (key !== undefined) validateKey(key);
+			else if (resumed.wake !== undefined) throw new Error(`Tool call ${call.id} needs explicit keys after a wake`);
 			const child = options.ownership.kind === "task" && !resumes ? { abandonOnRestart: true, ...options } : options;
 			let id: TaskId<R> | undefined;
 			await runtime.commit(async (tx) => {
+				const member = key === undefined ? undefined : await tx.doc(NestedCallDoc, runtime.taskId, key, null);
+				if (member?.taskId !== undefined) {
+					const existing = member.kind === "task" ? await tx.task(member.taskId) : undefined;
+					if (
+						existing?.kind !== task.definition.name ||
+						!jsonEqual(existing.input, copyJson(value, { omitUndefinedProperties: true }))
+					)
+						throw new Error(`Key ${key} of tool call ${call.id} was already used for another call or task`);
+					id = member.taskId as TaskId<R>;
+					return undefined;
+				}
 				id = await tx.createTask(task, value, child);
+				if (member) {
+					member.taskId = id;
+					member.kind = "task";
+				}
 				return undefined;
 			}, ctx);
 			return id!;
@@ -451,8 +665,15 @@ async function execute(
 		snapshot: runtime.snapshot,
 		snapshotAsOf: runtime.snapshotAsOf,
 		watchDoc: runtime.watchDoc,
-		executeTool: async (name, arguments_, ctx, options = {}) => {
+		executeTool: (async (
+			name: string,
+			arguments_: JsonObject,
+			ctx: Context,
+			options: { readonly key?: string; readonly progress?: boolean; readonly wait?: boolean } = {},
+		) => {
 			assertLive();
+			if (options.key === undefined && resumed.wake !== undefined)
+				throw new Error(`Tool call ${call.id} needs explicit keys after a wake`);
 			const key = options.key ?? String(++sequence);
 			if (options.key !== undefined) validateKey(key);
 			memoWrite ??= runtime.memo(nestedMemo, true, ctx).catch((error: unknown) => {
@@ -470,53 +691,123 @@ async function execute(
 				),
 			);
 			admissions.push(pending);
-			const id = await pending,
-				receipt = await runtime.waitForTask(id, ctx),
-				result = (await runtime.snapshot(NestedCallDoc, runtime.taskId, key, ctx))?.result;
-			return result === undefined
-				? fallback(id, name, receipt.state.outcome)
-				: (copyJson(result) as unknown as NestedToolExecutionResult);
+			const id = await pending;
+			const child: NestedToolCall = {
+				taskId: id,
+				async result(ctx) {
+					const receipt = await runtime.waitForTask(id, ctx);
+					const value = (await runtime.snapshot(NestedCallDoc, runtime.taskId, key, ctx))?.result;
+					return value === undefined
+						? fallback(id, name, receipt.state.outcome)
+						: (copyJson(value) as unknown as NestedToolExecutionResult);
+				},
+			};
+			return options.wait === false ? child : child.result(ctx);
+		}) as ToolExecutionApi["executeTool"],
+	};
+	const attempt: Attempt = {
+		api,
+		reported,
+		progress,
+		env: undefined,
+		ended: false,
+		async end() {
+			attempt.ended = true;
+			await Promise.allSettled(admissions);
+			reported.output.end();
+			return progress.stop();
 		},
 	};
-	let result: ToolExecutionResult,
-		ending = completed,
-		durationMs: number | undefined;
+	return attempt;
+}
+
+async function storePark(
+	runtime: Runtime,
+	input: ToolTaskInput,
+	call: ToolHookCall,
+	tool: ToolRegistration,
+	args: JsonObject,
+	result: ToolPark,
+	attempt: Attempt,
+	context: Context,
+): Promise<string | undefined> {
+	const invalid = invalidPark(tool, result, attempt.api);
+	if (invalid !== undefined) return invalid;
+	if (result.wait !== undefined)
+		for (const id of result.wait.on)
+			if ((await runtime.getTask(id, context))?.owner !== runtime.taskId) return `task ${id} is not owned by the call`;
+	const checkpoint = (result.sleep ?? result.wait)!.checkpoint;
+	const parked = {
+		phase: "parked",
+		arguments: args,
+		replay: tool.replay ?? "unsafe",
+		...(checkpoint === undefined ? {} : { checkpoint }),
+	} as const;
+	const streams = input.kind === "model" || input.progress !== false;
 	try {
-		env = await runtime.env(context);
-		const start = performance.now();
-		try {
-			result = await tool.execute(args, api, context);
-		} finally {
-			durationMs = Math.round(performance.now() - start);
-		}
+		await runtime.commit(async (tx) => {
+			const slot = toolSlot(await tx.doc(LiveDoc, runtime.conversationId), runtime.taskId);
+			if (slot) {
+				if (streams && attempt.reported.details !== undefined) assignJson(slot, "details", attempt.reported.details);
+				if (streams && attempt.reported.diagnostics.length)
+					assignJson(slot, "diagnostics", attempt.reported.diagnostics);
+				clearOutput(slot);
+				slot.status = result.sleep === undefined ? "waiting" : "sleeping";
+			}
+			if (result.sleep !== undefined) {
+				const { until, signals } = result.sleep;
+				return {
+					status: "sleeping",
+					checkpoint: parked,
+					...(until === undefined ? {} : { until }),
+					...(signals === undefined ? {} : { signals }),
+				};
+			}
+			return { status: "waiting", checkpoint: parked, on: result.wait!.on, policy: result.wait!.policy };
+		}, context);
 	} catch (error) {
-		if (runtime.signal.aborted) {
-			ended = true;
-			for (const waiter of await progress.stop()) waiter.reject(error);
-			throw error;
-		}
-		result = { isError: true, diagnostics: [diagnostic("tool_error", errorMessage(error))] };
-		ending = { status: "failed", message: `Tool ${call.name} threw` };
-	}
-	ended = true;
-	await Promise.allSettled(admissions);
-	reported.output.end();
-	const waiters = await progress.stop();
-	try {
-		const value = await prepareResult(runtime, input, call, tool, result, reported, context);
-		await settle(runtime, input, call, ending, () => value, context, durationMs);
-	} catch (error) {
-		for (const waiter of waiters) waiter.reject(error);
+		if (!runtime.signal.aborted && !closeSignal(runtime).aborted) return errorMessage(error);
+		const cleanup = withAbortSignal(closeSignal(runtime), withoutAbortSignal(context));
+		// An abort can win before the park commits. Close instead leaves the intent for recovery.
+		if ((await runtime.getTask(runtime.taskId, cleanup))?.abortRequested)
+			await cancelTool(runtime, input, call, tool, args, checkpoint, cleanup);
 		throw error;
 	}
-	for (const waiter of waiters) waiter.resolve();
+	return undefined;
+}
+async function cancelTool(
+	runtime: Runtime,
+	input: ToolTaskInput,
+	call: ToolHookCall,
+	tool: ToolRegistration,
+	args: JsonObject,
+	checkpoint: JsonValue | undefined,
+	context: Context,
+): Promise<void> {
+	if (!tool.cancel) return;
+	const attempt = await createAttempt(runtime, input, call, tool, { checkpoint }, context);
+	const refuse = (): never => {
+		throw new Error(`Tool ${call.name} cannot start nested calls or tasks in cancel`);
+	};
+	try {
+		attempt.env = await runtime.env(context);
+		await tool.cancel(args, { ...attempt.api, executeTool: refuse, createTask: refuse }, context);
+	} catch (error) {
+		if (context.abortSignal?.aborted) throw error;
+		const extension = await runtime.agent(context).then(
+			(agent) => toolExtension(agent, tool.name),
+			() => undefined,
+		);
+		runtime.report(error, { kind: "extension", ...optionalExtension(extension) });
+	}
+	for (const waiter of await attempt.end()) waiter.resolve();
 }
 
 function publish(runtime: Runtime, reported: Reported, enabled: boolean, context: Context): Progress {
 	let written: { text: string; details: JsonValue | undefined; diagnostics: number } = {
 			text: "",
-			details: undefined,
-			diagnostics: 0,
+			details: reported.details,
+			diagnostics: reported.diagnostics.length,
 		},
 		lastTime = 0;
 	return new Progress(
@@ -663,7 +954,8 @@ async function settle(
 	);
 	const hadNested = (await runtime.memo(nestedMemo, context)) === true;
 	await Promise.all(nested.map((task) => runtime.abortOwned(task.id, context)));
-	await runtime.commit(async (tx) => {
+	await runtime.commit(async (tx, current) => {
+		if (current.startedAt !== undefined) durationMs = runtime.now() - current.startedAt;
 		const live = await tx.doc(LiveDoc, runtime.conversationId),
 			slot = toolSlot(live, runtime.taskId),
 			result = build(slot);
@@ -743,14 +1035,15 @@ async function admitNested(
 	await runtime.commit(async (tx) => {
 		const state = await tx.doc(NestedCallDoc, runtime.taskId, options.key, null);
 		if (state.taskId !== undefined) {
-			const existing = (await tx.task(state.taskId))?.input as ToolTaskInput | undefined;
+			const existing =
+				state.kind === "task" ? undefined : ((await tx.task(state.taskId))?.input as ToolTaskInput | undefined);
 			if (
 				existing?.kind !== "nested" ||
 				existing.call.name !== name ||
 				!jsonEqual(existing.call.arguments, call.arguments)
 			)
 				throw new Error(`Nested call ${call.id} was already made with another tool or other arguments`);
-			id = state.taskId;
+			id = state.taskId as TaskId<ToolTaskResult>;
 			replayed = state.result !== undefined;
 			return undefined;
 		}
@@ -766,6 +1059,7 @@ async function admitNested(
 			ownership: { kind: "task", taskId: runtime.taskId },
 			abandonOnRestart: options.abandonOnRestart,
 		});
+		state.kind = "nested";
 		state.taskId = id;
 		const live = await tx.doc(LiveDoc, runtime.conversationId);
 		live.nestedTools ??= [];

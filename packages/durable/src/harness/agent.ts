@@ -1,6 +1,7 @@
 import { copyJson } from "@axi/objects/json";
 import { defineDoc } from "../documents.ts";
 import { documentRetention, persistWithin } from "../session/session.ts";
+import { wrapExecution } from "./parks.ts";
 import type { ConversationId, ConversationRecord, Tx } from "../types.ts";
 import type {
 	Agent,
@@ -260,7 +261,7 @@ export function resolveAgent<T extends ToolRegistration>(
 				wrapped(
 					tools,
 					wrap.tool,
-					(tool) => wrap.wrap(tool),
+					(tool) => wrapExecution(tool, (base) => wrap.wrap(base)),
 					(tool) => tool.name,
 					failed,
 				);

@@ -161,6 +161,16 @@ The tool API exposes its conversation and task identities, model collection, res
 
 `ToolTask` persists call arguments and the original replay policy before execution. An interrupted invocation repeats only when both recorded and current policies permit replay. Results and bounded progress are saved through the Session.
 
+A tool can return `ToolPark` instead of a result: `sleep` for signals or a deadline, or `wait` for tasks it owns. A park releases the invocation, saves the checkpoint, and leaves children running. The next invocation receives `api.wake` and `api.checkpoint`. An unsafe tool can remain parked across reopen; the replay rule applies when execution was interrupted, rather than while it waited. `cancel()` cleans up external work when a parked call is aborted. Cleanup may repeat and must be idempotent. It cannot start nested calls or tasks.
+
+Parked slots keep details and diagnostics and clear streaming output. Woken runs add to that retained information. Result duration includes the entire interval from task start, including parks, restarts, and downtime. Wrappers pass a base tool's park object through unchanged. Mixed result/park objects and invalid waits produce `invalid_park` through the final tool hook.
+
+`executeTool(..., { wait: false })` returns a task handle whose `result(context)` waits for the nested result. The caller can park on that task instead of holding its invocation open. Both nested calls and child tasks support stable keys. Reusing a key with different work fails; after a wake, keys are required because call positions can change.
+
+`beforeTool` can return a sleep before execution intent. Signal delivery, the deadline, registry publication, or reopen re-evaluates the whole gate chain. A gate that runs during a registry change is re-evaluated after its sleep commits. Calls already parked inside execution are unaffected by registry publications. Fix gate deadlines in a memo so re-evaluation does not extend them.
+
+Contexts can expire while all work in their conversation is parked. Public idle waits still wait for that work; context retention and work completion are separate decisions.
+
 Generation hooks are `beforeRequest`, `beforeProviderRequest`, `afterResponse`, `onYield`, `afterTools`, and `afterRun`. Tool hooks are `beforeTool` and `afterTool`. Compaction exposes `beforeCompact`. Each hook runs with an invocation context and typed task data. Hook and task APIs read committed entries through `entry()` and `entries()` within their conversation.
 
 `hookTask()` requests an installed task from `afterTools`, `onYield`, or `afterRun`. The generation creates these tasks as its children and waits for all of them. Invalid requests are reported and skipped.

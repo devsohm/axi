@@ -15,9 +15,9 @@ import type {
 export function defineExtension<T extends ToolRegistration = ToolRegistration>(extension: Extension<T>): Extension<T> {
 	return extension;
 }
-export function defineTool<P extends TSchema, D extends JsonValue = JsonValue>(
-	tool: ToolRegistration<P, D>,
-): ToolRegistration<P, D> {
+export function defineTool<P extends TSchema, D extends JsonValue = JsonValue, C extends JsonValue = JsonValue>(
+	tool: ToolRegistration<P, D, C>,
+): ToolRegistration<P, D, C> {
 	return tool;
 }
 export function section<T extends ToolRegistration = ToolRegistration>(

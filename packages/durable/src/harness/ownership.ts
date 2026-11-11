@@ -311,15 +311,16 @@ export class OwnershipTree {
 		}
 		return scope === undefined;
 	}
-	idle(scope: ConversationId | undefined): boolean {
+	idle(scope: ConversationId | undefined, counts: (task: StoredTask) => boolean = () => true): boolean {
 		if (scope === undefined) this.#coordination.read(ROOTS_KEY);
 		for (const id of this.#unknown) {
 			const record = this.live.get(id);
-			if (record && !record.background && this.inScope(taskParent(record), scope) !== false) return false;
+			if (record && !record.background && counts(record) && this.inScope(taskParent(record), scope) !== false)
+				return false;
 		}
 		for (const root of scope === undefined ? this.#roots : [scope]) {
 			for (const child of this.descendants(conversationNode(root))) {
-				if (child.live !== undefined && !child.node.background) return false;
+				if (child.live !== undefined && !child.node.background && counts(child.live)) return false;
 			}
 		}
 		return true;

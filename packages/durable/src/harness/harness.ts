@@ -51,6 +51,7 @@ import { ProviderDoc } from "./provider.ts";
 import { BUILTIN_TASKS } from "./registry.ts";
 import { type InvocationBinding, TaskScheduler } from "./scheduler.ts";
 import { Submissions } from "./submissions.ts";
+import { gatedCall, keepsChildren } from "./tool.ts";
 import { TaskGraphView, type TaskGraphWatch } from "./task-graph.ts";
 import { DURABLE_TELEMETRY_SCHEMA } from "./telemetry.ts";
 import type {
@@ -233,6 +234,8 @@ class HarnessImpl<T extends ToolRegistration> extends SessionImpl implements Har
 			report,
 			settleOutcome: settleSchedulerOutcome,
 			limitsRestarts: (kind) => LIMITS_RESTARTS.has(kind),
+			keepsAbandoned: keepsChildren,
+			gated: gatedCall,
 			withdrawInputs: withdrawQueuedInputs,
 			conversation: async (id, binding, context) =>
 				(await this.readOnLine((line) => line.conversation(id, context))) === undefined

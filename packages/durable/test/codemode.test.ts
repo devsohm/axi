@@ -137,12 +137,13 @@ it("acquires a model slot before admitting its nested call", async () => {
 									...api,
 									async executeTool() {
 										order.push("nested");
-										return {
+										const result = {
 											taskId: api.taskId,
-											isError: false,
+											isError: false as const,
 											diagnostics: [],
 											structuredOutput: { stopReason: "stop", answers: {} },
 										};
+										return { ...result, result: async () => result };
 									},
 								},
 								frame,

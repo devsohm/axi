@@ -122,7 +122,29 @@ export type ToolExecutionResult<D extends JsonValue = JsonValue> = {
 	readonly diagnostics?: readonly ToolDiagnostic[];
 	readonly usage?: Usage;
 	readonly control?: ToolControl;
+	readonly sleep?: never;
+	readonly wait?: never;
 };
+export type ToolPark<C extends JsonValue = JsonValue> = {
+	readonly [K in Exclude<keyof ToolExecutionResult, "sleep" | "wait">]?: never;
+} & (
+	| {
+			readonly sleep: {
+				readonly checkpoint?: C;
+				readonly until?: number;
+				readonly signals?: readonly import("../signals.ts").SignalKey<unknown>[];
+			};
+			readonly wait?: never;
+	  }
+	| {
+			readonly wait: {
+				readonly checkpoint?: C;
+				readonly on: readonly TaskId[];
+				readonly policy: import("../types.ts").JoinPolicy;
+			};
+			readonly sleep?: never;
+	  }
+);
 export type NestedToolExecutionResult = {
 	readonly taskId: TaskId;
 	readonly structuredOutput?: JsonValue;
@@ -134,10 +156,18 @@ export type NestedToolExecutionResult = {
 };
 export type ToolExecutionMode = "parallel" | "sequential";
 export type QueueMode = "all" | "one-at-a-time";
-export interface ToolExecutionApi<D extends JsonValue = JsonValue> extends DocumentObserver, DocumentReader {
+export type NestedToolCall = {
+	readonly taskId: TaskId;
+	result(context: Context): Promise<NestedToolExecutionResult>;
+};
+export interface ToolExecutionApi<D extends JsonValue = JsonValue, C extends JsonValue = JsonValue>
+	extends DocumentObserver,
+		DocumentReader {
 	readonly taskId: TaskId;
 	readonly conversationId: ConversationId;
 	readonly callId: string;
+	readonly wake: import("../types.ts").WakeReason | undefined;
+	readonly checkpoint: C | undefined;
 	readonly registry: RegistrySnapshot;
 	agent(context: Context): Promise<Agent>;
 	readonly models: Models;
@@ -151,10 +181,15 @@ export interface ToolExecutionApi<D extends JsonValue = JsonValue> extends Docum
 	commit<T>(change: (tx: Tx) => T | Promise<T>, context: Context, options?: CommitOptions): Promise<T>;
 	memo<T extends JsonValue>(name: string, context: Context): Promise<T | undefined>;
 	memo<T extends JsonValue>(name: string, candidate: T, context: Context): Promise<T>;
+	readSignal<T>(
+		token: import("../signals.ts").SignalToken<T>,
+		key: string,
+		context: Context,
+	): Promise<import("../signals.ts").SignalState<T> | undefined>;
 	createTask<I, S extends { phase: string }, R, H extends object>(
 		task: Task<I, S, R, H>,
 		input: I,
-		options: Omit<TaskOptions, "conversationId">,
+		options: Omit<TaskOptions, "conversationId"> & { readonly key?: string },
 		context: Context,
 	): Promise<TaskId<R>>;
 	getTask<R>(id: TaskId<R>, context: Context): Promise<TaskRecord<JsonValue, JsonValue, R> | undefined>;
@@ -164,10 +199,20 @@ export interface ToolExecutionApi<D extends JsonValue = JsonValue> extends Docum
 		name: string,
 		args: JsonObject,
 		context: Context,
-		options?: { readonly key?: string; readonly progress?: boolean },
+		options?: { readonly key?: string; readonly progress?: boolean; readonly wait?: true },
 	): Promise<NestedToolExecutionResult>;
+	executeTool(
+		name: string,
+		args: JsonObject,
+		context: Context,
+		options: { readonly key?: string; readonly progress?: boolean; readonly wait: false },
+	): Promise<NestedToolCall>;
 }
-export type ToolRegistration<P extends TSchema = TSchema, D extends JsonValue = JsonValue> = Tool<P> & {
+export type ToolRegistration<
+	P extends TSchema = TSchema,
+	D extends JsonValue = JsonValue,
+	C extends JsonValue = JsonValue,
+> = Tool<P> & {
 	readonly replay?: "safe" | "unsafe";
 	readonly executionMode?: ToolExecutionMode;
 	prepareArguments?(args: unknown): Static<P>;
@@ -175,7 +220,12 @@ export type ToolRegistration<P extends TSchema = TSchema, D extends JsonValue = 
 	readonly callers?: readonly ("model" | "tools")[];
 	readonly deferred?: true;
 	readonly outputLimits?: { readonly maxBytes?: number; readonly maxLines?: number; readonly retain?: "head" | "tail" };
-	execute(args: Static<P>, api: ToolExecutionApi<D>, context: Context): Promise<ToolExecutionResult<D>>;
+	execute(
+		args: Static<P>,
+		api: ToolExecutionApi<D, C>,
+		context: Context,
+	): Promise<ToolExecutionResult<D> | ToolPark<C>>;
+	cancel?(args: Static<P>, api: ToolExecutionApi<D, C>, context: Context): Promise<void>;
 };
 export type PromptInput<T extends ToolRegistration = ToolRegistration> = {
 	readonly conversationId: ConversationId;
@@ -397,12 +447,16 @@ export interface GenerationHooks {
 	afterRun(run: RunSummary, api: HookApi, context: Context): HookResult<{ readonly tasks: readonly HookTask[] }>;
 }
 export type ToolHookCall = ToolCall & { readonly parent?: { readonly taskId: TaskId; readonly callId: string } };
+export type GateSleep = {
+	readonly until?: number;
+	readonly signals?: readonly import("../signals.ts").SignalKey<unknown>[];
+};
 export interface ToolHooks {
 	beforeTool(
 		call: ToolHookCall,
 		api: HookApi,
 		context: Context,
-	): HookResult<{ readonly arguments?: JsonObject; readonly block?: string }>;
+	): HookResult<{ readonly arguments?: JsonObject; readonly block?: string; readonly sleep?: GateSleep }>;
 	afterTool(
 		call: ToolHookCall,
 		result: ToolExecutionResult,

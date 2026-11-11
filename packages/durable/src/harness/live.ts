@@ -22,7 +22,7 @@ import { recordUsage } from "./usage.ts";
 type SlotProgress = {
 	callId: string;
 	name: string;
-	status: "pending" | "running" | "done";
+	status: "pending" | "running" | "sleeping" | "waiting" | "done";
 	output?: string;
 	droppedBytes?: number;
 	droppedLines?: number;
@@ -171,7 +171,12 @@ export function toolSlot(live: Draft<LiveState>, id: TaskId): Draft<ToolSlot | N
 	return slots[from]?.taskId === id ? slots[from] : undefined;
 }
 export function clearProgress(slot: Draft<SlotProgress>): void {
-	for (const key of ["output", "droppedBytes", "droppedLines", "details", "diagnostics"] as const) delete slot[key];
+	clearOutput(slot);
+	delete slot.details;
+	delete slot.diagnostics;
+}
+export function clearOutput(slot: Draft<SlotProgress>): void {
+	for (const key of ["output", "droppedBytes", "droppedLines"] as const) delete slot[key];
 }
 export function finishSlot(slot: Draft<ToolSlot | NestedToolSlot>): void {
 	slot.status = "done";
