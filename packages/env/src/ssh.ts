@@ -291,8 +291,8 @@ export async function deployDaemon(
 		name = `axi-env-${hash.slice(0, 32)}`;
 	const file =
 		remote.platform === "windows"
-			? `${remote.home}\\.axi\\env\\bin\\${name}.exe`
-			: `${remote.home}/.axi/env/bin/${name}`;
+			? `${remote.home}\\.axi\\mobile\\tools\\${name}.exe`
+			: `${remote.home}/.axi/mobile/tools/${name}`;
 	let status: string;
 	if (remote.platform === "windows")
 		status = (

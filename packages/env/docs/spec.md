@@ -48,6 +48,8 @@ Connection and daemon pings detect silence. Reconnected watchers establish new c
 
 SSH host keys are supplied through an explicit known-hosts file and alias. Applications compare newly scanned keys through a trusted channel before accepting them. Deployment verifies the binary content and activates it only after the uploaded checksum agrees. The remote machine needs the native executable; it does not need Node or Rust to run it.
 
+`deployDaemon()` stores executables under `.axi/mobile/tools` in the remote home directory. A name contains `axi-env-` and the first 32 hexadecimal characters of its SHA-256 hash, followed by `.exe` on Windows. Matching files are reused after checksum verification. Uploads use a temporary file before activation. A later connection verifies the executable again and replaces altered content.
+
 ## Platform boundaries
 
 SSH uses a 15-second connection timeout and keepalives for an established connection.

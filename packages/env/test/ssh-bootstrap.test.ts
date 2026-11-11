@@ -135,7 +135,7 @@ test.skipIf(process.platform === "win32")(
 			await peer.plan([{ stdout: "missing\n" }, { closeInput: true, stderr: "upload declined", code: 19 }]);
 			await expect(deployDaemon(peer.target, remote, binary)).rejects.toMatchObject({ exitCode: 19, stderr: "upload declined" });
 			await peer.plan([{ stdout: "present\n" }]);
-			expect(await deployDaemon(peer.target, remote, binary)).toMatch(/^\/remote\/\.axi\/env\/bin\/axi-env-/);
+			expect(await deployDaemon(peer.target, remote, binary)).toMatch(/^\/remote\/\.axi\/mobile\/tools\/axi-env-/);
 			expect(await peer.calls()).toHaveLength(1);
 		} finally {
 			await peer.close();
@@ -259,8 +259,8 @@ test.skipIf(process.platform === "win32")(
 			const deployed = await deployDaemon(peer.target, remote, binary);
 			expect(await readFile(deployed)).toEqual(bytes);
 			expect((await stat(deployed)).mode & 0o777).toBe(0o700);
-			expect((await stat(join(remote.home, ".axi/env/bin"))).mode & 0o777).toBe(0o700);
-			expect(await readdir(join(remote.home, ".axi/env/bin"))).toEqual([deployed.split("/").at(-1)]);
+			expect((await stat(join(remote.home, ".axi/mobile/tools"))).mode & 0o777).toBe(0o700);
+			expect(await readdir(join(remote.home, ".axi/mobile/tools"))).toEqual([deployed.split("/").at(-1)]);
 			await peer.plan([{ local: true }]);
 			expect(await deployDaemon(peer.target, remote, binary)).toBe(deployed);
 			expect(await peer.calls()).toHaveLength(1);
@@ -291,7 +291,7 @@ test.skipIf(process.platform === "win32")(
 			const path = await deployDaemon(peer.target, remote, binary),
 				calls = await peer.calls();
 			const hash = createHash("sha256").update(bytes).digest("hex");
-			expect(path).toBe(`${remote.home}\\.axi\\env\\bin\\axi-env-${hash.slice(0, 32)}.exe`);
+			expect(path).toBe(`${remote.home}\\.axi\\mobile\\tools\\axi-env-${hash.slice(0, 32)}.exe`);
 			expect(Buffer.from(calls[1]!.input, "base64").toString()).toBe(`${bytes.toString("base64")}\nAXI-ENV-END\n`);
 			const script = Buffer.from(calls[1]!.command.split(" ").at(-1)!, "base64").toString("utf16le");
 			expect(script).toContain(hash);

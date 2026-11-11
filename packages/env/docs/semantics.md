@@ -28,7 +28,7 @@ Removal of a missing path requires `force`. Removing a directory requires `recur
 
 Temporary directories use the remote temporary directory and the supplied prefix. The default prefix is `tmp-`. Prefix joining permits parent components. On Unix, the remote temporary directory follows `TMPDIR`, `TMP`, `TEMP`, then the platform default. Termux uses `$PREFIX/tmp`. Windows checks `TEMP`, then `TMP`, then the system directory's `Temp` folder.
 
-`listDir()` uses byte order on POSIX and the file system's order on Windows. An entry that cannot be inspected fails the listing. A directory reader retains enumeration order, skips vanished entries and fills the page after those skips.
+`listDir()` uses byte order on POSIX and the file system's order on Windows. Entries removed between enumeration and inspection are omitted; other inspection errors fail the listing. A directory reader retains enumeration order, skips vanished entries and fills the page after those skips.
 
 `listFiles()` returns a bounded tree of files, directories and links. It does not follow links. Git ignore rules can omit tracked files too. Its defaults and payload are documented in the [wire protocol](protocol.md).
 
