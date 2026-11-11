@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import { expect, expectTypeOf, test } from "vitest";
 import { type Static, Type } from "typebox";
 import { StringEnum } from "@axi/ai/utils/string-enum";
@@ -40,6 +41,47 @@ const tool: Tool = {
 		additionalProperties: { type: "integer" },
 	},
 };
+test("JSON arguments convert to bigint and undefined without changing their transcript values", () => {
+	const parameters = Type.Object({ value: Type.BigInt(), empty: Type.Undefined() });
+	for (const schema of [parameters, JSON.parse(JSON.stringify(parameters))]) {
+		const convert: Tool = { name: "convert", description: "Convert extended values", parameters: schema };
+		for (const [value, expected] of [
+			["9007199254740993", 9007199254740993n],
+			[42.9, 42n],
+			[-3.5, -3n],
+			[true, 1n],
+			[null, 0n],
+		] as const) {
+			const call: ToolCall = { type: "toolCall", id: "extended", name: "convert", arguments: { value, empty: null } };
+			expect(validateToolArguments(convert, call)).toEqual({ value: expected, empty: undefined });
+			expect(call.arguments).toEqual({ value, empty: null });
+		}
+		const call: ToolCall = {
+			type: "toolCall",
+			id: "invalid-extended",
+			name: "convert",
+			arguments: { value: "invalid", empty: null },
+		};
+		expect(() => validateToolArguments(convert, call)).toThrow("expected bigint, got string");
+	}
+	const acceptsString: Tool = {
+		name: "choice",
+		description: "Read a value",
+		parameters: Type.Object({ value: Type.Union([Type.BigInt(), Type.String()]) }),
+	};
+	expect(
+		validateToolArguments(acceptsString, {
+			type: "toolCall",
+			id: "choice",
+			name: "choice",
+			arguments: { value: "42" },
+		}),
+	).toEqual({ value: "42" });
+	const voidTool: Tool = { name: "void", description: "Reject JSON", parameters: Type.Object({ value: Type.Void() }) };
+	expect(() =>
+		validateToolArguments(voidTool, { type: "toolCall", id: "void", name: "void", arguments: { value: null } }),
+	).toThrow("Validation failed");
+});
 test("tool validation coerces nested JSON schemas, omits optional nulls and leaves caller arguments intact", () => {
 	const call: ToolCall = {
 		type: "toolCall",
@@ -258,6 +300,200 @@ test("recursive local references convert each nested object", () => {
 	};
 	expect(validateToolArguments(convert, call)).toEqual({ count: 5, next: { count: -1 } });
 	expect(call.arguments).toEqual({ count: "5.8", next: { count: "-1.8" } });
+});
+
+test("named schema resources convert nested values and reject absent resource names", () => {
+	const parameters = Type.Object({
+		branch: Type.Cyclic(
+			{ Branch: Type.Object({ label: Type.String(), children: Type.Array(Type.Ref("Branch")) }) },
+			"Branch",
+		),
+	});
+	const tree: Tool = { name: "tree", description: "Read a tree", parameters };
+	const call: ToolCall = {
+		type: "toolCall",
+		id: "tree",
+		name: "tree",
+		arguments: { branch: { label: 9, children: [] } },
+	};
+	expect(validateToolArguments(tree, call)).toEqual({ branch: { label: "9", children: [] } });
+	expect(call.arguments).toEqual({ branch: { label: 9, children: [] } });
+	const unresolved: Tool = { ...tree, parameters: Type.Object({ branch: Type.Ref("Absent") }) };
+	expect(() => validateToolArguments(unresolved, call)).toThrow("branch: unresolved reference Absent");
+});
+
+test("recursive alternatives finish without repeated exponential conversion or transcript mutation", () => {
+	const module = new URL("../src/utils/validation.ts", import.meta.url).href;
+	const result = spawnSync(
+		process.execPath,
+		[
+			"--input-type=module",
+			"-e",
+			`
+		import { validateToolArguments } from ${JSON.stringify(module)};
+		const branch = { anyOf: [
+			{ type: "object", required: ["left"], additionalProperties: { $ref: "#/$defs/Branch" } },
+			{ type: "object", required: ["right"], additionalProperties: { $ref: "#/$defs/Branch" } }
+		] };
+		let tree = { leaf: false };
+		for (let depth = 0; depth < 45; depth++) tree = { child: tree };
+		const parameters = { type: "object", properties: { tree: { $ref: "#/$defs/Branch" } }, $defs: { Branch: branch } };
+		try {
+			validateToolArguments({ name: "read", description: "", parameters }, { type: "toolCall", id: "recursive", name: "read", arguments: { tree } });
+			process.exitCode = 1;
+		} catch (error) {
+			if (!/tree\\.(left|right): missing/.test(error.message)) throw error;
+		}
+	`,
+		],
+		{ encoding: "utf8", timeout: 4000 },
+	);
+	expect(result.error).toBeUndefined();
+	expect(result.stderr).toBe("");
+	expect(result.status).toBe(0);
+
+	const recursive: Tool = {
+		name: "read",
+		description: "Read text or nested text lists",
+		parameters: {
+			type: "object",
+			properties: { value: { $ref: "#/$defs/Value" } },
+			$defs: { Value: { anyOf: [{ type: "string" }, { type: "array", items: { $ref: "#/$defs/Value" } }] } },
+		},
+	};
+	const call: ToolCall = { type: "toolCall", id: "recursive", name: "read", arguments: { value: [null, [8]] } };
+	expect(validateToolArguments(recursive, call)).toEqual({ value: ["null", ["8"]] });
+	expect(call.arguments).toEqual({ value: [null, [8]] });
+	expect(() => validateToolArguments(recursive, { ...call, arguments: { value: {} } })).toThrow(
+		"value: expected string, got object",
+	);
+});
+
+test("large enums validate values near the end and report bounded diagnostics", () => {
+	const choices = Array.from({ length: 12000 }, (_, index) => `option-${index}`);
+	const select: Tool = {
+		name: "select",
+		description: "Select an option",
+		parameters: Type.Object({ choice: Type.Unsafe({ enum: choices }) }),
+	};
+	const call: ToolCall = { type: "toolCall", id: "enum", name: "select", arguments: { choice: "option-11999" } };
+	expect(validateToolArguments(select, call)).toEqual(call.arguments);
+	expect(() => validateToolArguments(select, { ...call, arguments: { choice: "absent" } })).toThrow(
+		"... and 11980 more]",
+	);
+});
+
+test("optional prototype-named fields are absent unless the arguments own them", () => {
+	const inspect: Tool = {
+		name: "inspect",
+		description: "Read explicit fields",
+		parameters: Type.Object({
+			toString: Type.Optional(Type.Number()),
+			constructor: Type.Optional(Type.String()),
+		}),
+	};
+	const call: ToolCall = { type: "toolCall", id: "own", name: "inspect", arguments: {} };
+	expect(validateToolArguments(inspect, call)).toEqual({});
+	expect(validateToolArguments(inspect, { ...call, arguments: { constructor: 17 } })).toEqual({ constructor: "17" });
+	expect(() => validateToolArguments(inspect, { ...call, arguments: { toString: "invalid" } })).toThrow(
+		"toString: expected number, got string",
+	);
+});
+
+test("constraint diagnostics identify the field, format and required dependency", () => {
+	const cases: Array<[Tool["parameters"], ToolCall["arguments"], string]> = [
+		[
+			Type.Object({ contact: Type.String({ format: "email" }) }),
+			{ contact: "invalid" },
+			"contact: expected format email",
+		],
+		[
+			{
+				type: "object",
+				properties: { flag: { type: "boolean" }, note: { type: "string" } },
+				dependentRequired: { flag: ["note"] },
+			},
+			{ flag: true },
+			"note: required when flag is present",
+		],
+		[
+			{
+				type: "object",
+				properties: { mode: { type: "string" } },
+				if: { properties: { mode: { const: "write" } } },
+				then: { required: ["path"] },
+			},
+			{ mode: "write" },
+			"path: missing",
+		],
+		[
+			{ type: "object", propertyNames: { pattern: "^[a-z]+$" } },
+			{ "Mixed-Key": 1 },
+			"Mixed-Key: invalid property name",
+		],
+		[
+			{ type: "object", properties: { items: { type: "array", contains: { type: "number" } } } },
+			{ items: ["text"] },
+			"items: expected at least 1 matching item",
+		],
+		[
+			{ type: "object", properties: { label: { type: "string" } }, unevaluatedProperties: false },
+			{ label: "keep", extra: false },
+			"extra: unknown field",
+		],
+	];
+	for (const [parameters, args, message] of cases) {
+		const inspect: Tool = { name: "inspect", description: "Check constraints", parameters };
+		const call: ToolCall = { type: "toolCall", id: "constraints", name: "inspect", arguments: args };
+		expect(() => validateToolArguments(inspect, call)).toThrow(message);
+		expect(call.arguments).toEqual(args);
+	}
+});
+
+test("composed constraints report each relevant error once", () => {
+	const cases: Array<[Tool["parameters"], ToolCall["arguments"], string[]]> = [
+		[
+			{
+				type: "object",
+				allOf: [Type.Object({ title: Type.String() }), Type.Object({ count: Type.Number() })],
+				unevaluatedProperties: false,
+			},
+			{ title: [], count: "bad" },
+			["title: expected string, got array", "count: expected number, got string"],
+		],
+		[
+			Type.Object({
+				entry: Type.Object({ ready: Type.Boolean() }, { dependentRequired: { ready: ["first", "second"] } }),
+			}),
+			{ entry: { ready: true } },
+			["entry.first: required when ready is present", "entry.second: required when ready is present"],
+		],
+		[
+			Type.Object({ values: Type.Unsafe({ type: "array", items: false }) }),
+			{ values: [1] },
+			["values.0: no value is allowed here"],
+		],
+		[Type.Object({ value: Type.Never() }), { value: 1 }, ["value: must not match the schema in not"]],
+		[
+			Type.Object({
+				values: Type.Unsafe({ type: "array", prefixItems: [{ type: "number" }], unevaluatedItems: false }),
+			}),
+			{ values: [1, 2] },
+			["values.1: unexpected item"],
+		],
+		[
+			Type.Object({ values: Type.Array(Type.Unknown(), { contains: { type: "number" }, maxContains: 1 }) }),
+			{ values: [1, 2] },
+			["values: expected between 1 and 1 matching items"],
+		],
+	];
+	for (const [parameters, args, diagnostics] of cases) {
+		const inspect: Tool = { name: "inspect", description: "Check composed constraints", parameters };
+		const call: ToolCall = { type: "toolCall", id: "composed", name: "inspect", arguments: args };
+		expect(() => validateToolArguments(inspect, call)).toThrow(
+			`Validation failed for tool "inspect":\n${diagnostics.map((message) => `  - ${message}`).join("\n")}\n\nReceived arguments:\n${JSON.stringify(args, null, 2)}`,
+		);
+	}
 });
 
 test("an explicitly undefined optional argument remains absent after argument repair", () => {
@@ -488,6 +724,8 @@ test("local references belong to their enclosing schema resource", () => {
 	};
 	expect(validateToolArguments(convert, call)).toEqual({ scoped: 3.8, outer: "42" });
 	expect(call.arguments).toEqual({ scoped: "3.8", outer: 42 });
+	expect(() => validateToolArguments(convert, { ...call, arguments: { scoped: "bad", outer: 42 } }))
+		.toThrow("scoped: expected number, got string");
 	const missing = {
 		...convert,
 		parameters: {

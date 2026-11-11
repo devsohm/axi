@@ -74,6 +74,10 @@ A `Tool` contains `name`, `description`, and a TypeBox `parameters` schema. The 
 
 Validation copies the arguments, removes optional null properties, converts structural values, and then coerces explicitly declared primitive types. Serialized JSON schemas retain these conversions, including tuple prefixes, pattern properties and local references within their schema resource. Matching union values remain unchanged. Invalid converted values raise a validation error.
 
+Numeric, boolean and string values can convert to `bigint`. A JSON `null` can convert to `undefined` when the schema requires it. These conversions leave the original transcript values intact. Validation reads an object's own fields; inherited methods do not count as arguments.
+
+Recursive alternatives reuse completed conversions and diagnostics for the same schema and value. An active conversion does not enter itself again. Large enum schemas use interpreted validation if their generated validator exceeds the compiler's stack.
+
 Local reference fragments decode URI escapes before JSON Pointer escapes. An unresolved or malformed reference rejects values at that field and names the reference in the diagnostic. An absent optional field does not fail because its reference is unresolved.
 
 Type errors name the expected and received types. Each missing required field has its own diagnostic. Paths use decoded property names separated by dots. The error ends with the original arguments as formatted JSON, so callers can inspect what the model supplied before conversion.
