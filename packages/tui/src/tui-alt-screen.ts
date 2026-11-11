@@ -1212,8 +1212,8 @@ export class TuiAltScreen extends TuiBase implements ViewportTUI {
 		let output = BEGIN;
 		if (full) {
 			this.fullRedrawCount++;
-			output +=
-				(this.#protocol === "kitty" && hadImages ? deleteAllKittyPlacements() : this.deleteImages()) + "\x1b[2J";
+			// ED 2 frees Kitty uploads after their placements are removed. The row clears below preserve them.
+			output += this.#protocol === "kitty" && hadImages ? deleteAllKittyPlacements() : this.deleteImages() + "\x1b[2J";
 		} else if (images)
 			output += this.#protocol === "iterm2" ? "\x1b[2J" : this.#protocol === "kitty" ? deleteAllKittyPlacements() : "";
 		output += prepared.deletions;

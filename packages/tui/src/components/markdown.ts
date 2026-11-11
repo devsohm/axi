@@ -292,7 +292,9 @@ export class Markdown implements Component {
 	): string[] {
 		const margin = " ".repeat(this.#paddingX),
 			bg = this.#default?.bgColor;
+		// Image escapes bypass text wrapping, so split their hard breaks into rows first.
 		const lines = this.block(token, contentWidth, following, undefined, highlights)
+			.flatMap((line) => (isImageLine(line) ? line.split("\n") : [line]))
 			.flatMap((line) => (isImageLine(line) ? [line] : wrapTextWithAnsi(line, contentWidth)))
 			.map((line) => {
 				if (isImageLine(line)) return line;

@@ -24,6 +24,20 @@ const render = (markdown: Markdown, width = 60) =>
 	markdown.render(width).map((line) => stripTerminalSequences(line).trimEnd());
 afterEach(resetCapabilitiesCache);
 
+test("image rows keep following hard breaks, captions and list spacing outside the image escape", () => {
+	setCapabilities({ images: "kitty", trueColor: true, hyperlinks: false });
+	const image = "\x1b_Ga=T,f=100,c=2,r=2;AQ==\x1b\\";
+	const markdown = new Markdown(`\`${image}\`  \ncaption  \nlast line\n\n- next`, 0, 0, theme);
+	for (const width of [40, 60]) {
+		const lines = markdown.render(width);
+		expect(lines.every((line) => !line.includes("\n"))).toBe(true);
+		expect(lines[0]).toContain(image);
+		expect(lines.slice(1).map((line) => stripTerminalSequences(line).trim())).toEqual([
+			"caption", "last line", "", "- next",
+		]);
+	}
+});
+
 test("ordered and task lists retain explicit markers and remove comments inside nested quotes", () => {
 	const source =
 		"3) third\n9) ninth\n\n- [x] done\n- [ ] pending\n\n> <!-- hidden -->\n>\n> - nested\n>   - child\n\n<!-- tail -->";

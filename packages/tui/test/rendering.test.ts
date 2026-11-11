@@ -48,6 +48,15 @@ test("fullscreen image placements follow clears and later writes on every termin
 		await terminal.screen();
 		const changed = writes.join("");
 		expect(changed.indexOf("\x1b_Ga=p")).toBeGreaterThan(changed.indexOf("streaming row"));
+		writes.length = 0;
+		terminal.resize(24, 8);
+		ui.renderNow();
+		const screen = await terminal.screen(), resized = writes.join("");
+		expect(resized).toContain("\x1b_Ga=p");
+		expect(resized).not.toContain("\x1b_Ga=T");
+		expect(resized).not.toContain("\x1b[2J");
+		expect(screen[5]).toBe("footer");
+		expect(screen.slice(6)).toEqual(["", ""]);
 	} finally {
 		ui.stop();
 		terminal.dispose();

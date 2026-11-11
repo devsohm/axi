@@ -66,6 +66,8 @@ The terminal library must remain independent of Durable. Application code subscr
 
 Fullscreen mode supports transcript search, configurable navigation, mouse selection and clipboard callbacks. Text selection respects grapheme boundaries; double-click selects words and triple-click selects lines. The default copy path writes OSC 52. Applications can inject a clipboard implementation. Image caching bounds offscreen Kitty images by count, transmission bytes and decoded size. Stopping restores terminal input and screen settings.
 
+Fullscreen redraws retain uploaded Kitty image data for placement reuse, including after a resize.
+
 ## Multiline editor and completion
 
 The editor stores cursor positions as UTF-16 offsets and moves across grapheme boundaries. It wraps text to terminal width, preserves the preferred column during vertical movement, and scrolls the visible editor window. It supports undo, history, kill and yank, mouse positioning, bracketed paste and large-paste markers. Applications supply submission callbacks, themes and completion providers.
@@ -75,6 +77,8 @@ Completion requests are cancellable. New input invalidates earlier requests. Com
 ## Markdown and mathematical notation
 
 Markdown renders headings, paragraphs, lists, task lists, quotes, fenced code, links and tables. Applications provide theme functions and optional syntax highlighting. Links use terminal hyperlinks when supported and readable destinations otherwise. Streaming partial fences and mathematical expressions remain renderable.
+
+Hard breaks after inline images remain separate rendered rows.
 
 Markdown reuses unchanged top-level blocks while text streams. A resize recalculates wrapping and retains cached code highlighting. Call `invalidate()` after changing theme functions or their output. It clears the block results, highlighting and default style prefix. These caches use weak references and can be collected between renders. Changed reference-link definitions always use the current text.
 
