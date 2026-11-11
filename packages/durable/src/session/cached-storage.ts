@@ -146,6 +146,7 @@ export class CachedStorage implements T.Storage {
 		}
 		if (value !== undefined) {
 			freezeRecord(value);
+			// A read started before publication must not replace the newly published cache entry.
 			if (pending.version === version) keep(value);
 		}
 		return value;

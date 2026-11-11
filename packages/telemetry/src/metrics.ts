@@ -23,6 +23,7 @@ export interface TelemetryUpDownCounter {
 export interface TelemetryHistogram {
 	record(value: number, attributes?: SpanAttributes, context?: TelemetryContext): void;
 }
+/** Instrument methods trust callers to supply finite measurements and nonnegative counter increments. */
 export interface TelemetryMetrics {
 	counter(name: string, options?: InstrumentOptions): TelemetryCounter;
 	upDownCounter(name: string, options?: InstrumentOptions): TelemetryUpDownCounter;

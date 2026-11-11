@@ -227,6 +227,7 @@ class ParentLink implements Link {
 	}
 	onMessage(receive: (bytes: Uint8Array) => void): void {
 		this.#inner.onMessage(receive);
+		// Acknowledge startup only after the child can receive the parent's messages.
 		const callback = this.#connected;
 		this.#connected = undefined;
 		callback?.();

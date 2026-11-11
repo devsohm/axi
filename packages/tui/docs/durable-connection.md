@@ -30,4 +30,4 @@ The application stops new input, removes subscriptions and disposes view attachm
 - Durable owns conversations, tasks, execution, commits and recovery.
 - The application owns authentication, settings, session selection, commands, themes and message presentation.
 
-The application adapter and message presentation are not implemented in this package yet.
+The application supplies the runtime adapter and message presentation.

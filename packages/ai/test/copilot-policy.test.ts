@@ -53,3 +53,29 @@ it("retains a successful login when a throttled policy response body fails", asy
 	expect(policyRequests).toBe(1);
 	expect(await credentials.read("github-copilot")).toMatchObject({ type: "oauth", access: "copilot-token" });
 });
+
+it("filters the Copilot catalog only when OAuth supplies a complete list of available identities", async () => {
+	const credentials = new InMemoryCredentialStore();
+	const models = createModels({ credentials });
+	const provider = githubCopilotProvider();
+	models.setProvider(provider);
+	const catalog = provider.getModels();
+	expect(catalog.length).toBeGreaterThan(1);
+	const selected = catalog[0]!;
+	for (const [availableModelIds, expected] of [
+		[undefined, catalog],
+		["unknown format", catalog],
+		[[selected.id, 42], catalog],
+		[[], []],
+		[[selected.id, "unlisted-model"], [selected]],
+	] as const) {
+		await credentials.modify("github-copilot", async () => ({
+			type: "oauth",
+			access: "synthetic-access",
+			refresh: "synthetic-refresh",
+			expires: Date.now() + 3_600_000,
+			availableModelIds,
+		}));
+		expect(await models.getAvailable("github-copilot")).toEqual(expected);
+	}
+});

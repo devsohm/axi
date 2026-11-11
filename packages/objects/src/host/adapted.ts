@@ -76,7 +76,8 @@ export class AdaptedMembers {
 	readonly version: number;
 	readonly #instance: AdaptedInstance;
 	readonly #members = new Map<string, DeriveSource>();
-	readonly #inputs = new Map<Derive, readonly DeriveSource[]>();
+	// Unchanged sources belong to the provider; only derived views belong to this version.
+	readonly #derived = new Set<Derive>();
 	readonly #keys = new Map<string, Map<DeriveSource, MappedKey>>();
 	#events: Map<string, MappedEvents> | undefined;
 	constructor(instance: AdaptedInstance, version: number) {
@@ -110,7 +111,7 @@ export class AdaptedMembers {
 				(value) => value as DeriveSource,
 				(error) => instance.report(name, error),
 			);
-			this.#inputs.set(derive, inputs);
+			this.#derived.add(derive);
 			source = derive;
 		}
 		this.#members.set(name, source);
@@ -172,9 +173,9 @@ export class AdaptedMembers {
 	detach(error: Error): void {
 		for (const node of this.#events?.values() ?? []) node.detach();
 		this.#events = undefined;
-		for (const source of this.#inputs.keys()) source.detach(error);
+		for (const source of this.#derived) source.detach(error);
 		for (const table of this.#keys.values()) for (const { source } of table.values()) source.detach(error);
-		this.#inputs.clear();
+		this.#derived.clear();
 		this.#members.clear();
 		this.#keys.clear();
 	}

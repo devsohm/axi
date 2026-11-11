@@ -2,6 +2,7 @@ import { createRequire } from "node:module";
 import { join } from "node:path";
 import { getNativeModuleCandidates } from "./native-module-path.ts";
 export type ModifierKey = "shift" | "command" | "control" | "option";
+/** Reads return undefined when unavailable, null for an empty clipboard, and reject on transfer failure. */
 export interface NativeClipboard {
 	getText(): Promise<string | null | undefined>;
 	getImage(): Promise<Uint8Array | null | undefined>;
@@ -12,8 +13,9 @@ type Helper = NativeClipboard & {
 	enableVirtualTerminalInput?: () => boolean;
 	isModifierPressed?: (name: ModifierKey) => boolean;
 };
-const require = createRequire(import.meta.url),
-	loaded = new Map<string, Helper | undefined>();
+const require = createRequire(import.meta.url);
+// Display availability can change after a module has been loaded.
+const loaded = new Map<string, Helper | undefined>();
 function load(platform: string, suffix = ""): Helper | undefined {
 	if (process.arch !== "x64" && process.arch !== "arm64") return;
 	const path = join(

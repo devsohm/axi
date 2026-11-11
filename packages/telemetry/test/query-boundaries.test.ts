@@ -46,6 +46,24 @@ test("equal-time traces have stable pagination without dropping or duplicating r
 	]);
 });
 
+test("equal-time continuations sort opaque trace identities independently of their arrival order", async () => {
+	vi.spyOn(performance, "now").mockReturnValue(0);
+	vi.spyOn(Date, "now").mockReturnValue(1000);
+	const recorder = new InMemoryTelemetryContext();
+	for (const id of ["z-last", "a-first", "m-middle"])
+		await recorder.extract({
+			"axi-memory-scope": "remote-recorder",
+			"axi-memory-span": "parent",
+			"axi-memory-trace": id,
+		}).startSpan({ name: id }, () => {});
+	const first = await recorder.findTraces({ limit: 2 });
+	expect(first.traces.map((trace) => trace.traceId)).toEqual(["a-first", "m-middle"]);
+	expect(first.cursor).toBeDefined();
+	const next = await recorder.findTraces({ limit: 2, cursor: first.cursor });
+	expect(next.traces.map((trace) => trace.traceId)).toEqual(["z-last"]);
+	expect(next.cursor).toBeUndefined();
+});
+
 test("trace rendering handles empty input, cycles and errors without diagnostics", () => {
 	expect(renderTrace([])).toBe("");
 	const failed: StoredSpan = {

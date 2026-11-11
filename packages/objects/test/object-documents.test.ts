@@ -1,6 +1,7 @@
 import { LiveQueries } from "../src/store/live-query.ts";
 import { afterEach, expect, it, vi } from "vitest";
 import { BACKGROUND_CONTEXT as context } from "../src/context/index.ts";
+import { ObjectsError } from "../src/data/index.ts";
 import { defineState, defineTable, int, obj, openStore, sqliteBackend, str } from "../src/index.ts";
 import { Documents, SealToken, type AnyDefinition } from "../src/documents/internal.ts";
 import type { KeyDeclarer } from "../src/documents/handles.ts";
@@ -85,6 +86,64 @@ function owner(store?: ObjectsStore) {
 	}
 	return { documents, errors, batch, attempt, end };
 }
+
+it.each([
+	[Object.assign(new Error("Value outside range"), { errcode: 275 }), "invalid", "args", false],
+	[new Error("CHECK constraint failed: quantity"), "invalid", "args", false],
+	[Object.assign(new Error("CHECK constraint failed: quantity"), { errcode: 19 }), "unavailable", undefined, true],
+	[new Error("Database refused the write"), "unavailable", undefined, true],
+	[new ObjectsError({ code: "released", message: "Store closed" }), "released", undefined, false],
+	[
+		new ObjectsError({ code: "unavailable", reason: "storage_failed", message: "Storage stopped" }),
+		"unavailable",
+		"storage_failed",
+		false,
+	],
+] as const)(
+	"a refused document commit preserves its prior value and reports %s",
+	async (failure, code, reason, broken) => {
+		const disk = await store();
+		const app = owner(disk),
+			attempt = app.attempt(),
+			saved = attempt.state(Saved);
+		await attempt.ready();
+		await saved.change(
+			"counter",
+			(draft) => {
+				draft.n = 1;
+			},
+			context,
+		);
+		const commit = vi.spyOn(disk, "commit").mockRejectedValueOnce(failure);
+		try {
+			const result = saved.change(
+				"counter",
+				(draft) => {
+					draft.n = 2;
+				},
+				context,
+			);
+			await expect(result).rejects.toMatchObject({ code, ...(reason ? { reason } : {}) });
+			const error = await result.catch((error: unknown) => error);
+			if (failure instanceof ObjectsError) expect(error).toBe(failure);
+			else expect(error).toMatchObject({ cause: failure });
+			expect(await saved.get("counter", context)).toEqual({ n: 1 });
+			expect(app.errors).toEqual(broken ? [error] : []);
+		} finally {
+			commit.mockRestore();
+		}
+		if (code === "invalid") {
+			await saved.change(
+				"counter",
+				(draft) => {
+					draft.n = 3;
+				},
+				context,
+			);
+			expect(await saved.get("counter", context)).toEqual({ n: 3 });
+		}
+	},
+);
 
 it("keeps committed values atomic across document watchers and discards a failed callback", async () => {
 	const app = owner(),

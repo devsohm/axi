@@ -29,6 +29,40 @@ function completed(): Response {
 }
 describe("Azure Responses", () => {
 	it.each(["stream", "streamSimple"] as const)(
+		"%s forwards a completion deployment through the payload callback",
+		async (operation) => {
+			const chat = { ...model, api: "openai-completions" as const };
+			let url = "",
+				body: unknown;
+			const result = await azureProvider()
+				[operation](chat, context, {
+					apiKey: "synthetic-key",
+					env: {
+						AZURE_OPENAI_RESOURCE_NAME: "example",
+						AZURE_OPENAI_DEPLOYMENT_NAME_MAP: "test-model=deployment",
+					},
+					onPayload(payload, original) {
+						expect(payload).toMatchObject({ model: "deployment" });
+						expect(original.id).toBe("test-model");
+						return { ...(payload as object), model: "callback-deployment" };
+					},
+					fetch: async (input, init) => {
+						url = String(input);
+						body = JSON.parse(String(init?.body));
+						return new Response(
+							'data: {"choices":[{"index":0,"delta":{"content":"Ready."},"finish_reason":"stop"}]}\n\ndata: [DONE]\n\n',
+							{ headers: { "content-type": "text/event-stream" } },
+						);
+					},
+				})
+				.result();
+			expect(result).toMatchObject({ stopReason: "stop", content: [{ type: "text", text: "Ready." }] });
+			expect(url).toBe("https://example.openai.azure.com/openai/v1/chat/completions");
+			expect(body).toMatchObject({ model: "callback-deployment" });
+			expect(chat.id).toBe("test-model");
+		},
+	);
+	it.each(["stream", "streamSimple"] as const)(
 		"reports endpoint setup errors before cancellation in %s",
 		async (operation) => {
 			const result = await azureProvider()

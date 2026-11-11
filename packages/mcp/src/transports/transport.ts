@@ -4,6 +4,7 @@ export type McpTransportMessageListener = (message: JsonRpcMessage) => void;
 export type McpTransportErrorListener = (error: Error) => void;
 export type McpTransportCloseListener = () => void;
 export interface McpTransportSendOptions {
+	/** Stops admission and delayed retries after the caller settles; it does not reverse a sent request. */
 	signal?: AbortSignal;
 }
 export interface McpTransport {

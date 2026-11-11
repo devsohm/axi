@@ -6,6 +6,7 @@ export interface McpPipe {
 	write(data: Uint8Array | string): void;
 	closeStdin(): void;
 	close(): void;
+	/** Must settle after close() as well as after a normal exit. */
 	readonly exited: Promise<unknown>;
 }
 export interface McpPipeHandlers {

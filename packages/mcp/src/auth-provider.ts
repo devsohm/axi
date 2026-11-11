@@ -7,5 +7,6 @@ export interface UnauthorizedContext {
 }
 export interface AuthProvider {
 	token(): Promise<string | undefined>;
+	/** The HTTP transport calls this once for an authorization failure, then reads the token again for one retry. */
 	onUnauthorized?(context: UnauthorizedContext): Promise<void>;
 }

@@ -144,6 +144,12 @@ script saves its final values. The fixture uses synthetic model responses.
 
 Offline provider tests inspect request encoding, device-login polling, token refresh, cancellation and malformed replies using synthetic credentials. Env tests run the generated Unix upload script in a temporary local directory. Windows command tests inspect the protocol and upload framing; native Windows execution still requires a Windows runner. Browser adapter tests use DOM event fixtures; real browser and terminal acceptance remain separate checks.
 
+Native discovery tests check packaging paths, unavailable modules, optional
+modifier support and a Linux display becoming available after startup. They mock
+the platform and module loader. They do not replace native tests on each operating
+system. Transient-event tests exercise older contract readers locally and over a
+memory link, including mapping failures, refusal and subscription release.
+
 ## Inspect behavior coverage
 
 Run `npm run test:coverage`, then open `coverage/test-map.md`. The report counts uncovered paths, ranks modules by uncovered branches, links behavior areas to their owned test files, lists other regression files, and shows line and branch execution for every measured source module.

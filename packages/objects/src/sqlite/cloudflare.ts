@@ -19,6 +19,7 @@ export type DurableObjectSqliteStorage = {
 const queues = new WeakMap<DurableObjectSqliteStorage, OperationQueue>();
 
 function parameter(value: SqliteValue): Binding {
+	// Preserve the byte binding contract: Buffer.slice keeps the complete backing store.
 	if (value instanceof Uint8Array) return value.slice().buffer;
 	if (typeof value !== "bigint") return value;
 	if (value < BigInt(Number.MIN_SAFE_INTEGER) || value > BigInt(Number.MAX_SAFE_INTEGER)) {

@@ -140,6 +140,7 @@ class Invocation {
 			),
 		).then(
 			(channel) => {
+				// Cancellation can finish the invocation before its asynchronous launch returns.
 				if (this.finished) {
 					void channel.stop().catch(() => undefined);
 					return;

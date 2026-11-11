@@ -70,6 +70,7 @@ function clockOutput(clock: Clock) {
 	});
 }
 export async function startVm(options: StartVmOptions): Promise<VmSession> {
+	// Host callbacks run inside QuickJS; launchers must defer replies instead of re-entering this VM.
 	const { data, post } = options,
 		deterministic = data.deterministic;
 	const stackSize = options.maxStackSize ?? MAX_STACK_SIZE;
@@ -136,6 +137,7 @@ export async function startVm(options: StartVmOptions): Promise<VmSession> {
 				if (seq === undefined || !Number.isInteger(seq) || seq < expected || queued.has(seq))
 					throw new Error(`Result ${message.id} has sequence number ${seq}, expected ${expected} or later, once`);
 				queued.set(seq, message);
+				// Replay follows recorded delivery order, even when the transport returns replies out of order.
 				for (let ready = queued.get(expected); ready !== undefined; ready = queued.get(expected)) {
 					queued.delete(expected);
 					if (ready.now !== undefined && Number.isFinite(ready.now)) clock.now = Math.max(clock.now, ready.now);

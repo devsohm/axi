@@ -23,6 +23,7 @@ Factories run synchronously. A factory declares handles before it reads their va
 | `self.registry(registry)` | Composed plugin contributions |
 | `self.writable(initial)` | In-process mutable value |
 | `self.derive(sources, compute)` | Derived JSON value |
+| `self.events<T>()` | Transient event source owned by the current attempt |
 | `self.open(open, close, options)` | Native resource with bounded cleanup |
 | `self.follow(attach)` | Source attached during activation |
 | `self.on(source, handler)` | Serialized source-triggered routine |
@@ -32,6 +33,14 @@ Factories run synchronously. A factory declares handles before it reads their va
 | `self.tx(callback, context)` | Atomic document and table transaction |
 
 An empty-parameter local factory receives `StoreSelf`. With a Store, it can also declare tables, persisted documents, persisted jobs and contributions. `self.query(table, query, limit)` exposes bounded live rows. A commit refreshes affected queries before publishing its document changes. Failed query refreshes retain the last result and report the failure.
+
+## Transient events
+
+Declare a local member with `event(schema)`, or put its schema in a remote variant's `events` map. Return a source created by `self.events<T>()` from the factory. Call `source.emit(value)` to queue a value with its emission time. An event is independent of document transactions, so a rollback does not retract it. Events have no persisted history and do not replay after a restart.
+
+Subscribe with `await reference.member.on(listener, context)`. Keep the returned subscription and call `stop()` when it is no longer needed. Cancelling the context or releasing the reference also ends the subscription. A reference subscription follows a replacement during reload, while a source retained from the old attempt refuses further emissions. A throwing listener ends only its own subscription.
+
+An older contract needs an explicit mapping when an event schema is edited. References sharing that older version share its mapped values. A mapping failure drops the event only for that version and reports once until a later value maps successfully. A refused member prevents that older reference from binding; current-version readers keep working. See the [event contract](spec.md#events) for delivery order and link windows.
 
 ## Documents, tables and jobs
 

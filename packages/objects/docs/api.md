@@ -83,6 +83,7 @@ Host data uses `exportHostData`, `readHostArchive`, `HostArchive`, `HostDataCoun
 | `EventSource` | interface | [`contracts/contract.d.ts`](../dist/contracts/contract.d.ts) |
 | `EventSubscription` | interface | [`contracts/contract.d.ts`](../dist/contracts/contract.d.ts) |
 | `evolveTable` | function | [`store/table-evolve.d.ts`](../dist/store/table-evolve.d.ts) |
+| `exportHostData` | function | [`store/host-data.d.ts`](../dist/store/host-data.d.ts) |
 | `Expression` | class | [`store/expression.d.ts`](../dist/store/expression.d.ts) |
 | `Facet` | typealias | [`host/facet.d.ts`](../dist/host/facet.d.ts) |
 | `FacetFunction` | typealias | [`surfaces/registered.d.ts`](../dist/surfaces/registered.d.ts) |
@@ -107,6 +108,9 @@ Host data uses `exportHostData`, `readHostArchive`, `HostArchive`, `HostDataCoun
 | `HandleOf` | typealias | [`documents/handles.d.ts`](../dist/documents/handles.d.ts) |
 | `Held` | typealias | [`host/reference.d.ts`](../dist/host/reference.d.ts) |
 | `Host` | interface | [`host/host.d.ts`](../dist/host/host.d.ts) |
+| `HostArchive` | typealias | [`store/host-data.d.ts`](../dist/store/host-data.d.ts) |
+| `HostDataCounts` | typealias | [`store/host-data.d.ts`](../dist/store/host-data.d.ts) |
+| `HostImportOptions` | typealias | [`store/host-data.d.ts`](../dist/store/host-data.d.ts) |
 | `HostError` | typealias | [`host/report.d.ts`](../dist/host/report.d.ts) |
 | `hostKind` | function | [`contracts/host-kind.d.ts`](../dist/contracts/host-kind.d.ts) |
 | `host` | function | [`store/host-column.d.ts`](../dist/store/host-column.d.ts) |
@@ -139,6 +143,7 @@ Host data uses `exportHostData`, `readHostArchive`, `HostArchive`, `HostDataCoun
 | `keepConnected` | function | [`surfaces/connection.d.ts`](../dist/surfaces/connection.d.ts) |
 | `keyed` | function | [`contracts/schema.d.ts`](../dist/contracts/schema.d.ts) |
 | `keyedEntries` | function | [`registries/entries.d.ts`](../dist/registries/entries.d.ts) |
+| `KeyedBy` | typealias | [`documents/definition.d.ts`](../dist/documents/definition.d.ts) |
 | `KeyedHandle` | interface | [`documents/handles.d.ts`](../dist/documents/handles.d.ts) |
 | `KeyedMember` | class | [`contracts/schema.d.ts`](../dist/contracts/schema.d.ts) |
 | `KeyedWatchable` | interface | [`contracts/contract.d.ts`](../dist/contracts/contract.d.ts) |
@@ -229,6 +234,7 @@ Host data uses `exportHostData`, `readHostArchive`, `HostArchive`, `HostDataCoun
 | `Query` | class | [`store/query.d.ts`](../dist/store/query.d.ts) |
 | `readDocument` | function | [`store/engine.d.ts`](../dist/store/engine.d.ts) |
 | `readDocumentEntry` | function | [`store/engine.d.ts`](../dist/store/engine.d.ts) |
+| `readHostArchive` | function | [`store/host-data.d.ts`](../dist/store/host-data.d.ts) |
 | `Reference` | typealias | [`host/reference.d.ts`](../dist/host/reference.d.ts) |
 | `RefIn` | typealias | [`host/reference.d.ts`](../dist/host/reference.d.ts) |
 | `RefState` | typealias | [`host/ref-state.d.ts`](../dist/host/ref-state.d.ts) |

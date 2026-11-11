@@ -48,7 +48,8 @@
 					"behavior": "event contracts, subscription cancellation, reload rebinding and remote terminal delivery",
 					"tests": [
 						"packages/objects/test/event-contracts.test.ts",
-						"packages/objects/test/events.test.ts"
+						"packages/objects/test/events.test.ts",
+						"packages/objects/test/event-versions.test.ts"
 					]
 				},
 				{
@@ -176,7 +177,11 @@
 				},
 				{
 					"behavior": "worker processes, recovery, rollout, idle cleanup and locks",
-					"tests": ["packages/objects/test/workers.test.ts", "packages/objects/test/worker-snapshot.test.ts"]
+					"tests": [
+						"packages/objects/test/workers.test.ts",
+						"packages/objects/test/worker-snapshot.test.ts",
+						"packages/objects/test/worker-entry-lifecycle.test.ts"
+					]
 				},
 				{
 					"behavior": "plugin discovery, evaluation and installation",
@@ -258,7 +263,8 @@
 						"packages/ai/test/catalog-auth.test.ts",
 						"packages/ai/test/entrypoints.test.ts",
 						"packages/ai/test/compat-dispatch.test.ts",
-						"packages/ai/test/cli-auth.test.ts"
+						"packages/ai/test/cli-auth.test.ts",
+						"packages/ai/test/provider-routing.test.ts"
 					]
 				},
 				{
@@ -583,6 +589,10 @@
 						"packages/tui/test/ansi-state.test.ts",
 						"packages/tui/test/math-boundaries.test.ts"
 					]
+				},
+				{
+					"behavior": "native module discovery and display recovery with mocked platforms",
+					"tests": ["packages/tui/test/native-loading.test.ts"]
 				},
 				{
 					"behavior": "real terminal negotiation and cleanup",

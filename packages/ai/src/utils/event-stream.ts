@@ -1,6 +1,7 @@
 import type { AssistantMessage, AssistantMessageEvent } from "../types.ts";
 
 class Queue<T> {
+	// Two stacks avoid moving the remaining events on every read of a long stream.
 	#pending: T[] = [];
 	#ready: T[] = [];
 	get length(): number {

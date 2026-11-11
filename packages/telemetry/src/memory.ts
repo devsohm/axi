@@ -91,6 +91,7 @@ let wallOffset = performance.timeOrigin;
 export function telemetryNow(): number {
 	const elapsed = performance.now();
 	const wall = Date.now();
+	// Keep sub-millisecond spacing while following wall-clock changes larger than its rounding noise.
 	if (Math.abs(wall - elapsed - wallOffset) > 10) wallOffset = wall - elapsed;
 	return Math.round((wallOffset + elapsed) * 1000) / 1000;
 }

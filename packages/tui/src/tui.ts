@@ -601,6 +601,7 @@ export abstract class TuiBase extends Container implements TUI {
 		this.doRender();
 	}
 	requestRender(force = false): void {
+		// Forced redraws bypass the frame-rate delay while retaining one pending render per turn.
 		if (force) {
 			this.resetRenderState();
 			this.#immediately();

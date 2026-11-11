@@ -47,6 +47,7 @@ export interface RequestOptions {
 	signal?: AbortSignal;
 	onEvent?: (json: Json, payload: Uint8Array) => void;
 	onStart?: (id: number, session: number) => void;
+	/** Bind work to this daemon lifetime; reconnecting must not reuse an earlier process's handles. */
 	session?: number;
 }
 type Pending = { resolve(value: Reply): void; reject(error: Error): void; onEvent?: RequestOptions["onEvent"] };
