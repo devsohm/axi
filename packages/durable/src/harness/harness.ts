@@ -3,7 +3,14 @@ import type { TaskGraph } from "./task-graph.ts";
 import type { Context } from "@axi/objects/context";
 import type { JsonValue } from "@axi/objects/json";
 import { withAbortSignal, withoutAbortSignal } from "@axi/objects/context";
-import { AXI_ATTRIBUTION, mergeClientIdentity, withClientIdentity, type Models, type ClientIdentity } from "@axi/ai";
+import {
+	AXI_ATTRIBUTION,
+	cleanupSessionResources,
+	mergeClientIdentity,
+	withClientIdentity,
+	type Models,
+	type ClientIdentity,
+} from "@axi/ai";
 import {
 	createTypedMetrics,
 	NOOP_TELEMETRY_CONTEXT,
@@ -366,8 +373,15 @@ class HarnessImpl<T extends ToolRegistration> extends SessionImpl implements Har
 	override report(error: unknown, info: ReportInfo = { kind: "listener_error" }, context?: Context): void {
 		this.#report(error, info, context);
 	}
-	protected override beforeClose(): Promise<void> {
-		return this.#tasks.join();
+	protected override async beforeClose(): Promise<void> {
+		// Requests finish before their shared provider transports and fallback state are released.
+		await this.#tasks.join();
+		for (const id of this.#tasks.providerSessionIds)
+			contained(
+				() => cleanupSessionResources(id),
+				(error) => this.#report(error, { kind: "host_error", callback: "models" }),
+			);
+		this.#tasks.providerSessionIds.clear();
 	}
 	async #create(target: CreateTarget, options: CreateOptions, context: Context): Promise<Conversation> {
 		this.assertUsable();

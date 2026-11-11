@@ -37,10 +37,37 @@ it("owns a named cache directory only after materializing its snapshot", async (
 	}
 });
 
+it("keeps worker source maps in separate files and maps errors when explicitly enabled", async () => {
+	const directory = await mkdtemp(join(tmpdir(), "axi-worker-maps-")),
+		entry = join(directory, "entry.ts");
+	await writeFile(
+		entry,
+		'function fail(){throw new Error("mapped failure")}\ntry{fail()}catch(error){console.log(error.stack)}',
+	);
+	const base = await buildWorkerBase(entry, []);
+	try {
+		const file = base.file(),
+			code = await readFile(file, "utf8");
+		expect(code).not.toContain("data:application/json;base64");
+		expect(code).toContain("sourceMappingURL=worker.mjs.map");
+		expect(JSON.parse(await readFile(file + ".map", "utf8")).sourcesContent).toBeUndefined();
+		expect(execFileSync(process.execPath, ["--enable-source-maps", file], { encoding: "utf8" })).toContain(
+			"entry.ts:1:",
+		);
+		expect(execFileSync(process.execPath, [file], { encoding: "utf8" })).toContain("worker.mjs:");
+	} finally {
+		base.remove();
+		await rm(directory, { recursive: true, force: true });
+	}
+});
+
 it("loads a lazy snapshot only on demand and restores every chunk after cleanup", async () => {
 	const directory = await mkdtemp(join(tmpdir(), "axi-lazy-base-"));
-	const entry = join(directory, "entry.ts"), lazy = join(directory, "lazy.ts");
-	await writeFile(entry, 'console.log("ready"); if (process.argv[2] === "load") console.log((await import("./lazy.ts")).value);',
+	const entry = join(directory, "entry.ts"),
+		lazy = join(directory, "lazy.ts");
+	await writeFile(
+		entry,
+		'console.log("ready"); if (process.argv[2] === "load") console.log((await import("./lazy.ts")).value);',
 	);
 	await writeFile(lazy, 'console.log("loaded"); export const value = 42;');
 	const base = await buildWorkerBase(entry, []);
@@ -53,7 +80,10 @@ it("loads a lazy snapshot only on demand and restores every chunk after cleanup"
 		await rm(join(dirname(first), chunks[0]!));
 		const recreated = base.file();
 		expect(recreated).not.toBe(first);
-		expect(execFileSync(process.execPath, [recreated, "load"], { encoding: "utf8" }).trim().split("\n")).toEqual(["ready", "loaded", "42",
+		expect(execFileSync(process.execPath, [recreated, "load"], { encoding: "utf8" }).trim().split("\n")).toEqual([
+			"ready",
+			"loaded",
+			"42",
 		]);
 	} finally {
 		base.remove();

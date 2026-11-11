@@ -31,7 +31,7 @@ export async function buildWorkerBase(entry: string, execArgv: readonly string[]
 		conditions: conditionsOf(execArgv),
 		ignoreAnnotations: true,
 		keepNames: true,
-		sourcemap: "inline",
+		sourcemap: "linked",
 		sourcesContent: false,
 		sourceRoot: pathToFileURL(root).href,
 		logLevel: "silent",

@@ -39,6 +39,7 @@ import type {
 	TaskState,
 } from "../types.ts";
 import { agentHooks, DEFAULT_RESTART_LIMIT } from "./agent.ts";
+import { providerSessionsByRuntime } from "./provider.ts";
 import { advanceRange, type ContextRange, rangeEntry, readContextFrom } from "./context.ts";
 import { jsonEqual as equal } from "./json.ts";
 import {
@@ -200,6 +201,7 @@ function memo(record: StoredTask | undefined, key: string): JsonValue | undefine
 }
 
 export class TaskScheduler {
+	readonly providerSessionIds = new Set<string>();
 	readonly #telemetry: NonNullable<HarnessOptions["telemetry"]>;
 	readonly #activeMetric;
 	readonly #durationMetric;
@@ -1477,7 +1479,8 @@ export class TaskScheduler {
 				return;
 			}
 		}
-		tx.setTask(stateOf(equal(current.state, next) ? current : progress(current), next));
+		const sameCheckpoint = next.status === "running" && equal(current.state.checkpoint, next.checkpoint);
+		tx.setTask(stateOf(sameCheckpoint ? current : progress(current), next));
 	}
 	#gated<T>(
 		run: Invocation,
@@ -1774,6 +1777,7 @@ export class TaskScheduler {
 				);
 			},
 		};
+		providerSessionsByRuntime.set(runtime, this.providerSessionIds);
 		return runtime;
 	}
 	#retention(): number {
@@ -1880,7 +1884,8 @@ export class TaskScheduler {
 			if (this.#runs.has(record.id)) state = { kind: "running" };
 			else if (record.state.status === "completing") state = { kind: "completing" };
 			else if (on.length) state = { kind: "waiting", on };
-			else if (this.#notDue(record)) state = { kind: "sleeping", until: record.state.until };
+			else if (this.#notDue(record))
+				state = { kind: "sleeping", ...(record.state.until === undefined ? {} : { until: record.state.until }) };
 			else {
 				const fit = this.#fit(record, snapshot.task(record.kind));
 				if ("reason" in fit) state = { kind: "blocked", ...fit };

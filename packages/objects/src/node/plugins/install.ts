@@ -63,9 +63,32 @@ export async function installPlugin(source: PluginSource, root: string, context:
 			if (!command.length) throw new Error("npmCommand is empty");
 			const packDir = await mkdtemp(join(staging, "pack-"));
 			const label = `${command[0]} pack ${source.npm}@${source.version}`;
-			const packed = JSON.parse(await run(command[0], [...command.slice(1), "pack", "--json", "--pack-destination", packDir, "--", `${source.npm}@${source.version}`], packDir, context, label)) as { filename: string }[];
-			if (!packed[0]) throw new Error(`${label}: packed nothing`);
-			await run("tar", ["-xzf", join(packDir, basename(packed[0].filename)), "--strip-components=1", "-C", payload], packDir, context, `extracting ${source.npm}`);
+			const packed = JSON.parse(
+				await run(
+					command[0],
+					[
+						...command.slice(1),
+						"pack",
+						"--json",
+						"--pack-destination",
+						packDir,
+						"--",
+						`${source.npm}@${source.version}`,
+					],
+					packDir,
+					context,
+					label,
+				),
+			) as { filename: string }[] | Record<string, { filename: string } | undefined>;
+			const tarball = Array.isArray(packed) ? packed[0] : packed[source.npm];
+			if (!tarball) throw new Error(`${label}: packed nothing`);
+			await run(
+				"tar",
+				["-xzf", join(packDir, basename(tarball.filename)), "--strip-components=1", "-C", payload],
+				packDir,
+				context,
+				`extracting ${source.npm}`,
+			);
 		}
 		const at = { root, required: false, kinds: options.kinds ?? [] };
 		const discovery = await discoverPackage(payload, at, context);

@@ -1,5 +1,5 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { BridgeStart, LauncherMessage, SandboxMessage } from "../../tui/bridge.ts";
@@ -42,7 +42,8 @@ export class Sandbox {
 	): Promise<Sandbox> {
 		requireSandboxNode();
 		if (Buffer.byteLength(source) > MAX_BUNDLE) throw new Error("terminal: the base bundle exceeds 8 MiB");
-		const dir = await mkdtemp(join(tmpdir(), "objects-tui-"));
+		// Node resolves the entry path before checking its exact filesystem permission.
+		const dir = await realpath(await mkdtemp(join(tmpdir(), "objects-tui-")));
 		await writeFile(join(dir, BOOTSTRAP_FILE), bootstrap);
 		const sandbox = new Sandbox(dir, onMessage, onEnd);
 		sandbox.#write(startFrame(start, source));

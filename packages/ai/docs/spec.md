@@ -179,6 +179,8 @@ The package root exposes isolated model collections, public types, authenticatio
 
 `@axi/ai/oauth` exports types for OAuth integrations. Use `models.login()` to run a registered provider's login flow. `@axi/ai/bedrock-provider` exposes the Bedrock provider. `@axi/ai/compat` exposes the optional process-wide API registry. `@axi/ai/utils/*` exposes individual utilities. Prefer an isolated collection when separate consumers must not share registrations.
 
+`@axi/ai/session-resources` exports session resource registration and cleanup without importing the complete model collection.
+
 ## Request observation
 
 The `telemetry` option accepts a `TelemetrySpan`. The model registry emits one logical request span around authentication and dispatch, or one poll span around a deferred fetch. Spans settle when the forwarded source result is observed.

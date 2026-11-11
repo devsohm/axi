@@ -68,6 +68,7 @@ Exports from the package root. The linked declarations contain exact signatures.
 | `defineEntry` | function | [`entries.d.ts`](../dist/entries.d.ts) |
 | `defineExtension` | function | [`harness/define.d.ts`](../dist/harness/define.d.ts) |
 | `defineTask` | function | [`tasks.d.ts`](../dist/tasks.d.ts) |
+| `defineSignal` | function | [`signals.d.ts`](../dist/signals.d.ts) |
 | `defineTool` | function | [`harness/define.d.ts`](../dist/harness/define.d.ts) |
 | `DocDefinition` | typealias | [`types.d.ts`](../dist/types.d.ts) |
 | `DocFamilyDefinition` | typealias | [`types.d.ts`](../dist/types.d.ts) |
@@ -174,6 +175,11 @@ Exports from the package root. The linked declarations contain exact signatures.
 | `SetTimer` | typealias | [`types.d.ts`](../dist/types.d.ts) |
 | `Settings` | typealias | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
 | `SettledSubmissionRecord` | typealias | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
+| `SignalDefinition` | typealias | [`signals.d.ts`](../dist/signals.d.ts) |
+| `SignalKey` | typealias | [`signals.d.ts`](../dist/signals.d.ts) |
+| `SignalResult` | typealias | [`signals.d.ts`](../dist/signals.d.ts) |
+| `SignalState` | typealias | [`signals.d.ts`](../dist/signals.d.ts) |
+| `SignalToken` | interface | [`signals.d.ts`](../dist/signals.d.ts) |
 | `SettledTask` | typealias | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
 | `Storage` | interface | [`types.d.ts`](../dist/types.d.ts) |
 | `StorageRequestError` | class | [`errors.d.ts`](../dist/errors.d.ts) |
@@ -183,9 +189,11 @@ Exports from the package root. The linked declarations contain exact signatures.
 | `SubmissionCreate` | typealias | [`types.d.ts`](../dist/types.d.ts) |
 | `SubmissionDraft` | typealias | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
 | `SubmissionId` | typealias | [`types.d.ts`](../dist/types.d.ts) |
+| `SubmissionNotify` | typealias | [`types.d.ts`](../dist/types.d.ts) |
 | `SubmissionQuery` | typealias | [`types.d.ts`](../dist/types.d.ts) |
 | `SubmissionRecord` | typealias | [`types.d.ts`](../dist/types.d.ts) |
 | `SubmissionSettlement` | typealias | [`types.d.ts`](../dist/types.d.ts) |
+| `SubmissionSettled` | const | [`signals.d.ts`](../dist/signals.d.ts) |
 | `SummaryRequest` | typealias | [`harness/compaction.d.ts`](../dist/harness/compaction.d.ts) |
 | `SystemEntry` | const | [`entries.d.ts`](../dist/entries.d.ts) |
 | `TableCommitChange` | typealias | [`types.d.ts`](../dist/types.d.ts) |
@@ -231,6 +239,7 @@ Exports from the package root. The linked declarations contain exact signatures.
 | `UserEntry` | const | [`entries.d.ts`](../dist/entries.d.ts) |
 | `UserInput` | typealias | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
 | `Wake` | typealias | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
+| `WakeReason` | typealias | [`types.d.ts`](../dist/types.d.ts) |
 | `WatchCall` | type | [`index.d.ts`](../dist/index.d.ts) |
 | `WatchEnd` | type | [`types.d.ts`](../dist/types.d.ts) |
 | `WatchHandle` | type | [`types.d.ts`](../dist/types.d.ts) |

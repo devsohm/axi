@@ -197,6 +197,28 @@ test("link payload overflow closes the peer and invokes its lifetime cleanup onc
 	await vi.waitFor(() => expect(closed).toBe(1));
 });
 
+test("a protocol close is not forcibly terminated before its close frame is delivered", async () => {
+	let forced = 0;
+	await using app = await fixture(undefined, {
+		maxPayload: 32,
+		sockets: {
+			"/limited": (socket) => {
+				const terminate = socket.terminate.bind(socket);
+				socket.terminate = () => {
+					forced++;
+					terminate();
+				};
+			},
+		},
+	});
+	const socket = app.connect("/limited");
+	await once(socket, "open");
+	const closed = once(socket, "close");
+	socket.send("x".repeat(64));
+	expect((await closed)[0]).toBe(1009);
+	expect(forced).toBe(0);
+});
+
 test("closing HTTP with an active object link closes its transport and releases its callback", async () => {
 	let closed = 0;
 	await using app = await fixture({

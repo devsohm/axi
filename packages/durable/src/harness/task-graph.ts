@@ -16,6 +16,7 @@ import type {
 	TaskRecord,
 	WatchHandle,
 } from "../types.ts";
+import type { SignalKey } from "../signals.ts";
 import { type BlockedReason, type BlockedSubject, blockedSubject } from "./scheduler.ts";
 import { jsonEqual } from "./json.ts";
 import { closedError, scanAll } from "./util.ts";
@@ -23,7 +24,12 @@ import { closedError, scanAll } from "./util.ts";
 export type TaskGraphState =
 	| { readonly status: "pending" | "running"; readonly phase: string }
 	| { readonly status: "waiting"; readonly phase: string; readonly on: readonly TaskId[]; readonly policy: JoinPolicy }
-	| { readonly status: "sleeping"; readonly phase: string; readonly until?: number }
+	| {
+			readonly status: "sleeping";
+			readonly phase: string;
+			readonly until?: number;
+			readonly signals?: readonly SignalKey<unknown>[];
+	  }
 	| { readonly status: "completing"; readonly outcome: TaskOutcome<JsonValue>["status"] };
 export type TaskGraphNode = {
 	readonly id: TaskId;
@@ -166,7 +172,12 @@ function state(record: StoredTask): TaskGraphState {
 				policy: value.policy,
 			};
 		case "sleeping":
-			return { status: "sleeping", phase: (value.checkpoint as { phase: string }).phase, until: value.until };
+			return {
+				status: "sleeping",
+				phase: (value.checkpoint as { phase: string }).phase,
+				...(value.until === undefined ? {} : { until: value.until }),
+				...(value.signals === undefined ? {} : { signals: value.signals.map(({ signal, key }) => ({ signal, key })) }),
+			};
 		case "completing":
 		case "terminal":
 			return { status: "completing", outcome: value.outcome.status };

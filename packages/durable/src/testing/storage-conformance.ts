@@ -740,6 +740,44 @@ export function createStorageConformance(options: StorageConformanceOptions): re
 			}),
 		]);
 	});
+	seeded("round-trips sleeps on signals, any waits, and wakes", async (storage) => {
+		const first = await storage.mintId<TaskId<JsonValue>>(),
+			second = await storage.mintId<TaskId<JsonValue>>();
+		const states: StoredTask["state"][] = [
+			{ status: "sleeping", checkpoint: { phase: "reply" }, signals: [{ signal: "client.reply", key: "receipt" }] },
+			{
+				status: "sleeping",
+				checkpoint: { phase: "reply" },
+				until: 2000,
+				signals: [{ signal: "client.reply", key: "receipt" }],
+			},
+			{ status: "waiting", checkpoint: { phase: "joined" }, on: [first, second], policy: "any" },
+			{ status: "pending", checkpoint: { phase: "joined" }, wake: { reason: "tasks", ended: [first] } },
+			{
+				status: "running",
+				checkpoint: { phase: "reply" },
+				wake: { reason: "signal", signal: "client.reply", key: "receipt" },
+			},
+		];
+		const records: StoredTask[] = [];
+		for (const [index, state] of states.entries()) {
+			const id = index === 0 ? first : index === 1 ? second : await storage.mintId<TaskId<JsonValue>>();
+			records.push(
+				pending(id, { state, memos: { "axi.signal.client.reply/receipt": { version: 1, value: "accepted" } } }),
+			);
+		}
+		await commitWrites(
+			storage,
+			records.map((value) => ({ type: "task", value })),
+			context,
+		);
+		for (const value of records) a.deepEqual(await storage.task(value.id, context), value);
+		for (const status of ["sleeping", "waiting", "pending", "running"] as const)
+			a.deepEqual(
+				(await storage.scanTasks({ status }, 10, undefined, context)).items,
+				records.filter((value) => value.state.status === status),
+			);
+	});
 	seeded("stores and scans sleeping tasks by status", async (storage) => {
 		const id = await storage.mintId<TaskId<JsonValue>>();
 		const sleeping = pending(id, {

@@ -13,16 +13,18 @@ export const ProviderDoc = defineDoc<ProviderState>({
 	initial: () => ({ sessionId: uuidv7() }),
 	checkpointWhen: () => true,
 });
+export const providerSessionsByRuntime = new WeakMap<object, Set<string>>();
 export async function ensureProviderSessionId<I, S, R, H extends object>(
 	runtime: TaskRuntime<I, S, R, H>,
 	context: Context,
 ): Promise<string> {
 	const state = await runtime.snapshot(ProviderDoc, runtime.conversationId, context);
-	if (state !== undefined) return state.sessionId;
-	let value: string | undefined;
-	await runtime.commit(async (tx) => {
-		value = (await tx.doc(ProviderDoc, runtime.conversationId)).sessionId;
-	}, context);
+	let value = state?.sessionId;
+	if (value === undefined)
+		await runtime.commit(async (tx) => {
+			value = (await tx.doc(ProviderDoc, runtime.conversationId)).sessionId;
+		}, context);
 	if (value === undefined) throw new Error(`Conversation ${runtime.conversationId} has no provider session ID`);
+	providerSessionsByRuntime.get(runtime)?.add(value);
 	return value;
 }

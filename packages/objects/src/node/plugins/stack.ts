@@ -1,7 +1,12 @@
 import { SourceMap } from "node:module";
 import { basename, join } from "node:path";
 
-type ScriptMapping = { readonly sourceMap: SourceMap; readonly directory: string; owners: number };
+type ScriptMapping = {
+	readonly source: string;
+	map: { kind: "pending" } | { kind: "ready"; value: SourceMap | undefined };
+	readonly directory: string;
+	owners: number;
+};
 const mappings = new Map<string, ScriptMapping>();
 const releaseMapping = new FinalizationRegistry<string>((file) => {
 	const entry = mappings.get(file);
@@ -15,9 +20,7 @@ export function inlineSourceMap(source: string): SourceMap | undefined {
 export function registerScript(file: string, source: string, directory: string, owner: object): void {
 	let entry = mappings.get(file);
 	if (!entry) {
-		const sourceMap = inlineSourceMap(source);
-		if (!sourceMap) return;
-		entry = { sourceMap, directory, owners: 0 };
+		entry = { source, map: { kind: "pending" }, directory, owners: 0 };
 		mappings.set(file, entry);
 	}
 	entry.owners++;
@@ -28,8 +31,12 @@ export function mapStack(error: unknown): string {
 	if (stack === undefined) return String(error);
 	return stack.replace(/([^\s()]+):(\d+):(\d+)/g, (position, file: string, line: string, column: string) => {
 		const registered = mappings.get(file);
-		const mapped = registered?.sourceMap.findEntry(Number(line) - 1, Number(column) - 1);
-		if (!registered || !mapped || !("originalSource" in mapped)) return position;
+		if (!registered) return position;
+		// Most plugin loads never map a stack, so defer decoding until a matching frame needs it.
+		if (registered.map.kind === "pending")
+			registered.map = { kind: "ready", value: inlineSourceMap(registered.source) };
+		const mapped = registered.map.value?.findEntry(Number(line) - 1, Number(column) - 1);
+		if (!mapped || !("originalSource" in mapped)) return position;
 		return `${join(basename(registered.directory), mapped.originalSource).replaceAll("\\", "/")}:${mapped.originalLine + 1}:${mapped.originalColumn + 1}`;
 	});
 }

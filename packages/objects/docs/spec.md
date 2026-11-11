@@ -80,6 +80,8 @@ A job runs outside its finish transaction. Its successful finish commits cleanup
 
 Plugin roots may be required or optional. Discovery reports collisions and invalid entries. Builds restrict imports to permitted plugin, shared and host-package paths. Plugin scripts execute as trusted code. File watching marks changes without applying them. Rollouts ship built generations through ordered host steps. Workers evaluate prebuilt scripts without rebuilding them.
 
+Package installation accepts both npm's array pack result and its package-name-keyed result. Plugin stack maps are decoded only when an error frame needs them. Worker bundles store source maps beside their modules. Worker processes use the caller's `execArgv`; add `--enable-source-maps` explicitly for mapped worker stacks, with its parsing and memory cost.
+
 HTTP routes deny anonymous callers unless explicitly public. Cross-site routes are public and anonymous. Authentication, host, origin, header and response-body checks run at the request boundary. Resource and root scopes last through response completion or cancellation.
 
 Worker starts serialize per address and hold process locks. Stale file locks are cleared only when no process is listening. A missing child PID is never a signal target. A running worker's lost link permits one recovery per minute for its address. Another loss within that window, a crash or a failed start requires retry or rollout.

@@ -306,7 +306,7 @@ class WorkerPool<P extends Principal, K extends KindShape> implements Workers<K>
 		const process = new WorkerProcess(
 			{
 				entry: base.file(),
-				execArgv: ["--enable-source-maps", ...(options.execArgv ?? [])],
+				execArgv: options.execArgv ?? [],
 				...(this.#environment === undefined ? {} : { env: this.#environment }),
 				...(onOutput === undefined ? {} : { onOutput: (stream, chunk) => onOutput(slot.address, stream, chunk) }),
 			},

@@ -170,6 +170,7 @@
 					"behavior": "plugin discovery, evaluation and installation",
 					"tests": [
 						"packages/objects/test/node-plugins.test.ts",
+						"packages/objects/test/plugin-stack-lifecycle.test.ts",
 						"packages/objects/test/plugin-build-rules.test.ts",
 						"packages/objects/test/discovery-boundaries.test.ts",
 						"packages/objects/test/plugin-harness.test.ts",

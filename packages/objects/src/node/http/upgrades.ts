@@ -24,7 +24,10 @@ type Open = {
 export class Upgrades {
 	readonly #sockets = new Set<Open>();
 	#keep(entry: Open): void {
-		entry.socket.on("error", () => entry.socket.terminate());
+		entry.socket.on("error", () => {
+			// A protocol close already queued its close frame; termination could discard it.
+			if (entry.socket.readyState !== entry.socket.CLOSING) entry.socket.terminate();
+		});
 		entry.socket.once("close", () => this.#sockets.delete(entry));
 		this.#sockets.add(entry);
 	}

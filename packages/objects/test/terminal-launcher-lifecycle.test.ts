@@ -1,4 +1,7 @@
 import { createServer, type ServerResponse } from "node:http";
+import { mkdir, mkdtemp, rm, symlink } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { PassThrough } from "node:stream";
 import { WebSocketServer } from "ws";
 import { afterEach, expect, test, vi } from "vitest";
@@ -87,6 +90,19 @@ async function fixture(source: string, dimensions = { columns: 80, rows: 24 }) {
 		},
 	};
 }
+
+test("the sandbox starts through a symlinked temporary-directory ancestor", async () => {
+	const directory = await mkdtemp(join(tmpdir(), "axi-terminal-link-"));
+	resources.push(() => rm(directory, { recursive: true, force: true }));
+	const real = join(directory, "real"),
+		link = join(directory, "linked");
+	await mkdir(real);
+	await symlink(real, link, "junction");
+	for (const name of ["TMPDIR", "TMP", "TEMP"]) vi.stubEnv(name, link);
+	const f = await fixture(script(""));
+	await f.start();
+	await vi.waitFor(() => expect(f.text()).toContain("ready"));
+});
 
 test("terminal requests return assets and base values while refusing foreign paths", async () => {
 	const f = await fixture(

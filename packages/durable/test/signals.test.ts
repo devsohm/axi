@@ -18,6 +18,7 @@ import {
 } from "../src/index.ts";
 import { checkSleep, deliverSignal, readSignal, sleepDue, sleepWake } from "../src/signals.ts";
 import { openNodeSqliteStorage } from "../src/storage/sqlite/node.ts";
+import { commitWrites } from "../src/testing/commit-writes.ts";
 import { closeSchedulers, open, root } from "./scheduler-support.ts";
 
 const Reply = defineSignal({ name: "reply", version: 1, schema: Type.Object({ answer: Type.String() }) });
@@ -163,6 +164,60 @@ test("a signal-only sleep survives SQLite close and reopen", async () => {
 		status: "completed",
 		result: { reply: { value: { answer: "after restart" } } },
 	});
+});
+
+test("recovered wakes survive the same checkpoint without resetting restart accounting", async () => {
+	const path = await mkdtemp(join(tmpdir(), "axi-signal-recovery-"));
+	directories.push(path);
+	const counts: Array<number | undefined> = [],
+		wakes: unknown[] = [];
+	const task = defineTask<null, { phase: "resume" | "next" }, null>({
+		name: "wake-accounting",
+		version: 1,
+		initial: () => ({ phase: "resume" }),
+		phases: {
+			resume: async (_task, runtime, ctx) => {
+				await runtime.commit(() => ({ status: "running", checkpoint: { phase: "resume" } }), ctx);
+				const current = await runtime.getTask(runtime.taskId, ctx);
+				counts.push(current?.restarts);
+				wakes.push(current && "wake" in current.state ? current.state.wake : undefined);
+				await runtime.commit(() => ({ status: "running", checkpoint: { phase: "next" } }), ctx);
+			},
+			next: async (_task, runtime, ctx) => {
+				const current = await runtime.getTask(runtime.taskId, ctx);
+				counts.push(current?.restarts);
+				wakes.push(current && "wake" in current.state ? current.state.wake : undefined);
+				await runtime.commit(() => ({ status: "terminal", outcome: { status: "completed", result: null } }), ctx);
+			},
+		},
+		abort: async () => {},
+	});
+	const file = join(path, "session.db"),
+		first = await open([task], { storage: await openNodeSqliteStorage(file) });
+	const conversationId = await root(first.session);
+	const id = await first.session.commit(
+		(tx) => tx.createTask(task, null, { conversationId, ownership: { kind: "conversation" } }),
+		context,
+	);
+	const pending = await first.storage.task(id, context);
+	if (!pending) throw new Error("Missing task");
+	await first.session.close(context);
+	const storage = await openNodeSqliteStorage(file);
+	await commitWrites(
+		storage,
+		[
+			{
+				type: "task",
+				value: { ...pending, state: { status: "running", checkpoint: { phase: "resume" }, wake: { reason: "time" } } },
+			},
+		],
+		context,
+	);
+	const reopened = await open([task], { storage });
+	reopened.scheduler.resume();
+	await reopened.scheduler.waitForTask(id, context);
+	expect(counts).toEqual([1, undefined]);
+	expect(wakes).toEqual([{ reason: "time" }, undefined]);
 });
 
 test("a self-signal in the sleeping checkpoint's commit is retained", async () => {
@@ -315,6 +370,12 @@ test("a settled submission notifies a sleeping task in the same durable commit",
 		);
 		harness.resume();
 		await vi.waitFor(async () => expect((await harness.getTask(id, context))?.state.status).toBe("sleeping"));
+		const graph = await harness.watchTaskGraph(context);
+		expect(graph.value.tasks[String(id)]?.state).toEqual({
+			status: "sleeping",
+			phase: "read",
+			signals: [{ signal: "axi.submission-settled", key: "receipt" }],
+		});
 		const submission = await conversation.submit(
 			{ type: "write", entry: { kind: "note", data: "receipt" }, notify: { taskId: id, key: "receipt" } },
 			context,

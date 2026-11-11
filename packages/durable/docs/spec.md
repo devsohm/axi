@@ -108,6 +108,8 @@ A task can commit `{ status: "sleeping", checkpoint, signals: [token.key(key)], 
 
 On reopen, the scheduler reconciles interrupted work with its registered definition. Missing or incompatible definitions remain visible as blockers. A definition can convert older input and checkpoints. `abandonOnRestart` work follows its restart abort path.
 
+Closing a Harness first stops and joins its invocations, then releases provider resources for the session identities it used. An idle Harness does not clear another Harness's provider sessions. Cleanup failures are reported as model-host errors while remaining cleanup handlers still run.
+
 A phase that returns without advancing its persistent state faults. Repeated restarts are bounded by `restartLimit`. Retrying a phase can repeat an external effect that completed before its receipt committed. Stable service request keys and replay policies belong to that effect's implementation.
 
 ## Harness and conversations

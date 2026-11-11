@@ -1,4 +1,4 @@
-import { createModels, fauxAssistantMessage, fauxProvider } from "@axi/ai";
+import { createModels, fauxAssistantMessage, fauxProvider, registerSessionResourceCleanup } from "@axi/ai";
 import { BACKGROUND_CONTEXT as context } from "@axi/objects/context";
 import {
 	createRegistry,
@@ -9,7 +9,60 @@ import {
 	MemoryStorage,
 	type Report,
 } from "@axi/durable";
-import { expect, test } from "vitest";
+import { expect, test, vi } from "vitest";
+
+test.each([false, true])(
+	"closing a Harness releases only its used provider sessions after requests end (active=%s)",
+	async (active) => {
+		const provider = fauxProvider(),
+			models = createModels(),
+			registry = createRegistry();
+		models.setProvider(provider.provider);
+		const sessions: string[] = [],
+			cleaned: Array<string | undefined> = [];
+		let inRequest = false;
+		provider.setResponses([
+			async (_messages, options) => {
+				if (!options?.sessionId) throw new Error("Missing provider session identity");
+				sessions.push(options.sessionId);
+				inRequest = true;
+				try {
+					if (active)
+						await new Promise<void>((resolve) =>
+							options.signal?.addEventListener("abort", () => resolve(), { once: true }),
+						);
+					return fauxAssistantMessage("complete");
+				} finally {
+					inRequest = false;
+				}
+			},
+		]);
+		const unsubscribe = registerSessionResourceCleanup((id) => {
+			expect(inRequest).toBe(false);
+			cleaned.push(id);
+		});
+		const idle = await Harness.open(new MemoryStorage(), { models, registry }, context);
+		const harness = await Harness.open(new MemoryStorage(), { models, registry }, context);
+		try {
+			const model = provider.getModel();
+			const conversation = await harness.root(context, {
+				agent: { model: { provider: model.provider, modelId: model.id } },
+			});
+			const submitted = await conversation.submit({ type: "input", content: "request" }, context);
+			if (active) await vi.waitFor(() => expect(inRequest).toBe(true));
+			else expect((await submitted.wait(context)).status).toBe("done");
+			await idle.close(context);
+			expect(cleaned).toEqual([]);
+			await harness.close(context);
+			expect(cleaned).toEqual(sessions);
+			expect(cleaned).toHaveLength(1);
+		} finally {
+			await idle.close(context);
+			await harness.close(context);
+			unsubscribe();
+		}
+	},
+);
 
 test.each([false, true])("provider body hooks survive resends and retries (throwing observer: %s)", async (throws) => {
 	const models = createModels(),
