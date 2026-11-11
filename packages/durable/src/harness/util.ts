@@ -6,8 +6,13 @@ export class Waiters<K, T> {
 	readonly #pending = new Map<K, Set<PromiseWithResolvers<T>>>();
 	add(key: K, context: Context): Promise<T> {
 		const signal = context.abortSignal;
-		if (signal?.aborted) return Promise.reject(signal.reason);
 		const waiter = Promise.withResolvers<T>();
+		// Rejection can precede delivery to a caller waiting for an earlier storage publication.
+		waiter.promise.catch(() => {});
+		if (signal?.aborted) {
+			waiter.reject(signal.reason);
+			return waiter.promise;
+		}
 		const group = this.#pending.get(key) ?? new Set<PromiseWithResolvers<T>>();
 		group.add(waiter);
 		this.#pending.set(key, group);

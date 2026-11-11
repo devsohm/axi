@@ -465,6 +465,7 @@
 					"tests": [
 						"packages/durable/test/atomic-submission.test.ts",
 						"packages/durable/test/run-lifecycle.test.ts",
+						"packages/durable/test/waiter-lifecycle.test.ts",
 						"packages/durable/test/hook-decisions.test.ts",
 						"packages/durable/test/session-observers.test.ts",
 						"packages/durable/test/session-publication-scope.test.ts",
