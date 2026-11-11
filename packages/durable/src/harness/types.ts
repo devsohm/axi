@@ -357,11 +357,19 @@ export interface HookApi extends DocumentReader {
 	readonly taskId: TaskId;
 	readonly conversationId: ConversationId;
 	readonly models: Models;
+	now(): number;
+	readSignal<T>(
+		token: import("../signals.ts").SignalToken<T>,
+		key: string,
+		context: Context,
+	): Promise<import("../signals.ts").SignalState<T> | undefined>;
 	memo<T extends JsonValue>(name: string, context: Context): Promise<T | undefined>;
 	memo<T extends JsonValue>(name: string, candidate: T, context: Context): Promise<T>;
 }
 export type RunSummary = { readonly reason: "answer" | "terminate"; readonly first: EntryId; readonly answer: EntryId; readonly last: EntryId };
-export type RunEndTask = { readonly task: AnyTask; readonly input: JsonValue };
+export type HookTask = { readonly task: AnyTask; readonly input: JsonValue };
+export type YieldDecision = { readonly continue?: UserInput };
+export type AfterToolsDecision = { readonly terminate?: true };
 export type HookResult<T> = T | undefined | Promise<T | undefined>;
 export interface GenerationHooks {
 	beforeRequest(
@@ -375,9 +383,18 @@ export interface GenerationHooks {
 		context: Context,
 	): HookResult<{ readonly payload: unknown }>;
 	afterResponse(message: AssistantMessage, api: HookApi, context: Context): void | Promise<void>;
-	onYield(answer: AssistantMessage, api: HookApi, context: Context): HookResult<{ readonly continue: UserInput }>;
-	afterTools(assistant: EntryId, results: readonly EntryId[], api: HookApi, context: Context): void | Promise<void>;
-	afterRun(run: RunSummary, api: HookApi, context: Context): HookResult<{ readonly tasks: readonly RunEndTask[] }>;
+	onYield(
+		answer: AssistantMessage,
+		api: HookApi,
+		context: Context,
+	): HookResult<{ readonly continue: UserInput } | { readonly tasks: readonly HookTask[] }>;
+	afterTools(
+		assistant: EntryId,
+		results: readonly EntryId[],
+		api: HookApi,
+		context: Context,
+	): HookResult<{ readonly tasks: readonly HookTask[] }>;
+	afterRun(run: RunSummary, api: HookApi, context: Context): HookResult<{ readonly tasks: readonly HookTask[] }>;
 }
 export type ToolHookCall = ToolCall & { readonly parent?: { readonly taskId: TaskId; readonly callId: string } };
 export interface ToolHooks {

@@ -51,10 +51,40 @@ export type CompactionStatus = {
 	retry?: { at: number; error: string };
 };
 export type CompactionFailure = { taskId: TaskId<CompactionResult>; trigger: CompactionReason; error: string };
-export type RunFailureReason = "model_error" | "no_model" | "aborted" | "reset" | "faulted" | "orphaned" | "interrupted" | "restart_limit" | "nothing_to_answer" | "turn_limit";
-export type RunFailure = { taskId: TaskId; inputs: SubmissionId[]; reason: RunFailureReason; detail?: string; first?: EntryId };
-export type LiveRun = { taskId: TaskId; inputs: SubmissionId[]; turns: number; first?: EntryId; afterRun?: { tasks?: TaskId[] } };
-export type RunEnd = { readonly status: "done"; readonly answer: EntryId } | { readonly status: "unanswered"; readonly reason: RunFailureReason; readonly detail?: string; readonly settlement?: SubmissionSettlement };
+export type RunFailureReason =
+	| "model_error"
+	| "no_model"
+	| "aborted"
+	| "reset"
+	| "faulted"
+	| "orphaned"
+	| "interrupted"
+	| "restart_limit"
+	| "nothing_to_answer"
+	| "turn_limit";
+export type RunFailure = {
+	taskId: TaskId;
+	inputs: SubmissionId[];
+	reason: RunFailureReason;
+	detail?: string;
+	first?: EntryId;
+};
+export type LiveRun = {
+	taskId: TaskId;
+	inputs: SubmissionId[];
+	turns: number;
+	first?: EntryId;
+	afterRun?: { tasks?: TaskId[] };
+	yield?: { answer: EntryId; tasks: TaskId[] };
+};
+export type RunEnd =
+	| { readonly status: "done"; readonly answer: EntryId }
+	| {
+			readonly status: "unanswered";
+			readonly reason: RunFailureReason;
+			readonly detail?: string;
+			readonly settlement?: SubmissionSettlement;
+	  };
 export type LiveState = {
 	run?: LiveRun;
 	runFailure?: RunFailure;
@@ -195,6 +225,10 @@ export async function settleSchedulerOutcome(
 	} else if (record.kind === "axi.generation") {
 		const live = await tx.doc(LiveDoc, record.conversationId);
 		if (live.run?.taskId !== record.id) return;
+		if (live.run.yield !== undefined) {
+			endRun(tx, live, record.id, { status: "done", answer: live.run.yield.answer });
+			return;
+		}
 		const detail = outcome.status === "faulted" ? outcome.error.detail : undefined;
 		const cutOff = detail !== null && typeof detail === "object" && "reason" in detail && detail.reason === "restart_limit";
 		if (!cutOff) await convertPartial(tx, live, record.conversationId);

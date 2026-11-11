@@ -1,7 +1,7 @@
 import { createModels, fauxAssistantMessage, fauxProvider } from "@axi/ai";
 import { BACKGROUND_CONTEXT as context } from "@axi/objects/context";
 import { expect, test } from "vitest";
-import { createRegistry, defineExtension, defineTask, GenerationTask, Harness, hook, LiveDoc, MemoryStorage, runEndTask, type RunSummary } from "../src/index.ts";
+import { createRegistry, defineExtension, defineTask, GenerationTask, Harness, hook, LiveDoc, MemoryStorage, hookTask, type RunSummary } from "../src/index.ts";
 
 test("continues a failed run and settles its answer before draining after-run work", async () => {
 	const models = createModels(), provider = fauxProvider(), registry = createRegistry();
@@ -21,7 +21,7 @@ test("continues a failed run and settles its answer before draining after-run wo
 		} }, abort: async (_task, runtime, ctx) => { await runtime.commit(() => ({ status: "terminal", outcome: { status: "aborted" } }), ctx); },
 	});
 	registry.install(defineExtension({ name: "checks", tasks: [Check], hooks: [hook(GenerationTask, {
-		afterRun: (run) => { summaries.push(run); return { tasks: [runEndTask(Check, "check")] }; },
+		afterRun: (run) => { summaries.push(run); return { tasks: [hookTask(Check, "check")] }; },
 	})] }));
 	provider.setResponses([fauxAssistantMessage([], { stopReason: "error", errorMessage: "Invalid request" }), fauxAssistantMessage("recovered"), fauxAssistantMessage("next")]);
 	const harness = await Harness.open(new MemoryStorage(), { models, registry, settings: { retry: { enabled: false }, compaction: { enabled: false } } }, context);

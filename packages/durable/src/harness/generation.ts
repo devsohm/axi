@@ -58,7 +58,7 @@ import type {
 	ModelRef,
 	PromptInput,
 	RunSummary,
-	RunEndTask,
+	HookTask,
 	ToolControl,
 	UserInput,
 } from "./types.ts";
@@ -96,7 +96,9 @@ export type GenerationCheckpoint =
 	  }
 	| { phase: "tools"; assistant: EntryId; tools: TaskId<ToolTaskResult>[]; pending: string[] }
 	| { phase: "finish"; run: RunSummary }
-	| { phase: "drain"; answer: EntryId; tasks: TaskId[] };
+	| { phase: "drain"; answer: EntryId; tasks: TaskId[] }
+	| { phase: "afterTools"; assistant: EntryId; tools: TaskId<ToolTaskResult>[]; tasks: TaskId[] }
+	| { phase: "yield"; answer: EntryId; tasks: TaskId[] };
 export type GenerationResult = { entryId: EntryId };
 type Runtime = TaskRuntime<GenerationInput, GenerationCheckpoint, GenerationResult, GenerationHooks>;
 type Next = NextTaskState<GenerationCheckpoint, GenerationResult>;
@@ -113,7 +115,7 @@ type Failure = { readonly policy: AfterFailedRun; readonly boundary?: Boundary }
 
 export const GenerationTask = defineTask<GenerationInput, GenerationCheckpoint, GenerationResult, GenerationHooks>({
 	name: "axi.generation",
-	version: 2,
+	version: 3,
 	migrate: (input, checkpoint) => ({ input: input as GenerationInput, checkpoint: checkpoint as GenerationCheckpoint }),
 	initial: () => ({ phase: "prepare", attempt: 1 }),
 	phases: {
@@ -311,9 +313,7 @@ export const GenerationTask = defineTask<GenerationInput, GenerationCheckpoint, 
 			});
 			if (!tasks.length) return finishAnswered(runtime, run.answer, context);
 			await runtime.commit(async (tx): Promise<Next> => {
-				const ids: TaskId[] = [];
-				for (const item of tasks)
-					ids.push(await tx.createTask(item.task, item.input, { ownership: { kind: "task", taskId: runtime.taskId } }));
+				const ids = await startHookTasks(tx, runtime.taskId, tasks);
 				const live = await tx.doc(LiveDoc, runtime.conversationId);
 				if (live.run?.taskId === runtime.taskId && live.run.afterRun) live.run.afterRun.tasks = ids;
 				return {
@@ -328,6 +328,52 @@ export const GenerationTask = defineTask<GenerationInput, GenerationCheckpoint, 
 			cutOffTooOften(task, runtime)
 				? finishCutOff(runtime, task, task.state.checkpoint.answer, context)
 				: finishAnswered(runtime, task.state.checkpoint.answer, context),
+		afterTools: async (task, runtime, context) => {
+			if (cutOffTooOften(task, runtime)) return endCutOff(runtime, task, context);
+			const { assistant, tools, tasks } = task.state.checkpoint;
+			const outcomes = await runtime.outcomes(tasks, context);
+			let terminate = false;
+			for (const [index, outcome] of outcomes.entries()) {
+				if (outcome.status !== "completed") continue;
+				const result = outcome.result;
+				if (result === null) continue;
+				if (
+					recordValue(result) &&
+					Object.keys(result).every((key) => key === "terminate") &&
+					(!Object.hasOwn(result, "terminate") || result.terminate === true)
+				) {
+					terminate ||= result.terminate === true;
+					continue;
+				}
+				const id = tasks[index]!,
+					kind = (await runtime.getTask(id, context))?.kind;
+				const extension = runtime.registry
+					.installed()
+					.findLast((item) => item.tasks?.some((task) => task.definition.name === kind))?.name;
+				runtime.report(new Error(`afterTools task ${id} (${kind}) completed with no AfterToolsDecision`), {
+					kind: "extension",
+					...optionalExtension(extension),
+				});
+			}
+			return endTools(runtime, assistant, tools, context, terminate);
+		},
+		yield: async (task, runtime, context) => {
+			const { answer, tasks } = task.state.checkpoint;
+			if (cutOffTooOften(task, runtime)) return finishCutOff(runtime, task, answer, context);
+			const outcomes = await runtime.outcomes(tasks, context);
+			const continuation = outcomes.flatMap((outcome) => {
+				if (outcome.status !== "completed" || !recordValue(outcome.result)) return [];
+				const value = outcome.result.continue;
+				return userInput(value) ? [value] : [];
+			})[0];
+			const hasAfterRun = await afterRunEnabled(runtime, context);
+			await runtime.commit(async (tx): Promise<Next> => {
+				const boundary = await prepareBoundary(tx, runtime.conversationId, runtime.settings);
+				const live = await tx.doc(LiveDoc, runtime.conversationId);
+				if (live.run?.taskId === runtime.taskId) delete live.run.yield;
+				return completeAnswer(tx, runtime, live, boundary, answer, continuation, hasAfterRun);
+			}, context);
+		},
 	},
 	abort: async (task, runtime, context) => {
 		const checkpoint = task.state.checkpoint;
@@ -349,7 +395,14 @@ export const GenerationTask = defineTask<GenerationInput, GenerationCheckpoint, 
 						: harnessError("aborted", `Tool ${call.name} was aborted`),
 					{ timestamp: runtime.now() },
 				);
-			endRun(tx, live, runtime.taskId, { status: "unanswered", reason: "aborted" });
+			endRun(
+				tx,
+				live,
+				runtime.taskId,
+				checkpoint.phase === "yield"
+					? { status: "done", answer: checkpoint.answer }
+					: { status: "unanswered", reason: "aborted" },
+			);
 			return { status: "terminal", outcome: { status: "aborted" } };
 		}, context);
 	},
@@ -726,37 +779,89 @@ async function classify(
 }
 async function answer(runtime: Runtime, message: AssistantMessage, context: Context): Promise<void> {
 	let continuation: UserInput | undefined;
+	let decided = false;
+	const tasks: PreparedRunTask[] = [];
 	await runtime.hooks.each("onYield", async (hook) => {
-		if (continuation === undefined) continuation = (await hook(message, runtime, context))?.continue;
+		if (decided) return;
+		const decision = await hook(message, runtime, context);
+		if (decision === undefined) return;
+		decided = true;
+		if ("tasks" in decision) prepareRunTasks(runtime, decision.tasks, tasks);
+		else continuation = decision.continue;
 	});
+	if (tasks.length) {
+		await runtime.commit(async (tx): Promise<Next> => {
+			const id = runtime.conversationId,
+				live = await tx.doc(LiveDoc, id);
+			const entry = await appendAssistant(tx, id, message);
+			const ids = await startHookTasks(tx, runtime.taskId, tasks);
+			// The answer is committed, but callers receive it only after its reviewers finish.
+			if (live.run?.taskId === runtime.taskId) live.run.yield = { answer: entry.id, tasks: ids };
+			delete live.generation;
+			return {
+				status: "waiting",
+				checkpoint: { phase: "yield", answer: entry.id, tasks: ids },
+				on: ids,
+				policy: "allSettled",
+			};
+		}, context);
+		return;
+	}
 	const hasAfterRun = await afterRunEnabled(runtime, context);
 	await runtime.commit(async (tx): Promise<Next> => {
 		const id = runtime.conversationId;
 		const boundary = await prepareBoundary(tx, id, runtime.settings);
 		const live = await tx.doc(LiveDoc, id);
 		const entry = await appendAssistant(tx, id, message);
-		const continues =
-			continuation !== undefined &&
-			!boundary.inbox.items.some((item) => item.mode !== "write") &&
-			!boundary.inbox.items.some((item) => item.mode === "write" && item.entry.head === "self");
-		if (!continues && hasAfterRun) {
-			const held = holdAnswer(tx, live, runtime.taskId, { reason: "answer", answer: entry.id, last: entry.id });
-			if (held !== undefined) return held;
-		}
-		const { users, first } = await applyBoundary(tx, boundary, "final", runtime.now());
-		if (continues) {
-			await tx.appendEntry(UserEntry, id, {
-				model: [{ role: "user", content: continuation!, timestamp: runtime.now() }],
-			});
-			if (live.run?.taskId === runtime.taskId) live.run.turns = 0;
-			handOver(live, runtime.taskId, await newGeneration(tx, id));
-			delete live.generation;
-		} else {
-			endRun(tx, live, runtime.taskId, { status: "done", answer: entry.id });
-			if (users.length) await startRun(tx, id, live, users, first);
-		}
-		return { status: "terminal", outcome: { status: "completed", result: { entryId: entry.id } } };
+		return completeAnswer(tx, runtime, live, boundary, entry.id, continuation, hasAfterRun);
 	}, context);
+}
+async function completeAnswer(
+	tx: Tx,
+	runtime: Runtime,
+	live: Draft<LiveState>,
+	boundary: Boundary,
+	answer: EntryId,
+	continuation: UserInput | undefined,
+	hasAfterRun: boolean,
+): Promise<Next> {
+	const id = runtime.conversationId;
+	const continues =
+		continuation !== undefined &&
+		!boundary.inbox.items.some((item) => item.mode !== "write") &&
+		!boundary.inbox.items.some((item) => item.mode === "write" && item.entry.head === "self");
+	if (!continues && hasAfterRun) {
+		const held = holdAnswer(tx, live, runtime.taskId, { reason: "answer", answer, last: answer });
+		if (held !== undefined) return held;
+	}
+	const { users, first } = await applyBoundary(tx, boundary, "final", runtime.now());
+	if (continues) {
+		await tx.appendEntry(UserEntry, id, { model: [{ role: "user", content: continuation, timestamp: runtime.now() }] });
+		if (live.run?.taskId === runtime.taskId) live.run.turns = 0;
+		handOver(live, runtime.taskId, await newGeneration(tx, id));
+		delete live.generation;
+	} else {
+		endRun(tx, live, runtime.taskId, { status: "done", answer });
+		if (users.length) await startRun(tx, id, live, users, first);
+	}
+	return { status: "terminal", outcome: { status: "completed", result: { entryId: answer } } };
+}
+function recordValue(value: unknown): value is Record<string, unknown> {
+	return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+function userInput(value: unknown): value is UserInput {
+	return (
+		typeof value === "string" ||
+		(Array.isArray(value) &&
+			value.length > 0 &&
+			value.every(
+				(item) =>
+					recordValue(item) &&
+					(item.type === "text"
+						? typeof item.text === "string"
+						: item.type === "image" && typeof item.data === "string" && typeof item.mimeType === "string"),
+			))
+	);
 }
 async function afterRunEnabled(runtime: Runtime, context: Context): Promise<boolean> {
 	return agentHooks(await runtime.agent(context), GenerationTask.definition.name).some(
@@ -775,12 +880,12 @@ function holdAnswer(tx: Tx, live: Draft<LiveState>, taskId: TaskId, end: Omit<Ru
 	return { status: "running", checkpoint: { phase: "finish", run: { ...end, first: run.first ?? end.answer } } };
 }
 type PreparedRunTask = { task: Task<JsonValue, { phase: string }, JsonValue, object>; input: JsonValue };
-function prepareRunTasks(runtime: Runtime, requests: readonly RunEndTask[], tasks: PreparedRunTask[]): void {
+function prepareRunTasks(runtime: Runtime, requests: readonly HookTask[], tasks: PreparedRunTask[]): void {
 	const errors: unknown[] = [];
 	for (const request of requests) {
 		try {
 			const name = request.task.definition.name;
-			if (name.startsWith("axi.")) throw new Error(`An afterRun hook cannot start the built-in task ${name}`);
+			if (name.startsWith("axi.")) throw new Error(`A hook cannot start the built-in task ${name}`);
 			const registered = runtime.registry.task(name);
 			if (!registered) throw new Error(`Task ${name} is not installed`);
 			const definition = registered.definition as PreparedRunTask["task"]["definition"];
@@ -803,7 +908,13 @@ function prepareRunTasks(runtime: Runtime, requests: readonly RunEndTask[], task
 		}
 	}
 	if (errors.length === 1) throw errors[0];
-	if (errors.length) throw new AggregateError(errors, `${errors.length} afterRun task requests were rejected`);
+	if (errors.length) throw new AggregateError(errors, `${errors.length} hook task requests were rejected`);
+}
+async function startHookTasks(tx: Tx, owner: TaskId, requests: readonly PreparedRunTask[]): Promise<TaskId[]> {
+	const ids: TaskId[] = [];
+	for (const { task, input } of requests)
+		ids.push(await tx.createTask(task, input, { ownership: { kind: "task", taskId: owner } }));
+	return ids;
 }
 async function finishAnswered(runtime: Runtime, answer: EntryId, context: Context): Promise<void> {
 	await runtime.commit(async (tx): Promise<Next> => {
@@ -870,6 +981,35 @@ async function finishTools(
 	tasks: readonly TaskId<ToolTaskResult>[],
 	context: Context,
 ): Promise<void> {
+	const slots = (await runtime.snapshot(LiveDoc, runtime.conversationId, context))?.tools ?? [];
+	const requested: PreparedRunTask[] = [];
+	await runtime.hooks.each("afterTools", async (hook) => {
+		const result = await hook(
+			assistant,
+			slots.flatMap((slot) => (slot.entry === undefined ? [] : [slot.entry])),
+			runtime,
+			context,
+		);
+		if (result !== undefined) prepareRunTasks(runtime, result.tasks, requested);
+	});
+	if (!requested.length) return endTools(runtime, assistant, tasks, context, false);
+	await runtime.commit(async (tx): Promise<Next> => {
+		const ids = await startHookTasks(tx, runtime.taskId, requested);
+		return {
+			status: "waiting",
+			checkpoint: { phase: "afterTools", assistant, tools: [...tasks], tasks: ids },
+			on: ids,
+			policy: "allSettled",
+		};
+	}, context);
+}
+async function endTools(
+	runtime: Runtime,
+	assistant: EntryId,
+	tasks: readonly TaskId<ToolTaskResult>[],
+	context: Context,
+	requestedTermination: boolean,
+): Promise<void> {
 	const outcomes = await runtime.outcomes(tasks, context),
 		controls = new Map<TaskId, ToolControl | undefined>();
 	tasks.forEach((id, at) => {
@@ -880,17 +1020,10 @@ async function finishTools(
 		);
 	});
 	const slots = (await runtime.snapshot(LiveDoc, runtime.conversationId, context))?.tools ?? [];
-	await runtime.hooks.each("afterTools", (hook) =>
-		hook(
-			assistant,
-			slots.flatMap((slot) => (slot.entry === undefined ? [] : [slot.entry])),
-			runtime,
-			context,
-		),
-	);
 	const terminate =
-			slots.length > 0 &&
-			slots.every((slot) => slot.taskId !== undefined && controls.get(slot.taskId)?.terminate === true),
+			requestedTermination ||
+			(slots.length > 0 &&
+				slots.every((slot) => slot.taskId !== undefined && controls.get(slot.taskId)?.terminate === true)),
 		added = [...controls.values()].flatMap((control) => control?.addTools ?? []),
 		handoff = [...controls.values()].findLast((control) => control?.handoff !== undefined)?.handoff;
 	const hasAfterRun = terminate && (await afterRunEnabled(runtime, context));

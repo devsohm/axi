@@ -14,7 +14,7 @@ import {
 	ResetEntry,
 	ToolResultEntry,
 	type EntryId,
-	type RunEndTask,
+	type HookTask,
 	type RunSummary,
 } from "../src/index.ts";
 
@@ -321,7 +321,7 @@ test.each(["builtin", "missing", "phase", "multiple"] as const)(
 			},
 			async abort() {},
 		});
-		const choices: Record<typeof failure, RunEndTask[]> = {
+		const choices: Record<typeof failure, HookTask[]> = {
 			builtin: [{ task: GenerationTask, input: null }],
 			missing: [{ task: Missing, input: null }],
 			phase: [{ task: Invalid, input: null }],

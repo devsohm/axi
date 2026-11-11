@@ -44,7 +44,7 @@ export {
 	type SummaryRequest,
 } from "./harness/compaction.ts";
 export type * from "./harness/types.ts";
-export { defineExtension, defineTool, section, hook, wrapTool, wrapSection, runEndTask } from "./harness/define.ts";
+export { defineExtension, defineTool, section, hook, wrapTool, wrapSection, hookTask } from "./harness/define.ts";
 export {
 	AgentDoc,
 	configure,

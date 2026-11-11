@@ -163,7 +163,13 @@ The tool API exposes its conversation and task identities, model collection, res
 
 Generation hooks are `beforeRequest`, `beforeProviderRequest`, `afterResponse`, `onYield`, `afterTools`, and `afterRun`. Tool hooks are `beforeTool` and `afterTool`. Compaction exposes `beforeCompact`. Each hook runs with an invocation context and typed task data. Hook and task APIs read committed entries through `entry()` and `entries()` within their conversation.
 
-`afterRun` receives the completed run's entry bounds and answer. It may return task requests made with `runEndTask()`. Inputs settle before those tasks run, while the conversation remains busy until the tasks finish. Tool hooks also observe rejected and interrupted calls. Replacement results retain the tool's output limits and cannot introduce undeclared structured output.
+`hookTask()` requests an installed task from `afterTools`, `onYield`, or `afterRun`. The generation creates these tasks as its children and waits for all of them. Invalid requests are reported and skipped.
+
+`afterTools` runs after every tool in a round settles. A requested task can end the run with `{ terminate: true }`. Otherwise the round continues through its normal controls and inbox boundary. A task can submit a steer in its final commit. Invalid decision results are reported and ignored.
+
+`onYield` uses the first hook decision: an immediate continuation, or tasks that review the committed answer. While review tasks run, `LiveDoc.run.yield` identifies the answer and tasks, and input submissions stay open. The first valid continuation in task creation order continues the run after all reviewers finish. Queued input or a reset takes precedence over that continuation. Without a continuation, or when review is aborted, the committed answer settles the inputs as done.
+
+`afterRun` receives the completed run's entry bounds and answer. Inputs settle before its tasks run, while the conversation remains busy until the tasks finish. It runs after answer review when the answer stands. Tool hooks also observe rejected and interrupted calls. Replacement results retain the tool's output limits and cannot introduce undeclared structured output.
 
 `beforeProviderRequest` runs after each new provider request body is built. Each hook can replace the body passed to the next hook. A failed hook reports an extension error and leaves the chain running.
 

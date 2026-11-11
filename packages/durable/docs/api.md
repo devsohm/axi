@@ -158,8 +158,10 @@ Exports from the package root. The linked declarations contain exact signatures.
 | `RewindableConversationDocToken` | typealias | [`types.d.ts`](../dist/types.d.ts) |
 | `RewindableConversationSemantics` | typealias | [`types.d.ts`](../dist/types.d.ts) |
 | `ROOT_CONVERSATION_ID` | const | [`types.d.ts`](../dist/types.d.ts) |
-| `runEndTask` | function | [`harness/define.d.ts`](../dist/harness/define.d.ts) |
-| `RunEndTask` | typealias | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
+| `hookTask` | function | [`harness/define.d.ts`](../dist/harness/define.d.ts) |
+| `HookTask` | typealias | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
+| `YieldDecision` | typealias | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
+| `AfterToolsDecision` | typealias | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
 | `RunFailure` | typealias | [`harness/live.d.ts`](../dist/harness/live.d.ts) |
 | `RunFailureReason` | typealias | [`harness/live.d.ts`](../dist/harness/live.d.ts) |
 | `RunningTask` | typealias | [`types.d.ts`](../dist/types.d.ts) |
