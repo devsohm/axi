@@ -17,6 +17,7 @@ export default defineConfig({
 		},
 	],
 	test: {
+		globalSetup: ["packages/env/test/build-daemon.ts"],
 		include: [...manifest.workspaces.map((directory) => `${directory}/test/**/*.test.ts`), "test/*.test.ts"],
 		coverage: {
 			provider: "v8",

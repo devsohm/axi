@@ -37,6 +37,8 @@ npm run test:workers
 cargo test --locked --manifest-path packages/env/daemon/Cargo.toml
 ```
 
+Vitest builds the local Env daemon before running tests, including filtered runs. This prevents tests from using an older binary after its source changes. Rust is required for these source tests. The build is incremental.
+
 Coverage output is in `coverage/index.html` and `coverage/coverage-summary.json`. It measures the TypeScript code exercised by the local JavaScript suite. It does not measure Rust, C, subprocess internals, visual correctness or provider availability.
 
 The JavaScript runner selects package tests from the root manifest's eight workspaces and integration tests from `test/*.test.ts`. Measured source files come from the eight workspaces. It resolves workspace package exports to their TypeScript source files. Package imports and direct source imports therefore share one module instance. The resolver honors the package's export restrictions before selecting the source file. Installed archive checks run separately with Node's normal package resolution and exercise the built JavaScript.

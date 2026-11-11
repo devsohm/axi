@@ -17,7 +17,6 @@ function script(name, ...args) {
 }
 
 script("build");
-script("build:daemon", "--workspace", "@axi/env");
 script("build:native", "--workspace", "@axi/tui");
 script("check");
 script("test:tooling");
