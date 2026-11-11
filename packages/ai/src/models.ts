@@ -316,6 +316,7 @@ class Collection implements MutableModels {
 				if (publication.persist === null) await this.#store.delete(id, { signal });
 				else if (publication.persist !== undefined)
 					await this.#store.write(id, structuredClone(publication.persist), { signal });
+				// A replacement can arrive during the write; stale generations must not become visible.
 				if (!current()) return false;
 				publication.update?.();
 				return true;

@@ -14,6 +14,7 @@ import { estimateContextTokens } from "../utils/estimate.ts";
 export function clampMaxTokensToContext(model: Model<Api>, context: TranscriptContext, maxTokens: number): number {
 	if (model.contextWindow <= 0) return Math.max(1, maxTokens);
 	const input = estimateContextTokens(context).tokens;
+	// Provider token counts can exceed our estimate; use the smaller margin when the answer would be crowded out.
 	const fixedRoom = model.contextWindow - input - 4096;
 	const proportionalRoom = model.contextWindow - input - Math.max(4096, Math.ceil(input * 0.15));
 	const room = proportionalRoom >= 32768 ? proportionalRoom : Math.min(32768, fixedRoom);

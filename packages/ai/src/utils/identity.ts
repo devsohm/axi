@@ -127,12 +127,5 @@ export function withClientIdentity(models: Models, identity: ClientIdentity): Mo
 }
 
 function mutable(models: Models): models is MutableModels {
-	return (
-		"setProvider" in models &&
-		typeof models.setProvider === "function" &&
-		"deleteProvider" in models &&
-		typeof models.deleteProvider === "function" &&
-		"clearProviders" in models &&
-		typeof models.clearProviders === "function"
-	);
+	return "setProvider" in models && "deleteProvider" in models && "clearProviders" in models;
 }

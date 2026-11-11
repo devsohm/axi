@@ -266,7 +266,8 @@
 						"packages/ai/test/entrypoints.test.ts",
 						"packages/ai/test/compat-dispatch.test.ts",
 						"packages/ai/test/cli-auth.test.ts",
-						"packages/ai/test/provider-routing.test.ts"
+						"packages/ai/test/provider-routing.test.ts",
+						"packages/ai/test/http-proxy.test.ts"
 					]
 				},
 				{

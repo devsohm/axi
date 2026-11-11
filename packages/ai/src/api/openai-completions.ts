@@ -167,6 +167,7 @@ export const stream: StreamFunction<"openai-completions", OpenAICompletionsOptio
 			events.push({ type: "start", partial: output });
 			let text: TextContent | undefined, thinking: ThinkingContent | undefined;
 			let finished = false;
+			// Parser state stays separate so partial messages contain only serializable tool calls.
 			const states = new Map<StreamingTool, ToolState>();
 			const byIndex = new Map<number, StreamingTool>(),
 				byId = new Map<string, StreamingTool>();

@@ -241,3 +241,29 @@ test("a read-only model facade stays read-only when wrapped", () => {
 	expect("setProvider" in wrapped).toBe(false);
 	expect(wrapped.getModel("fixture", "chat")).toBe(chat);
 });
+
+test("identity wrapping defers mutable method getters until their methods are called", () => {
+	const { models, provider } = fixture();
+	const reads: string[] = [];
+	const methods = {
+		setProvider: models.setProvider.bind(models),
+		deleteProvider: models.deleteProvider.bind(models),
+		clearProviders: models.clearProviders.bind(models),
+	};
+	for (const name of Object.keys(methods) as (keyof typeof methods)[])
+		Object.defineProperty(models, name, {
+			get() {
+				reads.push(name);
+				return methods[name];
+			},
+		});
+	const wrapped = withClientIdentity(models, identity);
+	expect(reads).toEqual([]);
+	wrapped.deleteProvider("fixture");
+	expect(models.getProviders()).toEqual([]);
+	wrapped.setProvider(provider);
+	expect(models.getModel("fixture", "chat")).toBe(chat);
+	wrapped.clearProviders();
+	expect(models.getProviders()).toEqual([]);
+	expect(reads).toEqual(["deleteProvider", "setProvider", "clearProviders"]);
+});
