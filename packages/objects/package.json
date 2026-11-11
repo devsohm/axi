@@ -146,9 +146,9 @@
 		"typebox": "1.4.3"
 	},
 	"peerDependencies": {
-		"esbuild": "0.28.2",
-		"ws": "8.21.0",
-		"react": "19.3.1"
+		"esbuild": "^0.28.2",
+		"ws": "^8.21.0",
+		"react": "^19.3.0"
 	},
 	"peerDependenciesMeta": {
 		"esbuild": {
