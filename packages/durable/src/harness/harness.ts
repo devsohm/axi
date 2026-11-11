@@ -291,7 +291,7 @@ class HarnessImpl<T extends ToolRegistration> extends SessionImpl implements Har
 			TaskRecord<JsonValue, JsonValue, R> | undefined
 		>;
 	}
-	signal<V>(id: TaskId, token: SignalToken<V>, key: string, value: V, context: Context): Promise<SignalResult> {
+	async signal<V>(id: TaskId, token: SignalToken<V>, key: string, value: V, context: Context): Promise<SignalResult> {
 		this.resume();
 		return this.commit((tx) => tx.signal(id, token, key, value), context);
 	}

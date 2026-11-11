@@ -104,6 +104,8 @@ Tasks belong to a conversation or another task. Owned work is joined during sett
 
 `defineSignal({ name, version, schema, migrate? })` declares a typed JSON value. Deliver it with `harness.signal(taskId, token, key, value, context)` or `tx.signal()`. Delivery returns `delivered`, `duplicate`, `invalid`, `closed`, or `not_found`. The key must be non-empty. Values are checked against the schema and copied into the task's persisted memos.
 
+`harness.signal()` returns a Promise. A closed or read-only harness rejects that Promise instead of throwing before returning it.
+
 A task can commit `{ status: "sleeping", checkpoint, signals: [token.key(key)], until? }`. It releases its invocation until a value arrives or the deadline passes. A value delivered before the sleep is retained. `runtime.readSignal(token, key, context)` returns the value, an expired marker, or `undefined`; older values require an explicit migration. A key can wake one wait. A later wait cannot reuse a consumed or expired key.
 
 `state.wake` identifies the signal, deadline, expiry, or ended tasks that resumed the task. It survives commits of the same checkpoint and restart recovery, then clears when the checkpoint changes. `any` waits resume after at least one listed task ends; the usual ownership join still applies before the waiting task becomes terminal.
