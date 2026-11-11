@@ -23,7 +23,7 @@ import { closedError, scanAll } from "./util.ts";
 export type TaskGraphState =
 	| { readonly status: "pending" | "running"; readonly phase: string }
 	| { readonly status: "waiting"; readonly phase: string; readonly on: readonly TaskId[]; readonly policy: JoinPolicy }
-	| { readonly status: "sleeping"; readonly phase: string; readonly until: number }
+	| { readonly status: "sleeping"; readonly phase: string; readonly until?: number }
 	| { readonly status: "completing"; readonly outcome: TaskOutcome<JsonValue>["status"] };
 export type TaskGraphNode = {
 	readonly id: TaskId;

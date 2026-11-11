@@ -13,6 +13,7 @@ import type { ExecutionEnv } from "../env/index.ts";
 import { errorMessage, ReadOnlySession } from "../errors.ts";
 import type { ObservedCommit, SessionImpl } from "../session/session.ts";
 import type { Transaction } from "../session/transaction.ts";
+import { checkSleep, readSignal, sleepDue, sleepWake } from "../signals.ts";
 import { ALL_KEYS, INTENT_KEY, ownedKey, ROOTS_KEY, taskKey } from "../session/keys.ts";
 import type { Timers } from "../timers.ts";
 import type {
@@ -179,6 +180,14 @@ function abortMark(record: StoredTask, reason?: "restart"): StoredTask {
 	return { ...rest, abortRequested: true, ...(reason === undefined ? {} : { abortReason: reason }) } as StoredTask;
 }
 function stateOf(record: StoredTask, state: TaskState<JsonValue, JsonValue>): StoredTask {
+	if (
+		(state.status === "pending" || state.status === "running") &&
+		(record.state.status === "pending" || record.state.status === "running") &&
+		state.wake === undefined &&
+		record.state.wake !== undefined &&
+		equal(state.checkpoint, record.state.checkpoint)
+	)
+		state = { ...state, wake: record.state.wake };
 	if (state.status !== "terminal" && state.status !== "completing") return { ...record, state } as StoredTask;
 	const { memos: _, restarts: __, ...rest } = record;
 	return { ...rest, state };
@@ -200,7 +209,7 @@ export class TaskScheduler {
 	// Invocations are process-local. Saved task checkpoints, not these handles,
 	// determine the phase entered after recovery; external effects can repeat.
 	readonly #runs = new Map<TaskId, Invocation>();
-	readonly #ready = new Set<TaskId>();
+	#ready = new Set<TaskId>();
 	readonly #sleeping = new Set<TaskId>();
 	readonly #abandoned = new Set<TaskId>();
 	readonly #cancelling = new Set<TaskId>();
@@ -459,14 +468,17 @@ export class TaskScheduler {
 	#waiting(task: StoredTask, first = false): readonly TaskId[] {
 		if (task.abortRequested) return this.#tree.owned(task.id, undefined, first);
 		if (task.state.status !== "waiting") return [];
+		if (task.state.policy === "any" && task.state.on.some((id) => !this.#tree.live.has(id))) return [];
 		if (!first) return task.state.on.filter((id) => this.#tree.live.has(id));
 		const member = task.state.on.find((id) => this.#tree.live.has(id));
 		return member === undefined ? [] : [member];
 	}
 	#notDue(
 		task: StoredTask,
-	): task is StoredTask & { readonly state: { readonly status: "sleeping"; readonly until: number } } {
-		return task.state.status === "sleeping" && !task.abortRequested && task.state.until > this.#options.now();
+	): task is StoredTask & { readonly state: Extract<TaskState<JsonValue, JsonValue>, { status: "sleeping" }> } {
+		return (
+			task.state.status === "sleeping" && !task.abortRequested && !sleepDue(task.state, task.memos, this.#options.now())
+		);
 	}
 	#due(): void {
 		for (const id of this.#sleeping) {
@@ -482,7 +494,12 @@ export class TaskScheduler {
 		let at: number | undefined;
 		for (const id of this.#sleeping) {
 			const task = this.#tree.live.get(id);
-			if (task?.state.status === "sleeping" && !task.abortRequested && task.state.until > now) {
+			if (
+				task?.state.status === "sleeping" &&
+				!task.abortRequested &&
+				task.state.until !== undefined &&
+				task.state.until > now
+			) {
 				at = at === undefined ? task.state.until : Math.min(at, task.state.until);
 			}
 		}
@@ -493,13 +510,8 @@ export class TaskScheduler {
 		let snapshotFailed = false;
 		for (const task of this.#tree.live.values()) {
 			if (task.state.status === "completing") continue;
-			if (
-				task.state.status === "waiting" &&
-				!task.abortRequested &&
-				task.state.on.some((id) => this.#tree.live.has(id))
-			)
-				continue;
-			if (task.state.status === "sleeping" && !task.abortRequested && task.state.until > now) continue;
+			if (task.state.status === "waiting" && !task.abortRequested && this.#waiting(task, true).length) continue;
+			if (task.state.status === "sleeping" && !task.abortRequested && !sleepDue(task.state, task.memos, now)) continue;
 			if (task.abortRequested && this.#waiting(task, true).length) continue;
 			if (!task.abortRequested || task.abortReason !== undefined) {
 				if (snapshot === undefined && !snapshotFailed)
@@ -883,7 +895,9 @@ export class TaskScheduler {
 		}
 	}
 	async #finalize(tx: Transaction): Promise<void> {
-		let candidates: readonly TaskId[] | undefined;
+		// Take this pass's work before awaiting; newly freed owners remain queued.
+		let candidates: readonly TaskId[] = [...this.#holders];
+		this.#holders.clear();
 		const done = new Set<TaskId>(),
 			staged = ownershipOverlay(tx),
 			tasks = new Map(staged.tasks);
@@ -896,7 +910,7 @@ export class TaskScheduler {
 				const finished = { has: (id: TaskId) => round.has(id) || done.has(id) };
 				const changes: { task: StoredTask; terminal: StoredTask; prior: StoredTask | undefined }[] = [];
 				try {
-					for (const id of ids ?? this.#holders) {
+					for (const id of ids) {
 						const prior = tasks.get(id),
 							task = prior ?? this.#liveRecord(id);
 						if (
@@ -920,7 +934,6 @@ export class TaskScheduler {
 				}
 				return { changes, next: [...next] };
 			}, this.#reloadScopes);
-			if (ids === undefined) this.#holders.clear();
 			for (const { task, terminal } of plan.changes) {
 				tx.setTask(terminal);
 				tasks.set(task.id, terminal);
@@ -1009,34 +1022,7 @@ export class TaskScheduler {
 				}
 				await this.#load(false);
 				this.#due();
-				const plan = await this.#region(() => {
-					const dropped: TaskId[] = [],
-						ready: Runnable[] = [];
-					let cascade = false;
-					for (const id of this.#ready) {
-						if (this.#runs.has(id)) {
-							dropped.push(id);
-							continue;
-						}
-						const task = this.#liveRecord(id);
-						if (
-							task === undefined ||
-							task.state.status === "completing" ||
-							this.#waiting(task, true).length ||
-							this.#notDue(task)
-						) {
-							dropped.push(id);
-							continue;
-						}
-						if (!task.abortRequested && !task.background && this.#cancelled(taskParent(task))) {
-							cascade = true;
-							continue;
-						}
-						ready.push(task as Runnable);
-					}
-					return { dropped, ready, cascade };
-				}, this.#reloadScopes);
-				for (const id of plan.dropped) this.#ready.delete(id);
+				const plan = await this.#planReady();
 				if (plan.cascade) {
 					this.#cascade = true;
 					this.#reconcileSoon();
@@ -1068,8 +1054,27 @@ export class TaskScheduler {
 							await this.#terminate(tx, task, { status: "orphaned", reason: resolved.reason });
 						continue;
 					}
-					if (resolved.record !== task || task.state.status !== "running")
-						tx.setTask(stateOf(resolved.record, { status: "running", checkpoint: resolved.record.state.checkpoint }));
+					if (resolved.record !== task || task.state.status !== "running") {
+						const prior = resolved.record;
+						const woke =
+							!task.abortRequested && task.state.status === "sleeping"
+								? sleepWake(task.state, task.memos, this.#options.now())
+								: undefined;
+						const wake =
+							woke?.wake ??
+							(!task.abortRequested && task.state.status === "waiting"
+								? { reason: "tasks" as const, ended: task.state.on.filter((id) => !this.#tree.live.has(id)) }
+								: "wake" in prior.state
+									? prior.state.wake
+									: undefined);
+						tx.setTask(
+							stateOf({ ...prior, ...(woke ? { memos: { ...prior.memos, ...woke.memos } } : {}) } as StoredTask, {
+								status: "running",
+								checkpoint: prior.state.checkpoint,
+								...(wake ? { wake } : {}),
+							}),
+						);
+					}
 					const controller = new AbortController(),
 						completion = Promise.withResolvers<void>();
 					const invocation: Invocation = {
@@ -1110,6 +1115,49 @@ export class TaskScheduler {
 		for (const id of abandoned) this.#abandoned.delete(id);
 		if (abandoned.length) this.#dirty = true;
 		return reservations;
+	}
+	async #planReady() {
+		// Notifications arriving while this pass awaits publication belong to the next pass.
+		const candidates = this.#ready;
+		this.#ready = new Set();
+		let dropped = new Set<TaskId>();
+		try {
+			const plan = await this.#region(() => {
+				const dropped: TaskId[] = [],
+					ready: Runnable[] = [];
+				let cascade = false;
+				for (const id of candidates) {
+					if (this.#runs.has(id)) {
+						dropped.push(id);
+						continue;
+					}
+					const task = this.#liveRecord(id);
+					if (
+						task === undefined ||
+						task.state.status === "completing" ||
+						this.#waiting(task, true).length ||
+						this.#notDue(task)
+					) {
+						dropped.push(id);
+						continue;
+					}
+					if (!task.abortRequested && !task.background && this.#cancelled(taskParent(task))) {
+						cascade = true;
+						continue;
+					}
+					ready.push(task as Runnable);
+				}
+				return { dropped, ready, cascade };
+			}, this.#reloadScopes);
+			dropped = new Set(plan.dropped);
+			return plan;
+		} finally {
+			const kept = [...candidates].filter((id) => {
+				const state = this.#tree.live.get(id)?.state;
+				return !dropped.has(id) && state !== undefined && state.status !== "completing";
+			});
+			this.#ready = new Set([...kept, ...this.#ready]);
+		}
 	}
 	#start(reservation: Reservation): void {
 		void (async () => {
@@ -1413,8 +1461,12 @@ export class TaskScheduler {
 		if (next.status === "waiting") await this.#validateWait(tx, run, current, next.on, next.policy);
 		if (next.status === "sleeping") {
 			if (run.mode === "abort") throw new Error(`Abort handler of task ${current.id} cannot sleep`);
-			if (typeof next.until !== "number" || !Number.isFinite(next.until) || next.until < 0)
+			if (
+				next.until !== undefined &&
+				(typeof next.until !== "number" || !Number.isFinite(next.until) || next.until < 0)
+			)
 				throw new Error(`Task ${current.id} cannot sleep until ${next.until}: not a time in milliseconds`);
+			checkSleep(next, current.memos, current.id);
 		}
 		if (next.status === "terminal") {
 			const overlay = ownershipOverlay(tx);
@@ -1562,6 +1614,11 @@ export class TaskScheduler {
 							},
 							args[1] as Context,
 						)) as Runtime["memo"],
+			readSignal: (token, key, context) =>
+				this.#read(run, async () => {
+					context.abortSignal?.throwIfAborted();
+					return this.#region(() => readSignal(this.#liveRecord(run.taskId)?.memos, token, key));
+				}),
 			sleepUntil: (until, checkpoint, context) =>
 				this.#gated(
 					run,

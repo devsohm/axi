@@ -6,6 +6,7 @@ import type { JsonValue } from "@axi/objects/json";
 import type { Op } from "@axi/objects/delta";
 import type { Message, Models } from "@axi/ai";
 import type { ExecutionEnv } from "./env/index.ts";
+import type { SignalKey, SignalResult, SignalState, SignalToken } from "./signals.ts";
 import type {
 	Agent,
 	ContextView,
@@ -112,17 +113,19 @@ export type TaskDocFamilyToken<Value extends JsonObject, Seed extends JsonValue>
 >;
 export type ConversationOwnership = { readonly kind: "ownerless" } | { readonly kind: "task"; readonly taskId: TaskId };
 export type TaskOwnership = { readonly kind: "conversation" } | { readonly kind: "task"; readonly taskId: TaskId };
-export type JoinPolicy = "failFast" | "allSettled";
+export type JoinPolicy = "failFast" | "allSettled" | "any";
+export type WakeReason =
+	| { readonly reason: "time" }
+	| { readonly reason: "expired" }
+	| { readonly reason: "signal"; readonly signal: string; readonly key: string }
+	| { readonly reason: "tasks"; readonly ended: readonly TaskId[] };
 
 export type RunningTask<I, S, R> = TaskRecord<I, S, R> & {
 	readonly state: Extract<TaskState<S, R>, { readonly status: "running" }>;
 };
-export type NextTaskState<S, R> = Extract<
-	TaskState<S, R>,
-	{
-		readonly status: "running" | "waiting" | "sleeping" | "terminal";
-	}
->;
+export type NextTaskState<S, R> =
+	| { readonly status: "running"; readonly checkpoint: S; readonly wake?: never; readonly outcome?: never }
+	| Extract<TaskState<S, R>, { readonly status: "waiting" | "sleeping" | "terminal" }>;
 export type PhaseHandler<I, P, S, R, H extends object> = (
 	task: RunningTask<I, P, R>,
 	runtime: TaskRuntime<I, S, R, H>,
@@ -151,6 +154,7 @@ export interface TaskRuntime<I, S, R, H extends object> extends DocumentObserver
 	): Promise<void>;
 	memo<T extends JsonValue>(name: string, context: Context): Promise<T | undefined>;
 	memo<T extends JsonValue>(name: string, candidate: T, context: Context): Promise<T>;
+	readSignal<T>(token: SignalToken<T>, key: string, context: Context): Promise<SignalState<T> | undefined>;
 	getTask<T>(id: TaskId<T>, context: Context): Promise<TaskRecord<JsonValue, JsonValue, T> | undefined>;
 	waitForTask<T>(id: TaskId<T>, context: Context): Promise<SettledTask<T>>;
 	abortOwned(id: TaskId, context: Context): Promise<void>;
@@ -228,8 +232,10 @@ type SubmissionIdentity<Kind extends "input" | "write" | "continue"> = {
 	readonly id: SubmissionId;
 	readonly conversationId: ConversationId;
 	readonly requestId?: string;
+	readonly notify?: SubmissionNotify;
 	readonly type: Kind;
 };
+export type SubmissionNotify = { readonly taskId: TaskId; readonly key: string };
 type QueuedSubmission = {
 	readonly status: "queued";
 	readonly entry?: never;
@@ -329,9 +335,25 @@ export type TaskOutcome<Value> =
 	| { readonly status: "orphaned"; readonly reason: string; readonly result?: never; readonly error?: never }
 	| { readonly status: "faulted"; readonly error: TaskOutcomeError; readonly result?: never; readonly reason?: never };
 export type TaskState<Checkpoint, Value> =
-	| { readonly status: "pending"; readonly checkpoint: Checkpoint; readonly outcome?: never }
-	| { readonly status: "running"; readonly checkpoint: Checkpoint; readonly outcome?: never }
-	| { readonly status: "sleeping"; readonly checkpoint: Checkpoint; readonly until: number; readonly outcome?: never }
+	| {
+			readonly status: "pending";
+			readonly checkpoint: Checkpoint;
+			readonly wake?: WakeReason;
+			readonly outcome?: never;
+	  }
+	| {
+			readonly status: "running";
+			readonly checkpoint: Checkpoint;
+			readonly wake?: WakeReason;
+			readonly outcome?: never;
+	  }
+	| {
+			readonly status: "sleeping";
+			readonly checkpoint: Checkpoint;
+			readonly until?: number;
+			readonly signals?: readonly SignalKey<unknown>[];
+			readonly outcome?: never;
+	  }
 	| {
 			readonly status: "waiting";
 			readonly checkpoint: Checkpoint;
@@ -721,6 +743,7 @@ export interface Tx {
 	): Promise<TaskId<R>>;
 	settleSubmission(id: SubmissionId, settlement: SubmissionSettlement): void;
 	placeSubmission(id: SubmissionId, entry: EntryId): void;
+	signal<T>(taskId: TaskId, token: SignalToken<T>, key: string, value: T): Promise<SignalResult>;
 	doc<Value extends JsonObject>(token: SessionDocToken<Value>): Promise<Draft<Value>>;
 	doc<Value extends JsonObject>(
 		token: ConversationDocToken<Value>,

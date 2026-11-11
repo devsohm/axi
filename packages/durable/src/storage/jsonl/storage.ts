@@ -30,9 +30,15 @@ import {
 	type StoredTask,
 } from "./wire.ts";
 
-export type JsonlStorageOptions = { readonly fsync?: boolean };
+export type JsonlStorageOptions = { readonly fsync?: boolean; readonly readOnly?: boolean };
+export class JsonlStorageReadOnlyError extends Error {
+	constructor() {
+		super("JSONL storage is open read-only");
+		this.name = "JsonlStorageReadOnlyError";
+	}
+}
 type Line<Value> = { readonly value: Value; readonly start: number };
-type FileLines<Value> = { readonly path: string; readonly lines: readonly Line<Value>[] };
+type FileLines<Value> = { readonly path: string; readonly lines: readonly Line<Value>[]; readonly size: number };
 type Encoded = { readonly marker: string; readonly sidecars: ReadonlyMap<string, string> };
 const decoder = new TextDecoder("utf-8", { fatal: true });
 const fileError = (action: string, error: FileError): Error =>
@@ -47,15 +53,18 @@ export class JsonlStorage implements Storage {
 	#closed = false;
 	#failure: JsonlStoragePoisonedError | undefined;
 	#writing: Promise<void> | undefined;
+	#mainSize = 0;
 	private readonly fs: FileSystem;
 	private readonly directory: string;
 	private readonly mainPath: string;
 	private readonly fsync: boolean;
-	private constructor(fs: FileSystem, directory: string, mainPath: string, fsync: boolean) {
+	private readonly readOnly: boolean;
+	private constructor(fs: FileSystem, directory: string, mainPath: string, options: JsonlStorageOptions) {
 		this.fs = fs;
 		this.directory = directory;
 		this.mainPath = mainPath;
-		this.fsync = fsync;
+		this.fsync = options.fsync ?? false;
+		this.readOnly = options.readOnly ?? false;
 	}
 
 	static async open(
@@ -66,13 +75,24 @@ export class JsonlStorage implements Storage {
 	): Promise<JsonlStorage> {
 		const absolute = await fs.absolutePath(directory, context);
 		if (!absolute.ok) throw fileError("path resolution", absolute.error);
-		const created = await fs.createDir(absolute.value, { recursive: true }, context);
-		if (!created.ok) throw fileError("directory creation", created.error);
+		if (!options.readOnly) {
+			const created = await fs.createDir(absolute.value, { recursive: true }, context);
+			if (!created.ok) throw fileError("directory creation", created.error);
+		}
 		const main = await fs.joinPath([absolute.value, "main.jsonl"], context);
 		if (!main.ok) throw fileError("path join", main.error);
-		const storage = new JsonlStorage(fs, absolute.value, main.value, options.fsync ?? false);
-		await storage.#recover(context);
-		return storage;
+		for (let attempt = 0; ; attempt++) {
+			const storage = new JsonlStorage(fs, absolute.value, main.value, options);
+			try {
+				await storage.#recover(context);
+				return storage;
+			} catch (error) {
+				if (!storage.readOnly || !(error instanceof JsonlCorruptionError) || attempt === 4) throw error;
+				// A writer can reclaim a sidecar between our marker read and sidecar read.
+				const info = await fs.fileInfo(main.value, context);
+				if (!info.ok || info.value.size === storage.#mainSize) throw error;
+			}
+		}
 	}
 	get #view(): MemoryStorage {
 		if (this.#closed) throw new Error("JsonlStorage is closed");
@@ -93,6 +113,7 @@ export class JsonlStorage implements Storage {
 		context: Context,
 	): Promise<CommitResult> {
 		void this.#view;
+		if (this.readOnly) throw new JsonlStorageReadOnlyError();
 		const seqs: Seq[] = [],
 			commits: Encoded[] = [];
 		const replacements = new Map<string, string>();
@@ -255,12 +276,12 @@ export class JsonlStorage implements Storage {
 	): Promise<FileLines<Value>> {
 		const read = await this.fs.readBinaryFile(path, context);
 		if (!read.ok) {
-			if (read.error.code === "not_found") return { path, lines: [] };
+			if (read.error.code === "not_found") return { path, lines: [], size: 0 };
 			throw fileError(`read of ${file}`, read.error);
 		}
 		const bytes = read.value;
 		const complete = bytes.length === 0 || bytes.at(-1) === 10 ? bytes.length : bytes.lastIndexOf(10) + 1;
-		if (complete !== bytes.length) {
+		if (complete !== bytes.length && !this.readOnly) {
 			const truncated = await this.fs.truncateFile(path, complete, context);
 			if (!truncated.ok) throw fileError(`torn-line truncation of ${file}`, truncated.error);
 		}
@@ -280,10 +301,11 @@ export class JsonlStorage implements Storage {
 			lines.push({ value: parse(text, lines.length + 1), start });
 			start = end + 1;
 		}
-		return { path, lines };
+		return { path, lines, size: bytes.length };
 	}
 	async #recover(context: Context): Promise<void> {
 		const main = await this.#read(this.mainPath, "main.jsonl", context, parseMarker);
+		this.#mainSize = main.size;
 		let previous = 0;
 		for (const { value } of main.lines) {
 			if (value.seq <= previous)
@@ -293,7 +315,7 @@ export class JsonlStorage implements Storage {
 		const listed = await this.fs.listDir(this.directory, context);
 		if (!listed.ok) throw fileError("directory listing", listed.error);
 		for (const item of listed.value)
-			if (item.kind === "file" && /^(?:doc|task)-(?:0|[1-9]\d*)\.jsonl\.reclaim$/.test(item.name))
+			if (!this.readOnly && item.kind === "file" && /^(?:doc|task)-(?:0|[1-9]\d*)\.jsonl\.reclaim$/.test(item.name))
 				await this.fs.remove(item.path, { force: true }, context);
 		const files = new Map<string, FileLines<Sidecar>>();
 		const records = new Map<string, Sidecar>();
@@ -406,7 +428,7 @@ export class JsonlStorage implements Storage {
 					kept.push(line);
 				} else unconfirmedAt ??= line.start;
 			}
-			if (unconfirmedAt !== undefined) {
+			if (unconfirmedAt !== undefined && !this.readOnly) {
 				const result = await this.fs.truncateFile(parsed.path, unconfirmedAt, context);
 				if (!result.ok) throw fileError(`tail truncation of ${file}`, result.error);
 			}
@@ -421,7 +443,7 @@ export class JsonlStorage implements Storage {
 			if (retained && (retained.length === 0 || retained.length < kept.length))
 				replacements.set(file, retained.map((line) => encodeLine(line.value)).join(""));
 		}
-		await this.#reclaim(replacements, context);
+		if (!this.readOnly) await this.#reclaim(replacements, context);
 	}
 
 	mintId: Storage["mintId"] = async () => this.#view.mintId();

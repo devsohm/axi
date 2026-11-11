@@ -15,6 +15,15 @@ export {
 export { createSession } from "./session/session.ts";
 export { ReadAfterWrite, SessionFailed } from "./errors.ts";
 export { defineTask } from "./tasks.ts";
+export {
+	defineSignal,
+	type SignalDefinition,
+	type SignalKey,
+	type SignalResult,
+	type SignalState,
+	type SignalToken,
+	SubmissionSettled,
+} from "./signals.ts";
 export { ConversationBusy, ConversationIdle } from "./errors.ts";
 export { createRegistry } from "./harness/registry.ts";
 export { registryReader } from "./harness/registry-reader.ts";

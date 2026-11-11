@@ -59,7 +59,10 @@ import type { UsageState } from "./usage.ts";
 export type ModelRef = { readonly provider: string; readonly modelId: string };
 export type UserInput = UserMessage["content"];
 export type InputEntry = { readonly kind: string; readonly data?: JsonValue };
-export type SubmissionDraft = { readonly requestId?: string } & (
+export type SubmissionDraft = {
+	readonly requestId?: string;
+	readonly notify?: import("../types.ts").SubmissionNotify;
+} & (
 	| {
 			readonly type: "input";
 			readonly content: UserInput;
@@ -328,7 +331,7 @@ export type TaskInspection = {
 		| { readonly kind: "running" }
 		| { readonly kind: "pending"; readonly migrates: boolean }
 		| { readonly kind: "waiting"; readonly on: readonly TaskId[] }
-		| { readonly kind: "sleeping"; readonly until: number }
+		| { readonly kind: "sleeping"; readonly until?: number }
 		| { readonly kind: "completing" }
 		| {
 				readonly kind: "blocked";
@@ -454,7 +457,19 @@ export interface Conversation {
 	watch(context: Context, window?: ConversationWindow): Promise<ConversationWatch>;
 }
 export interface Harness extends Session {
-	observeConversation(id: ConversationId, observer: Observer<ConversationView>, context: Context, window?: ConversationWindow): Promise<Observation<ConversationView>>;
+	signal<T>(
+		taskId: TaskId,
+		token: import("../signals.ts").SignalToken<T>,
+		key: string,
+		value: T,
+		context: Context,
+	): Promise<import("../signals.ts").SignalResult>;
+	observeConversation(
+		id: ConversationId,
+		observer: Observer<ConversationView>,
+		context: Context,
+		window?: ConversationWindow,
+	): Promise<Observation<ConversationView>>;
 	observeTaskGraph(observer: Observer<TaskGraph>, context: Context): Promise<Observation<TaskGraph>>;
 	resume(): void;
 	wake(): Wake;

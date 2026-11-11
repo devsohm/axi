@@ -15,6 +15,7 @@ import {
 	type AnyDocToken,
 } from "../documents.ts";
 import { ReadAfterWrite } from "../errors.ts";
+import { deliverSignal, type SignalResult, type SignalToken, SubmissionSettled } from "../signals.ts";
 import type * as T from "../types.ts";
 import { ROOT_CONVERSATION_ID } from "../types.ts";
 import { prepareForkDocumentCopies } from "./forks.ts";
@@ -340,9 +341,21 @@ export class Transaction implements T.Tx {
 		this.#written = true;
 		this.#settlements.push({ id, change: { status: "placed", entry } });
 	}
+	signal<V>(taskId: T.TaskId, token: SignalToken<V>, key: string, value: V): Promise<SignalResult> {
+		return this.#read("signal", async () => {
+			const committed = await this.#committedTask(taskId);
+			const target = this.#tasks.get(taskId)?.write?.record ?? committed;
+			const delivered = deliverSignal(target, token, key, value, this.#host.now());
+			if (delivered.record) this.setTask(delivered.record);
+			return delivered.result;
+		});
+	}
 	setTask(value: TaskRecord): void {
 		this.#open();
 		this.#written = true;
+		this.#stageTask(value);
+	}
+	#stageTask(value: TaskRecord): void {
 		const edit = this.#taskEdit(value.id);
 		const previous = edit.write?.record;
 		if (previous?.state.status === "terminal") throw new Error(`Task ${value.id} already has a terminal candidate`);
@@ -352,10 +365,16 @@ export class Transaction implements T.Tx {
 			previous?.startedAt ?? value.startedAt ?? (value.state.status === "running" ? this.#host.now() : undefined);
 		const endedAt =
 			previous?.endedAt ?? value.endedAt ?? (value.state.status === "terminal" ? this.#host.now() : undefined);
+		// A signal staged in this transaction must survive the task's following checkpoint write.
+		const memos =
+			value.state.status !== "terminal" && value.state.status !== "completing" && previous?.memos !== undefined
+				? { ...previous.memos, ...value.memos }
+				: undefined;
+		const candidate = memos === undefined ? value : ({ ...value, memos } as TaskRecord);
 		edit.write = {
 			kind: edit.write?.kind ?? "replace",
 			record: tableCopy({
-				...value,
+				...candidate,
 				...(startedAt === undefined ? {} : { startedAt }),
 				...(endedAt === undefined ? {} : { endedAt }),
 			}),
@@ -668,7 +687,21 @@ export class Transaction implements T.Tx {
 					: { ...current, ...change };
 			this.#submissions.set(id, next as T.SubmissionRecord);
 		}
-		for (const value of this.#submissions.values()) this.#writes.push({ type: "submission", value });
+		for (const value of this.#submissions.values()) {
+			if ((value.status === "done" || value.status === "unanswered") && value.notify) {
+				const { taskId, key } = value.notify;
+				const committed = await this.#committedTask(taskId);
+				const delivered = deliverSignal(
+					this.#tasks.get(taskId)?.write?.record ?? committed,
+					SubmissionSettled,
+					key,
+					value,
+					this.#host.now(),
+				);
+				if (delivered.record) this.#stageTask(delivered.record);
+			}
+			this.#writes.push({ type: "submission", value });
+		}
 		for (const edit of this.#tasks.values())
 			if (edit.write) this.#writes.push({ type: "task", value: edit.write.record });
 		for (const plan of this.#plans) {

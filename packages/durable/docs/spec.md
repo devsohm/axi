@@ -87,8 +87,8 @@ A watch reports committed values and operations. Retirement is a value call, so 
 |---|---|
 | `pending` | Persisted work awaiting admission |
 | `running` | A phase can execute |
-| `waiting` | Progress depends on named tasks under `failFast` or `allSettled` policy |
-| `sleeping` | Progress resumes at a persisted deadline |
+| `waiting` | Progress depends on named tasks under `failFast`, `allSettled`, or `any` policy |
+| `sleeping` | Progress resumes at a persisted deadline or a delivered signal |
 | `completing` | An outcome exists while owned work settles |
 | `terminal` | The final outcome is committed |
 
@@ -97,6 +97,14 @@ Terminal outcomes are `completed`, `failed`, `aborted`, `orphaned`, or `faulted`
 Tasks belong to a conversation or another task. Owned work is joined during settlement. An owner that is cancelling or completing cannot admit new children. Task-scoped documents retire with their task.
 
 `runtime.memo()` retains a named JSON value with the task. `sleepUntil()` persists a wake deadline and checkpoint. Host timers wake execution but are not the persistent source of truth.
+
+`defineSignal({ name, version, schema, migrate? })` declares a typed JSON value. Deliver it with `harness.signal(taskId, token, key, value, context)` or `tx.signal()`. Delivery returns `delivered`, `duplicate`, `invalid`, `closed`, or `not_found`. The key must be non-empty. Values are checked against the schema and copied into the task's persisted memos.
+
+A task can commit `{ status: "sleeping", checkpoint, signals: [token.key(key)], until? }`. It releases its invocation until a value arrives or the deadline passes. A value delivered before the sleep is retained. `runtime.readSignal(token, key, context)` returns the value, an expired marker, or `undefined`; older values require an explicit migration. A key can wake one wait. A later wait cannot reuse a consumed or expired key.
+
+`state.wake` identifies the signal, deadline, expiry, or ended tasks that resumed the task. It survives commits of the same checkpoint and restart recovery, then clears when the checkpoint changes. `any` waits resume after at least one listed task ends; the usual ownership join still applies before the waiting task becomes terminal.
+
+`SubmissionDraft.notify: { taskId, key }` delivers `SubmissionSettled` in the commit that settles the submission. The value is the same settled record returned by `Submission.wait()`. A closed or missing recipient does not prevent settlement.
 
 On reopen, the scheduler reconciles interrupted work with its registered definition. Missing or incompatible definitions remain visible as blockers. A definition can convert older input and checkpoints. `abandonOnRestart` work follows its restart abort path.
 
@@ -211,6 +219,8 @@ Reopening discards torn final lines and unconfirmed sidecar tails. Missing requi
 
 The JSONL `fsync` default is `false`. Enabling it flushes affected sidecars before the marker, but ordinary publication does not flush `main.jsonl`. An acknowledged tail commit can still disappear after host failure. Destructive reclamation first flushes its authorizing main marker.
 
+For a viewer beside a running JSONL writer, pass `{ readOnly: true }` to `JsonlStorage.open()` or `openNodeJsonlStorage()`. This open creates and changes no files. It ignores torn final lines and unconfirmed sidecar tails in memory, performs no reclamation, and retains the committed snapshot it read at open. `commit()` rejects with `JsonlStorageReadOnlyError`. If recovery encounters corruption while the main file grows, it retries up to five times because the writer may have reclaimed an older sidecar meanwhile. Stable corruption still rejects the open.
+
 These backends implement the same record contract. A Harness uses one selected Storage instance. It does not maintain a second authoritative database or automatically mirror SQLite into JSONL.
 
 ## Settings and host adapters
@@ -250,7 +260,7 @@ The browser database uses schema version 1. Its stores are `meta`, `record_ids`,
 
 ## Read-only access
 
-Open a Harness with `readOnly: true` to inspect existing records without recovering tasks or scheduling work. Writes reject with `ReadOnlySession`. A transaction that writes nothing still succeeds. `resume()` refuses scheduling and `wake()` returns `{ active: false }`. The storage backend can still create its schema while opening; this option does not open the database driver in a physical read-only mode.
+Open a Harness with `readOnly: true` to inspect existing records without recovering tasks or scheduling work. Writes reject with `ReadOnlySession`. A transaction that writes nothing still succeeds. `resume()` refuses scheduling and `wake()` returns `{ active: false }`. Storage opening has its own policy: also pass `readOnly: true` to a JSONL backend to prevent recovery writes. The Harness option alone does not make a database driver physically read-only.
 
 Storage calls `receive(index, seq)` exactly once for each durable batch, in input order. A receipt reports durability; it does not publish Session state. After the storage call settles, the Session adopts and publishes received batches in order. It never runs a mutation callback again to retry publication. Reads and scheduler decisions wait for pending writers of the keys they use. Custom storage backends must supply ordered receipts and the matching result; the receipt callback must not throw.
 

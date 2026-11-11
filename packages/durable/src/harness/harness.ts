@@ -12,6 +12,7 @@ import {
 	type TelemetryContext,
 } from "@axi/telemetry";
 import { ResetEntry } from "../entries.ts";
+import type { SignalToken, SignalResult } from "../signals.ts";
 import type { ExecutionEnv } from "../env/index.ts";
 import { contained, SessionImpl } from "../session/session.ts";
 import type { Transaction } from "../session/transaction.ts";
@@ -279,6 +280,10 @@ class HarnessImpl<T extends ToolRegistration> extends SessionImpl implements Har
 		return this.readOnLine((storage) => storage.task(id, context)) as Promise<
 			TaskRecord<JsonValue, JsonValue, R> | undefined
 		>;
+	}
+	signal<V>(id: TaskId, token: SignalToken<V>, key: string, value: V, context: Context): Promise<SignalResult> {
+		this.resume();
+		return this.commit((tx) => tx.signal(id, token, key, value), context);
 	}
 	get [SCHEDULER_INDEX_SIZES]() {
 		return this.#tasks.indexSizes;

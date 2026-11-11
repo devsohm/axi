@@ -175,7 +175,12 @@ export async function admitSubmission(
 			return { id: existing.id, status: existing.status === "unanswered" ? "done" : existing.status };
 		}
 	}
-	const fields = { conversationId: id, requestId: draft.requestId, trace: span?.propagation?.inject(span) };
+	const fields = {
+		conversationId: id,
+		requestId: draft.requestId,
+		notify: draft.notify,
+		trace: span?.propagation?.inject(span),
+	};
 	if (draft.type === "write" && isDisplayOnly(draft.entry) && !hasQueuedReset((await tx.doc(InboxDoc, id)).items)) {
 		const entry = await tx.appendEntry(id, draft.entry);
 		return {

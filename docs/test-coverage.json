@@ -398,6 +398,8 @@
 					"behavior": "tasks, scheduling, ownership and timers",
 					"tests": [
 						"packages/durable/test/scheduler.test.ts",
+						"packages/durable/test/signals.test.ts",
+						"packages/durable/test/scheduler-publication-races.test.ts",
 						"packages/durable/test/scheduler-recovery-boundaries.test.ts",
 						"packages/durable/test/scheduler-timers.test.ts",
 						"packages/durable/test/task-graph-boundaries.test.ts",
