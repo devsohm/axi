@@ -2,9 +2,10 @@ import { RETRY_HOPS } from "../link/internal.ts";
 import { BACKGROUND_CONTEXT, type Context } from "../context/index.ts";
 import type { JsonValue } from "../json.ts";
 import type { NativeWatchable, Watch, Watchable } from "../watch.ts";
-import type { Contract, Implementation, ParamsOf } from "../contracts/index.ts";
+import type { Contract, Implementation, KindShape, ParamsOf } from "../contracts/index.ts";
 import {
 	currentVariants,
+	keyOfAddress,
 	LOCAL,
 	takesNoArgs,
 	type CurrentVariants,
@@ -13,6 +14,8 @@ import {
 	type VariantImplementation,
 } from "../contracts/internal.ts";
 import { ObjectsError, type FailureCause, type Principal } from "../data/index.ts";
+import { invalid } from "../data/internal.ts";
+import { storedText } from "../store/text.ts";
 import { Keyed, Singleton, type KeyedSlot } from "../documents/internal.ts";
 import { Constant, Source, type Batch, type DeriveSource } from "../state/internal.ts";
 import { withLinkedAbortSignal, type Caller } from "./ctx.ts";
@@ -60,6 +63,7 @@ export type KeyedBinding =
 			readonly kind: "reexposed";
 			readonly binding: Binding;
 			readonly member: string;
+			readonly key: string | undefined;
 	  };
 export interface Target {
 	readonly kind: "local" | "remote";
@@ -161,7 +165,7 @@ export class Binding {
 		const methods = new Map<string, MethodData>();
 		for (const variant of currentVariants(contract).values()) {
 			for (const name of variant.state.keys()) members[name] = new ReferenceMember(this, name);
-			for (const name of variant.keyed.keys()) members[name] = new ReferenceKeyed(this, name);
+			for (const [name, { key }] of variant.keyed) members[name] = new ReferenceKeyed(this, name, key);
 			for (const [name, method] of variant.methods) methods.set(name, method);
 		}
 		for (const [name, method] of methods)
@@ -542,24 +546,34 @@ class ReferenceMember {
 class ReferenceKeyed {
 	readonly #binding: Binding;
 	readonly #name: string;
-	constructor(binding: Binding, name: string) {
+	readonly kind: KindShape | undefined;
+	constructor(binding: Binding, name: string, kind: KindShape | undefined) {
 		this.#binding = binding;
 		this.#name = name;
+		this.kind = kind;
+	}
+	#key(value: unknown): string {
+		if (this.kind === undefined) return value as string;
+		const key = keyOfAddress(this.kind, value);
+		if (key === undefined) throw invalid("args", `${this.#name}: expected an address of ${this.kind.kind}`);
+		return storedText(key, `${this.#name}: key`);
 	}
 	get slot(): KeyedSlot {
 		return this.#binding.keyedSlot(this.#name);
 	}
 	get keyed(): KeyedBinding {
-		return { kind: "reexposed", binding: this.#binding, member: this.#name };
+		return { kind: "reexposed", binding: this.#binding, member: this.#name, key: this.kind?.kind };
 	}
-	async get(key: string, context: Context): Promise<JsonValue | undefined> {
+	async get(raw: unknown, context: Context): Promise<JsonValue | undefined> {
+		const key = this.#key(raw);
 		await this.#binding.hydrated(context);
 		const slot = this.slot;
 		const mapping = this.#binding.keyedMapping(this.#name);
 		const value = await slot.get(key, { token: slot.owner.own, version: slot.definition.current.version }, context);
 		return value === undefined || mapping === undefined ? value : mapping(value);
 	}
-	async watch(key: string, context: Context): Promise<Watch<JsonValue> | undefined> {
+	async watch(raw: unknown, context: Context): Promise<Watch<JsonValue> | undefined> {
+		const key = this.#key(raw);
 		await this.#binding.firstValues(context);
 		const slot = this.slot;
 		if (
@@ -581,8 +595,8 @@ class ReferenceKeyed {
 		void watch.closed.then(pin.release);
 		return this.#binding.follow(watch);
 	}
-	at(key: string): Watchable<JsonValue> {
-		return this.#binding.at(this.#name, key);
+	at(key: unknown): Watchable<JsonValue> {
+		return this.#binding.at(this.#name, this.#key(key));
 	}
 }
 class KeyedMemberAt {

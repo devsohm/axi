@@ -2,6 +2,8 @@ import { Type, type TSchema, type TString, type TNumber, type TInteger, type TBo
 	type TLiteral, type TUnion, type TProperties, type TObject, type TArray, type TRecord, type TOptional,
 	type TUnknown, type TUnsafe } from "typebox";
 export type { Static, TSchema } from "typebox";
+import type { HostKind, KindShape } from "./host-kind.ts";
+import type { Params } from "./params.ts";
 
 export type Bounds = { readonly min?: number; readonly max?: number };
 export type Defaulted<T> = { readonly default: T };
@@ -56,11 +58,22 @@ export class Method<A extends TSchema = TSchema, R extends TSchema = TSchema> {
 	readonly result: R;
 	constructor(args: A, result: R) { this.args = args; this.result = result; }
 }
-export class KeyedMember<S extends TSchema = TSchema> {
+export class KeyedMember<S extends TSchema = TSchema, K extends KindShape | undefined = KindShape | undefined> {
 	readonly schema: S;
-	constructor(schema: S) { this.schema = schema; }
+	readonly key: K;
+	constructor(schema: S, key: K) {
+		this.schema = schema;
+		this.key = key;
+	}
 }
-export function keyed<S extends TSchema>(schema: S): KeyedMember<S> { return new KeyedMember(schema); }
+export function keyed<S extends TSchema>(schema: S): KeyedMember<S, undefined>;
+export function keyed<S extends TSchema, N extends string, P extends Params>(
+	schema: S,
+	key: HostKind<N, P>,
+): KeyedMember<S, HostKind<N, P>>;
+export function keyed(schema: TSchema, key?: KindShape): KeyedMember {
+	return new KeyedMember(schema, key);
+}
 export function method(): Method<TNull, TNull>;
 export function method<A extends TSchema>(args: A): Method<A, TNull>;
 export function method<R extends TSchema>(args: undefined, result: R): Method<TNull, R>;

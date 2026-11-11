@@ -2,7 +2,7 @@ import type { TNull } from "typebox";
 import type { Context } from "../context/index.ts";
 import type { Watchable, WatchHandle } from "../watch.ts";
 import type { Change, CurrentStep, History, VariantShape, Variants } from "./history.ts";
-import type { Address } from "./host-kind.ts";
+import type { Address, KindShape } from "./host-kind.ts";
 import type { Params, ParamsData } from "./params.ts";
 import type { Method, Static } from "./schema.ts";
 import type { Snapshot } from "./snapshot.ts";
@@ -19,15 +19,25 @@ export type CurrentVariants<C extends Contract> = CurrentStep<ShapeOf<C>["histor
 export type ParamsOf<C extends Contract> = { [F in keyof ShapeOf<C>["params"]]: Static<ShapeOf<C>["params"][F]> };
 type Call<M extends Method, X extends Context> = M["args"] extends TNull
 	? (context: X) => Promise<Static<M["result"]>> : (args: Static<M["args"]>, context: X) => Promise<Static<M["result"]>>;
-export interface KeyedWatchable<T> {
-	get(key: string, context: Context): Promise<T | undefined>;
-	watch(key: string, context: Context): Promise<WatchHandle<T> | undefined>;
-	at(key: string): Watchable<T>;
+export interface KeyedWatchable<T, Key = string> {
+	get(key: Key, context: Context): Promise<T | undefined>;
+	watch(key: Key, context: Context): Promise<WatchHandle<T> | undefined>;
+	at(key: Key): Watchable<T>;
 }
+export type HostKeyed<S, K extends KindShape> = S & { readonly "~key"?: K };
+export type KeyOfMember<S> = S extends { readonly "~key"?: infer K }
+	? K extends KindShape
+		? Address<K>
+		: string
+	: string;
 export type VariantImplementation<V extends VariantShape, X extends Context = Context> = {
 	[M in keyof V["state"] | keyof V["methods"] | keyof NonNullable<V["keyed"]>]: M extends keyof V["methods"]
-		? Call<V["methods"][M], X> : M extends keyof V["state"] ? Watchable<Static<V["state"][M]>>
-		: M extends keyof NonNullable<V["keyed"]> ? KeyedWatchable<Static<NonNullable<V["keyed"]>[M]>> : never;
+		? Call<V["methods"][M], X>
+		: M extends keyof V["state"]
+			? Watchable<Static<V["state"][M]>>
+			: M extends keyof NonNullable<V["keyed"]>
+				? KeyedWatchable<Static<NonNullable<V["keyed"]>[M]>, KeyOfMember<NonNullable<V["keyed"]>[M]>>
+				: never;
 };
 type Implement<K extends Kind, V extends Variants, X extends Context> = K extends "local"
 	? VariantImplementation<V[typeof LOCAL], X> : { [N in keyof V]: { readonly variant: N; readonly members: VariantImplementation<V[N], X> } }[keyof V];
@@ -35,10 +45,26 @@ export type Implementation<C extends Contract, X extends Context = Context> = Im
 export type MemberKind = "state" | "method" | "keyed";
 export type HostAddress = (params: ParamsOf<Contract>) => Address;
 export type MethodData = { readonly args: Snapshot; readonly result: Snapshot };
-export type VariantData = { readonly state: ReadonlyMap<string, Snapshot>; readonly methods: ReadonlyMap<string, MethodData>; readonly keyed: ReadonlyMap<string, Snapshot> };
-export type VersionData = { readonly version: number; readonly fingerprint: string; readonly variants: ReadonlyMap<string, VariantData>; readonly changes: readonly Change[] };
-export type ContractData = { readonly kind: Kind; readonly name: string; readonly params: ParamsData;
-	readonly hostAddress: HostAddress | undefined; readonly versions: readonly VersionData[]; readonly kinds: ReadonlyMap<string, MemberKind> };
+export type KeyedSnapshot = Snapshot & { readonly key?: KindShape };
+export type VariantData = {
+	readonly state: ReadonlyMap<string, Snapshot>;
+	readonly methods: ReadonlyMap<string, MethodData>;
+	readonly keyed: ReadonlyMap<string, KeyedSnapshot>;
+};
+export type VersionData = {
+	readonly version: number;
+	readonly fingerprint: string;
+	readonly variants: ReadonlyMap<string, VariantData>;
+	readonly changes: readonly Change[];
+};
+export type ContractData = {
+	readonly kind: Kind;
+	readonly name: string;
+	readonly params: ParamsData;
+	readonly hostAddress: HostAddress | undefined;
+	readonly versions: readonly VersionData[];
+	readonly kinds: ReadonlyMap<string, MemberKind>;
+};
 const declarations = new WeakMap<Contract, ContractData>();
 export function createContract<C extends Contract>(data: ContractData): C {
 	const latest = data.versions.at(-1)!;

@@ -1,5 +1,7 @@
 import { objectsMetrics } from "../telemetry.ts";
 import type { Context } from "../context/index.ts";
+import type { KindShape } from "../contracts/index.ts";
+import { kindOfKey } from "../contracts/host-kind.ts";
 import type { Op, Prepared } from "../delta/index.ts";
 import {
 	changeDocument,
@@ -14,9 +16,9 @@ import {
 } from "../store/engine.ts";
 import type { StagedWrite } from "../store/step.ts";
 import type { ObjectsStore } from "../store/store.ts";
-import type { JsonObject, StateDefinition } from "./definition.ts";
+import type { JsonObject, KeyedBy, StateDefinition } from "./definition.ts";
 
-type Definition = StateDefinition<JsonObject, boolean, boolean>;
+type Definition = StateDefinition<JsonObject, KeyedBy, boolean>;
 export type Stored = {
 	readonly id: number;
 	readonly revision: number;
@@ -26,6 +28,7 @@ export type Stored = {
 export type FoundDocument = {
 	readonly stored: Stored;
 	readonly fingerprint: string;
+	readonly host: string | undefined;
 };
 export type Loaded = { readonly value: JsonObject; readonly stored: Stored };
 export type DocumentChange = {
@@ -78,14 +81,11 @@ export function storedAfter(change: StoredChange): Stored | undefined {
 export class Persistence {
 	readonly store: ObjectsStore;
 	readonly #scope: Omit<DocumentAddress, "key">;
-	constructor(
-		store: ObjectsStore,
-		owner: string,
-		namespace: string,
-		kind: string,
-	) {
+	readonly #host: KindShape | undefined;
+	constructor(store: ObjectsStore, owner: string, namespace: string, kind: string, host?: KindShape) {
 		this.store = store;
 		this.#scope = { owner, namespace, kind };
+		this.#host = host;
 	}
 	at(key: string): DocumentAddress {
 		return key ? { ...this.#scope, key } : this.#scope;
@@ -108,6 +108,7 @@ export class Persistence {
 		context: Context,
 	): Loaded {
 		const { record, deltasSinceBase } = document;
+		this.checkHost(record.host, definition);
 		checkReadable(record, definition);
 		// These records contain the JSON object accepted when the document was written.
 		const previous = document.value as JsonObject;
@@ -123,6 +124,12 @@ export class Persistence {
 				deltasSinceBase,
 			},
 		};
+	}
+	checkHost(host: string | undefined, definition: Definition): void {
+		if ((host !== undefined) === (this.#host !== undefined)) return;
+		const stored = host === undefined ? "string keys" : `addresses of ${kindOfKey(host)}`;
+		const declared = this.#host === undefined ? "string keys" : `addresses of ${this.#host.kind}`;
+		throw new Error(`${definition.name}: stored with ${stored}, declared with ${declared} (convert it explicitly)`);
 	}
 	async find(
 		key: string,
@@ -142,6 +149,7 @@ export class Persistence {
 						deltasSinceBase: 0,
 					},
 					fingerprint: record.fingerprint,
+					host: record.host,
 				};
 	}
 	keys(
@@ -172,7 +180,7 @@ export class Persistence {
 			const base = { version, fingerprint, value: prepared.value };
 			writes.push(
 				createDocument(
-					this.at(key),
+					{ ...this.at(key), ...(this.#host === undefined ? {} : { host: key }) },
 					base,
 					JSON.stringify(prepared.value),
 					(id) => {

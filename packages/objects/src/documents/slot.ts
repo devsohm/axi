@@ -6,6 +6,7 @@ import { AddressSource } from "./address-source.ts";
 import type {
 	CommitPersistence,
 	JsonObject,
+	KeyedBy,
 	StateDefinition,
 } from "./definition.ts";
 import type { Documents } from "./documents.ts";
@@ -18,7 +19,7 @@ import {
 	type StoredChange,
 } from "./persistence.ts";
 
-export type AnyDefinition = StateDefinition<JsonObject, boolean, boolean>;
+export type AnyDefinition = StateDefinition<JsonObject, KeyedBy, boolean>;
 export interface DocumentSlot {
 	readonly owner: Documents;
 	readonly persisted: PersistedSlot | undefined;
@@ -65,6 +66,10 @@ export class SlotDefinition {
 			throw new Error(
 				`${name}: declared ${next.keyed ? "keyed" : "singleton"}, its documents are not`,
 			);
+		if (current.host?.kind !== next.host?.kind) {
+			const keys = (kind: string | undefined) => kind === undefined ? "string keys" : `addresses of ${kind}`;
+			throw new Error(`${name}: declared with ${keys(next.host?.kind)}, its documents have ${keys(current.host?.kind)}`);
+		}
 		if (current.persist !== next.persist)
 			throw new Error(
 				`${name}: declared ${next.persist ? "persisted" : "in memory"}, its documents are not`,
@@ -167,6 +172,9 @@ export class SingletonSlot
 		return this.load("", context);
 	}
 	key(_key: string): string {
+		return "";
+	}
+	keyOf(_key: unknown): string {
 		return "";
 	}
 	cold(_key: string): boolean {

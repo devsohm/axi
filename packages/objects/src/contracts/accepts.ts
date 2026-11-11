@@ -40,6 +40,7 @@ export type AcceptsTable<C extends Contract> = {
 };
 export type AcceptedVersion = { readonly version: number; readonly fingerprint: string };
 type StateNeed = "removed" | "changed";
+type KeyedNeed = StateNeed | "rekeyed";
 type MethodNeed = { removed: boolean; args: boolean; result: boolean };
 function section<N>(raw: unknown, required: ReadonlyMap<string, N>, path: string, check: (value: unknown, need: N, path: string) => void): void {
 	const supplied = new Map(raw === undefined ? [] : entriesOf(raw, path));
@@ -53,9 +54,11 @@ function stateMapping(raw: unknown, need: StateNeed, path: string): void {
 	if (typeof raw !== "function" && !(need === "removed" && raw === "refuse"))
 		throw new Error(`${path}: expected ${need === "removed" ? 'a function or "refuse"' : "a function"}`);
 }
-function keyedMapping(raw: unknown, need: StateNeed, path: string): void {
+function keyedMapping(raw: unknown, need: KeyedNeed, path: string): void {
 	if (raw !== "refuse" && !(need === "changed" && typeof raw === "function"))
-		throw new Error(`${path}: expected ${need === "changed" ? 'a function or "refuse"' : '"refuse"'}`);
+		throw new Error(
+			`${path}: expected ${need === "changed" ? 'a function or "refuse"' : '"refuse"'}${need === "rekeyed" ? " (its key kind changed: a value mapping cannot map keys)" : ""}`,
+		);
 }
 function methodMapping(raw: unknown, need: MethodNeed, path: string): void {
 	if (raw === "refuse") return;
@@ -79,13 +82,19 @@ export function checkAccepts<C extends Contract>(contract: C, accepts: AcceptsTa
 		const path = `${data.name} accepts[${key}]`, index = data.versions.findIndex((item) => String(item.version) === key);
 		if (index < 0 || index === data.versions.length - 1) throw new Error(`${path}: not an older version`);
 		const old = data.versions[index]!;
-		const edits = new Set(data.versions.slice(index + 1).flatMap((item) => item.changes.map((change) => JSON.stringify(change))));
-		const changed = (variant: string, member: string, side: Change[2]) => edits.has(JSON.stringify([variant, member, side]));
-		const states = new Map<string, Map<string, StateNeed>>(), methods = new Map<string, MethodNeed>(), keyed = new Map<string, StateNeed>();
+		const edits = new Set(
+			data.versions.slice(index + 1).flatMap((item) => item.changes.map((change) => JSON.stringify(change))),
+		);
+		const changed = (variant: string, member: string, side: Change[2]) =>
+			edits.has(JSON.stringify([variant, member, side]));
+		const states = new Map<string, Map<string, StateNeed>>(),
+			methods = new Map<string, MethodNeed>(),
+			keyed = new Map<string, KeyedNeed>();
 		for (const [variant, previous] of old.variants) {
 			const now = current.variants.get(variant)!, needs = new Map<string, StateNeed>();
-			for (const member of previous.keyed.keys()) {
+			for (const [member, oldKeyed] of previous.keyed) {
 				if (!now.keyed.has(member)) keyed.set(member, "removed");
+				else if (now.keyed.get(member)!.key?.kind !== oldKeyed.key?.kind) keyed.set(member, "rekeyed");
 				else if (changed(variant, member, "keyed")) keyed.set(member, "changed");
 			}
 			for (const member of previous.state.keys()) {

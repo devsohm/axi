@@ -1,9 +1,11 @@
 import { awaitWithContext, type Context } from "../context/index.ts";
+import { addressOfKey, keyOfAddress } from "../contracts/host-kind.ts";
 import { track, type Tracker, type Prepared } from "../delta/index.ts";
 import type { Watch } from "../watch.ts";
 import { ObjectsError } from "../data/index.ts";
-import { asObjectsError } from "../data/internal.ts";
-import type { StagedWrite } from "../store/step.ts";
+import { asObjectsError, invalid } from "../data/internal.ts";
+import { findDocument, loadDocument } from "../store/engine.ts";
+import type { StagedWrite, Step } from "../store/step.ts";
 import { compareText, storedText } from "../store/text.ts";
 import { AddressSource } from "./address-source.ts";
 import type { JsonObject } from "./definition.ts";
@@ -26,6 +28,11 @@ import {
 } from "./slot.ts";
 
 export type Access = { readonly token: SealToken; readonly version: number };
+export type ChangedDocument =
+	| { readonly kind: "absent" }
+	| { readonly kind: "unchanged" }
+	| { readonly kind: "present"; readonly loaded: Loaded }
+	| { readonly kind: "failed"; readonly error: ObjectsError };
 type SharedLoad = {
 	readonly done: Promise<void>;
 	readonly tokens: Set<SealToken>;
@@ -57,6 +64,22 @@ export class KeyedSlot implements DocumentSlot, PersistedSlot {
 	}
 	key(raw: string): string {
 		return storedText(raw, this.#keyLabel);
+	}
+	keyOf(value: unknown): string {
+		const host = this.definition.current.host;
+		if (host === undefined) return value as string;
+		const key = keyOfAddress(host, value);
+		if (key === undefined) throw invalid("args", `${this.#keyLabel}: expected an address of ${host.kind}`);
+		return key;
+	}
+	handleKeys(access: Access, context: Context): AsyncIterable<unknown> {
+		const host = this.definition.current.host;
+		const keys = this.keys(access, context);
+		return host === undefined
+			? keys
+			: (async function* () {
+					for await (const key of keys) yield addressOfKey(host, key);
+				})();
 	}
 	get(
 		raw: string,
@@ -261,6 +284,48 @@ export class KeyedSlot implements DocumentSlot, PersistedSlot {
 		}
 		if (source) source.written(before!, prepared);
 		else this.#touch(resident);
+	}
+	holds(key: string): boolean {
+		return this.#residents.has(key) || this.#pins.has(key);
+	}
+	async readChanged(key: string, step: Step, context: Context): Promise<ChangedDocument> {
+		const record = await findDocument(step, this.persistence.at(key));
+		if (record === undefined) return { kind: "absent" };
+		const current = this.#residents.get(key)?.stored;
+		if (current?.id === record.id && current.revision === record.revision) return { kind: "unchanged" };
+		const document = await loadDocument(step, record);
+		try {
+			return { kind: "present", loaded: this.persistence.decode(document, this.definition.current, context) };
+		} catch (error) {
+			return { kind: "failed", error: asObjectsError(error, this.owner.label) };
+		}
+	}
+	adoptChanged(key: string, change: ChangedDocument): void {
+		// An unreadable import keeps the last value until the caller fails the owner after the publication batch.
+		if (change.kind === "unchanged" || change.kind === "failed") return;
+		const previous = this.#residents.get(key);
+		if (previous !== undefined) {
+			this.#residents.delete(key);
+			this.owner.residency.forget(previous);
+		}
+		const source = this.#pins.get(key);
+		if (change.kind === "absent") {
+			if (previous !== undefined) source?.retire();
+			return;
+		}
+		const resident = new Resident(
+			this,
+			key,
+			track(change.loaded.value),
+			change.loaded.stored,
+			this.definition.current.version,
+		);
+		this.#residents.set(key, resident);
+		if (source === undefined) this.#touch(resident);
+		else {
+			source.ready = true;
+			source.replaced();
+		}
 	}
 	retire(key: string): void {
 		const resident = this.#residents.get(key);

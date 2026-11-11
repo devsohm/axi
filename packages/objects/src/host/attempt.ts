@@ -14,7 +14,7 @@ import type { Contract, Implementation, ParamsOf } from "../contracts/index.ts";
 import { contractData, type ShapeOf } from "../contracts/internal.ts";
 import { ObjectsError, type FailureCause, type Principal } from "../data/index.ts";
 import { asObjectsError, checkArgs, checkParams, invalid, openFailure, type Provider, type Value } from "../data/internal.ts";
-import type { HandleOf, JsonObject, StateDefinition, Tx } from "../documents/index.ts";
+import type { HandleOf, JsonObject, KeyedBy, StateDefinition, Tx } from "../documents/index.ts";
 import {
 	SealToken,
 	type AnyDefinition,
@@ -75,7 +75,7 @@ type SourceValues<S extends readonly unknown[]> = {
 	readonly [I in keyof S]: S[I] extends Watchable<infer V> ? V : S[I] extends NativeWatchable<infer V> ? V : never;
 };
 export interface Self<P extends Principal = Principal> extends RoutineDeclarations<P> {
-	state<D extends StateDefinition<JsonObject, boolean, false>>(definition: D): HandleOf<D>;
+	state<D extends StateDefinition<JsonObject, KeyedBy, false>>(definition: D): HandleOf<D>;
 	derive<const S extends readonly (Watchable<unknown> | NativeWatchable<unknown>)[], T extends JsonValue>(
 		sources: S,
 		compute: (
@@ -102,7 +102,7 @@ export interface Self<P extends Principal = Principal> extends RoutineDeclaratio
 	job<A, R, S>(definition: JobDefinition<A, R, S>, implementation: JobImplementation<A, R, S, P>): JobHandle<A, R, S>;
 }
 export interface StoreSelf<P extends Principal = Principal> extends Self<P> {
-	state<D extends StateDefinition<JsonObject, boolean, boolean>>(definition: D): HandleOf<D>;
+	state<D extends StateDefinition<JsonObject, KeyedBy, boolean>>(definition: D): HandleOf<D>;
 	table<C extends Columns, K extends readonly string[]>(definition: TableDefinition<C, K>): Table<C, K>;
 	query<C extends Columns, K extends readonly string[]>(table: Table<C, K>, query: Query<C, K>, limit: number): Watchable<RowOf<C>[]>;
 	contribute<C>(registry: Registry<C, unknown>, value: Contribution<C>): void;
@@ -224,7 +224,7 @@ export class Attempt implements StoreSelf, KeyDeclarer, RegistryWaiter {
 		this.#trace = trace;
 		this.#opening = withContextValue(OPENING, object, withAbortSignal(this.#abort.signal, context));
 	}
-	state<D extends StateDefinition<JsonObject, boolean, boolean>>(definition: D): HandleOf<D> {
+	state<D extends StateDefinition<JsonObject, KeyedBy, boolean>>(definition: D): HandleOf<D> {
 		this.#declaringOnly("state");
 		const name = definition.name;
 		if (this.#declared.has(name)) throw new Error(`${this.#object.label}: state "${name}" is declared twice`);

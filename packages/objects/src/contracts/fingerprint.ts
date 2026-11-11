@@ -18,9 +18,14 @@ export function fingerprintOf(normal: JsonValue): string {
 function members(variant: VariantData): JsonValue {
 	const entries: [string, JsonValue][] = [];
 	for (const [name, state] of variant.state) entries.push([name, { state: state.normal }]);
-	for (const [name, keyed] of variant.keyed) entries.push([name, { keyed: keyed.normal }]);
-	for (const [name, method] of variant.methods) entries.push([name, { args: method.args.normal, result: method.result.normal }]);
-	return Object.fromEntries(entries.sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0));
+	for (const [name, keyed] of variant.keyed)
+		entries.push([
+			name,
+			keyed.key === undefined ? { keyed: keyed.normal } : { keyed: keyed.normal, key: keyed.key.kind },
+		]);
+	for (const [name, method] of variant.methods)
+		entries.push([name, { args: method.args.normal, result: method.result.normal }]);
+	return Object.fromEntries(entries.sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)));
 }
 export function materialize(kind: Kind, params: ParamsData, version: number, variants: ReadonlyMap<string, VariantData>, changes: readonly Change[]): VersionData {
 	const normal: JsonValue = kind === "local" ? { kind, params: params.normal, members: members(variants.get(LOCAL)!) }

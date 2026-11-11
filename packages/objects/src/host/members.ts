@@ -49,9 +49,14 @@ export function checkImplementation(
 		if (!source) throw new Error(`${name}: a state member is a JSON watchable`);
 		state.set(name, source);
 	}
-	for (const name of shape.keyed.keys()) {
+	for (const [name, { key }] of shape.keyed) {
 		const member = resolveKeyed(own(name));
 		if (!member) throw new Error(`${name}: a keyed member is a keyed document handle`);
+		const actual = member.kind === "own" ? member.slot.definition.current.host?.kind : member.key;
+		if (actual !== key?.kind) {
+			const keys = (kind: string | undefined) => (kind === undefined ? "string keys" : `addresses of ${kind}`);
+			throw new Error(`${name}: declared with ${keys(key?.kind)}, implemented with ${keys(actual)}`);
+		}
 		keyed.set(name, member);
 	}
 	return { variant, members: { methods, state, keyed } };

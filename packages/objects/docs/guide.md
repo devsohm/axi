@@ -37,6 +37,8 @@ An empty-parameter local factory receives `StoreSelf`. With a Store, it can also
 
 `defineState()` specifies a document's name, schema, version and initial value. A keyed definition addresses documents with `handle.at(key)`. Change documents with `handle.change()` or draft several handles in `self.tx()`. A failed transaction publishes nothing.
 
+Use `keyed: true` for string keys. Use `keyed: Kind`, with a declared `hostKind`, for host addresses. Pass `Kind(params)` to the handle or transaction. Expose that handle through a local contract with `keyed(schema, Kind)`. The implementation and contract must use the same key kind.
+
 A persisted definition also supplies `checkpointWhen`. Schema migrations run through its `migrate` callback. State survives a reload. Persistence also retains it across host restarts when the application reopens the same Store.
 
 `defineTable()` specifies columns, a primary key, indexes and a version. `evolveTable()` records later schema changes and row transformations. `query()` builds conditions and ordering. Use table paging for bounded reads and `self.query()` for a watched result.

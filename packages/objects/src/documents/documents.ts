@@ -4,7 +4,7 @@ import { objectsMetrics, untraced } from "../telemetry.ts";
 import { ObjectsError } from "../data/index.ts";
 import type { Batch } from "../state/internal.ts";
 import type { ObjectsStore } from "../store/store.ts";
-import type { CommitPersistence, JsonObject, StateDefinition } from "./definition.ts";
+import type { CommitPersistence, JsonObject, KeyedBy, StateDefinition } from "./definition.ts";
 import { SealToken } from "./fence.ts";
 import { Keyed, Singleton, type HandleOf, type KeyDeclarer } from "./handles.ts";
 import { KeyedSlot } from "./keyed-slot.ts";
@@ -43,18 +43,18 @@ export class Documents {
 		this.batch = owner.batch;
 		this.context = owner.context;
 	}
-	declare<D extends StateDefinition<JsonObject, boolean, boolean>>(
+	declare<D extends StateDefinition<JsonObject, KeyedBy, boolean>>(
 		definition: D,
 		token: SealToken,
 		declarer: KeyDeclarer,
 	): HandleOf<D>;
-	declare(definition: AnyDefinition, token: SealToken, declarer: KeyDeclarer): Keyed | Singleton {
+	declare(definition: AnyDefinition, token: SealToken, declarer: KeyDeclarer): unknown {
 		let slot = this.#slots.get(definition.name);
 		if (slot) slot.definition.check(definition);
 		else {
 			const owner = definition.persist ? this.#owner.store! : undefined;
 			const disk = definition.persist
-				? new Persistence(owner!.store, owner!.owner, "objects", definition.name)
+				? new Persistence(owner!.store, owner!.owner, "objects", definition.name, definition.host)
 				: undefined;
 			slot = definition.keyed ? new KeyedSlot(this, definition, disk) : new SingletonSlot(this, definition, disk);
 			this.#slots.set(definition.name, slot);
@@ -155,6 +155,12 @@ export class Documents {
 	}
 	async settled(): Promise<void> {
 		(await this.line.acquire())();
+	}
+	hostSlots(kind: string): KeyedSlot[] {
+		return [...this.#slots.values()].filter(
+			(slot): slot is KeyedSlot =>
+				slot instanceof KeyedSlot && slot.persisted !== undefined && slot.definition.current.host?.kind === kind,
+		);
 	}
 	end(): void {
 		this.#phase = "ended";

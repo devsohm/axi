@@ -1,6 +1,18 @@
-import { LOCAL, contractData, createContract, type Contract, type ContractShape, type CurrentVariants,
-	type Kind, type MemberKind, type ShapeOf } from "./contract.ts";
-import { checkMembers, memberPath, readMethod } from "./declare.ts";
+import {
+	LOCAL,
+	contractData,
+	createContract,
+	type Contract,
+	type ContractShape,
+	type CurrentVariants,
+	type HostKeyed,
+	type Kind,
+	type MemberKind,
+	type ShapeOf,
+} from "./contract.ts";
+import { checkMembers, keyedSnapshot, memberPath, readMethod } from "./declare.ts";
+import type { HostKind, KindShape } from "./host-kind.ts";
+import type { Params } from "./params.ts";
 import { materialize } from "./fingerprint.ts";
 import type { Change, CurrentStep, Increment, MemberNames, MethodAt, Variants, VariantsWith } from "./history.ts";
 import { Method, type TSchema } from "./schema.ts";
@@ -36,12 +48,40 @@ interface RemoteEditor<V extends Variants, C extends Change> extends Methods<"re
 	addMethod<X extends keyof V & string, const M extends string, A extends TSchema, R extends TSchema>(variant: X, member: M, args: A, result: R): RemoteEditor<Put<V, X, "methods", M, Method<A, R>>, C | [X, M, "args" | "result"]>;
 }
 interface LocalEditor<V extends Variants, C extends Change> extends Methods<"local", V, C> {
-	state<M extends keyof V[typeof LOCAL]["state"] & string, S extends TSchema>(member: M, schema: S): LocalEditor<Put<V, typeof LOCAL, "state", M, S>, C | [typeof LOCAL, M, "state"]>;
-	addState<const M extends string, S extends TSchema>(member: M, schema: S): LocalEditor<Put<V, typeof LOCAL, "state", M, S>, C | [typeof LOCAL, M, "state"]>;
-	removeState<M extends keyof V[typeof LOCAL]["state"] & string>(member: M): LocalEditor<Drop<V, typeof LOCAL, "state", M>, C>;
-	addMethod<const M extends string, A extends TSchema, R extends TSchema>(member: M, args: A, result: R): LocalEditor<Put<V, typeof LOCAL, "methods", M, Method<A, R>>, C | [typeof LOCAL, M, "args" | "result"]>;
-	keyed<M extends KeyedNames<V>, S extends TSchema>(member: M, schema: S): LocalEditor<PutKeyed<V, M, S>, C | [typeof LOCAL, M, "keyed"]>;
-	addKeyed<const M extends string, S extends TSchema>(member: M, schema: S): LocalEditor<PutKeyed<V, M, S>, C | [typeof LOCAL, M, "keyed"]>;
+	state<M extends keyof V[typeof LOCAL]["state"] & string, S extends TSchema>(
+		member: M,
+		schema: S,
+	): LocalEditor<Put<V, typeof LOCAL, "state", M, S>, C | [typeof LOCAL, M, "state"]>;
+	addState<const M extends string, S extends TSchema>(
+		member: M,
+		schema: S,
+	): LocalEditor<Put<V, typeof LOCAL, "state", M, S>, C | [typeof LOCAL, M, "state"]>;
+	removeState<M extends keyof V[typeof LOCAL]["state"] & string>(
+		member: M,
+	): LocalEditor<Drop<V, typeof LOCAL, "state", M>, C>;
+	addMethod<const M extends string, A extends TSchema, R extends TSchema>(
+		member: M,
+		args: A,
+		result: R,
+	): LocalEditor<Put<V, typeof LOCAL, "methods", M, Method<A, R>>, C | [typeof LOCAL, M, "args" | "result"]>;
+	keyed<M extends KeyedNames<V>, S extends TSchema>(
+		member: M,
+		schema: S,
+	): LocalEditor<PutKeyed<V, M, S>, C | [typeof LOCAL, M, "keyed"]>;
+	keyed<M extends KeyedNames<V>, S extends TSchema, N extends string, P extends Params>(
+		member: M,
+		schema: S,
+		key: HostKind<N, P>,
+	): LocalEditor<PutKeyed<V, M, HostKeyed<S, HostKind<N, P>>>, C | [typeof LOCAL, M, "keyed"]>;
+	addKeyed<const M extends string, S extends TSchema>(
+		member: M,
+		schema: S,
+	): LocalEditor<PutKeyed<V, M, S>, C | [typeof LOCAL, M, "keyed"]>;
+	addKeyed<const M extends string, S extends TSchema, N extends string, P extends Params>(
+		member: M,
+		schema: S,
+		key: HostKind<N, P>,
+	): LocalEditor<PutKeyed<V, M, HostKeyed<S, HostKind<N, P>>>, C | [typeof LOCAL, M, "keyed"]>;
 	removeKeyed<M extends KeyedNames<V>>(member: M): LocalEditor<DropKeyed<V, M>, C>;
 }
 type Editor<K extends Kind, V extends Variants, C extends Change> = K extends "local" ? LocalEditor<V, C> : RemoteEditor<V, C>;
@@ -85,11 +125,11 @@ export function evolve<C extends Contract, E extends Methods<ShapeOf<C>["kind"],
 		if (!variantAt(variant).state.delete(member)) throw new Error(`${at(variant, member, "state")}: no such state member`);
 		return editor;
 	};
-	const keyed = (adding: boolean, member: string, schema: TSchema) => {
+	const keyed = (adding: boolean, member: string, schema: TSchema, key?: KindShape) => {
 		const value = variantAt(LOCAL);
 		if (adding) ensureNew(LOCAL, member, "keyed");
 		else if (!value.keyed.has(member)) throw new Error(`${at(LOCAL, member, "keyed")}: no such keyed member`);
-		value.keyed.set(member, snapshotSchema(schema, at(LOCAL, member, "keyed")));
+		value.keyed.set(member, keyedSnapshot(schema, key, at(LOCAL, member, "keyed")));
 		changes.push([LOCAL, member, "keyed"]);
 		return checked();
 	};
@@ -120,14 +160,34 @@ export function evolve<C extends Contract, E extends Methods<ShapeOf<C>["kind"],
 		changes.push([variant, member, "args"], [variant, member, "result"]);
 		return checked();
 	};
-	const shared = { args: (name: string, input: TSchema) => method(name, input), result: (name: string, output: TSchema) => method(name, undefined, output),
-		method, removeMethod: (member: string) => { for (const name of methodVariants(member)) variants.get(name)!.methods.delete(member); return editor; } };
-	editor = data.kind === "local" ? { ...shared,
-		state: (name: string, schema: TSchema) => state(false, LOCAL, name, schema), addState: (name: string, schema: TSchema) => state(true, LOCAL, name, schema),
-		removeState: (name: string) => removeState(LOCAL, name), addMethod: (name: string, args: TSchema, result: TSchema) => addMethod(LOCAL, name, args, result),
-		keyed: (name: string, schema: TSchema) => keyed(false, name, schema), addKeyed: (name: string, schema: TSchema) => keyed(true, name, schema), removeKeyed }
-		: { ...shared, state: (variant: string, name: string, schema: TSchema) => state(false, variant, name, schema),
-			addState: (variant: string, name: string, schema: TSchema) => state(true, variant, name, schema), removeState, addMethod };
+	const shared = {
+		args: (name: string, input: TSchema) => method(name, input),
+		result: (name: string, output: TSchema) => method(name, undefined, output),
+		method,
+		removeMethod: (member: string) => {
+			for (const name of methodVariants(member)) variants.get(name)!.methods.delete(member);
+			return editor;
+		},
+	};
+	editor =
+		data.kind === "local"
+			? {
+					...shared,
+					state: (name: string, schema: TSchema) => state(false, LOCAL, name, schema),
+					addState: (name: string, schema: TSchema) => state(true, LOCAL, name, schema),
+					removeState: (name: string) => removeState(LOCAL, name),
+					addMethod: (name: string, args: TSchema, result: TSchema) => addMethod(LOCAL, name, args, result),
+					keyed: (name: string, schema: TSchema, key?: KindShape) => keyed(false, name, schema, key),
+					addKeyed: (name: string, schema: TSchema, key?: KindShape) => keyed(true, name, schema, key),
+					removeKeyed,
+				}
+			: {
+					...shared,
+					state: (variant: string, name: string, schema: TSchema) => state(false, variant, name, schema),
+					addState: (variant: string, name: string, schema: TSchema) => state(true, variant, name, schema),
+					removeState,
+					addMethod,
+				};
 	editWith(editor as unknown as Editor<ShapeOf<C>["kind"], CurrentVariants<C>, never>, edit, `${path}: evolve`);
 	return createContract({ ...data, kinds, versions: [...data.versions, materialize(data.kind, data.params, version, variants, changes)] });
 }

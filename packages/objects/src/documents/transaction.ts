@@ -44,12 +44,9 @@ import type { DocumentSlot, SingletonSlot } from "./slot.ts";
 
 export interface Tx {
 	draft<T extends JsonObject>(handle: SingletonHandle<T>): Promise<Draft<T>>;
-	draft<T extends JsonObject>(
-		handle: KeyedHandle<T>,
-		key: string,
-	): Promise<Draft<T>>;
+	draft<T extends JsonObject, Key>(handle: KeyedHandle<T, Key>, key: NoInfer<Key>): Promise<Draft<T>>;
 	retire(handle: SingletonHandle<JsonObject>): Promise<void>;
-	retire(handle: KeyedHandle<JsonObject>, key: string): Promise<void>;
+	retire<Key>(handle: KeyedHandle<JsonObject, Key>, key: NoInfer<Key>): Promise<void>;
 	start<A, R, S>(
 		job: JobHandle<A, R, S>,
 		args: A,
@@ -175,19 +172,14 @@ export class Transaction implements Tx {
 		return { documents: this.#adoptions.length, ops, writes: this.#writes?.staged.length ?? 0, rows: this.#rows };
 	}
 	draft<T extends JsonObject>(handle: SingletonHandle<T>): Promise<Draft<T>>;
+	draft<T extends JsonObject, Key>(handle: KeyedHandle<T, Key>, key: NoInfer<Key>): Promise<Draft<T>>;
 	draft<T extends JsonObject>(
-		handle: KeyedHandle<T>,
-		key: string,
-	): Promise<Draft<T>>;
-	draft<T extends JsonObject>(
-		handle: SingletonHandle<T> | KeyedHandle<T>,
-		key = "",
+		handle: SingletonHandle<T> | KeyedHandle<T, unknown>,
+		key: unknown = "",
 	): Promise<Draft<T>> {
 		try {
 			const slot = this.#slot(handle);
-			return this.draftSlot(slot, key === "" ? key : slot.key(key)) as Promise<
-				Draft<T>
-			>;
+			return this.draftSlot(slot, slot.key(slot.keyOf(key))) as Promise<Draft<T>>;
 		} catch (error) {
 			return Promise.reject(error);
 		}
@@ -208,13 +200,13 @@ export class Transaction implements Tx {
 		return entry.draft.change.state;
 	}
 	retire(handle: SingletonHandle<JsonObject>): Promise<void>;
-	retire(handle: KeyedHandle<JsonObject>, key: string): Promise<void>;
+	retire<Key>(handle: KeyedHandle<JsonObject, Key>, key: NoInfer<Key>): Promise<void>;
 	async retire(
-		handle: SingletonHandle<JsonObject> | KeyedHandle<JsonObject>,
-		key = "",
+		handle: SingletonHandle<JsonObject> | KeyedHandle<JsonObject, unknown>,
+		key: unknown = "",
 	): Promise<void> {
 		const slot = this.#slot(handle),
-			at = key === "" ? key : slot.key(key),
+			at = slot.key(slot.keyOf(key)),
 			entry = this.retireSlot(slot, at),
 			disk = slot.persisted;
 		if (entry.found !== undefined || !disk?.cold(at)) return;
@@ -222,6 +214,7 @@ export class Transaction implements Tx {
 		this.#assertOpen();
 		if (found) {
 			try {
+				disk.persistence.checkHost(found.host, disk.definition.current);
 				checkReadable(
 					{ version: found.stored.version, fingerprint: found.fingerprint },
 					disk.definition.current,
@@ -463,9 +456,7 @@ export class Transaction implements Tx {
 		for (const group of this.#entries.values())
 			for (const entry of group.values()) entry.draft?.change.abort();
 	}
-	#slot(
-		handle: SingletonHandle<JsonObject> | KeyedHandle<JsonObject>,
-	): SingletonSlot | KeyedSlot {
+	#slot(handle: SingletonHandle<JsonObject> | KeyedHandle<JsonObject, unknown>): SingletonSlot | KeyedSlot {
 		const { slot, version } = handle as Singleton | Keyed;
 		slot.definition.assertVersion(version);
 		return slot;

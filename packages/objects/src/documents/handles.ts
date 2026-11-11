@@ -1,4 +1,5 @@
 import type { Context } from "../context/index.ts";
+import type { Address, KindShape } from "../contracts/index.ts";
 import type { Draft } from "../delta/index.ts";
 import type { Watch, Watchable, WatchHandle } from "../watch.ts";
 import type { JsonObject, StateDefinition } from "./definition.ts";
@@ -10,22 +11,20 @@ export interface SingletonHandle<T extends JsonObject> extends Watchable<T> {
 	change<R>(fn: (draft: Draft<T>) => R, context: Context): Promise<R>;
 	retire(context: Context): Promise<void>;
 }
-export interface KeyedHandle<T extends JsonObject> {
-	get(key: string, context: Context): Promise<T | undefined>;
-	keys(context: Context): AsyncIterable<string>;
-	watch(key: string, context: Context): Promise<WatchHandle<T> | undefined>;
-	at(key: string): Watchable<T>;
-	change<R>(
-		key: string,
-		fn: (draft: Draft<T>) => R,
-		context: Context,
-	): Promise<R>;
-	retire(key: string, context: Context): Promise<void>;
+export interface KeyedHandle<T extends JsonObject, Key = string> {
+	get(key: Key, context: Context): Promise<T | undefined>;
+	keys(context: Context): AsyncIterable<Key>;
+	watch(key: Key, context: Context): Promise<WatchHandle<T> | undefined>;
+	at(key: Key): Watchable<T>;
+	change<R>(key: Key, fn: (draft: Draft<T>) => R, context: Context): Promise<R>;
+	retire(key: Key, context: Context): Promise<void>;
 }
 export type HandleOf<D> = D extends StateDefinition<infer T, infer K, boolean>
 	? K extends true
 		? KeyedHandle<T>
-		: SingletonHandle<T>
+		: K extends KindShape
+			? KeyedHandle<T, Address<K>>
+			: SingletonHandle<T>
 	: never;
 export interface KeyDeclarer {
 	at(slot: KeyedSlot, key: string): KeySource;
@@ -59,7 +58,7 @@ export class Singleton implements SingletonHandle<JsonObject> {
 		return this.slot.owner.tx((tx) => tx.retire(this), this.token, context);
 	}
 }
-export class Keyed implements KeyedHandle<JsonObject> {
+export class Keyed implements KeyedHandle<JsonObject, unknown> {
 	readonly slot: KeyedSlot;
 	readonly token: SealToken;
 	readonly version: number;
@@ -75,33 +74,26 @@ export class Keyed implements KeyedHandle<JsonObject> {
 		this.version = version;
 		this.#declarer = declarer;
 	}
-	get(key: string, context: Context): Promise<JsonObject | undefined> {
-		return this.slot.get(key, this, context);
+	get(key: unknown, context: Context): Promise<JsonObject | undefined> {
+		try {
+			return this.slot.get(this.slot.keyOf(key), this, context);
+		} catch (error) {
+			return Promise.reject(error);
+		}
 	}
-	keys(context: Context): AsyncIterable<string> {
-		return this.slot.keys(this, context);
+	keys(context: Context): AsyncIterable<unknown> {
+		return this.slot.handleKeys(this, context);
 	}
-	watch(key: string, context: Context): Promise<Watch<JsonObject> | undefined> {
-		return this.slot.watch(key, this, context);
+	async watch(key: unknown, context: Context): Promise<Watch<JsonObject> | undefined> {
+		return this.slot.watch(this.slot.keyOf(key), this, context);
 	}
-	at(key: string): Watchable<JsonObject> {
-		return this.#declarer.at(
-			this.slot,
-			key,
-		) as unknown as Watchable<JsonObject>;
+	at(key: unknown): Watchable<JsonObject> {
+		return this.#declarer.at(this.slot, this.slot.keyOf(key)) as unknown as Watchable<JsonObject>;
 	}
-	change<R>(
-		key: string,
-		fn: (draft: Draft<JsonObject>) => R,
-		context: Context,
-	): Promise<R> {
-		return this.slot.owner.tx(
-			async (tx) => fn(await tx.draft(this, key)),
-			this.token,
-			context,
-		);
+	change<R>(key: unknown, fn: (draft: Draft<JsonObject>) => R, context: Context): Promise<R> {
+		return this.slot.owner.tx(async (tx) => fn(await tx.draft(this, key)), this.token, context);
 	}
-	retire(key: string, context: Context): Promise<void> {
+	retire(key: unknown, context: Context): Promise<void> {
 		return this.slot.owner.tx(
 			(tx) => tx.retire(this, key),
 			this.token,

@@ -2,7 +2,8 @@ import { objectsMetrics } from "../telemetry.ts";
 import type { Context } from "../context/index.ts";
 import type { Op } from "../delta/index.ts";
 import type { JsonValue } from "../json.ts";
-import type { Static, TSchema } from "../contracts/index.ts";
+import type { KindShape, Static, TSchema } from "../contracts/index.ts";
+import { kindParams } from "../contracts/host-kind.ts";
 import { fingerprintOf } from "../contracts/fingerprint.ts";
 import { checkName } from "../contracts/names.ts";
 import { snapshotSchema } from "../contracts/snapshot.ts";
@@ -21,7 +22,8 @@ export type CheckpointWhen<T> = (
 type DocumentOf<S extends TSchema> = Static<S> extends JsonObject
 	? Static<S>
 	: never;
-type StateOptions<S extends TSchema, K extends boolean> = {
+export type KeyedBy = boolean | KindShape;
+type StateOptions<S extends TSchema, K extends KeyedBy> = {
 	readonly schema: S;
 	readonly version: number;
 	readonly initial: () => DocumentOf<S>;
@@ -29,21 +31,21 @@ type StateOptions<S extends TSchema, K extends boolean> = {
 	readonly keyed?: K;
 };
 
-export function defineState<S extends TSchema, K extends boolean = false>(
+export function defineState<S extends TSchema, K extends KeyedBy = false>(
 	name: string,
 	options: StateOptions<S, K> & {
 		readonly persist?: false;
 		readonly checkpointWhen?: never;
 	},
 ): StateDefinition<DocumentOf<S>, K, false>;
-export function defineState<S extends TSchema, K extends boolean = false>(
+export function defineState<S extends TSchema, K extends KeyedBy = false>(
 	name: string,
 	options: StateOptions<S, K> & {
 		readonly persist: true;
 		readonly checkpointWhen: CheckpointWhen<DocumentOf<S>>;
 	},
 ): StateDefinition<DocumentOf<S>, K, true>;
-export function defineState<S extends TSchema, K extends boolean>(
+export function defineState<S extends TSchema, K extends KeyedBy>(
 	name: string,
 	options: StateOptions<S, K> & {
 		readonly persist?: boolean;
@@ -51,6 +53,7 @@ export function defineState<S extends TSchema, K extends boolean>(
 	},
 ): StateDefinition<DocumentOf<S>, K, boolean> {
 	checkName(name, "A state name");
+	if (options.keyed !== undefined && typeof options.keyed !== "boolean") kindParams(options.keyed);
 	return new StateDefinition(
 		name,
 		options.schema,
@@ -63,15 +66,12 @@ export function defineState<S extends TSchema, K extends boolean>(
 	);
 }
 
-export class StateDefinition<
-	T extends JsonObject,
-	K extends boolean,
-	P extends boolean = false,
-> {
+export class StateDefinition<T extends JsonObject, K extends KeyedBy, P extends boolean = false> {
 	readonly name: string;
 	readonly schema: TSchema;
 	readonly version: number;
 	readonly keyed: boolean;
+	readonly host: KindShape | undefined;
 	readonly persist: boolean;
 	readonly fingerprint: string;
 	declare readonly "~keyed"?: K;
@@ -89,14 +89,15 @@ export class StateDefinition<
 		version: number,
 		initial: () => T,
 		migrate: ((old: JsonObject, from: number) => T) | undefined,
-		keyed: boolean,
+		keyed: KeyedBy,
 		persist: boolean,
 		checkpointWhen: CheckpointWhen<T> | undefined,
 	) {
 		this.name = name;
 		this.schema = schema;
 		this.version = version;
-		this.keyed = keyed;
+		this.keyed = keyed !== false;
+		this.host = typeof keyed === "boolean" ? undefined : keyed;
 		this.persist = persist;
 		this.fingerprint = fingerprintOf(snapshotSchema(schema, name).normal);
 		this.#create = initial;
