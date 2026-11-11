@@ -14,6 +14,83 @@ import {
 } from "../src/index.ts";
 import { TuiScope } from "../src/tui/scope.ts";
 
+test("queued events honor stopped listeners and isolate a failed subscriber", async () => {
+	const Feed = local("ordered-feed", { version: 1, params: { name: str() }, members: { next: event(str()) } });
+	const errors: unknown[] = [],
+		sources = new Map<string, EventSource<string>>(),
+		seen: string[] = [];
+	const host = createHost({
+		onError: (error) => {
+			errors.push(error);
+		},
+	});
+	try {
+		await host.load(
+			[
+				{
+					name: "feeds",
+					facet: defineFacet((h) =>
+						h.serve(Feed, ({ name }, self) => {
+							const next = self.events<string>();
+							sources.set(name, next);
+							return { next };
+						}),
+					),
+				},
+			],
+			context,
+		);
+		const left = await host.get(Feed, { name: "left" }, context),
+			right = await host.get(Feed, { name: "right" }, context);
+		const stopped = await right.next.on(({ value }) => {
+			seen.push(`right:${value}`);
+		}, context);
+		await left.next.on(({ value }) => {
+			seen.push(`left:${value}`);
+			if (value === "start") {
+				stopped.stop();
+				sources.get("left")!.emit("followup");
+			}
+		}, context);
+		const broken = vi.fn(() => {
+			throw new Error("subscriber failed");
+		});
+		await left.next.on(broken, context);
+		sources.get("left")!.emit("start");
+		sources.get("right")!.emit("cancelled");
+		sources.get("left")!.emit("end");
+		expect(seen).toEqual([]);
+		await new Promise<void>((resolve) => setImmediate(resolve));
+		expect(seen).toEqual(["left:start", "left:end", "left:followup"]);
+		expect(broken).toHaveBeenCalledTimes(1);
+		expect(errors).toEqual([
+			expect.objectContaining({
+				kind: "listener_error",
+				error: expect.objectContaining({ message: "subscriber failed" }),
+			}),
+		]);
+		const cancelled = withCancel(context),
+			reason = new Error("already cancelled");
+		cancelled.cancel(reason);
+		await expect(
+			right.next.on(() => {
+				throw new Error("unreachable");
+			}, cancelled.context),
+		).rejects.toBe(reason);
+		stopped.stop();
+		await right.next.on(({ value }) => {
+			seen.push(`new:${value}`);
+		}, context);
+		sources.get("right")!.emit("available");
+		await new Promise<void>((resolve) => setImmediate(resolve));
+		expect(seen.at(-1)).toBe("new:available");
+		left.release();
+		right.release();
+	} finally {
+		await host.close(context);
+	}
+});
+
 test("a subscription follows its reference through reload and ends on cancellation", async () => {
 	const Log = local("event-log", { version: 1, params: {}, members: { written: event(str()) } });
 	const host = createHost({
