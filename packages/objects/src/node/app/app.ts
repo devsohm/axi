@@ -1,14 +1,17 @@
-import { statSync } from "node:fs";
-import { join, resolve, sep } from "node:path";
+import { randomUUID } from "node:crypto";
+import { createReadStream, createWriteStream, statSync } from "node:fs";
+import { mkdtemp, rename, rm } from "node:fs/promises";
+import { dirname, join, resolve, sep } from "node:path";
+import { pipeline } from "node:stream/promises";
 import type { TelemetryContext } from "@axi/telemetry";
 import { withAbortSignal, type Context } from "../../context/index.ts";
 import { hostKind, type Address, type HostKind, type KindShape } from "../../contracts/index.ts";
-import type { Principal } from "../../data/index.ts";
+import { isObjectsError, type Principal } from "../../data/index.ts";
 import { principalKey, samePrincipal } from "../../data/principal.ts";
 import { createHost, type Host, type HostError, type PluginFacet, type PrincipalAttributes } from "../../host/index.ts";
 import { isJsonValue, type JsonValue } from "../../json.ts";
 import { openNodeSqliteDatabase } from "../../sqlite/node.ts";
-import { openStore, sqliteBackend } from "../../store/index.ts";
+import { decodeJsonl, encodeJsonl, openStore, sqliteBackend } from "../../store/index.ts";
 import { localeChoiceFacet, themeChoiceFacet, themesFacet, translationsFacet } from "../../surfaces/index.ts";
 import { telemetryIngestFacet, type TelemetryIngestTarget } from "../../telemetry-ingest/index.ts";
 import type { Watchable } from "../../watch.ts";
@@ -29,7 +32,7 @@ import {
 	type TuiSurface, type TuiSurfaceOptions, type WebSurface, type WebSurfaceOptions,
 } from "../surfaces/index.ts";
 import { createWorkers, nodeBaseInputs, processLock, type ProcessLock, type Workers, type WorkersError } from "../workers/index.ts";
-import { ARCHIVE_FORMAT, packData, unpackData, type ArchiveManifest } from "./archive.ts";
+import { ARCHIVE_FORMAT, exists, packData, unpackStaging, type ArchiveManifest } from "./archive.ts";
 import { addressParam, HostData } from "./data.ts";
 import { filesFacet, type FilesCaps } from "./files.ts";
 import { appInfoFacet } from "./info.ts";
@@ -108,9 +111,11 @@ export interface App<P extends Principal> {
 	ownerLink(): string;
 	applyChanges(context: Context): Promise<RolloutResult>;
 	exportData(address: Address, path: string, context: Context): Promise<void>;
-	importData(archive: string, address: Address, context: Context): Promise<void>;
+	importData(archive: string, address: Address, context: Context, options?: DataImportOptions): Promise<void>;
+	deleteData(address: Address, context: Context): Promise<void>;
 	close(context: Context): Promise<void>;
 }
+export type DataImportOptions = { readonly existing?: "refuse" | "replace" };
 export type KitStart = {
 	readonly dir: string;
 	readonly facet: string;
@@ -298,6 +303,12 @@ export async function startServer<P extends Principal>(options: AppOptions<P>, c
 			throw error;
 		}
 	}
+	async function underLock(address: Address, operation: string, held: string, ctx: Context, work: () => Promise<void>): Promise<void> {
+		const lock = await addressLock(address, ctx);
+		if (lock === undefined) throw new Error(`${operation}: ${address.key} ${held}`);
+		try { await work(); }
+		finally { await lock.release(); }
+	}
 	function pool(address: Address): Workers<HostKind> {
 		const pool = workers.get(address.kind);
 		if (!pool) throw new Error(`app: no worker kind "${address.kind}"`);
@@ -361,11 +372,14 @@ export async function startServer<P extends Principal>(options: AppOptions<P>, c
 					api: api.versions[0] ?? "",
 					address: { kind: address.kind, key: address.key },
 				};
+			const staging = await mkdtemp(join(dirname(target), ".objects-server-")), server = join(staging, "server.archive");
+			try {
+				await pipeline(encodeJsonl(host.exportHostData(address, ctx)), createWriteStream(server, { mode: 0o600 }));
 			for (let attempt = 1; ; attempt++) {
 				if (worker.state.value[address.key]?.status === "running") {
 					const data = await host.get(HostData, { address: addressParam(address) }, ctx);
 					try {
-						await data.exportTo({ path: target, manifest: JSON.stringify(manifest) }, ctx);
+						await data.exportTo({ path: target, manifest: JSON.stringify(manifest), server }, ctx);
 					} finally {
 						data.release();
 					}
@@ -374,7 +388,7 @@ export async function startServer<P extends Principal>(options: AppOptions<P>, c
 				const locked = await addressLock(address, ctx);
 				if (locked) {
 					try {
-						await packData(workerDirectory(dataDir, address), manifest, target, ctx);
+						await packData(workerDirectory(dataDir, address), manifest, server, target, ctx);
 					} finally {
 						await locked.release();
 					}
@@ -382,27 +396,52 @@ export async function startServer<P extends Principal>(options: AppOptions<P>, c
 				}
 				if (attempt === 5) throw new Error(`exportData: the worker at ${address.key} keeps starting; try again`);
 			}
+			} finally { await rm(staging, { recursive: true, force: true }); }
 		},
-		async importData(archive, address, ctx) {
+		async importData(archive, address, ctx, importOptions = {}) {
 			pool(address);
-			const locked = await addressLock(address, ctx);
-			if (!locked) throw new Error(`importData: ${address.key} has data (its worker runs)`);
-			try {
-				await unpackData(
+			const dir = workerDirectory(dataDir, address), existing = importOptions.existing ?? "refuse";
+			await underLock(address, "importData", "has data (its worker runs)", ctx, async () => {
+				if (existing === "refuse" && await exists(dir)) throw new Error(`importData: ${dir} exists already (an address is imported once)`);
+				const { staging } = await unpackStaging(
 					resolve(archive),
-					workerDirectory(dataDir, address),
+					dirname(dir),
 					(manifest) => {
 						if (manifest?.format !== ARCHIVE_FORMAT)
 							throw new Error(`importData: not a format ${ARCHIVE_FORMAT} archive`);
 						if (manifest.app !== options.name)
 							throw new Error(`importData: an archive of "${manifest.app}", not "${options.name}"`);
+						if (manifest.address?.kind !== address.kind) throw new Error(`importData: an archive of a ${String(manifest.address?.kind)}, not a ${address.kind}`);
 					},
 					{ bytes: limits.importBytes, entries: limits.importEntries },
 					ctx,
 				);
-			} finally {
-				await locked.release();
-			}
+				const aside = existing === "replace" && await exists(dir) ? `${dir}.aside-${randomUUID()}` : undefined;
+				let placed = false;
+				try {
+					if (aside !== undefined) await rename(dir, aside);
+					await rename(staging, dir);
+					placed = true;
+					await host.importHostData(decodeJsonl(createReadStream(join(dir, "server.archive"))), ctx, { address, existing });
+				} catch (error) {
+					if (isObjectsError(error) && error.code === "unavailable" && error.reason === "storage_failed") {
+						// Undoing an uncertain commit could pair the old worker directory with newly committed server data.
+						throw new Error(`importData: ${address.key}: the server's commit has an unknown outcome; nothing was undone (the new directory is in place${aside === undefined ? "" : `, the old one at ${aside}`}). Run the import again with existing: "replace" once the server's store is back.`, { cause: error });
+					}
+					await rm(placed ? dir : staging, { recursive: true, force: true });
+					if (aside !== undefined && await exists(aside)) await rename(aside, dir);
+					throw error;
+				}
+				await rm(join(dir, "server.archive"), { force: true }).catch(() => {});
+				if (aside !== undefined) await rm(aside, { recursive: true, force: true }).catch(() => {});
+			});
+		},
+		async deleteData(address, ctx) {
+			pool(address);
+			await underLock(address, "deleteData", "runs; stop its worker first", ctx, async () => {
+				await host.deleteHostData(address, ctx);
+				await rm(workerDirectory(dataDir, address), { recursive: true, force: true });
+			});
 		},
 		close(ctx) {
 			return (closing ??= (async () => {

@@ -9,7 +9,7 @@ export const HostData = remote("objects.app.data", {
 	version: 1,
 	params: { address: str() },
 	hostAddress: ({ address }) => JSON.parse(address) as Address,
-	variants: { main: { methods: { exportTo: method(obj({ path: str(), manifest: str() })) } } },
+	variants: { main: { methods: { exportTo: method(obj({ path: str(), manifest: str(), server: str() })) } } },
 });
 export function addressParam(address: Address): string {
 	return JSON.stringify({ kind: address.kind, params: address.params, key: address.key });
@@ -22,8 +22,8 @@ export function hostDataFacet<P extends Principal>(store: Store, files: string, 
 			return {
 				variant: "main",
 				members: {
-					exportTo: async ({ path, manifest }, context) => {
-						await packStore(store, files, JSON.parse(manifest) as ArchiveManifest, path, context);
+					exportTo: async ({ path, manifest, server }, context) => {
+						await packStore(store, files, JSON.parse(manifest) as ArchiveManifest, server, path, context);
 						return null;
 					},
 				},

@@ -7,7 +7,7 @@ import { openNodeSqliteDatabase } from "../../sqlite/node.ts";
 import { decodeJsonl, encodeJsonl, importStore, openStore, sqliteBackend, type Store } from "../../store/index.ts";
 import { privateDirectory, privateStore } from "./layout.ts";
 import { readTar, writeTar, type TarEntry } from "./tar.ts";
-export const ARCHIVE_FORMAT = 1;
+export const ARCHIVE_FORMAT = 2;
 export type ArchiveManifest = {
 	readonly format: number;
 	readonly app: string;
@@ -15,7 +15,7 @@ export type ArchiveManifest = {
 	readonly address: { readonly kind: string; readonly key: string };
 };
 export type ImportLimits = { readonly bytes?: number; readonly entries?: number };
-async function exists(path: string): Promise<boolean> {
+export async function exists(path: string): Promise<boolean> {
 	return stat(path).then(
 		() => true,
 		() => false,
@@ -55,11 +55,17 @@ async function* fileEntries(root: string): AsyncGenerator<TarEntry> {
 		};
 	}
 }
-export async function packData(dir: string, manifest: ArchiveManifest, path: string, context: Context): Promise<void> {
+export async function packData(
+	dir: string,
+	manifest: ArchiveManifest,
+	server: string,
+	path: string,
+	context: Context,
+): Promise<void> {
 	if (!(await exists(dir))) throw new Error(`exportData: ${manifest.address.key} has no data`);
 	const store = await openStore(sqliteBackend(await openNodeSqliteDatabase(join(dir, "store.sqlite"))), context);
 	try {
-		await packStore(store, join(dir, "files"), manifest, path, context);
+		await packStore(store, join(dir, "files"), manifest, server, path, context);
 	} finally {
 		await store.close(context);
 	}
@@ -68,6 +74,7 @@ export async function packStore(
 	store: Store,
 	files: string,
 	manifest: ArchiveManifest,
+	server: string,
 	path: string,
 	context: Context,
 ): Promise<void> {
@@ -80,6 +87,7 @@ export async function packStore(
 		async function* entries(): AsyncGenerator<TarEntry> {
 			yield { path: "manifest.json", size: description.length, data: once(description) };
 			yield { path: "store.archive", size, data: createReadStream(exported) };
+			yield { path: "server.archive", size: (await stat(server)).size, data: createReadStream(server) };
 			yield* fileEntries(files);
 		}
 		const target = join(staging, "archive.tar");
@@ -89,19 +97,19 @@ export async function packStore(
 		await rm(staging, { recursive: true, force: true });
 	}
 }
-export async function unpackData(
+export async function unpackStaging(
 	archive: string,
-	dir: string,
+	parent: string,
 	accept: (manifest: ArchiveManifest) => void,
 	limits: ImportLimits,
 	context: Context,
-): Promise<void> {
-	if (await exists(dir)) throw new Error(`importData: ${dir} exists already (an address is imported once)`);
-	await privateDirectory(dirname(dir));
-	const staging = await mkdtemp(join(dirname(dir), ".objects-import-"));
+): Promise<{ readonly staging: string; readonly server: string }> {
+	await privateDirectory(parent);
+	const staging = await mkdtemp(join(parent, ".objects-import-"));
 	try {
 		let manifest = false,
 			storeArchive: string | undefined,
+			serverArchive: string | undefined,
 			count = 0,
 			size = 0;
 		for await (const entry of readTar(createReadStream(archive))) {
@@ -124,21 +132,23 @@ export async function unpackData(
 				}
 				accept(JSON.parse(Buffer.concat(parts).toString("utf8")) as ArchiveManifest);
 				manifest = true;
-			} else if (entry.path === "store.archive" || entry.path.startsWith("files/")) {
+			} else if (entry.path === "store.archive" || entry.path === "server.archive" || entry.path.startsWith("files/")) {
 				const target = join(staging, ...entry.path.split("/"));
 				if (entry.path === "store.archive") storeArchive = target;
+				if (entry.path === "server.archive") serverArchive = target;
 				await mkdir(dirname(target), { recursive: true, mode: 0o700 });
 				await pipeline(entry.data, createWriteStream(target, { mode: 0o600 }));
 			} else throw new Error(`importData: the archive holds ${entry.path}, which an address archive does not`);
 		}
-		if (!manifest || !storeArchive) throw new Error("importData: the archive has no manifest.json or store.archive");
+		if (!manifest || !storeArchive || !serverArchive)
+			throw new Error("importData: the archive has no manifest.json, store.archive or server.archive");
 		const database = join(staging, "store.sqlite");
 		await privateStore(database);
 		const backend = sqliteBackend(await openNodeSqliteDatabase(database)),
 			store = await importStore(backend, decodeJsonl(createReadStream(storeArchive)), context);
 		await store.close(context);
 		await rm(storeArchive);
-		await rename(staging, dir);
+		return { staging, server: serverArchive };
 	} catch (error) {
 		await rm(staging, { recursive: true, force: true });
 		throw error;

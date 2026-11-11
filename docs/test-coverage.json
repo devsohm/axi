@@ -207,6 +207,7 @@
 						"packages/objects/test/app-host.test.ts",
 						"packages/objects/test/app-data-lifecycle.test.ts",
 						"packages/objects/test/app-archive.test.ts",
+						"packages/objects/test/app-data-transaction.test.ts",
 						"packages/objects/test/app-owner.test.ts",
 						"packages/objects/test/app-auth-routes.test.ts"
 					]

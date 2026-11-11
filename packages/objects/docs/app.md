@@ -125,9 +125,13 @@ The host stores four index tables and summary documents in its Store. Immutable 
 
 `copyFiles({ store, files: filesDirectory }, targetDirectory, context)` copies only the file index and committed blobs into a new host directory. It holds the source Store's export queue while linking or copying blobs, stages beside the target, and removes staging data on failure. The target must not exist. Unfinished uploads and unrelated Store owners are excluded.
 
-`exportData(address, path, context)` writes a tar archive containing a manifest, Store JSONL records and completed files. A running worker performs its export. Otherwise, the server acquires the worker's lock before reading its data.
+`exportData(address, path, context)` writes a format 2 tar archive containing a manifest, the worker's Store JSONL records, completed files and `server.archive`. The server part contains documents and table rows belonging to that address. A running worker performs its export. Otherwise, the server acquires the worker's lock before reading its data.
 
-`importData(archive, address, context)` accepts an empty destination only. It checks app identity, format, paths and limits, stages the contents, imports the Store and then installs the completed directory. Failure removes the staging directory. Defaults allow 100,000 entries and 4 GiB of unpacked data.
+`importData(archive, address, context, options)` checks app identity, address kind, format, paths and limits. It refuses existing data unless `options.existing` is `"replace"`. It stages the worker's files and Store, puts the old directory aside when replacing, installs the new directory, then imports the server part in one commit. Copying to another address rewrites its ownership keys. Defaults allow 100,000 entries and 4 GiB of unpacked data.
+
+A definite import failure restores the old directory and removes the new one. An uncertain server commit leaves the new directory in place and preserves the old directory beside it. The error identifies this condition. After recovering the server Store, repeat the import with `existing: "replace"`. Format 1 archives lack the server part and are refused.
+
+`deleteData(address, context)` commits deletion of the server-owned data before removing the worker directory. Repeating it removes a directory left by an interrupted deletion. Import and delete hold the worker's process lock and are refused while that worker runs. Stop it through `app.workers.get(kind).stop(address, context)` first.
 
 The Store archive is not a Durable JSONL session file. Durable has its own storage contract and can use an Objects Store through `StoreStorage`.
 

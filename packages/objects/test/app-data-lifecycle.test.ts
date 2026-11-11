@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect, test } from "vitest";
 import { BACKGROUND_CONTEXT as context } from "../src/context/index.ts";
-import { hostKind, openStore, sqliteBackend, str } from "../src/index.ts";
+import { encodeJsonl, hostKind, openStore, sqliteBackend, str } from "../src/index.ts";
 import { startServer, type AppError, type AppOptions } from "../src/node/app/index.ts";
 import { ARCHIVE_FORMAT, packData } from "../src/node/app/archive.ts";
 import { workerDirectory } from "../src/node/app/layout.ts";
@@ -56,6 +56,13 @@ test("the app exports dormant worker data and imports it under the worker lock",
 		const restored = workerDirectory(app.dataDir, target);
 		expect(await readFile(join(restored, "files", "saved.txt"), "utf8")).toBe("persisted worker file");
 		expect((await stat(join(restored, "store.sqlite"))).isFile()).toBe(true);
+		await expect(app.importData(archive, target, context)).rejects.toThrow("exists already");
+		await writeFile(join(restored, "files", "saved.txt"), "old replacement");
+		await app.importData(archive, target, context, { existing: "replace" });
+		expect(await readFile(join(restored, "files", "saved.txt"), "utf8")).toBe("persisted worker file");
+		await app.deleteData(target, context);
+		await expect(stat(restored)).rejects.toMatchObject({ code: "ENOENT" });
+		await app.deleteData(target, context);
 		expect(app.workers.get(Notebook.kind)?.state.value[source.key]).toBeUndefined();
 		expect(app.web).toBeUndefined();
 		expect(app.tui).toBeUndefined();
@@ -109,7 +116,10 @@ test.each(["wrong-app", "wrong-format"] as const)(
 				api: "v1",
 				address: { kind: source.kind, key: source.key },
 			};
-			await packData(data, manifest, archive, context);
+			const server = join(directory, "server.jsonl"), chunks: Uint8Array[] = [];
+			for await (const chunk of encodeJsonl(app.host.exportHostData(source, context))) chunks.push(chunk);
+			await writeFile(server, Buffer.concat(chunks));
+			await packData(data, manifest, server, archive, context);
 			await expect(app.importData(archive, target, context)).rejects.toThrow(
 				invalid === "wrong-app" ? 'an archive of "another-app"' : "not a format",
 			);

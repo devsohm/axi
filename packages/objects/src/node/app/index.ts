@@ -9,6 +9,7 @@ export {
 	type AppPlugins,
 	type AppTimeouts,
 	type AppWorkerKind,
+	type DataImportOptions,
 } from "./app.ts";
 export { ARCHIVE_FORMAT, type ArchiveManifest } from "./archive.ts";
 export { ephemeralLoginFacet, type EphemeralUser } from "./ephemeral.ts";

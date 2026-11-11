@@ -3,9 +3,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, it } from "vitest";
 import { BACKGROUND_CONTEXT as context } from "../src/context/index.ts";
-import { createHost, openStore, sqliteBackend } from "../src/index.ts";
+import { createHost, encodeJsonl, openStore, sqliteBackend } from "../src/index.ts";
 import { openNodeSqliteDatabase } from "../src/sqlite/node.ts";
-import { ARCHIVE_FORMAT, packStore, unpackData, type ArchiveManifest } from "../src/node/app/archive.ts";
+import { ARCHIVE_FORMAT, packStore, unpackStaging, type ArchiveManifest } from "../src/node/app/archive.ts";
 import { defineUsers } from "../src/node/app/users.ts";
 import { obj, str } from "../src/contracts/index.ts";
 import { readTar, writeTar } from "../src/node/app/tar.ts";
@@ -19,11 +19,11 @@ async function bytes(source: AsyncIterable<Uint8Array>) {
 	return Buffer.concat(parts);
 }
 
-it("round-trips application rows and finished files, refuses replacement and removes an over-limit staging import", async () => {
+it("round-trips application rows, server data and finished files and removes an over-limit staging import", async () => {
 	const dir = await mkdtemp(join(tmpdir(), "axi-app-archive-")),
 		files = join(dir, "files"),
 		archive = join(dir, "address.tar"),
-		target = join(dir, "restored");
+		server = join(dir, "server.jsonl");
 	const store = await openStore(sqliteBackend(await openNodeSqliteDatabase(join(dir, "store.sqlite"))), context),
 		host = createHost({ store, onError() {} });
 	const users = defineUsers(obj({ name: str() })),
@@ -41,15 +41,16 @@ it("round-trips application rows and finished files, refuses replacement and rem
 		const accounts = await host.get(users.Users, {}, context);
 		await accounts.update({ id: "user", profile: { name: "Ari" } }, context);
 		accounts.release();
-		await packStore(store, files, manifest, archive, context);
-		await expect(unpackData(archive, target, () => {}, { bytes: 1 }, context)).rejects.toThrow("more than 1 bytes");
+		await writeFile(server, await bytes(encodeJsonl(host.exportHostData({ ...manifest.address, params: { name: "one" } }, context))));
+		await packStore(store, files, manifest, server, archive, context);
+		await expect(unpackStaging(archive, dir, () => {}, { bytes: 1 }, context)).rejects.toThrow("more than 1 bytes");
 		expect(await readdir(dir)).not.toContain("restored");
 		expect((await readdir(dir)).some((name) => name.startsWith(".objects-import-"))).toBe(false);
-		await unpackData(archive, target, (value) => expect(value).toEqual(manifest), {}, context);
+		const { staging: target, server: serverPart } = await unpackStaging(archive, dir, (value) => expect(value).toEqual(manifest), {}, context);
+		expect(await readFile(serverPart, "utf8")).toBe(await readFile(server, "utf8"));
 		expect(await readdir(join(target, "files"))).toEqual(["saved.txt"]);
 		expect(await readFile(join(target, "files/saved.txt"), "utf8")).toBe("retained file");
 		expect((await stat(join(target, "store.sqlite"))).mode & 0o777).toBe(0o600);
-		await expect(unpackData(archive, target, () => {}, {}, context)).rejects.toThrow("exists already");
 		const reopened = await openStore(
 				sqliteBackend(await openNodeSqliteDatabase(join(target, "store.sqlite"))),
 				context,
