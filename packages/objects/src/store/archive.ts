@@ -25,6 +25,7 @@ export type ArchiveManifest = {
 	readonly schema: number;
 	readonly lastSeq: number;
 	readonly nextId: number;
+	readonly host?: string;
 };
 export type ArchivePart =
 	| ArchiveManifest
@@ -43,6 +44,7 @@ const column = obj({
 	default: opt(union([str(), num(), bool()])),
 	version: opt(positive),
 	fingerprint: opt(str()),
+	host: opt(str()),
 });
 const columns = Type.Record(Type.String(), column);
 const versions = Type.Record(Type.String(), positive),
@@ -79,6 +81,7 @@ const record = obj({
 	createdAt: positive,
 	retiredAt: opt(positive),
 	meta: opt(str()),
+	host: opt(str()),
 	revision: positive,
 	version: positive,
 	fingerprint: str(),
@@ -97,6 +100,7 @@ const partSchema = {
 			schema: positive,
 			lastSeq: count,
 			nextId: positive,
+			host: opt(str()),
 		}),
 		table,
 		put,

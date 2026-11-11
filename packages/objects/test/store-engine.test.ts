@@ -17,6 +17,7 @@ import {
 	writeContent,
 	listDocumentKeys,
 	listDocumentEntries,
+	listHostRecords,
 } from "../src/store/engine.ts";
 import { applyStoreSchema } from "../src/store/schema.ts";
 import { Step, type StagedWrite } from "../src/store/step.ts";
@@ -43,6 +44,24 @@ async function fixture() {
 	return { db, ids, commit, catalog };
 }
 const address = { owner: "app", namespace: "notes", kind: "note", key: "" };
+it("selects live host-owned records without mistaking a matching string key for an owner", async () => {
+	const { db, commit } = await fixture();
+	try {
+		const base = { version: 1, fingerprint: "first", value: {} };
+		const created = await commit([
+			createDocument({ ...address, key: "worker|one", host: "worker|one" }, base, "{}"),
+			createDocument({ ...address, namespace: "plain", key: "worker|one" }, base, "{}"),
+			createDocument({ ...address, key: "worker|two", host: "worker|two" }, base, "{}"),
+		]);
+		const [owned, plain] = created.created;
+		expect((await readDocument(db, owned!))?.host).toBe("worker|one");
+		expect(await readDocument(db, plain!)).not.toHaveProperty("host");
+		expect((await listHostRecords(db, "worker|one", 0, 10)).map(record => record.id)).toEqual([owned]);
+		expect(await listHostRecords(db, "worker|one", owned!, 10)).toEqual([]);
+		await commit([retireDocument(owned!, 1)]);
+		expect(await listHostRecords(db, "worker|one", 0, 10)).toEqual([]);
+	} finally { await db.close(); }
+});
 it("applies deltas atomically, refuses stale revisions, and frees a retired live address", async () => {
 	const { db, commit } = await fixture();
 	try {

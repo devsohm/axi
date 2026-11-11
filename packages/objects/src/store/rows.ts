@@ -2,7 +2,7 @@ import type { Context } from "../context/index.ts";
 import type { JsonValue } from "../json.ts";
 import type { SqliteValue } from "../sqlite/index.ts";
 import { invalid } from "../data/internal.ts";
-import type { Column, ColumnType } from "./columns.ts";
+import type { Column, ColumnType, HostColumnOf } from "./columns.ts";
 import { storedText } from "./text.ts";
 
 export type Scalar = string | number | boolean;
@@ -42,6 +42,7 @@ export class RowCodec {
 	readonly #columns: readonly Column[];
 	readonly #keys: readonly Column[];
 	readonly #json: readonly Extract<Column, { type: "json" }>[];
+	readonly #host: HostColumnOf | undefined;
 	readonly #names: ReadonlySet<string>;
 	readonly #keyNames: ReadonlySet<string>;
 	readonly #keyPositions: readonly number[];
@@ -56,6 +57,7 @@ export class RowCodec {
 			(name) => columns.find((column) => column.name === name)!,
 		);
 		this.#json = columns.filter((column) => column.type === "json");
+		this.#host = columns.find((column): column is HostColumnOf => column.type === "str" && column.host !== undefined);
 		this.#names = new Set(columns.map((column) => column.name));
 		this.#keyNames = new Set(key);
 		this.#keyPositions = key.map((name) =>
@@ -116,12 +118,9 @@ export class RowCodec {
 			const what = `${this.#table}: ${operation}: key column "${column.name}"`;
 			const input: unknown = Reflect.get(fields, column.name);
 			if (input === undefined) throw invalid("args", `${what} is missing`);
-			if (column.type === "json")
-				throw invalid(
-					"args",
-					`${what}: a json(...) column has no scalar value`,
-				);
-			const value = toSqlite(checkScalar(column.type, input, what));
+			if (column.type === "json") throw invalid("args", `${what}: a json(...) column has no scalar value`);
+			const value =
+				column.host === undefined ? toSqlite(checkScalar(column.type, input, what)) : column.host.key(input, what);
 			params.push(value);
 			stored[column.name] = value;
 		}
@@ -136,6 +135,8 @@ export class RowCodec {
 			const value = stored[column.name];
 			if (value === null || value === undefined) continue;
 			if (column.type === "bool") row[column.name] = value === 1;
+			else if (column.type === "str" && column.host !== undefined)
+				row[column.name] = column.host.address(value as string);
 			else if (column.type === "json")
 				row[column.name] = column.json.read(
 					value as string,
@@ -146,6 +147,17 @@ export class RowCodec {
 			else row[column.name] = value;
 		}
 		return row;
+	}
+	stored<R extends Readonly<Record<string, unknown>>>(row: R): R {
+		const column = this.#host,
+			cell = column && row[column.name];
+		if (!column || typeof cell !== "object" || cell === null) return row;
+		return { ...row, [column.name]: (cell as { readonly key: string }).key };
+	}
+	addressed<R extends Readonly<Record<string, unknown>>>(row: R): R {
+		const column = this.#host,
+			cell = column && row[column.name];
+		return column && typeof cell === "string" ? { ...row, [column.name]: column.host.address(cell) } : row;
 	}
 }
 
@@ -166,6 +178,10 @@ export function encodeCell(
 	value: unknown,
 	what: string,
 ): { readonly param: SqliteValue; readonly stored: Scalar | JsonValue } {
+	if (column.type === "str" && column.host !== undefined) {
+		const key = column.host.key(value, what);
+		return { param: key, stored: key };
+	}
 	if (column.type !== "json") {
 		const stored = checkScalar(column.type, value, what);
 		return { param: toSqlite(stored), stored };

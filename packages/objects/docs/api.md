@@ -102,6 +102,8 @@ Exports from the package root. The linked declarations contain exact signatures.
 | `Host` | interface | [`host/host.d.ts`](../dist/host/host.d.ts) |
 | `HostError` | typealias | [`host/report.d.ts`](../dist/host/report.d.ts) |
 | `hostKind` | function | [`contracts/host-kind.d.ts`](../dist/contracts/host-kind.d.ts) |
+| `host` | function | [`store/host-column.d.ts`](../dist/store/host-column.d.ts) |
+| `HostColumnSchema` | typealias | [`store/host-column.d.ts`](../dist/store/host-column.d.ts) |
 | `HostKind` | interface | [`contracts/host-kind.d.ts`](../dist/contracts/host-kind.d.ts) |
 | `hostLanguage` | function | [`surfaces/active-language.d.ts`](../dist/surfaces/active-language.d.ts) |
 | `HostOptions` | typealias | [`host/host.d.ts`](../dist/host/host.d.ts) |

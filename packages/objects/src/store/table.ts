@@ -1,4 +1,6 @@
 import { checkName } from "../contracts/names.ts";
+import type { Address, KindShape } from "../contracts/index.ts";
+import type { HostColumnSchema } from "./host-column.ts";
 import { hash64 } from "../contracts/fingerprint.ts";
 import {
 	columnRecord,
@@ -6,6 +8,7 @@ import {
 	type Column,
 	type ColumnRecord,
 	type Columns,
+	type HostColumnOf,
 	type OrderColumn,
 } from "./columns.ts";
 import { columnRefs, type ColumnRef } from "./expression.ts";
@@ -24,9 +27,11 @@ export type TableOptions<
 };
 export type KeyOf<C extends Columns, K extends readonly string[]> = {
 	readonly [P in K[number]]: P extends keyof C
-		? C[P] extends { readonly "~kind": "Integer" }
-			? number
-			: string
+		? C[P] extends HostColumnSchema<infer H extends KindShape>
+			? Address<H>
+			: C[P] extends { readonly "~kind": "Integer" }
+				? number
+				: string
 		: never;
 };
 export type Evolution = {
@@ -35,6 +40,7 @@ export type Evolution = {
 };
 export const TABLE_FORM_VERSION = 1;
 export const INDEX_NAME = /^[a-z0-9_]+$/;
+export const HOST_INDEX = "host";
 export function defineTable<
 	C extends Columns,
 	const K extends readonly OrderColumn<C>[],
@@ -59,6 +65,7 @@ export class TableDefinition<
 	readonly fingerprint: string;
 	readonly rows: RowCodec;
 	readonly refs: Readonly<Record<string, ColumnRef>>;
+	readonly hostColumn: HostColumnOf | undefined;
 	declare readonly "~columns"?: C;
 	declare readonly "~key"?: K;
 	constructor(
@@ -88,6 +95,19 @@ export class TableDefinition<
 				orderColumns(this.byName, names, `${name}: index "${index}"`),
 			);
 		}
+		const hosts = this.columns.filter(
+			(column): column is HostColumnOf => column.type === "str" && column.host !== undefined,
+		);
+		if (hosts.length > 1) throw new Error(`${name}: more than one host(...) column`);
+		this.hostColumn = hosts[0];
+		const hostIndex = this.hostColumn && this.key[0] !== this.hostColumn.name ? [this.hostColumn.name] : undefined;
+		const declaredHost = indexes.get(HOST_INDEX);
+		if (
+			declaredHost !== undefined &&
+			(hostIndex === undefined || declaredHost.length !== 1 || declaredHost[0] !== hostIndex[0])
+		)
+			throw new Error(`${name}: index "${HOST_INDEX}" is the host(...) column's own`);
+		if (hostIndex) indexes.set(HOST_INDEX, hostIndex);
 		this.indexes = indexes;
 		this.record = Object.fromEntries(
 			this.columns.map((column) => [column.name, columnRecord(column)]),

@@ -104,6 +104,7 @@ class ImportArchive {
 				refuse(`format ${part.format} is not ${ARCHIVE_FORMAT}`);
 			if (part.schema > STORE_SCHEMA)
 				refuse(`schema ${part.schema} is newer than ${STORE_SCHEMA}`);
+			if (part.host !== undefined) refuse(`a host's data archive (${part.host}); import it with importHostData`);
 			this.#manifest = part;
 			this.#step = new Step(
 				this.#executor,
@@ -177,6 +178,7 @@ class ImportArchive {
 			record.namespace,
 			record.kind,
 			record.key ?? "",
+			...(record.host === undefined ? [] : [record.host]),
 		])
 			if (storedText(text, what) !== text)
 				refuse("an address is not well-formed text");

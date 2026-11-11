@@ -104,12 +104,11 @@ export class TableChanges {
 		let index = writes.length - 1;
 		while (index >= 0 && writes[index]!.kind === "update") index--;
 		const reset = writes[index];
+		const committed = reset === undefined ? await this.handle.get(key, context) : undefined;
 		let row =
-			reset === undefined
-				? ((await this.handle.get(encoded.key, context)) as
-						| EvaluatedRow
-						| undefined)
-				: reset.kind === "put"
+			committed !== undefined
+				? definition.rows.stored(committed as EvaluatedRow)
+				: reset?.kind === "put"
 					? reset.row
 					: undefined;
 		for (index++; index < writes.length; index++) {
@@ -117,7 +116,7 @@ export class TableChanges {
 			if (row !== undefined && change.kind === "update")
 				row = applySet(change.set, row, definition.name);
 		}
-		return row;
+		return row === undefined ? undefined : definition.rows.addressed(row);
 	}
 	#set(input: unknown, what: string): SetNode {
 		return compileSet(this.handle.definition, this.#input(input), what);

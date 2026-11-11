@@ -17,6 +17,7 @@ export type DocumentRecord = DocumentAddress & {
 	readonly createdAt: number;
 	readonly retiredAt?: number;
 	readonly meta?: string;
+	readonly host?: string;
 	readonly revision: number;
 	readonly version: number;
 	readonly fingerprint: string;
@@ -90,7 +91,7 @@ export type OwnedDocumentEntry = DocumentEntry & {
 };
 
 export function createDocument(
-	address: DocumentAddress,
+	address: DocumentAddress & { readonly host?: string },
 	base: DocumentBase,
 	text: string,
 	created?: (id: number) => void,
@@ -121,7 +122,7 @@ export async function insertDocument(
 	text: string | undefined,
 ): Promise<void> {
 	await step.run(
-		`INSERT INTO ${TABLES.documents} (id, owner, namespace, kind, key, history, created_at, retired_at, meta, revision, version, fingerprint) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		`INSERT INTO ${TABLES.documents} (id, owner, namespace, kind, key, history, created_at, retired_at, meta, host, revision, version, fingerprint) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		record.id,
 		record.owner,
 		record.namespace,
@@ -131,6 +132,7 @@ export async function insertDocument(
 		record.createdAt,
 		record.retiredAt ?? null,
 		record.meta ?? null,
+		record.host ?? null,
 		record.revision,
 		record.version,
 		record.fingerprint,
@@ -256,14 +258,12 @@ export async function retireRecord(
 		);
 	await dropRetired(step, record.id, record.history);
 }
-type RecordRow = Omit<
-	DocumentRecord,
-	"createdAt" | "retiredAt" | "meta" | "key"
-> & {
+type RecordRow = Omit<DocumentRecord, "createdAt" | "retiredAt" | "meta" | "key" | "host"> & {
 	readonly created_at: number;
 	readonly retired_at: number | null;
 	readonly meta: string | null;
 	readonly key: string;
+	readonly host: string | null;
 };
 type RevisionRow = {
 	readonly seq: number;
@@ -272,15 +272,16 @@ type RevisionRow = {
 	readonly content: string;
 };
 const RECORD_COLUMNS =
-	"id, owner, namespace, kind, key, history, created_at, retired_at, meta, revision, version, fingerprint";
+	"id, owner, namespace, kind, key, history, created_at, retired_at, meta, host, revision, version, fingerprint";
 function recordOf(row: RecordRow): DocumentRecord {
-	const { key, created_at, retired_at, meta, ...fields } = row;
+	const { key, created_at, retired_at, meta, host, ...fields } = row;
 	return {
 		...fields,
 		...(key ? { key } : {}),
 		createdAt: created_at,
 		...(retired_at === null ? {} : { retiredAt: retired_at }),
 		...(meta === null ? {} : { meta }),
+		...(host === null ? {} : { host }),
 	};
 }
 export async function readDocument(
@@ -465,6 +466,21 @@ export async function listRecords(
 	return (
 		await executor.all<RecordRow>(
 			`SELECT ${RECORD_COLUMNS} FROM ${TABLES.documents} WHERE id > ? ORDER BY id LIMIT ?`,
+			after,
+			limit,
+		)
+	).map(recordOf);
+}
+export async function listHostRecords(
+	executor: Pick<SqliteExecutor, "all">,
+	host: string,
+	after: number,
+	limit: number,
+): Promise<DocumentRecord[]> {
+	return (
+		await executor.all<RecordRow>(
+			`SELECT ${RECORD_COLUMNS} FROM ${TABLES.documents} WHERE host = ? AND id > ? AND retired_at IS NULL ORDER BY id LIMIT ?`,
+			host,
 			after,
 			limit,
 		)

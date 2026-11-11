@@ -34,6 +34,10 @@ Commits queued behind a running Store step share the next database transaction. 
 
 Persisted state declares a schema version and checkpoint policy. A schema change requires a compatible migration. Tables record version history and bounded migrations. Jobs persist unsettled run records separately from their state. Recovery uses committed records, not unfinished in-memory callbacks.
 
+`host(Kind)` declares a table column containing addresses of one host kind. The Store writes canonical address keys as text and returns addresses on reads. A table has at most one host column. It cannot be optional or have a default. Its automatic `host` index is omitted when the primary key already starts with that column. Host columns support equality, inequality, and membership conditions. Ordering comparisons, prefix conditions, null conditions, and expressions over host addresses are refused.
+
+Store schema version 3 adds an optional, indexed host field to document records. Existing records keep no host owner. A string key matching a host address does not make the record host-owned. Table records and archives retain host-column kinds. Schema migration preserves existing document values and lifetimes.
+
 An uncertain database outcome is terminal for the Store. Export holds its queue until the iterator ends or is cancelled. Import validates and applies the complete archive to an empty database. Optional outbox replay accepts consecutive commits and checks row counts.
 
 ## Store sync

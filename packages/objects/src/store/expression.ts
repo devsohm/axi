@@ -1,6 +1,6 @@
 import type { TOptional } from "typebox";
 import type { JsonValue } from "../json.ts";
-import type { TSchema } from "../contracts/index.ts";
+import type { Address, TSchema } from "../contracts/index.ts";
 import { invalid } from "../data/internal.ts";
 import type {
 	Column,
@@ -97,16 +97,10 @@ export type SetOf<C extends Columns, K extends readonly string[]> = {
 		: ValueOf<C[P]> | Expression<ValueOf<C[P]>, ColumnTypeOf<C[P]>>;
 };
 
-export function eq<T extends Scalar>(
-	column: ColumnRef<T, ScalarType>,
-	value: T,
-): Condition {
+export function eq<T extends Scalar | Address>(column: ColumnRef<T, ScalarType>, value: T): Condition {
 	return new Condition("eq", [column, value]);
 }
-export function ne<T extends Scalar>(
-	column: ColumnRef<T, ScalarType>,
-	value: T,
-): Condition {
+export function ne<T extends Scalar | Address>(column: ColumnRef<T, ScalarType>, value: T): Condition {
 	return new Condition("ne", [column, value]);
 }
 export function lt<T extends Scalar>(
@@ -133,10 +127,7 @@ export function gte<T extends Scalar>(
 ): Condition {
 	return new Condition("gte", [column, value]);
 }
-export function inArray<T extends Scalar>(
-	column: ColumnRef<T, ScalarType>,
-	values: readonly T[],
-): Condition {
+export function inArray<T extends Scalar | Address>(column: ColumnRef<T, ScalarType>, values: readonly T[]): Condition {
 	return new Condition("inArray", [column, values]);
 }
 export function isNull(column: ColumnRef<unknown, ScalarType>): Condition {
@@ -241,7 +232,7 @@ function operand(column: ScalarColumn, value: unknown, what: string): Scalar {
 			"args",
 			`${what}: column "${column.name}" compared with ${String(value)}; ask with isNull`,
 		);
-	return checkScalar(column.type, value, `${what}: column "${column.name}"`);
+	return encodeCell(column, value, `${what}: column "${column.name}"`).stored as Scalar;
 }
 function stringOperand(value: unknown, what: string): string {
 	return checkScalar("str", value, what);
@@ -260,6 +251,8 @@ export function compileWhere(
 		return { or: args.map((part) => compileWhere(table, part, what)) };
 	if (op === "not") return { not: compileWhere(table, args[0], what) };
 	const column = scalarColumn(table, args[0], what);
+	if (column.host !== undefined && op !== "eq" && op !== "ne" && op !== "inArray")
+		throw invalid("args", `${table.name}: ${what}: ${op} on host(...) column "${column.name}" (eq, ne, inArray only)`);
 	if (op === "isNull") return { isNull: column.name };
 	if (op === "prefix") {
 		if (column.type !== "str")
@@ -320,8 +313,9 @@ function compileExpr(
 		const column =
 			typeof args[0] === "string" ? table.byName.get(args[0]) : undefined;
 		if (!column) return refuse(`no column "${String(args[0])}"`);
-		if (column.type !== type)
-			return refuse(`column "${column.name}" is ${column.type}, not ${type}`);
+		if (column.type !== type) return refuse(`column "${column.name}" is ${column.type}, not ${type}`);
+		if (column.type === "str" && column.host !== undefined)
+			return refuse(`host(...) column "${column.name}" holds addresses`);
 		return { node: { col: column.name }, nullable: column.optional };
 	}
 	if (op === "replacePrefix") {
@@ -418,10 +412,10 @@ export function compileSet(
 				`${table.name}: ${location}: null is no ${column.type} value (undefined clears)`,
 			);
 		} else if (value instanceof Expression) {
-			if (column.type === "json")
+			if (column.type === "json" || column.host !== undefined)
 				throw invalid(
 					"args",
-					`${table.name}: ${location}: json(...) columns take plain values`,
+					`${table.name}: ${location}: ${column.type === "json" ? "json" : "host"}(...) columns take plain values`,
 				);
 			const expression = compileExpr(table, value, column.type, location);
 			if (expression.nullable && !column.optional)
@@ -437,7 +431,7 @@ export function compileSet(
 							json: encodeCell(column, value, `${table.name}: ${location}`)
 								.stored,
 						}
-					: checkScalar(column.type, value, `${table.name}: ${location}`);
+					: (encodeCell(column, value, `${table.name}: ${location}`).stored as Scalar);
 	}
 	return result;
 }

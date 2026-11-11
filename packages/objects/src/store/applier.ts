@@ -53,6 +53,8 @@ export async function applyWrite(
 				);
 			}
 			const seen = new Set<string>();
+			if (Object.values(write.columns).filter((column) => column.host !== undefined).length > 1)
+				refused("more than one host column");
 			for (const [name, column] of Object.entries(write.columns)) {
 				const at = `${what}: column ${JSON.stringify(name)}`;
 				if (!COLUMN_NAME.test(name) || seen.has(name.toLowerCase()))
@@ -206,6 +208,15 @@ function json(value: unknown, what: string): string {
 	return text;
 }
 function checkColumn(column: ColumnRecord, what: string): void {
+	if (column.host !== undefined) {
+		if (column.type !== "str" || column.optional === true || column.default !== undefined)
+			throw invalid("args", `${what}: a host column is a non-opt str column without a default`);
+		try {
+			checkName(column.host, `${what}: host kind`);
+		} catch (error) {
+			throw invalid("args", error instanceof Error ? error.message : String(error));
+		}
+	}
 	const isJson = column.type === "json";
 	if (
 		isJson !== (column.version !== undefined) ||

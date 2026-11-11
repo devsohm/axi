@@ -52,4 +52,5 @@ export {
 } from "./table-evolve.ts";
 export type { Page, PageOptions, Table, TableOf } from "./table-handle.ts";
 export { compareText } from "./text.ts";
+export { host, type HostColumnSchema } from "./host-column.ts";
 export type { StoreWrite } from "./writes.ts";

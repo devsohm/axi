@@ -44,8 +44,15 @@ const migrations: readonly SqliteMigration[] = [
 			`CREATE INDEX objects_revisions_bases ON ${TABLES.revisions} (document_id, seq) WHERE kind = 'base'`,
 		],
 	},
+	{
+		version: 3,
+		statements: [
+			`ALTER TABLE ${TABLES.documents} ADD COLUMN host TEXT`,
+			`CREATE INDEX objects_documents_host ON ${TABLES.documents} (host) WHERE host IS NOT NULL`,
+		],
+	},
 ];
-export const STORE_SCHEMA = 2;
+export const STORE_SCHEMA = 3;
 const currentSql = `SELECT s.version, e.encoding, m.last_seq, m.next_id, m.outbox, m.outbox_floor
  FROM objects_store_schema s, pragma_encoding e, ${TABLES.meta} m WHERE s.singleton = 1 AND m.singleton = 1`;
 

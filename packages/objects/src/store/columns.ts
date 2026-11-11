@@ -1,5 +1,6 @@
 import type { TBoolean, TInteger, TNumber, TOptional, TString } from "typebox";
-import type { Static, TSchema } from "../contracts/index.ts";
+import type { KindShape, Static, TSchema } from "../contracts/index.ts";
+import { HostColumn, type HostColumnSchema } from "./host-column.ts";
 import { JsonColumn, type JsonColumnSchema } from "./json-column.ts";
 import { storedText } from "./text.ts";
 
@@ -7,20 +8,23 @@ type ScalarSchema = TString | TInteger | TNumber | TBoolean;
 export type ColumnSchema =
 	| ScalarSchema
 	| JsonColumnSchema<unknown>
+	| HostColumnSchema<KindShape>
 	| TOptional<ScalarSchema | JsonColumnSchema<unknown>>;
 export type Columns = { readonly [name: string]: ColumnSchema };
 export type ColumnType = "str" | "int" | "num" | "bool" | "json";
 export type ColumnTypeOf<S> = S extends TOptional<infer Inner>
 	? ColumnTypeOf<Inner>
-	: S extends TString
+	: S extends HostColumnSchema<KindShape>
 		? "str"
-		: S extends TInteger
-			? "int"
-			: S extends TNumber
-				? "num"
-				: S extends TBoolean
-					? "bool"
-					: "json";
+		: S extends TString
+			? "str"
+			: S extends TInteger
+				? "int"
+				: S extends TNumber
+					? "num"
+					: S extends TBoolean
+						? "bool"
+						: "json";
 export type ValueOf<S> = S extends TOptional<infer Inner>
 	? ValueOf<Inner>
 	: S extends TSchema
@@ -41,7 +45,7 @@ export type PutRowOf<C extends Columns> = {
 	[K in Exclude<keyof C, Exclude<Required<C>, Defaulted<C>>>]?: ValueOf<C[K]>;
 };
 export type OrderColumn<C extends Columns> = {
-	[K in keyof C]: C[K] extends TString | TInteger
+	[K in keyof C]: C[K] extends TString | TInteger | HostColumnSchema<KindShape>
 		? C[K] extends TOptional<TSchema>
 			? never
 			: K
@@ -54,6 +58,7 @@ export type Column =
 			readonly type: "str" | "int" | "num" | "bool";
 			readonly optional: boolean;
 			readonly default: string | number | boolean | undefined;
+			readonly host?: HostColumn;
 	  }
 	| {
 			readonly name: string;
@@ -61,12 +66,15 @@ export type Column =
 			readonly optional: boolean;
 			readonly json: JsonColumn;
 	  };
+export type ScalarColumn = Exclude<Column, { readonly type: "json" }>;
+export type HostColumnOf = ScalarColumn & { readonly type: "str"; readonly host: HostColumn };
 export type ColumnRecord = {
 	readonly type: ColumnType;
 	readonly optional?: true;
 	readonly default?: string | number | boolean;
 	readonly version?: number;
 	readonly fingerprint?: string;
+	readonly host?: string;
 };
 export const COLUMN_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
 export function checkColumnName(name: string, what: string): void {
@@ -90,6 +98,11 @@ export function describeColumns(columns: Columns, table: string): Column[] {
 		const json: unknown = Reflect.get(schema, "json");
 		if (json instanceof JsonColumn)
 			return { name, type: "json", optional, json };
+		const host: unknown = Reflect.get(schema, "host");
+		if (host instanceof HostColumn) {
+			if (optional) throw new Error(`${what}: a host(...) column is not opt(...)`);
+			return { name, type: "str", optional: false, default: undefined, host };
+		}
 		const type = scalarType(Reflect.get(schema, "type"), what);
 		for (const key of Object.keys(schema))
 			if (key !== "type" && key !== "default")
@@ -134,6 +147,7 @@ function scalarType(
 	}
 }
 export function columnRecord(column: Column): ColumnRecord {
+	if (column.type !== "json" && column.host !== undefined) return { type: "str", host: column.host.kind.kind };
 	const record: ColumnRecord = {
 		type: column.type,
 		...(column.optional ? { optional: true as const } : {}),

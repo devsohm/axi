@@ -12,6 +12,20 @@ import {
 } from "../src/store/schema.ts";
 
 describe("store schema", () => {
+	it("migrates a version-two database without changing its document contents", async () => {
+		const db = await openNodeSqliteDatabase(":memory:");
+		try {
+			await applyStoreSchema(db);
+			await db.exec(`DROP INDEX objects_documents_host; ALTER TABLE ${TABLES.documents} DROP COLUMN host; UPDATE objects_store_schema SET version = 2`);
+			await db.run(`INSERT INTO ${TABLES.documents} (id, owner, namespace, kind, key, history, created_at, revision, version, fingerprint) VALUES (2, 'app', 'notes', 'entry', 'old', 'none', 1, 1, 1, 'first')`);
+			await db.run(`INSERT INTO ${TABLES.revisions} VALUES (2, 1, 'base', 1, ?)`, '{"value":7}');
+			await db.run(`UPDATE ${TABLES.meta} SET last_seq = 1, next_id = 3`);
+			expect(await applyStoreSchema(db)).toMatchObject({ last_seq: 1, next_id: 3 });
+			expect(await db.get(`SELECT id, key, host FROM ${TABLES.documents}`)).toEqual({ id: 2, key: "old", host: null });
+			expect(await db.get(`SELECT content FROM ${TABLES.revisions}`)).toEqual({ content: '{"value":7}' });
+			expect(await db.get("SELECT version FROM objects_store_schema")).toEqual({ version: 3 });
+		} finally { await db.close(); }
+	});
 	it("initializes metadata and roundtrips table definitions through a real SQLite transaction", async () => {
 		const db = await openNodeSqliteDatabase(":memory:");
 		try {
