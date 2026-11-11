@@ -1,4 +1,5 @@
-import { existsSync } from "node:fs";
+import { existsSync, realpathSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
 import manifest from "./package.json" with { type: "json" };
@@ -18,6 +19,7 @@ export default defineConfig({
 	],
 	test: {
 		globalSetup: ["packages/env/test/build-daemon.ts"],
+		env: { TMPDIR: realpathSync(tmpdir()) },
 		include: [...manifest.workspaces.map((directory) => `${directory}/test/**/*.test.ts`), "test/*.test.ts"],
 		coverage: {
 			provider: "v8",

@@ -69,8 +69,10 @@ with both the in-process evaluator and SQLite. Terminal checks cover negotiation
 exit restoration, Unicode deletion, character search and paste handling. MCP
 credential checks exercise concurrent refresh, token rotation and failed refresh
 recovery. Filesystem checks cancel reads after the daemon replies and confirm
-that the connection remains usable. App checks cover dormant worker archives,
-invalid imports and exclusive data-directory locks.
+that the connection remains usable. App checks cover live and dormant worker
+archives, server-owned records, failed replacements and exclusive data-directory
+locks. Host-data checks compare stored row and JSON-cell versions after migration
+and reject malformed archives before they can change existing data.
 
 The verification workflow runs the owned suite on its native platform matrix. Its Linux x64 job also enforces the coverage minimums, validates the behavior report, and uploads the `test-coverage` artifact.
 

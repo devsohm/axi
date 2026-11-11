@@ -1,5 +1,6 @@
 import type { TOptional } from "typebox";
-import { opt, type TSchema } from "../contracts/index.ts";
+import { opt, type KindShape, type TSchema } from "../contracts/index.ts";
+import type { HostColumnSchema } from "./host-column.ts";
 import { editWith } from "../contracts/evolve.ts";
 import type { Increment } from "../contracts/history.ts";
 import {
@@ -81,7 +82,7 @@ export interface TableEditor<C extends Columns, K extends readonly string[]>
 		name: N,
 		column: S,
 	): TableEditor<
-		Added<C, N, C[N] extends TOptional<TSchema> ? TOptional<S> : S>,
+		Added<C, N, C[N] extends TOptional<TSchema> ? TOptional<Exclude<S, TOptional<TSchema> | HostColumnSchema<KindShape>>> : S>,
 		K
 	>;
 	rows(patch: (row: RowOf<C>) => PatchOf<C, K>): TableTailEditor<C, K>;

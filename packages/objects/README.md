@@ -33,6 +33,7 @@ Persistent documents, tables and jobs use a shared SQLite Store. The Store commi
 | `@axi/objects/tui` | Terminal scopes and sandbox bridge runtime |
 | `@axi/objects/tui/launcher` | Trusted Node launcher, credentials and machine-action prompts |
 | `@axi/objects/app` | Server and worker setup, sessions, files, users and data archives |
+| `@axi/objects/compression` | Node raw deflate and bounded inflate for link transports |
 | `@axi/objects/app/files` | Versioned file storage, folders, live listings and file-only copying without server startup or the compiler |
 
 The Node helpers load only when imported. Plugin builds require the optional `esbuild` peer. WebSocket hosting requires the optional `ws` peer.

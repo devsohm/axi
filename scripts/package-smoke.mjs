@@ -43,6 +43,7 @@ import {
 import { openNodeSqliteDatabase } from "@axi/objects/sqlite/node";
 import { Files, FilesFolder, filesFacet } from "@axi/objects/app/files";
 import { workerMain } from "@axi/objects/workers/child";
+import { nodeCompression } from "@axi/objects/compression";
 import { decodeBatch, encodeBatch, LOG_VERSION } from "@axi/objects/sync";
 import { registerLazyOAuthFlows } from "@axi/ai/lazy-oauth";
 import { registerLazyBedrockProvider } from "@axi/ai/lazy-bedrock-provider";
@@ -64,6 +65,13 @@ import { createInMemoryTransportPair } from "@axi/mcp/testing";
 
 const tui = await import("@axi/tui");
 assert.equal(typeof workerMain, "function");
+const compressionInput = new TextEncoder().encode("installed compression ".repeat(100));
+const compressed = nodeCompression.deflate(compressionInput);
+const inflated = nodeCompression.inflate(compressed, compressionInput.length);
+assert.equal(inflated.kind, "bytes");
+assert.deepEqual(new Uint8Array(inflated.bytes), compressionInput);
+assert.equal(nodeCompression.inflate(compressed, compressionInput.length - 1).kind, "too_large");
+assert.equal(nodeCompression.inflate(Uint8Array.of(255, 255, 255), 100).kind, "corrupt");
 assert.equal(typeof registerLazyOAuthFlows, "function");
 assert.equal(typeof registerLazyBedrockProvider, "function");
 assert.equal(LOG_VERSION, 2);

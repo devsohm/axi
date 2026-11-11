@@ -180,6 +180,69 @@ it("validates archive order, ownership and document revisions before admitting a
 	expect(f.reference.summary.value).toBe("3:1");
 });
 
+it("rejects ambiguous archive groups and invalid revision chains", async () => {
+	const f = await fixture();
+	await f.write("left", 3, ["a"]);
+	const parts = await collect(f.app.exportHostData(left, context));
+	const manifest = parts.find((part) => part.kind === "manifest")!;
+	const table = parts.find((part) => part.kind === "table")!;
+	const put = parts.find((part) => part.kind === "put")!;
+	const record = parts.find((part) => part.kind === "document.create")!;
+	const revision = parts.find((part) => part.kind === "document.revision")!;
+	const archive = (items: unknown[]) => [manifest, ...items, { kind: "end", writes: items.length }];
+	const cases: [unknown[], string][] = [
+		[[{ kind: "end", writes: 0 }], "manifest comes first"],
+		[
+			[
+				{ ...manifest, format: 99 },
+				{ kind: "end", writes: 0 },
+			],
+			"format 99",
+		],
+		[
+			[
+				{ ...manifest, schema: 99 },
+				{ kind: "end", writes: 0 },
+			],
+			"schema 99",
+		],
+		[archive([manifest]), "manifest comes first"],
+		[archive([table, table]), "occurs twice"],
+		[archive([put]), "a put follows its table"],
+		[archive([{ kind: "index", table: table.table, name: "by_id", columns: ["id"] }]), "an index follows"],
+		[
+			archive([table, { kind: "index", table: table.table, name: "by_id", columns: ["id"] }, put]),
+			"before its indexes",
+		],
+		[archive([record, revision, table]), "tables come before"],
+		[archive([record, revision, record]), "second record"],
+		[archive([{ ...record, record: { ...record.record, key: right.key } }, revision]), "does not belong"],
+		[archive([{ ...record, record: { ...record.record, owner: "owner\uD800" } }, revision]), "not well-formed text"],
+		[archive([revision]), "revision follows its record"],
+		[archive([record, revision, revision]), "in seq order"],
+		[archive([record, { ...revision, id: revision.id + 1 }]), "revision follows its record"],
+		[archive([record, { ...revision, content: { kind: "delta", version: 1, ops: [] } }]), "without a base"],
+		[
+			archive([
+				record,
+				revision,
+				{ ...revision, seq: revision.seq + 1, content: { kind: "delta", version: 1, ops: [["invalid-operation"]] } },
+			]),
+			"delta that does not apply",
+		],
+	];
+	for (const [parts, message] of cases) await expect(readHostArchive(parts, context)).rejects.toThrow(message);
+	const folded = await readHostArchive(
+		archive([
+			record,
+			revision,
+			{ ...revision, seq: revision.seq + 1, content: { kind: "delta", version: 1, ops: [["s", ["count"], 10]] } },
+		]),
+		context,
+	);
+	expect(folded.documents[0]!.value).toEqual({ count: 10 });
+});
+
 it("cancels an operation waiting on an owner's line and leaves its data intact", async () => {
 	const f = await fixture();
 	await f.write("left", 4, ["a"]);

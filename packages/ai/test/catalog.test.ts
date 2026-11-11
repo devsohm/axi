@@ -107,6 +107,23 @@ it("includes Fable 5.2 and applies its mid-conversation controls and compatible 
 	expect(MODELS.azure["gpt-6.1-sol"].cost.tiers).toEqual(MODELS.openai["gpt-6.1-sol"].cost.tiers);
 });
 
+it("ships OpenRouter's Fable 5.2 chat and batch entries with their endpoint controls", () => {
+	expect(MODELS.openrouter).toMatchObject({
+		"anthropic/claude-fable-5.2": {
+			api: "anthropic-messages",
+			cost: { input: 8, output: 40, cacheRead: 0.2, cacheWrite: 10 },
+			thinkingLevelMap: { off: null, xhigh: "xhigh", max: "max" },
+			compat: { supportsMidConvoEffort: true },
+		},
+		"anthropic/claude-fable-5.2:batch": { api: "openai-completions", cost: { input: 4, output: 20 } },
+	});
+	expect(
+		Object.keys(MODELS.openrouter).filter((id) =>
+			["anthropic/claude-fable-5.1", "anthropic/claude-fable-5.2", "anthropic/claude-haiku-4.5"].includes(id),
+		),
+	).toEqual(["anthropic/claude-fable-5.1", "anthropic/claude-fable-5.2", "anthropic/claude-haiku-4.5"]);
+});
+
 it("omits Baseten entries without tools and retired entries even when they support tools", () => {
 	const result = buildModelsDevCatalog({
 		baseten: {
