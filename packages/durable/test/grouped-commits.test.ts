@@ -1,6 +1,6 @@
 import { BACKGROUND_CONTEXT as context } from "@axi/objects/context";
 import { describe, expect, it } from "vitest";
-import { MemoryStorage } from "../src/index.ts";
+import { MemoryStorage, SessionFailed } from "../src/index.ts";
 import type { Context } from "@axi/objects/context";
 import { SessionImpl } from "../src/session/session.ts";
 import type { Storage } from "../src/types.ts";
@@ -110,4 +110,67 @@ describe("concurrent session commits", () => {
 		expect(storage.entriesAtClose.get(ids[1]!)).toEqual(["stored"]);
 		expect(storage.entriesAtClose.get(ids[2]!)).toEqual([]);
 	});
+
+	it.each(["stored-then-rejected", "missing-receipt"] as const)(
+		"preserves stored data and seals later work after a %s group",
+		async (mode) => {
+			const failure = new Error("Group connection lost");
+			class Storage extends PausedStorage {
+				override async commit(...args: Parameters<PausedStorage["commit"]>) {
+					const [batches, receive, ctx] = args;
+					if (batches.length === 1) return super.commit(...args);
+					await super.commit(batches.slice(0, 1), mode === "missing-receipt" ? () => {} : receive, ctx);
+					if (mode === "stored-then-rejected") throw failure;
+					return { stored: 1, refused: failure };
+				}
+			}
+			const storage = new Storage(), session = new SessionImpl(storage);
+			const ids = await session.commit(async (tx) => {
+				const ids = [];
+				for (let index = 0; index < 3; index++)
+					ids.push((await tx.createConversation({ ownership: { kind: "ownerless" } })).id);
+				return ids;
+			}, context);
+			const published: string[] = [];
+			session.observeCommits({
+				advance: ({ changes }) => {
+					for (const change of changes) if (change.type === "entry") published.push(change.value.kind);
+				},
+				end() {},
+			});
+			storage.pause = true;
+			const first = session.commit((tx) => tx.appendEntry(ids[0]!, { kind: "first" }), context);
+			await storage.entered.promise;
+			const second = session.commit((tx) => tx.appendEntry(ids[1]!, { kind: "durable" }), context);
+			const third = session.commit((tx) => tx.appendEntry(ids[2]!, { kind: "unwritten" }), context);
+			const results = Promise.allSettled([first, second, third]);
+			const admitted = Promise.withResolvers<void>();
+			void session.readOnLine(async () => admitted.resolve()).catch(() => {});
+			await admitted.promise;
+			storage.released.resolve();
+			try {
+				const [one, two, three] = await results;
+				expect(one.status).toBe("fulfilled");
+				if (two.status !== "rejected" || three.status !== "rejected") throw new Error("The failed group resolved");
+				if (mode === "stored-then-rejected") {
+					expect(two.reason).toBe(failure);
+					expect(three.reason).toBe(failure);
+				} else {
+					expect(two.reason).toBeInstanceOf(Error);
+					expect(two.reason).not.toBe(failure);
+					expect(three.reason).toBeInstanceOf(SessionFailed);
+					expect(three.reason.cause).toBe(two.reason);
+				}
+				await expect(session.commit(() => {}, context)).rejects.toMatchObject({ name: "SessionFailed", cause: two.reason });
+				expect(published).toEqual(mode === "stored-then-rejected" ? ["first", "durable"] : ["first"]);
+				await session.close(context);
+				expect(await session.closed).toEqual({ kind: "failed", error: two.reason });
+				expect([...storage.entriesAtClose.values()]).toEqual([["first"], ["durable"], []]);
+			} finally {
+				storage.released.resolve();
+				await results;
+				await session.close(context);
+			}
+		},
+	);
 });

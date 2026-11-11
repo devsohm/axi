@@ -126,4 +126,41 @@ describe("session observers", () => {
 		expect(storage.writes).toBe(writes + 1);
 		expect(stored).toMatchObject([[{ kind: "change", value: { text: "ab" }, ops: [["a", ["text"], "ab"]] }]]);
 	});
+
+	it.each(["document", "commit"] as const)(
+		"isolates an asynchronously failing %s observer, including a rejected end callback",
+		async (target) => {
+			const session = createSession(new MemoryStorage());
+			let calls = 0;
+			const ends: WatchEnd[] = [], values: number[] = [];
+			const faulty = {
+				async advance() {
+					calls++;
+					throw "Observer rejected";
+				},
+				async end(end: WatchEnd) {
+					ends.push(end);
+					throw new Error("End callback rejected");
+				},
+			};
+			try {
+				await session.commit((tx) => tx.doc(Counter), context);
+				if (target === "document") await session.observeDoc(Counter, faulty, context);
+				else session.observeCommits(faulty);
+				await session.observeDoc(Counter, {
+					advance: (call) => { if (call.kind === "value") values.push(call.value.count); },
+					end() {},
+				}, context);
+				for (const count of [1, 2]) await session.commit(async (tx) => {
+					(await tx.doc(Counter)).count = count;
+				}, context);
+				expect(values).toEqual([1, 2]);
+				expect(calls).toBe(1);
+				expect(ends).toEqual([{ kind: "listener_error", error: new Error("Observer rejected") }]);
+				await session.close(context);
+				expect(await session.closed).toEqual({ kind: "closed" });
+				expect(ends).toHaveLength(1);
+			} finally { await session.close(context); }
+		},
+	);
 });
