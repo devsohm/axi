@@ -47,12 +47,12 @@ export function anthropicMetadata(provider: string, id: string) {
 	const native =
 		/^claude-opus-(?:4[.-]8|5(?:[.-]5)?)(?:-\d{8})?$/.test(id) ||
 		/^claude-(?:sonnet|haiku)-5[.-]5(?:-\d{8})?$/.test(id) ||
-		/^claude-(?:fable|mythos)-5(?:[.-]1)?(?:-\d{8})?$/.test(id);
+		/^claude-(?:fable|mythos)-5(?:[.-][12])?(?:-\d{8})?$/.test(id);
 	const canonical = id.toLowerCase().replace(/^~?anthropic\//, "");
 	const effort =
 		/^claude-opus-(?:5|5[.-]5)(?:-\d{8})?$/.test(canonical) ||
 		/^claude-(?:sonnet|haiku)-5[.-]5(?:-\d{8})?$/.test(canonical) ||
-		/^claude-(?:fable|mythos)-5[.-]1(?:-\d{8})?$/.test(canonical);
+		/^claude-(?:fable|mythos)-5[.-][12](?:-\d{8})?$/.test(canonical);
 	return {
 		...(["anthropic", "openrouter", "opencode", "opencode-go"].includes(provider) &&
 		effort &&

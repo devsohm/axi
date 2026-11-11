@@ -502,7 +502,7 @@ export class Editor implements Component, Focusable {
 						this.#pastes.delete(id);
 					}
 					this.state.lines = this.state.lines.map((line) =>
-						line.replace(MARKERS, (whole, id: string, suffix: string) =>
+						line.replace(MARKERS, (whole, id: string, suffix = "") =>
 							Number(id) > removed ? `[paste #${Number(id) - 1}${suffix}]` : whole,
 						),
 					);

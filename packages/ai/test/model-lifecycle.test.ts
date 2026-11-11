@@ -1,5 +1,6 @@
 import { expect, test } from "vitest";
-import { createModels, type RefreshModelsContext } from "../src/models.ts";
+import { createModels, type Provider, type RefreshModelsContext } from "../src/models.ts";
+import type { Credential } from "../src/auth/types.ts";
 import { InMemoryModelsStore } from "../src/models-store.ts";
 import { InMemoryCredentialStore } from "../src/auth/credential-store.ts";
 import { fauxProvider } from "../src/providers/faux.ts";
@@ -49,6 +50,79 @@ test("catalog refresh hydrates offline first and publishes authenticated updates
 	expect((await store.read("faux"))?.models.map((model) => model.id)).toEqual(["fresh"]);
 	expect((await store.read("faux"))?.etag).toBe("new");
 });
+
+test.each(["configured", "credential"] as const)(
+	"catalog refresh uses %s authentication without leaking credentials",
+	async (policy) => {
+		const credentials = new InMemoryCredentialStore();
+		await credentials.modify("faux", async () => ({ type: "oauth", access: "stale", refresh: "renew", expires: 0 }));
+		let refreshes = 0;
+		const phases: Array<{ network: boolean; credential: Credential | undefined }> = [];
+		const provider: Provider = {
+			...fauxProvider().provider,
+			refreshModelsAuth: policy,
+			auth: {
+				oauth: {
+					name: "Fixture OAuth",
+					async login() {
+						throw new Error("No interactive login expected");
+					},
+					async refresh() {
+						refreshes++;
+						return { type: "oauth", access: "fresh", refresh: "renewed", expires: Date.now() + 600000 };
+					},
+					async toAuth(credential) {
+						return { apiKey: credential.access };
+					},
+				},
+			},
+			async refreshModels(context) {
+				phases.push({ network: context.allowNetwork, credential: context.credential });
+			},
+		};
+		const models = createModels({ credentials });
+		models.setProvider(provider);
+		expect((await models.refresh()).errors.size).toBe(0);
+		expect(phases).toEqual([
+			{ network: false, credential: { type: "oauth", access: "stale", refresh: "renew", expires: 0 } },
+			{ network: true, credential: policy === "configured" ? undefined : expect.objectContaining({ access: "fresh" }) },
+		]);
+		expect(refreshes).toBe(policy === "configured" ? 0 : 1);
+	},
+);
+
+test.each([true, false])(
+	"configured catalog refresh checks auth availability (%s) without resolving a request key",
+	async (configured) => {
+		let resolutions = 0;
+		const phases: boolean[] = [];
+		const provider: Provider = {
+			...fauxProvider().provider,
+			refreshModelsAuth: "configured",
+			auth: {
+				apiKey: {
+					name: "Fixture key",
+					async check() {
+						return configured ? { type: "api_key", source: "fixture environment" } : undefined;
+					},
+					async resolve() {
+						resolutions++;
+						return undefined;
+					},
+				},
+			},
+			async refreshModels(context) {
+				phases.push(context.allowNetwork);
+				expect(context.credential).toBeUndefined();
+			},
+		};
+		const models = createModels();
+		models.setProvider(provider);
+		expect((await models.refresh()).errors.size).toBe(0);
+		expect(phases).toEqual(configured ? [false, true] : [false]);
+		expect(resolutions).toBe(0);
+	},
+);
 
 test("a replaced provider cannot publish an obsolete refresh after its asynchronous work completes", async () => {
 	const faux = fauxProvider(),

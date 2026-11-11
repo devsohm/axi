@@ -155,6 +155,23 @@ test("removing an earlier paste renumbers later markers and undo restores their 
 	expect(input.getExpandedText()).toBe("");
 });
 
+test("deleting a short paste marker preserves the following payload after renumbering", () => {
+	const input = editor();
+	const first = "first line\n".repeat(15),
+		second = "second payload ".repeat(100);
+	for (const text of [first, second]) paste(input, text);
+	input.handleInput("\x15");
+	for (const character of "keep [paste #1][paste #2]") input.handleInput(character);
+	input.handleInput("\x1b[D");
+	input.handleInput("\x7f");
+	expect(input.getText()).toBe("keep [paste #1]");
+	expect(input.getExpandedText()).toBe("keep " + second);
+	const sent: string[] = [];
+	input.onSubmit = (text) => sent.push(text);
+	input.handleInput("\r");
+	expect(sent).toEqual([("keep " + second).trim()]);
+});
+
 test("paste strips terminal control bytes, normalizes line endings and separates a path from the preceding word", () => {
 	const input = editor();
 	input.setText("open");

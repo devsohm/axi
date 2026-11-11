@@ -37,7 +37,11 @@ import {
 	sendAnthropicThread,
 	type PendingThread,
 } from "./anthropic-threads.ts";
-import { isStrictToolLimitErrorMessage } from "./constrained-sampling.ts";
+import {
+	hasExceededStrictToolLimits,
+	isStrictToolLimitErrorMessage,
+	markStrictToolLimitsExceeded,
+} from "./strict-tool-limits.ts";
 import type { AnthropicEffort, AnthropicOptions } from "./options.ts";
 import { adjustMaxTokensForThinking, buildBaseOptions, clampMaxTokensToContext } from "./simple-options.ts";
 
@@ -106,7 +110,7 @@ export const stream: StreamFunction<"anthropic-messages", AnthropicOptions> = (m
 				...(options.signal ? { signal: options.signal } : {}),
 				...(options.timeoutMs !== undefined ? { timeout: options.timeoutMs } : {}),
 			};
-			let downgraded = false,
+			let downgraded = hasExceededStrictToolLimits(options.sessionId),
 				response: Response;
 			let full: MessageCreateParamsStreaming;
 			let thread: PendingThread | undefined;
@@ -139,6 +143,7 @@ export const stream: StreamFunction<"anthropic-messages", AnthropicOptions> = (m
 				} catch (error) {
 					if (options.signal?.aborted || downgraded || !request.preferred || !mayDowngrade(error)) throw error;
 					downgraded = true;
+					markStrictToolLimitsExceeded(options.sessionId);
 					appendAssistantMessageDiagnostic(output, {
 						type: "anthropic_strict_tools_fallback",
 						timestamp: Date.now(),

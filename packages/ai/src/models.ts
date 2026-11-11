@@ -114,6 +114,8 @@ export interface Provider<A extends Api = Api> {
 	getModels(): readonly Model<A>[];
 	getAllModels?(): readonly ProviderModel<A>[];
 	refreshModels?(context: RefreshModelsContext): Promise<void>;
+	/** Configured catalogs need an auth check, but must not receive or refresh a request credential. */
+	readonly refreshModelsAuth?: "credential" | "configured";
 	filterModels?(models: readonly Model<A>[], credential: Credential | undefined): readonly Model<A>[];
 	filterAllModels?(
 		models: readonly ProviderModel<A>[],
@@ -403,8 +405,13 @@ class Collection implements MutableModels {
 					await this.#phase(provider, credential, false, undefined, generation, signal);
 					if (failure !== undefined) throw failure;
 					if (!allowNetwork || signal.aborted) return;
-					credential = await this.#refreshCredential(provider, credential, signal);
-					if (credential) await this.#phase(provider, credential, true, options.force, generation, signal);
+					if (provider.refreshModelsAuth === "configured") {
+						if (await this.#check(provider, credential, signal))
+							await this.#phase(provider, undefined, true, options.force, generation, signal);
+					} else {
+						credential = await this.#refreshCredential(provider, credential, signal);
+						if (credential) await this.#phase(provider, credential, true, options.force, generation, signal);
+					}
 				};
 				try {
 					await raceWithAbortSignal(operation(), signal);

@@ -1,6 +1,20 @@
 import type { Api, ClassifierApi, ClassifierModel, Model, ModelCost } from "../src/types.ts";
 
 export const fixedChats: Readonly<Record<string, Readonly<Record<string, Model<Api>>>>> = {
+	anthropic: {
+		"claude-fable-5-2": {
+			id: "claude-fable-5-2",
+			name: "Claude Fable 5.2",
+			provider: "anthropic",
+			api: "anthropic-messages",
+			baseUrl: "https://api.anthropic.com",
+			reasoning: true,
+			input: ["text", "image"],
+			contextWindow: 1000000,
+			maxTokens: 128000,
+			cost: { input: 8, output: 40, cacheRead: 0.2, cacheWrite: 10 },
+		},
+	},
 	"github-copilot": {
 		"gpt-6-luna": {
 			id: "gpt-6-luna",

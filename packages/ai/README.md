@@ -40,6 +40,8 @@ gpt-4o-mini
 
 The built-in catalog contains 42 providers. Chat, image and classifier entries share provider authentication but use separate operations. Catalog reads are synchronous. `models.refresh()` updates dynamic providers and can restore their persisted catalogs without network access.
 
+A provider can set `refreshModelsAuth: "configured"` when its catalog source needs no request credential. The network refresh still requires configured authentication, but does not refresh OAuth or pass credentials to the catalog source. The default, `"credential"`, resolves a usable credential first.
+
 Transcripts carry system messages and tool changes. The helpers replay the current prompt and tools, or retain updates in place for transports that support them. Event streams expose text, thinking and tool-call updates and return the completed assistant message.
 
 Supported Responses models keep tool declarations in the input history, so removals and later loads preserve the existing request prefix. Addition-only transports fold changes through the last removal or redeclaration, then retain later additions in place. See [transcripts and tools](docs/spec.md#transcripts-and-tools) for the transport rules.

@@ -5,11 +5,11 @@ import {
 	createGrammarToolInputProperties,
 	getGrammarToolInput,
 	getJsonSchemaToolParameters,
-	isStrictToolLimitErrorMessage,
 	makeStrictJsonSchema,
 	resolveGrammarConstrainedSampling,
 	resolveJsonSchemaStrictSampling,
 } from "../src/api/constrained-sampling.ts";
+import { isStrictToolLimitErrorMessage } from "../src/api/strict-tool-limits.ts";
 import { convertResponsesTools } from "../src/api/openai-responses-shared.ts";
 import type { Tool } from "../src/types.ts";
 

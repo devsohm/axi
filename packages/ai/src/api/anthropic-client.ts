@@ -91,7 +91,7 @@ export function anthropicClient(
 			model.headers,
 			buildCopilotDynamicHeaders({ messages: context.messages, hasImages: hasCopilotVisionInput(context.messages) }),
 		);
-	else if (oauth) Object.assign(headers, { "user-agent": "claude-cli/2.1.280", "x-app": "cli" }, model.headers);
+	else if (oauth) Object.assign(headers, { "user-agent": "claude-cli/2.1.322", "x-app": "cli" }, model.headers);
 	else {
 		const compat = anthropicCompat(model);
 		if (options.sessionId && anthropicRetention(options) !== "none" && compat.sendSessionAffinityHeaders)

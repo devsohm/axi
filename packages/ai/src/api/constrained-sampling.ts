@@ -96,13 +96,6 @@ export function prefersJsonSchemaStrictSampling(tool: Tool): boolean {
 	const config = tool.constrainedSampling;
 	return !!config && config.type === "json_schema" && config.strict === "prefer";
 }
-export function isStrictToolLimitErrorMessage(message: string): boolean {
-	return [
-		"The compiled grammar is too large",
-		"Too many strict tools (",
-		"Schemas contains too many parameters with union types (",
-	].some((phrase) => message.includes(phrase));
-}
 export interface GrammarConstrainedSampling {
 	format: "lark" | "regex";
 	definition: string;

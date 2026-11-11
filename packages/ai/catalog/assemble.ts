@@ -133,6 +133,7 @@ function allowedFallbacks(models: Model<Api>[]): void {
 	);
 	for (const [id, alternatives] of [
 		["claude-fable-5", ["claude-opus-4-8", "claude-opus-5"]],
+		["claude-fable-5-2", ["claude-opus-4-8", "claude-opus-5"]],
 		["claude-opus-5", ["claude-opus-4-8"]],
 	] as const) {
 		const model = byId.get(id);
@@ -160,6 +161,7 @@ export function assembleCatalog(
 	fallbacks(models, "github-copilot", ["gpt-6-luna"]);
 	prependCorrections(models);
 	fallbacks(models, "openai", ["gpt-5-chat-latest"]);
+	fallbacks(models, "anthropic", ["claude-fable-5-2"]);
 	for (const id of ["deepseek-flash", "deepseek-v4-pro"]) {
 		const model = chat("deepseek", id);
 		model.compat = { requiresReasoningContentOnAssistantMessages: true, thinkingFormat: "deepseek" };
@@ -230,12 +232,6 @@ export function assembleCatalog(
 			api: "azure-openai-responses",
 			baseUrl: "",
 			contextWindow: azureContext[model.id] ?? model.contextWindow,
-			cost: {
-				input: model.cost.input,
-				output: model.cost.output,
-				cacheRead: model.cost.cacheRead,
-				cacheWrite: model.cost.cacheWrite,
-			},
 		}));
 	for (const model of models)
 		if (model.provider === "deepseek" && model.id === "deepseek-v4-pro")

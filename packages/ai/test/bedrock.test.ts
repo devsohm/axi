@@ -3,6 +3,8 @@ import type { ConverseStreamCommandInput } from "@aws-sdk/client-bedrock-runtime
 import { Type } from "typebox";
 import type { Model } from "../src/types.ts";
 import { normalizeContext } from "../src/utils/transcript.ts";
+import { markStrictToolLimitsExceeded } from "../src/api/strict-tool-limits.ts";
+import { cleanupSessionResources } from "../src/session-resources.ts";
 type Middleware = (next: (args: unknown) => Promise<unknown>) => (args: unknown) => Promise<unknown>;
 const sdk = vi.hoisted(() => ({
 	configs: [] as Record<string, unknown>[],
@@ -83,6 +85,31 @@ async function payload(m = model, options: BedrockOptions = {}): Promise<Convers
 	return captured;
 }
 describe("Bedrock adapter", () => {
+	it("shares session fallback state and restores strict sampling after session cleanup", async () => {
+		const sessionId = "bedrock-remembered-limit";
+		const transcript = normalizeContext({
+			messages: context.messages,
+			tools: [
+				{
+					name: "lookup",
+					description: "Look up an item",
+					parameters: Type.Object({ id: Type.String() }),
+					constrainedSampling: { type: "json_schema", strict: "prefer" },
+				},
+			],
+		});
+		markStrictToolLimitsExceeded(sessionId);
+		try {
+			expect((await stream(model, transcript, { sessionId }).result()).stopReason).toBe("stop");
+			cleanupSessionResources(sessionId);
+			expect((await stream(model, transcript, { sessionId }).result()).stopReason).toBe("stop");
+			const requests = sdk.requests as ConverseStreamCommandInput[];
+			expect(requests[0].toolConfig?.tools?.[0]).not.toHaveProperty("toolSpec.strict");
+			expect(requests[1].toolConfig?.tools?.[0]).toMatchObject({ toolSpec: { strict: true } });
+		} finally {
+			cleanupSessionResources(sessionId);
+		}
+	});
 	it("retries a strict-schema capacity rejection once while preserving required constraints", async () => {
 		const failure = new BedrockRuntimeServiceException({
 			name: "ValidationException",

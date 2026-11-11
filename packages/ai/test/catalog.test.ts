@@ -58,6 +58,55 @@ it("retains only documented fixed models when the upstream catalog has none", ()
 	expect(chats("azure")).toEqual(["deepseek-v4-pro", "gpt-5-chat-latest"]);
 });
 
+it("preserves Azure long-context pricing when deriving a catalog from OpenAI", () => {
+	const source = buildModelsDevCatalog({
+		openai: {
+			models: {
+				"gpt-5.4": {
+					tool_call: true,
+					reasoning: true,
+					apis: { responses: { base_url: "https://api.openai.com/v1" } },
+					cost: { input: 3, output: 18, cache_read: 0.3 },
+					limit: { context: 1000000, output: 128000 },
+				},
+			},
+		},
+	});
+	const catalog = assembleCatalog(source, { chat: [], images: [], classifiers: [] }, { chat: [], classifiers: [] }, []);
+	const azure = catalog.azure.find((model) => model.id === "gpt-5.4");
+	expect(azure?.cost.tiers).toEqual([
+		{ inputTokensAbove: 272000, input: 6, output: 27, cacheRead: 0.6, cacheWrite: 0 },
+	]);
+});
+
+it("includes Fable 5.2 and applies its mid-conversation controls and compatible fallback", () => {
+	const source = buildModelsDevCatalog({
+		anthropic: {
+			models: {
+				"claude-opus-4-8": { tool_call: true, reasoning: true },
+				"claude-opus-5": { tool_call: true, reasoning: true },
+			},
+		},
+	});
+	const catalog = assembleCatalog(source, { chat: [], images: [], classifiers: [] }, { chat: [], classifiers: [] }, []);
+	const fable = catalog.anthropic.find((model) => model.id === "claude-fable-5-2");
+	expect(fable).toMatchObject({
+		name: "Claude Fable 5.2",
+		contextWindow: 1000000,
+		maxTokens: 128000,
+		cost: { input: 8, output: 40, cacheRead: 0.2, cacheWrite: 10 },
+		thinkingLevelMap: { off: null },
+		compat: { supportsMidConvoEffort: true, supportsMidConvoSystemMessages: true, supportsMidConvoToolChanges: true },
+	});
+	if (!fable || !hasApi(fable, "anthropic-messages")) throw new Error("Fable model missing");
+	expect(fable.compat?.allowedFallbackModels?.map((model) => model.model)).toEqual(["claude-opus-5"]);
+	expect(MODELS.anthropic["claude-fable-5-2"]).toMatchObject({
+		cost: { input: 8 },
+		compat: { supportsMidConvoEffort: true },
+	});
+	expect(MODELS.azure["gpt-6.1-sol"].cost.tiers).toEqual(MODELS.openai["gpt-6.1-sol"].cost.tiers);
+});
+
 it("omits Baseten entries without tools and retired entries even when they support tools", () => {
 	const result = buildModelsDevCatalog({
 		baseten: {

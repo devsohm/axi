@@ -59,7 +59,7 @@ export const PRELUDE_SOURCE = String.raw`(function (send, toolList, globalList, 
     return [headline, ...frames].join("\n");
   }
   function format(value) {
-    if (typeof value === "string") return value;
+    if (typeof value === "string" || typeof value === "number") return String(value);
     if (value instanceof Error) return stack(value);
     try { const text = json(value); return text === undefined ? String(value) : text; } catch { return String(value); }
   }

@@ -230,6 +230,7 @@
 						"packages/ai/test/provider-dispatch.test.ts",
 						"packages/ai/test/identity-forwarding.test.ts",
 						"packages/ai/test/model-lifecycle.test.ts",
+						"packages/ai/test/strict-tool-limits.test.ts",
 						"packages/ai/test/registration.test.ts",
 						"packages/ai/test/catalog.test.ts",
 						"packages/ai/test/catalog-boundaries.test.ts",

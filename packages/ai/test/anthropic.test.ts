@@ -566,6 +566,38 @@ describe("Anthropic messages", () => {
 		});
 		expect(JSON.stringify(transcript)).toBe(original);
 	});
+	it.each(["remembered-limit", undefined])(
+		"retains strict-tool fallback only for a session (%s)",
+		async (sessionId) => {
+			const strict: Array<boolean | undefined> = [];
+			const options: AnthropicOptions = {
+				apiKey: "test",
+				maxRetries: 0,
+				sessionId,
+				fetch: async (_url, init) => {
+					const body = JSON.parse(String(init?.body));
+					strict.push(body.tools[0].strict);
+					return strict.length === 1
+						? Response.json(
+								{ type: "error", error: { type: "invalid_request_error", message: "Too many strict tools (25)" } },
+								{ status: 400 },
+							)
+						: answer();
+				},
+			};
+			const selected = { ...model, compat: { supportsStrictTools: true } };
+			const transcript = normalizeContext({ messages: context.messages, tools: [tool] });
+			try {
+				for (let index = 0; index < 2; index++)
+					expect((await stream(selected, transcript, options).result()).stopReason).toBe("stop");
+				cleanupSessionResources(sessionId);
+				expect((await stream(selected, transcript, options).result()).stopReason).toBe("stop");
+				expect(strict).toEqual([true, undefined, sessionId === undefined ? true : undefined, true]);
+			} finally {
+				cleanupSessionResources(sessionId);
+			}
+		},
+	);
 	it("keeps required constraints and never retries after an SSE rejection", async () => {
 		for (const [strict, sse] of [
 			["require", false],

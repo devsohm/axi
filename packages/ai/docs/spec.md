@@ -169,6 +169,10 @@ A deferred chat result carries a provider handle. Persist that handle in the app
 
 `cleanupSessionResources(sessionId?)` releases transport resources registered for a session. Omitting the session ID requests cleanup of all sessions. It runs every registered cleanup and reports combined failures. The application owns when sessions end.
 
+Anthropic and Bedrock share session-level strict-tool fallback state. After a schema-capacity rejection, later requests with that session ID send preferred strict tools without strict sampling. Required strict tools stay strict. Session cleanup clears the fallback. At most 10,000 session IDs are retained, with oldest-insertion eviction; requests without a session ID do not retain this state.
+
+`Provider.refreshModelsAuth` controls authentication for the network catalog phase. `"credential"`, the default, resolves credentials and refreshes expired OAuth. `"configured"` checks whether authentication is configured, then calls the source with no credential and without refreshing OAuth. Local cache hydration still receives the stored credential. An offline refresh runs no network phase.
+
 ## Module entry points
 
 The package root exposes isolated model collections, public types, authentication contracts, transcript helpers, validation, event streams, diagnostics, and the scripted provider. `@axi/ai/models` exposes model operations. `@axi/ai/providers/*` exposes individual provider factories. `@axi/ai/api/*` exposes transport adapters.

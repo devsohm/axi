@@ -6,7 +6,12 @@ import {
 import type { SimpleStreamOptions, StreamFunction } from "../types.ts";
 import { collapseSystemMessages, getCurrentTools } from "../utils/transcript.ts";
 import { appendAssistantMessageDiagnostic } from "../utils/diagnostics.ts";
-import { isStrictToolLimitErrorMessage, prefersJsonSchemaStrictSampling } from "./constrained-sampling.ts";
+import { prefersJsonSchemaStrictSampling } from "./constrained-sampling.ts";
+import {
+	hasExceededStrictToolLimits,
+	isStrictToolLimitErrorMessage,
+	markStrictToolLimitsExceeded,
+} from "./strict-tool-limits.ts";
 import { bedrockClient } from "./bedrock-client.ts";
 import { bedrockRequest, bedrockSimpleOptions } from "./bedrock-request.ts";
 import { bedrockStream } from "./bedrock-stream.ts";
@@ -21,7 +26,7 @@ export const stream: StreamFunction<"bedrock-converse-stream", BedrockOptions> =
 				.filter(prefersJsonSchemaStrictSampling)
 				.map((tool) => tool.name),
 		);
-		let disablePreferredStrict = false;
+		let disablePreferredStrict = hasExceededStrictToolLimits(options.sessionId);
 		for (;;) {
 			const params = bedrockRequest(model, transcript, options, disablePreferredStrict);
 			const preferred = params.toolConfig?.tools?.some(
@@ -46,6 +51,7 @@ export const stream: StreamFunction<"bedrock-converse-stream", BedrockOptions> =
 				)
 					throw error;
 				disablePreferredStrict = true;
+				markStrictToolLimitsExceeded(options.sessionId);
 				appendAssistantMessageDiagnostic(output, {
 					type: "bedrock_strict_tools_fallback",
 					timestamp: Date.now(),

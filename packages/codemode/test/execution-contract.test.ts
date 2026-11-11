@@ -25,6 +25,27 @@ const hosts = {
 };
 
 for (const [name, create] of Object.entries(hosts)) {
+	test(`${name} preserves non-finite primitive numbers in console diagnostics and thrown values`, async () => {
+		const sandbox = create();
+		try {
+			const printed = await sandbox.execute(
+				'console.warn("calc", NaN, Infinity, -Infinity, 12, { value: NaN }); text(Infinity);',
+			);
+			expect(printed).toMatchObject({
+				ok: true,
+				output: [
+					{ type: "text", text: 'calc NaN Infinity -Infinity 12 {"value":null}', console: true },
+					{ type: "text", text: "Infinity" },
+				],
+			});
+			expect(await sandbox.execute("throw -Infinity;")).toMatchObject({
+				ok: false,
+				error: { kind: "script", message: "-Infinity" },
+			});
+		} finally {
+			await sandbox.close();
+		}
+	});
 	test(`${name} keeps mixed output ordered, detects image bytes and preserves writes when exit is caught`, async () => {
 		const sandbox = create();
 		try {
