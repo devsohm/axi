@@ -142,6 +142,8 @@ A persistent `CredentialStore` implements `read`, `list`, `modify`, and `delete`
 
 `models.login()` uses the registered provider's login method. Expired OAuth credentials refresh through the credential store. Logout deletes the stored record. Login availability and model availability are separate checks.
 
+A configuration check uses the API-key authentication method selected at its start. Replacing that method does not redirect a check that is already running.
+
 OAuth resolution refreshes tokens with at most five minutes remaining, or a larger requested `minOAuthValidityMs`. Concurrent requests check expiry again under the credential lock. Cancellation stops a caller waiting for that lock. After a refresh starts, it has a separate 15-second timeout and still saves the result if the caller cancels, because the previous refresh token may no longer work. An explicit `minOAuthValidityMs` also checks the refreshed token; the ordinary five-minute window only triggers refresh.
 
 ## Catalog refresh

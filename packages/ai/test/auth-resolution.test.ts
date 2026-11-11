@@ -1,6 +1,6 @@
 import { expect, test, vi } from "vitest";
 import { InMemoryCredentialStore } from "../src/auth/credential-store.ts";
-import type { OAuthAuth, OAuthCredential } from "../src/auth/types.ts";
+import type { ApiKeyAuth, OAuthAuth, OAuthCredential } from "../src/auth/types.ts";
 import { createModels } from "../src/models.ts";
 import { fauxProvider } from "../src/providers/faux.ts";
 
@@ -30,6 +30,32 @@ function fixture() {
 	});
 	return { credentials, oauth, ambient, models };
 }
+
+test("a configuration check uses the authentication method captured at its start", async () => {
+	const first: ApiKeyAuth = {
+		name: "First account",
+		resolve: async () => undefined,
+		check: vi.fn(async () => ({ type: "api_key" as const, source: "first account" })),
+	};
+	const replacement: ApiKeyAuth = {
+		...first,
+		check: vi.fn(async () => ({ type: "api_key" as const, source: "replacement account" })),
+	};
+	let reads = 0;
+	const models = createModels();
+	models.setProvider({
+		...fauxProvider().provider,
+		auth: {
+			get apiKey() {
+				return ++reads === 1 ? first : replacement;
+			},
+		},
+	});
+	expect(await models.checkAuth("faux")).toEqual({ type: "api_key", source: "first account" });
+	expect(first.check).toHaveBeenCalledTimes(1);
+	expect(replacement.check).not.toHaveBeenCalled();
+	expect(reads).toBe(1);
+});
 
 test("cancelling an active refresh releases its caller while the rotated token remains shared and saved", async () => {
 	const { credentials, oauth, models } = fixture();

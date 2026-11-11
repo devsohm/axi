@@ -442,10 +442,11 @@ class Collection implements MutableModels {
 		signal: AbortSignal,
 	): Promise<AuthCheck | undefined> {
 		if (credential?.type === "oauth") return provider.auth.oauth ? { source: "OAuth", type: "oauth" } : undefined;
-		if (!provider.auth.apiKey) return undefined;
-		if (provider.auth.apiKey.check) {
+		const apiKey = provider.auth.apiKey;
+		if (!apiKey) return undefined;
+		if (apiKey.check) {
 			try {
-				return await provider.auth.apiKey.check({
+				return await apiKey.check({
 					ctx: this.#auth,
 					credential: credential?.type === "api_key" ? credential : undefined,
 					signal,
