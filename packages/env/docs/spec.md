@@ -26,6 +26,8 @@ Connection close is terminal. Unplanned connection loss rejects pending work, ma
 
 `openProcess()` requires the daemon's `process` feature. It resolves after the `started` event and exposes the request's eventual exit separately. Input writes target the original daemon session. Closing stdin follows queued writes; later input is dropped by the client and rejected with `EBADF` by the daemon. A completed process ends its process group before reporting its exit. Output bytes from each stream are delivered before the exit result.
 
+After exit, a reader held by link backpressure continues draining its pipe. The idle grace period applies when the pipe is silent, rather than while the link prevents reading. This also applies to command execution and terminal output.
+
 ## Failure and cancellation
 
 Environment file methods return Durable `Result` values. Known remote error codes map to stable `FileError` codes; other names map to `unknown`. Existing `FileError` instances retain their identity. Diagnostic messages and native error details may vary by platform.

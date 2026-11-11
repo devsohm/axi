@@ -1,6 +1,6 @@
 use axi_env::{
     frame::{self, Frame},
-    output::Output,
+    output::{Output, ReaderGate},
 };
 use serde_json::json;
 use std::{
@@ -13,7 +13,7 @@ use std::{
 
 #[test]
 fn controls_precede_bulk_and_close_drains_both_queues() {
-    let output = Output::default();
+    let output = Arc::new(Output::default());
     let unsent = Arc::new(AtomicUsize::new(0));
     output.bulk(
         Frame::with_payload(frame::EVENT, 8, json!({}), b"first".to_vec()),
@@ -50,7 +50,7 @@ fn failed_write_releases_the_frame_counter_and_closes_backpressure() {
             Ok(())
         }
     }
-    let output = Output::default();
+    let output = Arc::new(Output::default());
     let unsent = Arc::new(AtomicUsize::new(0));
     output.bulk(Frame::new(frame::EVENT, 1, json!({})), Some(unsent.clone()));
     output.bulk(
@@ -59,5 +59,18 @@ fn failed_write_releases_the_frame_counter_and_closes_backpressure() {
     );
     output.run(&mut BrokenWriter);
     assert_eq!(unsent.load(Ordering::SeqCst), 0);
-    output.wait_for_room(&AtomicBool::new(false));
+    assert!(ReaderGate::new(&output).forward(&AtomicBool::new(false), || true));
+}
+
+#[test]
+fn reader_gate_covers_handover_and_releases_after_forwarding() {
+    let output = Arc::new(Output::default());
+    let gate = ReaderGate::new(&output);
+    let same_command = gate.clone();
+    assert!(!gate.pending());
+    assert!(!gate.forward(&AtomicBool::new(false), || {
+        assert!(same_command.pending());
+        false
+    }));
+    assert!(!same_command.pending());
 }

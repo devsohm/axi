@@ -7,6 +7,7 @@ use crate::{
 use crate::{
     exec::{Message, kill_group},
     frame::{EVENT, Frame},
+    output::ReaderGate,
     sys,
 };
 use serde_json::{Map, Value, json};
@@ -174,16 +175,17 @@ pub fn run(
         groups.lock().unwrap().remove(&pid);
         Failure::new("spawn_error", error.to_string())
     };
+    let gate = ReaderGate::new(output);
     let reading = {
         let master = master.clone();
         let sender = sender.clone();
         let stop = stop.clone();
-        let output = output.clone();
+        let gate = gate.clone();
         thread::Builder::new().spawn(move || {
             unix::read(&master, &stop, |bytes| {
-                let live = sender.send(Message::Data(0, bytes.to_vec())).is_ok();
-                output.wait_for_room(&stop);
-                live
+                gate.forward(&stop, || {
+                    sender.send(Message::Data(0, bytes.to_vec())).is_ok()
+                })
             });
             let _ = sender.send(Message::Eof(0));
         })
@@ -242,10 +244,14 @@ pub fn run(
         }
         let wait = if let Some(at) = idle {
             let now = Instant::now();
-            if now >= at {
+            if now < at {
+                at - now
+            } else if gate.pending() {
+                idle = Some(now + Duration::from_millis(100));
+                Duration::from_millis(100)
+            } else {
                 break;
             }
-            at - now
         } else {
             Duration::from_secs(3600)
         };

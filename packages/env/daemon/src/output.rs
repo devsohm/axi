@@ -42,7 +42,7 @@ impl Output {
         self.changed.notify_all();
         self.room.notify_all();
     }
-    pub fn wait_for_room(&self, stop: &AtomicBool) {
+    fn wait_for_room(&self, stop: &AtomicBool) {
         let mut state = self.state.lock().unwrap();
         while state.bytes > 4194304 && !state.closed && !stop.load(Ordering::SeqCst) {
             state = self
@@ -80,5 +80,30 @@ impl Output {
                 return;
             }
         }
+    }
+}
+
+// Counts readers handing bytes to the link so backpressure cannot look like an idle pipe.
+#[derive(Clone)]
+pub struct ReaderGate {
+    output: Arc<Output>,
+    pending: Arc<AtomicUsize>,
+}
+impl ReaderGate {
+    pub fn new(output: &Arc<Output>) -> Self {
+        Self {
+            output: output.clone(),
+            pending: Arc::new(AtomicUsize::new(0)),
+        }
+    }
+    pub fn forward(&self, stop: &AtomicBool, send: impl FnOnce() -> bool) -> bool {
+        self.pending.fetch_add(1, Ordering::SeqCst);
+        let sent = send();
+        self.output.wait_for_room(stop);
+        self.pending.fetch_sub(1, Ordering::SeqCst);
+        sent
+    }
+    pub fn pending(&self) -> bool {
+        self.pending.load(Ordering::SeqCst) != 0
     }
 }

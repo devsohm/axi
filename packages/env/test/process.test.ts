@@ -99,3 +99,48 @@ test("process cancellation settles its exit and invalid starts fail before retur
 		connection.close();
 	}
 });
+
+test.each(["stdout", "stderr"] as const)(
+	"keeps trailing %s bytes after exit while another process fills the link",
+	async (stream) => {
+		const connection = new Connection({ command: [process.env.AXI_ENV_DAEMON ?? localDaemon()] });
+		const received: Uint8Array[] = [];
+		const expected = Buffer.alloc(96 * 1024 + 17, 58);
+		let flood: Awaited<ReturnType<typeof openProcess>> | undefined;
+		let stalled = false;
+		try {
+			const program = await openProcess(connection, {
+				cwd: tmpdir(),
+				argv: [
+					process.execPath,
+					"-e",
+					`process.stdin.once('data', () => { process.stdin.destroy(); setTimeout(() => process.${stream}.end(Buffer.alloc(${expected.length}, 58)), 250); })`,
+				],
+				onStdout: (bytes) => received.push(bytes),
+				onStderr: (bytes) => received.push(bytes),
+			});
+			program.write("start");
+			flood = await openProcess(connection, {
+				cwd: tmpdir(),
+				argv: [
+					process.execPath,
+					"-e",
+					"const chunk = Buffer.alloc(1024 * 1024); function write() { process.stdout.write(chunk, write); } write();",
+				],
+				onStdout: () => {
+					if (stalled) return;
+					stalled = true;
+					Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 1200);
+				},
+			});
+			expect(await program.exited).toBe(0);
+			expect(stalled).toBe(true);
+			expect(Buffer.concat(received).equals(expected)).toBe(true);
+		} finally {
+			flood?.close();
+			await flood?.exited.catch(() => {});
+			connection.close();
+		}
+	},
+	20_000,
+);

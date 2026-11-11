@@ -2,7 +2,7 @@ use crate::{
     decode::StreamDecoder,
     errors::Failure,
     frame::{EVENT, Frame},
-    output::Output,
+    output::{Output, ReaderGate},
     sys,
     window::{Pending, Window},
 };
@@ -286,7 +286,7 @@ pub fn run(
         groups.lock().unwrap().remove(&pid);
         Failure::new("spawn_error", error.to_string())
     };
-    let gate = request.window.is_none().then(|| output.clone());
+    let gate = request.window.is_none().then(|| ReaderGate::new(output));
     if let Err(error) = read_pipe(
         0,
         child.stdout.take().unwrap(),
@@ -301,7 +301,7 @@ pub fn run(
         child.stderr.take().unwrap(),
         sender.clone(),
         stop.clone(),
-        gate,
+        gate.clone(),
     ) {
         return Err(abandon(child, error));
     }
@@ -346,8 +346,16 @@ pub fn run(
             timed_out = true;
             kill(&mut killed);
         }
-        if (status.is_some() && ended.iter().all(|e| *e)) || idle.is_some_and(|at| now >= at) {
+        if status.is_some() && ended.iter().all(|e| *e) {
             break;
+        }
+        if idle.is_some_and(|at| now >= at) {
+            // A reader waiting for the link may still have bytes left in its pipe after exit.
+            if gate.as_ref().is_some_and(ReaderGate::pending) {
+                idle = Some(now + Duration::from_millis(100));
+            } else {
+                break;
+            }
         }
         if let Some(buffer) = &mut pending {
             if !buffer.is_empty() && now >= buffer.next_send() && unsent.load(Ordering::SeqCst) == 0
@@ -451,15 +459,15 @@ pub(crate) fn read_pipe(
     pipe: impl sys::Pipe + Send + 'static,
     sender: Sender<Message>,
     stop: Arc<AtomicBool>,
-    output: Option<Arc<Output>>,
+    gate: Option<ReaderGate>,
 ) -> std::io::Result<thread::JoinHandle<()>> {
     thread::Builder::new().spawn(move || {
         sys::read_pipe(pipe, &stop, |bytes| {
-            let live = sender.send(Message::Data(index, bytes.to_vec())).is_ok();
-            if let Some(output) = &output {
-                output.wait_for_room(&stop);
+            let send = || sender.send(Message::Data(index, bytes.to_vec())).is_ok();
+            match &gate {
+                Some(gate) => gate.forward(&stop, send),
+                None => send(),
             }
-            live
         });
         let _ = sender.send(Message::Eof(index));
     })

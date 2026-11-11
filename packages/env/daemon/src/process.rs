@@ -2,7 +2,7 @@ use crate::{
     errors::Failure,
     exec::{self, Control, Groups, Message},
     frame::{EVENT, Frame},
-    output::Output,
+    output::{Output, ReaderGate},
     sys,
 };
 use serde_json::{Map, Value, json};
@@ -121,12 +121,13 @@ pub fn run(
         Ok(group) => group,
         Err(error) => return Err(abandon(child, error)),
     };
+    let gate = ReaderGate::new(output);
     if let Err(error) = exec::read_pipe(
         0,
         child.stdout.take().unwrap(),
         send.clone(),
         stop.clone(),
-        Some(output.clone()),
+        Some(gate.clone()),
     ) {
         return Err(abandon(child, error));
     }
@@ -135,7 +136,7 @@ pub fn run(
         child.stderr.take().unwrap(),
         send.clone(),
         stop.clone(),
-        Some(output.clone()),
+        Some(gate.clone()),
     ) {
         return Err(abandon(child, error));
     }
@@ -203,10 +204,15 @@ pub fn run(
             break;
         }
         let wait = if let Some(deadline) = idle {
-            if Instant::now() >= deadline {
+            let now = Instant::now();
+            if now < deadline {
+                deadline - now
+            } else if gate.pending() {
+                idle = Some(now + Duration::from_millis(100));
+                Duration::from_millis(100)
+            } else {
                 break;
             }
-            deadline.saturating_duration_since(Instant::now())
         } else {
             Duration::from_secs(3600)
         };
