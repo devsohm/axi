@@ -442,6 +442,7 @@
 						"packages/durable/test/bash.test.ts",
 						"packages/durable/test/environment.test.ts",
 						"packages/durable/test/node-environment.test.ts",
+						"packages/durable/test/directory-enumeration.test.ts",
 						"packages/durable/test/shell-output-lifecycle.test.ts",
 						"packages/durable/test/search.test.ts",
 						"packages/durable/test/images.test.ts",

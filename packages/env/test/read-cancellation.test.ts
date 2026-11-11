@@ -54,16 +54,16 @@ test.each(["binary", "text", "directory"] as const)(
 	},
 );
 
-test.each(["ENOENT", "EACCES", "unsupported"] as const)(
-	"directory readers handle entries that disappear, fail or have unsupported types: %s",
-	async (code) => {
+test.each(["ENOENT", "EACCES", "unsupported"].flatMap((code) => ["reader", "listing"].map((method) => [code, method])))(
+	"directory %s entries preserve failure semantics through %s",
+	async (code, method) => {
 		const cwd = await mkdtemp(join(tmpdir(), "axi-read-dir-entry-"));
 		const connection = new Connection({ command: [localDaemon()] });
 		const env = new RemoteExecutionEnv({ connection, id: "directory-errors", cwd });
 		const request = connection.request.bind(connection);
 		try {
 			await writeFile(join(cwd, "visible"), "data");
-			const reader = getOrThrow(await env.openDirReader(".", context));
+			const reader = method === "reader" ? getOrThrow(await env.openDirReader(".", context)) : undefined;
 			connection.request = async (op, fields, options) => {
 				const response = await request(op, fields, options);
 				if (op !== "readdir") return response;
@@ -82,19 +82,21 @@ test.each(["ENOENT", "EACCES", "unsupported"] as const)(
 				};
 			};
 			try {
-				const result = await reader.next(10, context);
+				const result = reader ? await reader.next(10, context) : await env.listDir(".", context);
 				if (code === "EACCES")
 					expect(result).toMatchObject({
 						ok: false,
 						error: { code: "permission_denied", path: join(cwd, "inaccessible") },
 					});
 				else
-					expect(getOrThrow(result)).toMatchObject({
-						entries: [{ name: "visible", path: join(cwd, "visible"), kind: "file" }],
-						done: true,
+					expect(result).toMatchObject({
+						ok: true,
+						value: reader
+							? { entries: [{ name: "visible", path: join(cwd, "visible"), kind: "file" }], done: true }
+							: [{ name: "visible", path: join(cwd, "visible"), kind: "file" }],
 					});
 			} finally {
-				await reader.close(context);
+				await reader?.close(context);
 			}
 		} finally {
 			connection.request = request;

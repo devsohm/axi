@@ -30,6 +30,8 @@ Connection close is terminal. Unplanned connection loss rejects pending work, ma
 
 Environment file methods return Durable `Result` values. Known remote error codes map to stable `FileError` codes; other names map to `unknown`. Existing `FileError` instances retain their identity. Diagnostic messages and native error details may vary by platform.
 
+Directory listings and directory readers omit entries reported as missing during enumeration. Other entry errors fail the operation. This permits concurrent file removal and replacement without discarding the remaining listing.
+
 Cancelling a request or `info(signal)` during startup stops that caller's wait immediately with `aborted`. The shared connection continues starting for other callers. File operations also stop waiting for startup when their context is cancelled.
 
 After a request is sent, cancellation sends a cancel frame and waits up to one second for the daemon's result or error. If the daemon does not answer, the client returns `aborted` and ignores a later reply. A remote command timeout also runs on the client, covering connection startup and an unresponsive daemon. Cancellation of a command or terminal kills its process group. Explicit kill can stop a command without classifying the request as aborted. Short file operations can finish normally after cancellation is requested. Callers must follow the operation-specific checkpoints in the semantics document.

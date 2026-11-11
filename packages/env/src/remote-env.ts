@@ -384,7 +384,10 @@ export class RemoteExecutionEnv implements ExecutionEnv {
 			for (const entry of entries) {
 				if (context.abortSignal?.aborted) throw new FileError("aborted", "aborted", resolved);
 				const path = paths.resolve(resolved, entry.name);
-				if (entry.error !== undefined) throw toFileError(new RemoteError(entry.error), path);
+				if (entry.error !== undefined) {
+					if (entry.error.code === "ENOENT") continue;
+					throw toFileError(new RemoteError(entry.error), path);
+				}
 				const info = fileInfo(path, entry.info!, paths);
 				if (info.ok) result.push(info.value);
 			}

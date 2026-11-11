@@ -266,6 +266,8 @@ Committed entry and settlement events are emitted after storage succeeds, includ
 
 The package does not supply a terminal UI, a command-line product, credential storage policy, or an OS sandbox. Applications compose those capabilities around the Harness.
 
+`NodeExecutionEnv.listDir()` omits names that disappear between enumeration and inspection, including names that cannot round-trip through UTF-8. Other inspection errors fail the listing. A missing listing directory still returns `not_found`. This lets a read-only JSONL viewer open beside a writer replacing sidecars.
+
 ## IndexedDB
 
 The IndexedDB backend implements the same storage interface as memory, SQLite and JSONL. A transaction publishes its sequence counter and mixed record writes together. An aborted transaction publishes neither. IDs survive reopening. Fork scans respect ancestor cutoffs, and document reads reconstruct a base plus subsequent changes. Closing rejects new operations, waits for admitted operations and closes the database connection. Database deletion requires other connections to be closed.

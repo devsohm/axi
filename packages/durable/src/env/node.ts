@@ -174,8 +174,14 @@ export class NodeExecutionEnv implements ExecutionEnv {
 			const files: FileInfo[] = [];
 			for (const name of await readdir(target)) {
 				checkFileContext(context, target);
-				const info = describeFile(join(target, name), await lstat(join(target, name)));
-				if (info) files.push(info);
+				try {
+					const info = describeFile(join(target, name), await lstat(join(target, name)));
+					if (info) files.push(info);
+				} catch (error) {
+					// A concurrent rename or removal can invalidate a name returned by readdir.
+					if (error instanceof Error && "code" in error && error.code === "ENOENT") continue;
+					throw error;
+				}
 			}
 			return files;
 		});
