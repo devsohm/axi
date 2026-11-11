@@ -113,6 +113,113 @@ test("a two-stage sign-in validates its callback and exchanges with the same red
 	expect((await state.load())?.tokens?.access_token).toBe("signed-in");
 });
 
+test.each(["authorization", "response"] as const)(
+	"sign-in completion retains its %s while stored state is loading",
+	async (changed) => {
+		const state = store();
+		await state.save(initial());
+		const client = {
+			serverUrl: initial().serverUrl,
+			store: state,
+			clientName: "test",
+			settings: { clientId: "configured" },
+			redirectUrl: "http://localhost:7456/login",
+		};
+		const authorization = await startMcpSignIn(client);
+		if (authorization.kind !== "redirect") throw new Error("Missing browser step");
+		const options = {
+			...client,
+			authorization,
+			response: { state: authorization.state, code: "accepted-code" },
+		};
+		const saved = await state.load(),
+			entered = Promise.withResolvers<void>(),
+			release = Promise.withResolvers<void>();
+		vi.spyOn(state, "load").mockImplementationOnce(async () => {
+			entered.resolve();
+			await release.promise;
+			return saved;
+		});
+		let exchanged: URLSearchParams | undefined;
+		vi.stubGlobal("fetch", async (_url: unknown, request: RequestInit) => {
+			exchanged = new URLSearchParams(String(request.body));
+			return Response.json({ access_token: "signed-in", token_type: "Bearer" });
+		});
+		const pending = completeMcpSignIn(options);
+		await entered.promise;
+		if (changed === "authorization") options.authorization = { ...authorization, state: "replacement-state" };
+		else options.response = { state: "replacement-state", code: "replacement-code" };
+		release.resolve();
+		await pending;
+		expect(exchanged?.get("code")).toBe("accepted-code");
+		expect(exchanged?.get("redirect_uri")).toBe(client.redirectUrl);
+		expect((await state.load())?.tokens?.access_token).toBe("signed-in");
+	},
+);
+
+test("the browser step uses settings selected after the refresh lock is released", async () => {
+	const state = store();
+	await state.save(initial());
+	const entered = Promise.withResolvers<void>(),
+		release = Promise.withResolvers<void>();
+	state.withRefreshLock = async (fn) => {
+		entered.resolve();
+		await release.promise;
+		return fn();
+	};
+	const options = {
+		serverUrl: initial().serverUrl,
+		store: state,
+		clientName: "test",
+		settings: { clientId: "first", scope: "first-scope" },
+		redirectUrl: "http://localhost/login",
+	};
+	vi.stubGlobal("fetch", () => {
+		throw new Error("Unexpected network request");
+	});
+	const pending = startMcpSignIn(options);
+	await entered.promise;
+	options.settings = { clientId: "second", scope: "second-scope" };
+	release.resolve();
+	const result = await pending;
+	if (result.kind !== "redirect") throw new Error("Missing browser step");
+	const request = new URL(result.authorizationUrl).searchParams;
+	expect(request.get("client_id")).toBe("second");
+	expect(request.get("scope")).toBe("second-scope");
+});
+
+test("the browser step retains its callback while stored state is loading", async () => {
+	const state = store();
+	await state.save(initial());
+	const saved = await state.load(),
+		entered = Promise.withResolvers<void>(),
+		release = Promise.withResolvers<void>();
+	vi.spyOn(state, "load").mockImplementationOnce(async () => {
+		entered.resolve();
+		await release.promise;
+		return saved;
+	});
+	const options = {
+		serverUrl: initial().serverUrl,
+		store: state,
+		clientName: "test",
+		settings: { clientId: "configured" },
+		redirectUrl: "http://localhost/first",
+		challenge: { error: "insufficient_scope" },
+	};
+	vi.stubGlobal("fetch", () => {
+		throw new Error("Unexpected network request");
+	});
+	const pending = startMcpSignIn(options);
+	await entered.promise;
+	options.redirectUrl = "http://localhost/second";
+	release.resolve();
+	const result = await pending;
+	if (result.kind !== "redirect") throw new Error("Missing browser step");
+	expect(result.redirectUrl).toBe("http://localhost/first");
+	expect(new URL(result.authorizationUrl).searchParams.get("redirect_uri")).toBe(result.redirectUrl);
+});
+
 test("cancelling while waiting for a refresh lock returns before the lock is released", async () => {
 	const controller = new AbortController();
 	const gate = Promise.withResolvers<void>();

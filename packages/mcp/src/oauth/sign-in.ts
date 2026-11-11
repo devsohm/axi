@@ -64,36 +64,39 @@ function flowOptions(options: McpSignInOptions): OAuthFlowOptions {
 }
 export async function startMcpSignIn(options: McpSignInOptions): Promise<McpSignInStart> {
 	if (options.signal?.aborted) throw new McpSignInCancelledError();
-	const { settings, store, challenge } = options;
-	const stepUp = challenge?.error === "insufficient_scope";
+	const stepUp = options.challenge?.error === "insufficient_scope";
 	if (!stepUp) {
+		const { settings, store, challenge, redirectUrl, signal } = options;
 		const refresh = store.withRefreshLock(async () => {
-			if (options.signal?.aborted) return "REDIRECT";
+			if (signal?.aborted) return "REDIRECT";
 			const state = await store.load();
 			if (
 				!state?.tokens?.refresh_token ||
 				(settings.clientRegistration === "cimd" && state.clientInformation && !settings.clientId)
 			)
 				return "REDIRECT";
-			return refreshStoredTokens(options, state, { challenge, redirectUrl: options.redirectUrl });
+			return refreshStoredTokens(options, state, { challenge, redirectUrl });
 		});
 		try {
-			if ((await waitForRefresh(refresh, options.signal)) === "AUTHORIZED") return { kind: "authorized" };
+			if ((await waitForRefresh(refresh, signal)) === "AUTHORIZED") return { kind: "authorized" };
 		} catch (error) {
 			if (!(error instanceof McpRefreshLockBusyError)) throw error;
 		}
 	}
 	return cancellable(options.signal, async () => {
+		// A browser step keeps its scope and callback paired across storage awaits.
+		const { settings, store, challenge, redirectUrl } = options;
 		const stored = await store.load();
 		if (stored) {
+			const { settings, redirectUrl } = options;
 			const next = { ...stored };
 			delete next.oauthState;
 			const usable =
 				settings.clientId ||
 				(stored.clientInformation
 					? settings.clientRegistration !== "cimd" &&
-						registeredRedirectUrls(stored.clientInformation).includes(options.redirectUrl)
-					: offersClientMetadataDocument(settings, options.clientMetadataDocuments, options.redirectUrl));
+						registeredRedirectUrls(stored.clientInformation).includes(redirectUrl)
+					: offersClientMetadataDocument(settings, options.clientMetadataDocuments, redirectUrl));
 			if (!usable) {
 				delete next.clientInformation;
 				delete next.tokens;
@@ -102,7 +105,7 @@ export async function startMcpSignIn(options: McpSignInOptions): Promise<McpSign
 			await store.save(next);
 		}
 		let redirect: URL | undefined;
-		const provider = createOAuthClientProvider(options, options.redirectUrl, (url) => {
+		const provider = createOAuthClientProvider(options, redirectUrl, (url) => {
 			redirect = url;
 		});
 		const scopes = [settings.scope, stepUp ? stepUpScope(stored?.tokens?.scope, challenge?.scope) : challenge?.scope];
@@ -114,7 +117,7 @@ export async function startMcpSignIn(options: McpSignInOptions): Promise<McpSign
 		return {
 			kind: "redirect",
 			authorizationUrl: redirect.href,
-			redirectUrl: redirect.searchParams.get("redirect_uri") ?? options.redirectUrl,
+			redirectUrl: redirect.searchParams.get("redirect_uri") ?? redirectUrl,
 			state: await provider.state(),
 			...(requested ? { scope: requested } : {}),
 		};
@@ -124,16 +127,17 @@ export async function completeMcpSignIn(
 	options: McpSignInOptions & { authorization: McpSignInRedirect; response: McpAuthorizationResponse },
 ): Promise<void> {
 	await cancellable(options.signal, async () => {
-		if (options.response.state !== options.authorization.state)
+		const { authorization, response } = options;
+		if (response.state !== authorization.state)
 			throw new Error("The authorization response belongs to a different sign-in");
-		if ((await options.store.load())?.oauthState !== options.authorization.state)
+		if ((await options.store.load())?.oauthState !== authorization.state)
 			throw new Error("Another sign-in to this MCP server started since; sign in again");
 		await authorizeMcp(createOAuthClientProvider(options, options.redirectUrl), {
 			...flowOptions(options),
-			authorizationCode: options.response.code,
-			iss: options.response.iss,
-			authorizationRedirectUrl: options.authorization.redirectUrl,
-			scope: options.authorization.scope,
+			authorizationCode: response.code,
+			iss: response.iss,
+			authorizationRedirectUrl: authorization.redirectUrl,
+			scope: authorization.scope,
 		});
 	});
 }

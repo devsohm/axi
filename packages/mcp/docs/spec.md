@@ -78,6 +78,8 @@ The sign-in client captures its server URL when creating an OAuth provider. Serv
 
 A pending loopback sign-in keeps the authorization object supplied when the wait began. Replacing the caller's authorization field does not change validation of a pasted redirect URL.
 
+Each browser step captures its scope settings and callback before reading stored state. Sign-in completion keeps the authorization and response objects that passed the initial state check through the token exchange.
+
 `createMcpAuthProvider()` captures its state store and redirect URI when created. Replacing those fields on the original options object does not change token reads or the redirect URI used for refresh. The `settings` callback supplies current settings when a refresh is needed.
 
 `OAuthCallbackServer.listen()` defaults to `127.0.0.1`, an ephemeral port, `/callback` and a five-minute wait. Options select advertised host, extra paths, timeout and page renderer. Callback state must match one pending wait. An optional expected path prevents accepting a response on another configured path. Duplicate pending states fail. OAuth errors, missing codes and expired state produce failed responses; successful results contain code, state and optional issuer.
