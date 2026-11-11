@@ -292,8 +292,8 @@ class HarnessImpl<T extends ToolRegistration> extends SessionImpl implements Har
 		>;
 	}
 	async signal<V>(id: TaskId, token: SignalToken<V>, key: string, value: V, context: Context): Promise<SignalResult> {
-		this.resume();
-		return this.commit((tx) => tx.signal(id, token, key, value), context);
+		this.#tasks.resume();
+		return this.commitWith((tx) => tx.signal(id, token, key, value), context);
 	}
 	get [SCHEDULER_INDEX_SIZES]() {
 		return this.#tasks.indexSizes;

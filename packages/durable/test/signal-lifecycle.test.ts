@@ -4,7 +4,7 @@ import { Type } from "typebox";
 import { expect, test } from "vitest";
 import { createRegistry, defineSignal, Harness, MemoryStorage, type SignalResult, type TaskId } from "../src/index.ts";
 
-test.each(["closed", "read-only"] as const)(
+test.each(["closed", "read-only", "closed read-only"] as const)(
 	"signal delivery on a %s harness returns a rejected promise",
 	async (state) => {
 		const storage = new MemoryStorage();
@@ -12,10 +12,10 @@ test.each(["closed", "read-only"] as const)(
 		const token = defineSignal({ name: "lifecycle-reply", version: 1, schema: Type.String() });
 		const harness = await Harness.open(
 			storage,
-			{ models: createModels(), registry: createRegistry(), readOnly: state === "read-only" },
+			{ models: createModels(), registry: createRegistry(), readOnly: state !== "closed" },
 			context,
 		);
-		if (state === "closed") await harness.close(context);
+		if (state !== "read-only") await harness.close(context);
 		try {
 			let pending: Promise<SignalResult> | undefined;
 			expect(() => {
@@ -29,3 +29,22 @@ test.each(["closed", "read-only"] as const)(
 		}
 	},
 );
+
+test("signal delivery uses internal admission when public convenience methods are replaced", async () => {
+	const storage = new MemoryStorage();
+	const id = await storage.mintId<TaskId>();
+	const token = defineSignal({ name: "unregistered-reply", version: 1, schema: Type.String() });
+	const harness = await Harness.open(storage, { models: createModels(), registry: createRegistry() }, context);
+	harness.resume = () => {
+		throw new Error("Public resume override must not run");
+	};
+	harness.commit = async () => {
+		throw new Error("Public commit override must not run");
+	};
+	try {
+		await expect(harness.signal(id, token, "reply", "answer", context)).resolves.toBe("not_found");
+		expect((await harness.inspect(context)).scheduling).toBe("running");
+	} finally {
+		await harness.close(context);
+	}
+});
