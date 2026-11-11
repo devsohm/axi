@@ -66,6 +66,15 @@ export class KeyedMember<S extends TSchema = TSchema, K extends KindShape | unde
 		this.key = key;
 	}
 }
+export class EventDeclaration<S extends TSchema = TSchema> {
+	readonly schema: S;
+	constructor(schema: S) {
+		this.schema = schema;
+	}
+}
+export function event<S extends TSchema>(schema: S): EventDeclaration<S> {
+	return new EventDeclaration(schema);
+}
 export function keyed<S extends TSchema>(schema: S): KeyedMember<S, undefined>;
 export function keyed<S extends TSchema, N extends string, P extends Params>(
 	schema: S,

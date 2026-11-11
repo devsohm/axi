@@ -24,9 +24,13 @@ For a custom client, `ClientOptions.styles` accepts `ClientStyles`: `prepare(set
 
 The optional `@axi/objects/react` entry requires React. Wrap components in `HostProvider`. `useHold` acquires and releases a reference with the component. `useWatch`, `useRegistry` and `useRefState` follow values. `usePageState` retains local values across component remounts on the same host.
 
+`useEvents(member, listener)` subscribes while the component is mounted and that member remains selected. Delivery calls the latest committed listener without resubscribing on each render. An undefined member leaves no subscription. Switching the member or unmounting cancels the old subscription. Events do not request a render themselves.
+
 ## Terminal clients
 
 The `@axi/objects/tui` entry is independent of the terminal rendering library. `TuiScope` holds references, follows values and requests redraws. Dispose a scope when its component ends. Host page state survives replacement of the scope.
+
+`scope.on(member, listener)` listens until the scope is disposed. The listener decides whether to redraw; events do not call the scope's redraw callback automatically.
 
 `scope.optimistic(read, reduce?)` returns a reader, `add(action, call)` and a `pending()` reader. The reducer applies actions in order over the current server value. Without a reducer, the latest action is the displayed value. Actions remain until every added call settles, including rejected calls. The reader then uses the server value again. `add` returns the original promise; callers handle rejections. Disposing the scope stops its redraws.
 

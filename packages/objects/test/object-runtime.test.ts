@@ -1,3 +1,5 @@
+import { HostEvents } from "../src/host/events.ts";
+import { objectsMetrics } from "../src/telemetry.ts";
 import { expect, it, vi } from "vitest";
 import { BACKGROUND_CONTEXT as context } from "../src/context/index.ts";
 import { int, local, method, obj, type Contract } from "../src/contracts/index.ts";
@@ -31,7 +33,9 @@ function fixture(factory: (self: Self) => unknown, linger = 0) {
 		forgotten = 0;
 	const batch = new Batch((error) => errors.push(error), undefined),
 		backoff = new Backoff(() => object.attempt());
+	const events = new HostEvents(objectsMetrics(undefined), (error) => errors.push(error));
 	const host: ObjectHost = {
+		events,
 		hostData: new HostDataGate(),
 		spanHost: "client",
 		batch,
@@ -71,7 +75,7 @@ function fixture(factory: (self: Self) => unknown, linger = 0) {
 			return new ObjectsError({ code: "invalid", reason: "cycle", message: "cycle" });
 		},
 		reference(contract, dependent, caller, options) {
-			return new Binding(contract, batch, dependent, caller, options.readyTimeout ?? 1000);
+			return new Binding(contract, batch, dependent, caller, options.readyTimeout ?? 1000, events);
 		},
 		bind() {
 			throw new Error("No dependencies declared");
@@ -99,7 +103,7 @@ function fixture(factory: (self: Self) => unknown, linger = 0) {
 	};
 	object = new ObjectsObject(host, served, { id: 1 }, undefined, "1", "item", context, []);
 	function reference<C extends Contract>(contract: C) {
-		const binding = new Binding(contract, batch, undefined, caller, 1000);
+		const binding = new Binding(contract, batch, undefined, caller, 1000, events);
 		binding.bind(object);
 		return { binding, value: binding.reference as Reference<C> };
 	}

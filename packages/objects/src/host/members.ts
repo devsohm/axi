@@ -8,16 +8,21 @@ import {
 } from "../registries/internal.ts";
 import { NativeSource, type Derive, type DeriveSource } from "../state/internal.ts";
 import { resolveKeyed, resolveWatchable, type KeyedBinding } from "./reference.ts";
+import { OwnEventSource, type EventNode, type SourceOwner } from "./events.ts";
+import { ReexposedEvents, ReferenceEvents } from "./reference-events.ts";
 export type { KeyedBinding } from "./reference.ts";
 export type Members = {
 	readonly methods: ReadonlyMap<string, (args: unknown, context: Context) => Promise<unknown>>;
 	readonly state: ReadonlyMap<string, DeriveSource>;
 	readonly keyed: ReadonlyMap<string, KeyedBinding>;
+	readonly events: ReadonlyMap<string, EventNode>;
 };
+const noEvents: ReadonlyMap<string, EventNode> = new Map();
 
 export function checkImplementation(
 	contract: Contract,
 	implementation: unknown,
+	owner?: SourceOwner,
 ): { readonly variant: string | undefined; readonly members: Members } {
 	let variant: string | undefined,
 		value = implementation;
@@ -36,7 +41,7 @@ export function checkImplementation(
 		keyed = new Map<string, KeyedBinding>();
 	const object = value as Record<string, unknown>;
 	for (const name of Object.keys(object))
-		if (!shape.methods.has(name) && !shape.state.has(name) && !shape.keyed.has(name))
+		if (!shape.methods.has(name) && !shape.state.has(name) && !shape.keyed.has(name) && !shape.events.has(name))
 			throw new Error(`${name}: not a member`);
 	const own = (name: string): unknown => (Object.hasOwn(object, name) ? object[name] : undefined);
 	for (const [name, method] of shape.methods) {
@@ -59,7 +64,18 @@ export function checkImplementation(
 		}
 		keyed.set(name, member);
 	}
-	return { variant, members: { methods, state, keyed } };
+	let events = noEvents;
+	if (shape.events.size) {
+		const nodes = new Map<string, EventNode>();
+		for (const name of shape.events.keys()) {
+			const value = own(name);
+			if (value instanceof OwnEventSource && owner && value.ownedBy(owner)) nodes.set(name, value);
+			else if (value instanceof ReferenceEvents) nodes.set(name, new ReexposedEvents(value));
+			else throw new Error(`${name}: an event member is this object's own self.events() or a reference's event member`);
+		}
+		events = nodes;
+	}
+	return { variant, members: { methods, state, keyed, events } };
 }
 export function attachDerives(
 	derives: readonly Derive[],

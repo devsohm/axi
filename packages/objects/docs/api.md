@@ -77,6 +77,11 @@ Host data uses `exportHostData`, `readHostArchive`, `HostArchive`, `HostDataCoun
 | `eq` | function | [`store/expression.d.ts`](../dist/store/expression.d.ts) |
 | `evaluateRegistered` | function | [`surfaces/registered.d.ts`](../dist/surfaces/registered.d.ts) |
 | `evolve` | function | [`contracts/evolve.d.ts`](../dist/contracts/evolve.d.ts) |
+| `event` | function | [`contracts/schema.d.ts`](../dist/contracts/schema.d.ts) |
+| `EventDeclaration` | type | [`contracts/schema.d.ts`](../dist/contracts/schema.d.ts) |
+| `EventMember` | interface | [`contracts/contract.d.ts`](../dist/contracts/contract.d.ts) |
+| `EventSource` | interface | [`contracts/contract.d.ts`](../dist/contracts/contract.d.ts) |
+| `EventSubscription` | interface | [`contracts/contract.d.ts`](../dist/contracts/contract.d.ts) |
 | `evolveTable` | function | [`store/table-evolve.d.ts`](../dist/store/table-evolve.d.ts) |
 | `Expression` | class | [`store/expression.d.ts`](../dist/store/expression.d.ts) |
 | `Facet` | typealias | [`host/facet.d.ts`](../dist/host/facet.d.ts) |

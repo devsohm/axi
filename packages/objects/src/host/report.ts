@@ -25,6 +25,13 @@ export type HostError =
 	| { readonly kind: "query_failed"; readonly object: string; readonly table: string; readonly error: unknown }
 	| { readonly kind: "protocol_error"; readonly error: unknown }
 	| {
+			readonly kind: "event_mapping_failed";
+			readonly object: string;
+			readonly member: string;
+			readonly version: number;
+			readonly error: unknown;
+	  }
+	| {
 			readonly kind: "close_failed";
 			readonly object: string;
 			readonly native: Position;

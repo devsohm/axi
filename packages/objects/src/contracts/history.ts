@@ -1,9 +1,13 @@
 import type { Method, TSchema } from "./schema.ts";
 
-export type VariantShape = { readonly state: Readonly<Record<string, TSchema>>;
-	readonly methods: Readonly<Record<string, Method>>; readonly keyed?: Readonly<Record<string, TSchema>> };
+export type VariantShape = {
+	readonly state: Readonly<Record<string, TSchema>>;
+	readonly methods: Readonly<Record<string, Method>>;
+	readonly keyed?: Readonly<Record<string, TSchema>>;
+	readonly events?: Readonly<Record<string, TSchema>>;
+};
 export type Variants = Readonly<Record<string, VariantShape>>;
-export type Change = readonly [variant: string, member: string, side: "state" | "args" | "result" | "keyed"];
+export type Change = readonly [variant: string, member: string, side: "state" | "args" | "result" | "keyed" | "event"];
 type Step = { readonly version: string; readonly variants: Variants; readonly changes: Change };
 export type History = readonly Step[];
 export type CurrentStep<H extends History> = H extends readonly [...Step[], infer Tail extends Step] ? Tail : never;

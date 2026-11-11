@@ -10,10 +10,11 @@ import {
 	variantNames,
 	variantOrder,
 } from "../contracts/internal.ts";
-import { ObjectsError } from "../data/index.ts";
+import { ObjectsError, isObjectsError } from "../data/index.ts";
 import { asObjectsError, invalid } from "../data/internal.ts";
 import type { AnyHost } from "../host/host.ts";
 import type { Caller } from "../host/ctx.ts";
+import { EventNode } from "../host/events.ts";
 import type { ObjectsObject } from "../host/object.ts";
 import { LIVE, LOADING, type RefState } from "../host/ref-state.ts";
 import type { Binding, CheckedParams, PinnedKey, RetryOperation, Target } from "../host/reference.ts";
@@ -25,6 +26,7 @@ import {
 	parsePart,
 	type StateEntry,
 	type WireAddress,
+	type Part,
 } from "../link/internal.ts";
 import type { DeriveSource } from "../state/internal.ts";
 import type { ConsumerSide } from "./consumer.ts";
@@ -37,7 +39,9 @@ type Bound = {
 	readonly methods: ReadonlyMap<string, MethodData>;
 	readonly names: VariantNames;
 	readonly replicas: ReadonlyMap<string, Replica>;
+	eventNode(member: string): EventNode | undefined;
 };
+const noEvents = (): undefined => undefined;
 export class RemoteObject implements Target {
 	readonly kind = "remote";
 	readonly label: string;
@@ -89,6 +93,9 @@ export class RemoteObject implements Target {
 	}
 	get state(): RefState {
 		return this.#status;
+	}
+	get attachable(): Bound | undefined {
+		return this.#snapshot;
 	}
 	stateFor(_version: number, _fingerprint: string): RefState { return this.state; }
 	get span(): TelemetrySpan | undefined { return this.#holding?.span; }
@@ -235,7 +242,14 @@ export class RemoteObject implements Target {
 		return () => {
 			const old = this.#snapshot?.replicas,
 				replicas = new Map<string, Replica>();
-			this.#snapshot = { variant, methods: definition.methods, names, replicas };
+			const nodes = names.events.length ? new Map(names.events.map((name) => [name, new EventNode()])) : undefined;
+			this.#snapshot = {
+				variant,
+				methods: definition.methods,
+				names,
+				replicas,
+				eventNode: nodes ? (name) => nodes.get(name) : noEvents,
+			};
 			for (const [name, value] of snapshots) {
 				const previous = old?.get(name);
 				if (previous) {
@@ -254,6 +268,27 @@ export class RemoteObject implements Target {
 		this.#held("bound");
 		this.#failure = undefined;
 		this.#move(LIVE);
+	}
+	eventNode(index: number): EventNode | undefined {
+		const snapshot = this.#snapshot;
+		if (this.#status.kind !== "live" || !snapshot) return;
+		const name = snapshot.names.events[index];
+		if (name === undefined) throw new Error(`${this.label}: no event member ${index}`);
+		const node = snapshot.eventNode(name)!;
+		return node.tapped ? node : undefined;
+	}
+	event(index: number, at: number, value: Part, link: HostLink): void {
+		const node = this.eventNode(index);
+		if (!node) return;
+		let data: string | Uint8Array;
+		try {
+			data = link.openPart(value, link.limits, link.context);
+		} catch (error) {
+			if (!isObjectsError(error, "too_large")) throw error;
+			this.#host.events.metrics.counter("objects.events.dropped").add(1, { reason: "too_large" });
+			return;
+		}
+		this.#host.events.push(node, parsePart(data) as JsonValue, at);
 	}
 	failed(message: Extract<Message, { kind: "failed" }>): void {
 		const error = asObjectsError(errorFromWire(message.cause.error), this.label);

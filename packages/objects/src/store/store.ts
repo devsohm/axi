@@ -18,6 +18,7 @@ import type { StoreWrite } from "./writes.ts";
 export interface Store {
 	readonly lastSeq: number;
 	readonly outbox: Outbox | undefined;
+	onCommitted(listener: (lastSeq: number) => void, onError: (error: unknown) => void): () => void;
 	export(context: Context): AsyncIterableIterator<ArchivePart>;
 	close(context: Context): Promise<void>;
 }
@@ -97,6 +98,8 @@ export class ObjectsStore implements Store {
 	readonly #migratingTables = new Map<string, number>();
 	readonly #outbox: Outbox | undefined;
 	readonly #exports = new Set<() => void>();
+	readonly #committedListeners = new Map<(lastSeq: number) => void, (error: unknown) => void>();
+	#announcementQueued = false;
 	#seq: number;
 	#committedId: number;
 	#status: Status = { kind: "open" };
@@ -127,6 +130,28 @@ export class ObjectsStore implements Store {
 	}
 	get outbox(): Outbox | undefined {
 		return this.#outbox;
+	}
+	onCommitted(listener: (lastSeq: number) => void, onError: (error: unknown) => void): () => void {
+		this.#committedListeners.set(listener, onError);
+		return () => {
+			this.#committedListeners.delete(listener);
+		};
+	}
+	#announceCommit(): void {
+		if (!this.#committedListeners.size || this.#announcementQueued) return;
+		this.#announcementQueued = true;
+		queueMicrotask(() => {
+			this.#announcementQueued = false;
+			const sequence = this.#seq;
+			for (const [listener, failed] of [...this.#committedListeners]) {
+				try {
+					listener(sequence);
+				} catch (error) {
+					this.#committedListeners.delete(listener);
+					failed(error);
+				}
+			}
+		});
 	}
 	get recordsOutbox(): boolean {
 		return this.#outbox !== undefined;
@@ -294,6 +319,7 @@ export class ObjectsStore implements Store {
 			const failed = this.#fail(error);
 			for (const commit of admitted.slice(index)) commit.reject(failed);
 		}
+		this.#announceCommit();
 	}
 	#adopt({ step, nextId }: AppliedCommit): void {
 		this.#seq = step.seq;
@@ -332,6 +358,7 @@ export class ObjectsStore implements Store {
 			return { step, nextId };
 		});
 		this.#adopt(applied);
+		this.#announceCommit();
 		try {
 			this.#notify(applied.step, commit);
 		} catch (error) {
@@ -412,6 +439,7 @@ export class ObjectsStore implements Store {
 			this.#seq = done.seq;
 			this.#committedId = done.nextId;
 			if (done.catalog) for (const [name, record] of done.catalog) this.#catalog.set(name, record);
+			if (written) this.#announceCommit();
 			try {
 				objectsMetrics(context.telemetry.metrics).counter("objects.store.commits").add(written);
 				objectsMetrics(context.telemetry.metrics).counter("objects.store.statements").add(done.statements);
@@ -497,6 +525,7 @@ export class ObjectsStore implements Store {
 				this.#committedId = result.nextId;
 				this.#ids.raise(result.nextId - 1);
 				for (const [name, table] of result.tables) this.#catalog.set(name, table);
+				this.#announceCommit();
 			} finally {
 				unlock();
 			}

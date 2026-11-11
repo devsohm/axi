@@ -1,8 +1,10 @@
 import { type Context, withAbortSignal } from "../context/index.ts";
 import { asRemoteOldWork } from "../host/old-work.ts";
 import type { TelemetryContext } from "@axi/telemetry";
-import { objectsMetrics, parentOf, ended, type OpenSpan } from "../telemetry.ts";
+import { objectsMetrics, parentOf } from "../telemetry.ts";
 import { ObjectsError, isObjectsError, type Principal } from "../data/index.ts";
+import { asObjectsError } from "../data/internal.ts";
+import type { EventEntry, EventFlush } from "../host/events.ts";
 import type { Caller } from "../host/ctx.ts";
 import {
 	type BoundEntry,
@@ -13,25 +15,30 @@ import {
 	oversized,
 	type ProviderMessage,
 	parsePayload,
+	jsonPart,
 	errorFromWire,
 	payloadPart,
 	type StateEntry,
+	type WireEvent,
 	wireError,
 } from "../link/internal.ts";
 import { Hold } from "./hold.ts";
 import type { HostLink } from "./host-link.ts";
-import type { RelayedHold } from "./relay.ts";
+import { endAll, RelayedCall, type RelayedHold } from "./relay.ts";
 type Running =
 	| { readonly kind: "served"; readonly hold: Hold; readonly bytes: boolean; readonly abort: AbortController }
-	| { readonly kind: "relayed"; readonly hold: RelayedHold; span?: OpenSpan };
+	| RelayedCall;
 type Reply = Extract<OriginMessage, { kind: "result" | "error" }>;
 export class ProviderSide {
 	readonly link: HostLink;
 	readonly origin: number;
-	readonly #limit: number;
+	readonly #limit: number | undefined;
 	readonly #active = new Map<number, Running>();
 	readonly #holds = new Map<number, Hold | RelayedHold>();
-	readonly #acks: ("local" | HostLink)[] = [];
+	readonly #acks: ("local" | { readonly from: HostLink; readonly bound?: readonly number[] })[] = [];
+	readonly #eventTickets: ("local" | HostLink)[] = [];
+	#events: WireEvent[] = [];
+	#eventsInFlight = 0;
 	readonly #pending = new Set<Hold>();
 	readonly #bindings = new Set<Hold>();
 	#touched: Hold[] = [];
@@ -40,7 +47,7 @@ export class ProviderSide {
 	#preferBinding = false;
 	#waitingSince?: number;
 	#relay: { readonly origin: number; readonly links: Set<HostLink> } | undefined;
-	constructor(link: HostLink, origin: number, limit: number) {
+	constructor(link: HostLink, origin: number, limit: number | undefined) {
 		this.link = link;
 		this.origin = origin;
 		this.#limit = limit;
@@ -61,8 +68,13 @@ export class ProviderSide {
 			case "release": {
 				const hold = this.#holds.get(message.hold);
 				if (hold) {
-					this.forget(hold);
-					hold.release();
+					if (hold.kind === "relayed") {
+						hold.release();
+						this.forget(hold);
+					} else {
+						this.forget(hold);
+						hold.release();
+					}
 				}
 				this.#releaseIfIdle();
 				return;
@@ -75,7 +87,8 @@ export class ProviderSide {
 				this.#holds.get(message.hold)?.retry(message);
 				return;
 			case "ack":
-				this.#ack();
+				if (message.events === undefined) this.#ack();
+				else this.#eventAck(message.events);
 				this.#releaseIfIdle();
 				return;
 		}
@@ -84,18 +97,24 @@ export class ProviderSide {
 		const holds = [...this.#holds.values()];
 		this.#holds.clear();
 		const error = new ObjectsError({ code: "unavailable", message: "the link closed" });
+		const relayed: RelayedCall[] = [];
 		for (const running of this.#active.values()) {
 			if (running.kind === "served") running.abort.abort(error);
-			else this.#relayEnd(running);
+			else relayed.push(running);
 		}
 		this.#active.clear();
+		endAll(relayed);
 		for (const hold of holds)
 			if (hold.kind === "served" && !this.link.host.closing) hold.release();
 			else hold.drop();
 		this.#touched = [];
+		this.#events = [];
 		if (this.#relay) {
 			this.link.host.relays.delete(this.#relay.origin);
-			for (const link of this.#relay.links) link.send({ kind: "closed", origin: this.#relay.origin });
+			for (const link of this.#relay.links) {
+				link.send({ kind: "closed", origin: this.#relay.origin });
+				link.consumer.unrelay(this.#relay.origin);
+			}
 		}
 	}
 	send(message: OriginMessage): void {
@@ -128,7 +147,7 @@ export class ProviderSide {
 					from.send({ kind: "ack", origin: relay.origin });
 					return;
 				}
-				this.#acks.push(from);
+				this.#acks.push({ from, ...(forwarded.kind === "bound" ? { bound: holds.map((entry) => entry.hold) } : {}) });
 				if (holds === forwarded.holds) this.send(forwarded);
 				else if (forwarded.kind === "bound") this.send({ ...forwarded, holds: holds as BoundEntry[] });
 				else this.send({ ...forwarded, holds: holds as readonly StateEntry[] });
@@ -140,48 +159,95 @@ export class ProviderSide {
 				if (running?.kind === "relayed" && running.hold.heldOn(from)) this.reply(forwarded.call, forwarded);
 				return;
 			}
+			case "event": {
+				const events = this.#onlyRelayed(forwarded.events, from);
+				this.#eventTickets.push(from);
+				this.send(events === forwarded.events ? forwarded : { ...forwarded, events: [...events] });
+				return;
+			}
 			case "gone": {
 				const hold = this.#relayedOn(forwarded.hold, from);
 				if (hold) {
+					this.#rejectRelayed(hold, asObjectsError(errorFromWire(forwarded.error), `hold ${hold.id}`), "queued");
 					hold.lost();
 					this.send(forwarded);
 				}
 				return;
 			}
-			default:
-				if (this.#relayedOn(forwarded.hold, from)) this.send(forwarded);
+			case "failed":
+			case "loading": {
+				const hold = this.#relayedOn(forwarded.hold, from);
+				if (!hold) return;
+				const error =
+					forwarded.kind === "failed"
+						? asObjectsError(errorFromWire(forwarded.cause.error), `hold ${hold.id}`)
+						: new ObjectsError({ code: "unavailable", message: `hold ${hold.id}: rebinding` });
+				this.#rejectRelayed(hold, error, "queued");
+				this.send(forwarded);
+			}
 		}
 	}
 	unlinked(link: HostLink): void {
 		this.#relay?.links.delete(link);
 	}
 	upstreamDropped(hold: RelayedHold, error: ObjectsError): void {
-		for (const [id, running] of this.#active)
-			if (running.hold === hold) this.reply(id, { kind: "error", call: id, error: wireError(error) });
+		this.#rejectRelayed(hold, error, "all");
 		this.send({ kind: "loading", hold: hold.id });
+	}
+	#rejectRelayed(hold: RelayedHold, error: ObjectsError, which: "queued" | "all"): void {
+		const ids: number[] = [];
+		for (const [id, call] of this.#active)
+			if (call.kind === "relayed" && call.hold === hold && (call.unqueue() || which === "all")) ids.push(id);
+		const answer = wireError(error);
+		for (const id of ids) this.reply(id, { kind: "error", call: id, error: answer });
 	}
 	forget(hold: Hold | RelayedHold, error?: ObjectsError): void {
 		if (this.#holds.get(hold.id) === hold) this.#holds.delete(hold.id);
 		const reason = error ?? new ObjectsError({ code: "released", message: `hold ${hold.id}: released` });
+		const relayed: RelayedCall[] = [];
 		for (const [id, running] of this.#active)
 			if (running.hold === hold) {
 				this.#active.delete(id);
 				if (running.kind === "served") running.abort.abort(reason);
-				else this.#relayEnd(running);
+				else relayed.push(running);
 			}
+		endAll(relayed);
 		if (hold.kind === "served") this.unbind(hold);
 		this.#releaseIfIdle();
 	}
 	reply(id: number, reply: Reply): void {
 		const running = this.#active.get(id);
 		if (!this.#active.delete(id)) return;
+		if (running?.kind === "relayed") running.end(reply);
 		if (this.#pending.size) this.#sendPending();
 		this.send(reply);
-		if (running?.kind === "relayed") this.#relayEnd(running, reply);
 		this.#releaseIfIdle();
 	}
 	#releaseIfIdle(): void {
-		if (!this.#holds.size && !this.#active.size && !this.#acks.length) this.link.drop(this);
+		if (!this.#holds.size && !this.#active.size && !this.#acks.length && !this.#eventTickets.length)
+			this.link.drop(this);
+	}
+	queueEvent(hold: number, member: number, entry: EventEntry, flush: EventFlush): void {
+		const events = this.link.host.events;
+		if (this.#eventsInFlight >= this.link.host.eventWindow) {
+			events.metrics.counter("objects.events.dropped").add(1, { reason: "window" });
+			return;
+		}
+		if (!this.#events.length) flush.sending(this);
+		if (entry.part === undefined) {
+			entry.part = this.link.part(jsonPart(entry.value), this.link.context);
+			events.metrics.counter("objects.events.encodes").add(1);
+		}
+		this.#events.push({ hold, member, at: entry.at, value: entry.part });
+	}
+	sendEvents(): void {
+		const events = this.#events;
+		this.#events = [];
+		if (!events.length) return;
+		this.#eventsInFlight++;
+		this.#eventTickets.push("local");
+		this.link.host.events.metrics.counter("objects.events.sent").add(events.length);
+		this.send({ kind: "event", events });
 	}
 	bind(hold: Hold, context: Context): void {
 		if (this.#free) this.#sendState({ kind: "bound", holds: [hold.boundEntry(context)] });
@@ -257,7 +323,8 @@ export class ProviderSide {
 		if (this.#active.has(message.call)) throw new Error(`call ${message.call}: the id is in use`);
 		const hold = this.#holds.get(message.hold);
 		if (!hold) return;
-		if (this.#active.size >= this.#limit) throw new Error(`call ${message.call}: more than ${this.#limit} calls`);
+		if (this.#limit !== undefined && this.#active.size >= this.#limit)
+			throw new Error(`call ${message.call}: more than ${this.#limit} calls`);
 		const part = message.args;
 		if (part instanceof DeflatedPart && this.link.role === "child")
 			throw new Error(`call ${message.call}: compressed arguments from a child`);
@@ -267,10 +334,9 @@ export class ProviderSide {
 				this.#refuse(message.call, error);
 				return;
 			}
-			const running: Extract<Running, { kind: "relayed" }> = { kind: "relayed", hold };
+			const running = new RelayedCall(hold, message);
 			this.#active.set(message.call, running);
-			const { old, ...unmarked } = message;
-			running.span = hold.call(old && !this.link.trusted ? unmarked : message);
+			hold.submit(running);
 			return;
 		}
 		if (!hold.callable) {
@@ -295,7 +361,8 @@ export class ProviderSide {
 		if (old) this.link.host.oldWork.open();
 		const scope = old ? asRemoteOldWork(this.link.context) : this.link.context;
 		const work = this.#run(message.call, running, method.name, args, parentOf(message.trace, this.link.host.telemetry), scope);
-		if (old) void work.then(() => this.link.host.oldWork.close(), () => this.link.host.oldWork.close());
+		if (old)
+			void work.then(() => this.link.host.oldWork.close(), () => this.link.host.oldWork.close());
 	}
 	async #run(
 		id: number,
@@ -336,19 +403,40 @@ export class ProviderSide {
 		if (!running) return;
 		this.#active.delete(id);
 		if (running.kind === "relayed") {
-			this.#relayEnd(running);
+			if (running.unqueue()) return;
 			running.hold.abort(id);
+			running.end();
 		} else running.abort.abort(new ObjectsError({ code: "aborted", message: `call ${id}: aborted by its caller` }));
 	}
 	#ack(): void {
 		const sender = this.#acks.shift();
 		if (sender === undefined) return;
 		if (sender !== "local") {
-			sender.send({ kind: "ack", origin: this.#relay!.origin });
+			for (const id of sender.bound ?? []) {
+				const hold = this.#relayedOn(id, sender.from);
+				if (hold)
+					this.#rejectRelayed(
+						hold,
+						new ObjectsError({ code: "unavailable", message: `hold ${id}: rebound` }),
+						"queued",
+					);
+			}
+			sender.from.send({ kind: "ack", origin: this.#relay!.origin });
 			return;
 		}
 		this.#ownAcked++;
 		this.#drain();
+	}
+	#eventAck(count: number): void {
+		// Relay credit belongs to the original sender until the downstream consumer acknowledges it.
+		const relayed = new Map<HostLink, number>();
+		while (count-- > 0) {
+			const sender = this.#eventTickets.shift();
+			if (sender === undefined) break;
+			if (sender === "local") this.#eventsInFlight--;
+			else relayed.set(sender, (relayed.get(sender) ?? 0) + 1);
+		}
+		for (const [link, events] of relayed) link.send({ kind: "ack", origin: this.#relay!.origin, events });
 	}
 	#flush(context: Context): void {
 		const holds = this.#touched;
@@ -403,18 +491,5 @@ export class ProviderSide {
 			.histogram("objects.backpressure.wait")
 			.record(performance.now() - this.#waitingSince);
 		this.#waitingSince = undefined;
-	}
-	#relayEnd(running: Extract<Running, { kind: "relayed" }>, reply?: Reply): void {
-		const span = running.span;
-		if (!span) return;
-		span.span.setAttributes({
-			outcome: !reply
-				? "aborted"
-				: reply.kind === "result"
-					? "ok"
-					: ended(span.span, "relay_failed", errorFromWire(reply.error)),
-		});
-		span.end();
-		running.span = undefined;
 	}
 }

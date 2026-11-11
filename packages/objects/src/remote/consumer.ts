@@ -14,8 +14,9 @@ import {
 	parsePayload,
 	payloadPart,
 	type StateEntry,
+	type WireEvent,
 } from "../link/internal.ts";
-import { CallWindow } from "./calls.ts";
+import { CallWindow, type QueuedCall } from "./calls.ts";
 import { actingFor } from "./hold.ts";
 import type { HostLink } from "./host-link.ts";
 import type { RemoteObject } from "./remote-object.ts";
@@ -32,6 +33,9 @@ export class ConsumerSide {
 	readonly #holders = new Map<number, RemoteObject>();
 	readonly #requests = new Map<number, Request>();
 	readonly #window = new CallWindow<Request>();
+	readonly #relayed = new Map<number, CallWindow<QueuedCall<unknown>>>();
+	#greeted: { readonly calls: number | undefined } | undefined;
+	#consumed = 0;
 	#holdId = 0;
 	#callId = 0;
 	constructor(link: HostLink) {
@@ -118,8 +122,22 @@ export class ConsumerSide {
 			}
 		for (const request of requests) request.reject(error);
 	}
-	opened(calls: number): void {
+	opened(calls: number | undefined): void {
+		this.#greeted = { calls };
 		this.#window.opened(calls);
+		for (const window of this.#relayed.values()) window.opened(calls);
+	}
+	relayWindow<C extends QueuedCall<unknown>>(origin: number): CallWindow<C> {
+		let window = this.#relayed.get(origin);
+		if (!window) {
+			window = new CallWindow();
+			if (this.#greeted) window.opened(this.#greeted.calls);
+			this.#relayed.set(origin, window);
+		}
+		return window as CallWindow<C>;
+	}
+	unrelay(origin: number): void {
+		this.#relayed.delete(origin);
 	}
 	message(message: ConsumerMessage): void | Promise<void> {
 		if (message.origin !== undefined) {
@@ -131,7 +149,19 @@ export class ConsumerSide {
 			case "state": {
 				const parts = this.#compressed(message.holds);
 				if (parts) return this.#link.inflate(parts, () => this.message(message));
-				this.#apply(message.holds);
+				this.#apply(message.holds, message.kind === "bound");
+				return;
+			}
+			case "event": {
+				const parts: [DeflatedPart, number][] = [];
+				for (const entry of message.events)
+					if (
+						this.#link.inflates(entry.value, this.#link.limits) &&
+						this.#holders.get(entry.hold)?.eventNode(entry.member)
+					)
+						parts.push([entry.value, this.#link.limits.decoded]);
+				if (parts.length) return this.#link.inflate(parts, () => this.message(message));
+				this.#events(message.events);
 				return;
 			}
 			case "failed": {
@@ -162,6 +192,7 @@ export class ConsumerSide {
 		const pending = [...this.#requests.values(), ...this.#window.clear()];
 		this.#requests.clear();
 		this.#holders.clear();
+		this.#relayed.clear();
 		const error = new ObjectsError({ code: "unavailable", message: "the link closed" });
 		for (const request of pending) request.reject(error);
 	}
@@ -188,7 +219,16 @@ export class ConsumerSide {
 				}
 		return parts;
 	}
-	#apply(entries: readonly (BoundEntry | StateEntry)[]): void {
+	#events(entries: readonly WireEvent[]): void {
+		for (const entry of entries) this.#holders.get(entry.hold)?.event(entry.member, entry.at, entry.value, this.#link);
+		if (this.#consumed++ !== 0) return;
+		queueMicrotask(() => {
+			const count = this.#consumed;
+			this.#consumed = 0;
+			this.#link.send({ kind: "ack", events: count });
+		});
+	}
+	#apply(entries: readonly (BoundEntry | StateEntry)[], bound: boolean): void {
 		const actions: (() => void)[] = [],
 			live: RemoteObject[] = [];
 		let large: [RemoteObject, ObjectsError][] | undefined;
@@ -210,9 +250,11 @@ export class ConsumerSide {
 			this.#link.host.batch.commit(() => {
 				for (const action of actions) action();
 			}, this.#link.context);
+		// Rebinding calls must follow the acknowledgement that changes their method indexes.
+		if (bound) this.#link.send({ kind: "ack" });
 		for (const holder of live) holder.wentLive();
 		for (const [holder, error] of large ?? []) holder.tooLarge(error);
-		this.#link.send({ kind: "ack" });
+		if (!bound) this.#link.send({ kind: "ack" });
 	}
 	#reply(reply: Reply): void | Promise<void> {
 		const request = this.#requests.get(reply.call);

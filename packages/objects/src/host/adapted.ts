@@ -2,6 +2,8 @@ import type { JsonValue } from "../json.ts";
 import { currentVariants, LOCAL, variantsAt } from "../contracts/internal.ts";
 import { ObjectsError } from "../data/index.ts";
 import { Derive, type Batch, type DeriveSource } from "../state/internal.ts";
+import type { ObjectsMetrics } from "../telemetry.ts";
+import { EventNode, type EventEntry, type EventFlush, type Tap } from "./events.ts";
 import type { Served } from "./object.ts";
 
 type Mapper = ((value: never) => JsonValue) | "refuse";
@@ -9,6 +11,7 @@ type Versioned = Pick<Served, "kind" | "contract" | "provider">;
 type Mappings = {
 	readonly state?: Readonly<Record<string, Mapper | Readonly<Record<string, Mapper>>>>;
 	readonly keyed?: Readonly<Record<string, Mapper>>;
+	readonly events?: Readonly<Record<string, Mapper | Readonly<Record<string, Mapper>>>>;
 };
 export type AdaptedInstance = {
 	readonly served: Versioned;
@@ -16,7 +19,10 @@ export type AdaptedInstance = {
 	readonly label: string;
 	readonly batch: Batch;
 	member(name: string): DeriveSource;
+	event(name: string): EventNode | undefined;
 	report(member: string, error: unknown): void;
+	reportEvent(member: string, error: unknown): void;
+	readonly metrics: ObjectsMetrics;
 };
 
 function mappings(served: Versioned, version: number): Mappings | undefined {
@@ -32,6 +38,17 @@ function stateMapping(
 	return served.kind === "local"
 		? (state?.[name] as Mapper | undefined)
 		: (state?.[variant ?? ""] as Readonly<Record<string, Mapper>> | undefined)?.[name];
+}
+function eventMapping(
+	served: Versioned,
+	version: number,
+	variant: string | undefined,
+	name: string,
+): Mapper | undefined {
+	const events = mappings(served, version)?.events;
+	return served.kind === "local"
+		? (events?.[name] as Mapper | undefined)
+		: (events?.[variant ?? ""] as Readonly<Record<string, Mapper>> | undefined)?.[name];
 }
 function refused(served: Versioned, version: number, member?: string): ObjectsError {
 	return new ObjectsError({
@@ -49,6 +66,8 @@ export function refusal(served: Served, version: number, variant: string | undef
 		if (stateMapping(served, version, variant, member) === "refuse") return refused(served, version, member);
 	for (const member of shape?.keyed.keys() ?? [])
 		if (mappings(served, version)?.keyed?.[member] === "refuse") return refused(served, version, member);
+	for (const member of shape?.events.keys() ?? [])
+		if (eventMapping(served, version, variant, member) === "refuse") return refused(served, version, member);
 	return undefined;
 }
 
@@ -59,6 +78,7 @@ export class AdaptedMembers {
 	readonly #members = new Map<string, DeriveSource>();
 	readonly #inputs = new Map<Derive, readonly DeriveSource[]>();
 	readonly #keys = new Map<string, Map<DeriveSource, MappedKey>>();
+	#events: Map<string, MappedEvents> | undefined;
 	constructor(instance: AdaptedInstance, version: number) {
 		this.#instance = instance;
 		this.version = version;
@@ -133,7 +153,25 @@ export class AdaptedMembers {
 		};
 	}
 
+	event(name: string): EventNode | undefined {
+		const instance = this.#instance;
+		if (!instance.served.provider.accepted.some((entry) => entry.version === this.version)) return;
+		const source = instance.event(name);
+		if (!source) return;
+		const mapping = eventMapping(instance.served, this.version, instance.variant, name);
+		if (mapping === undefined) return source;
+		if (mapping === "refuse") return;
+		const events = (this.#events ??= new Map());
+		let mapped = events.get(name);
+		if (!mapped) {
+			mapped = new MappedEvents(source, mapping, instance.metrics, (error) => instance.reportEvent(name, error));
+			events.set(name, mapped);
+		}
+		return mapped;
+	}
 	detach(error: Error): void {
+		for (const node of this.#events?.values() ?? []) node.detach();
+		this.#events = undefined;
 		for (const source of this.#inputs.keys()) source.detach(error);
 		for (const table of this.#keys.values()) for (const { source } of table.values()) source.detach(error);
 		this.#inputs.clear();
@@ -154,5 +192,42 @@ export class AdaptedMembers {
 			reason: "ended",
 			message: `${this.#instance.label}: ended`,
 		});
+	}
+}
+
+class MappedEvents extends EventNode {
+	readonly #source: EventNode;
+	readonly #tap: Tap;
+	#failed = false;
+	constructor(
+		source: EventNode,
+		mapping: Exclude<Mapper, string>,
+		metrics: ObjectsMetrics,
+		report: (error: unknown) => void,
+	) {
+		super();
+		this.#source = source;
+		this.#tap = {
+			boundAt: -Infinity,
+			deliver: (entry: EventEntry, flush: EventFlush) => {
+				if (!this.tapped) return;
+				let value: JsonValue;
+				try {
+					value = mapping(entry.value as never);
+				} catch (error) {
+					metrics.counter("objects.events.dropped").add(1, { reason: "mapping" });
+					if (!this.#failed) report(error);
+					this.#failed = true;
+					return;
+				}
+				this.#failed = false;
+				this.deliver({ node: this, value, at: entry.at, n: entry.n, part: undefined }, flush);
+			},
+		};
+		source.tap(this.#tap);
+	}
+	detach(): void {
+		this.#source.untap(this.#tap);
+		this.clear();
 	}
 }

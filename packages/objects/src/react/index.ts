@@ -3,6 +3,7 @@ export {
 	useHost,
 	useHold,
 	useWatch,
+	useEvents,
 	useRegistry,
 	useRefState,
 	usePageState,

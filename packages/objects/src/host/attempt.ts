@@ -10,7 +10,7 @@ import type { TelemetryContext, TelemetrySpan } from "@axi/telemetry";
 import { OpenSpan, objectsMetrics, spanFailed, untraced } from "../telemetry.ts";
 import type { JsonValue } from "../json.ts";
 import type { NativeWatchable, Watchable, WatchEnd } from "../watch.ts";
-import type { Contract, Implementation, ParamsOf } from "../contracts/index.ts";
+import type { Contract, EventSource, Implementation, ParamsOf } from "../contracts/index.ts";
 import { contractData, type ShapeOf } from "../contracts/internal.ts";
 import { ObjectsError, type FailureCause, type Principal } from "../data/index.ts";
 import { asObjectsError, checkArgs, checkParams, invalid, openFailure, type Provider, type Value } from "../data/internal.ts";
@@ -47,6 +47,8 @@ import type { HostDataGate } from "./host-data.ts";
 import { CallContext, withLinkedAbortSignal, type Acquirer, type Caller, type Ctx, type GetOptions } from "./ctx.ts";
 import { AdaptedMembers } from "./adapted.ts";
 import { Deadline } from "./deadline.ts";
+import { OwnEventSource, type EventNode, type HostEvents, type SourceOwner } from "./events.ts";
+import { ReexposedEvents } from "./reference-events.ts";
 import { checkDependencies, parkedCause, ParkedLong, waitingOn, type Dependency } from "./dependencies.ts";
 import { FollowSource, type FollowAttach } from "./follow.ts";
 import { attachDerives, checkImplementation, contributionOf, type KeyedBinding, type Members } from "./members.ts";
@@ -92,6 +94,7 @@ export interface Self<P extends Principal = Principal> extends RoutineDeclaratio
 	get<C extends Contract>(type: C, params: ParamsOf<C>): Reference<C>;
 	registry<C, V>(registry: Registry<C, V>): RegistryValue<V>;
 	writable<T>(initial: T): Writable<T>;
+	events<T>(): EventSource<T>;
 	retryOn(...sources: readonly (Watchable<unknown> | NativeWatchable<unknown>)[]): void;
 	open<T>(
 		open: (context: Context) => Promise<T>,
@@ -113,9 +116,13 @@ export type Factory<C extends Contract, P extends Principal = Principal> = Shape
 	: (params: ParamsOf<C>, principal: P, self: Self<P>) => Implementation<C, Ctx<P>>;
 
 export type AttemptHost = Acquirer & {
+	readonly events: HostEvents;
 	readonly hostData: HostDataGate;
 	readonly telemetry?: import("@axi/telemetry").TelemetryContext;
-	principalAttributes?(principal: Principal | undefined, context: Context): Readonly<import("@axi/telemetry").SpanAttributes>;
+	principalAttributes?(
+		principal: Principal | undefined,
+		context: Context,
+	): Readonly<import("@axi/telemetry").SpanAttributes>;
 	readonly batch: Batch;
 	readonly principal: Principal | undefined;
 	readonly incarnation: string;
@@ -219,6 +226,8 @@ export class Attempt implements StoreSelf, KeyDeclarer, RegistryWaiter {
 	#change: PromiseWithResolvers<void> | undefined;
 	#early: ObjectsError | undefined;
 	#registry: RegistryDeclarations | undefined;
+	#sourceOwner: SourceOwner | undefined;
+	#eventSources: OwnEventSource[] | undefined;
 	constructor(object: AttemptObject, context: Context, trace: { readonly attempt: number; readonly trigger: TelemetryContext } = { attempt: 1, trigger: context.telemetry }) {
 		this.#object = object;
 		this.#served = object.served;
@@ -312,6 +321,16 @@ export class Attempt implements StoreSelf, KeyDeclarer, RegistryWaiter {
 		);
 		this.#declarations().writables.push(writable);
 		return writable;
+	}
+	events<T>(): EventSource<T> {
+		this.#declaringOnly("events");
+		this.#sourceOwner ??= {
+			events: this.#object.host.events,
+			sealed: () => (this.#token.sealed ? this.#object.ended() : undefined),
+		};
+		const source = new OwnEventSource(this.#sourceOwner);
+		(this.#eventSources ??= []).push(source);
+		return source as unknown as EventSource<T>;
 	}
 	retryOn(...sources: readonly (Watchable<unknown> | NativeWatchable<unknown>)[]): void {
 		this.#declaringOnly("retryOn");
@@ -408,6 +427,11 @@ export class Attempt implements StoreSelf, KeyDeclarer, RegistryWaiter {
 	get keyedMembers(): ReadonlyMap<string, KeyedBinding> {
 		return this.#members!.keyed;
 	}
+	eventNode(name: string, version: number): EventNode | undefined {
+		return version === this.#served.contract.version
+			? this.#members?.events.get(name)
+			: this.#adaptedAt(version).event(name);
+	}
 
 	member(name: string): DeriveSource {
 		const source = this.#members!.state.get(name);
@@ -499,7 +523,11 @@ export class Attempt implements StoreSelf, KeyDeclarer, RegistryWaiter {
 					label: object.label,
 					batch: object.host.batch,
 					member: (name) => this.member(name),
+					event: (name) => this.#members?.events.get(name),
 					report: (member, error) => object.host.report({ kind: "derive_failed", object: object.label, member, error }),
+					reportEvent: (member, error) =>
+						object.host.report({ kind: "event_mapping_failed", object: object.label, member, version, error }),
+					metrics: objectsMetrics(object.host.telemetry?.metrics),
 				},
 				version,
 			);
@@ -677,6 +705,8 @@ export class Attempt implements StoreSelf, KeyDeclarer, RegistryWaiter {
 		for (const derive of this.#derives) derive.detach(ended);
 		for (const query of this.#queries) query.detach(ended);
 		for (const follow of this.#follows) follow.detach();
+		for (const source of this.#eventSources ?? []) source.detach();
+		for (const source of this.#members?.events.values() ?? []) if (source instanceof ReexposedEvents) source.detach();
 		for (const writable of this.#registry?.writables ?? none) writable.detach(ended);
 	}
 	releaseReferences(): void {
@@ -855,9 +885,10 @@ export class Attempt implements StoreSelf, KeyDeclarer, RegistryWaiter {
 			}
 		}
 		try {
-			const { members, variant } = checkImplementation(this.#served.contract, implementation);
+			const { members, variant } = checkImplementation(this.#served.contract, implementation, this.#sourceOwner);
 			this.#members = members;
 			this.#variant = variant;
+			for (const source of members.events.values()) if (source instanceof ReexposedEvents) source.attach();
 			if (this.#registry) {
 				const object = this.#object,
 					contributor = { plugin: this.#served.plugin, type: this.#served.contract.name };

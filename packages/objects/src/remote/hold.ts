@@ -10,6 +10,7 @@ import type { Caller } from "../host/ctx.ts";
 import type { Serving } from "../host/host.ts";
 import type { ObjectsObject, Holder } from "../host/object.ts";
 import { retryOperation } from "../host/reference.ts";
+import type { EventNode, Tap } from "../host/events.ts";
 import type { UnboundRequest } from "../host/unbound.ts";
 import {
 	type BoundEntry,
@@ -53,6 +54,7 @@ type State =
 	| { readonly kind: "refused"; readonly request: HoldRequest; readonly cause: FailureCause }
 	| { readonly kind: "released" };
 const pending: State = { kind: "pending" };
+const noEventTaps: readonly (readonly [EventNode, Tap])[] = [];
 export class Hold implements Holder, UnboundRequest {
 	readonly kind = "served";
 	readonly listed = true;
@@ -69,6 +71,7 @@ export class Hold implements Holder, UnboundRequest {
 	#retirements: readonly number[] = NO_RETIRED;
 	#dirty = false;
 	#counted = true;
+	#eventTaps: readonly (readonly [EventNode, Tap])[] = noEventTaps;
 	constructor(id: number, provider: ProviderSide, caller: Caller, limits: Limits) {
 		this.id = id;
 		this.#side = provider;
@@ -172,7 +175,10 @@ export class Hold implements Holder, UnboundRequest {
 				}
 				return;
 			}
-			if (previous.kind === "bound" && object.attachable === previous.instance) return;
+			if (previous.kind === "bound" && object.attachable === previous.instance) {
+				this.#untap();
+				return;
+			}
 			const names = this.#names();
 			if (previous.kind === "bound") this.#unfollow(previous);
 			const error = shown.kind === "failed" ? shown.cause.error : undefined;
@@ -259,6 +265,18 @@ export class Hold implements Holder, UnboundRequest {
 			}
 			if (source instanceof Source) this.#subscribe(state, index, source);
 		}
+		if (state.names.events.length) {
+			const boundAt = this.#side.link.host.events.counter;
+			const taps: (readonly [EventNode, Tap])[] = [];
+			for (const [index, name] of state.names.events.entries()) {
+				const node = object.instance!.eventNode(name, this.#request!.version);
+				if (!node) continue;
+				const tap: Tap = { boundAt, deliver: (entry, flush) => this.#side.queueEvent(this.id, index, entry, flush) };
+				node.tap(tap);
+				taps.push([node, tap]);
+			}
+			this.#eventTaps = taps;
+		}
 		this.#updates = [];
 		this.#failures = [];
 		this.#retirements = NO_RETIRED;
@@ -301,11 +319,16 @@ export class Hold implements Holder, UnboundRequest {
 		this.#refuse(this.#request!, cause);
 	}
 	#unfollow(state: Bound): void {
+		this.#untap();
 		for (const item of state.followed) item.source.unsubscribe(item.subscriber);
 		this.#updates = [];
 		this.#failures = [];
 		this.#retirements = NO_RETIRED;
 		this.#dirty = false;
+	}
+	#untap(): void {
+		for (const [node, tap] of this.#eventTaps) node.untap(tap);
+		this.#eventTaps = noEventTaps;
 	}
 	release(): void {
 		this.drop();
@@ -315,7 +338,7 @@ export class Hold implements Holder, UnboundRequest {
 	drop(): void {
 		const state = this.#status,
 			host = this.#side.link.host;
-		if (state.kind === "bound") for (const item of state.followed) item.source.unsubscribe(item.subscriber);
+		if (state.kind === "bound") this.#unfollow(state);
 		else if (state.kind === "unplaced" || (state.kind === "refused" && state.cause.kind === "waiting"))
 			host.unindex(state.request.type, this);
 		this.#status = { kind: "released" };

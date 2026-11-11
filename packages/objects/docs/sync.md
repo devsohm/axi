@@ -26,6 +26,8 @@ A lost upload reply can leave the remote ahead of local progress. Retrying with 
 
 `SessionSyncStore` stores batch bodies, lists slots and snapshots, reads session metadata and lists sessions. `SessionSyncMaintenance` adds snapshot publication and history cleanup.
 
+An upload needs only `SessionSyncUploader`, the `putBatch` part of that interface. `store.onCommitted(listener, onError)` can notify a `FlushScheduler` after local commits or applied history. Keep the returned removal function and call it when the uploader stops. Sync does not install this wiring automatically.
+
 A batch slot identifies its preceding sequence, final sequence and writer. Its body is a `SyncBody`, an asynchronous stream of bytes. Slots also record whether a body is an archive or has been folded into a snapshot.
 
 `remoteHistory(listing, from)` selects a snapshot and the following batch chain. `remoteHead(listing)` follows the slot chain from sequence zero. Folded slots keep their writer and sequence information after their bodies are removed.

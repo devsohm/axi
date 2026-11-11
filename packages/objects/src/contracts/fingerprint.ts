@@ -18,6 +18,7 @@ export function fingerprintOf(normal: JsonValue): string {
 function members(variant: VariantData): JsonValue {
 	const entries: [string, JsonValue][] = [];
 	for (const [name, state] of variant.state) entries.push([name, { state: state.normal }]);
+	for (const [name, schema] of variant.events) entries.push([name, { event: schema.normal }]);
 	for (const [name, keyed] of variant.keyed)
 		entries.push([
 			name,

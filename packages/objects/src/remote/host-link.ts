@@ -26,7 +26,6 @@ type Options = {
 	readonly codec: Codec;
 	readonly limits: Limits;
 };
-const concurrency = 256;
 export class HostLink implements ChannelHandler {
 	readonly host: AnyHost;
 	readonly role: LinkRole;
@@ -38,6 +37,7 @@ export class HostLink implements ChannelHandler {
 	readonly #origins = new Map<number, ProviderSide>();
 	readonly #channel: Channel;
 	readonly #end = new AbortController();
+	readonly #calls: number | undefined;
 	constructor(host: AnyHost, link: Link, options: Options, context: Context) {
 		this.host = host;
 		this.role = options.role;
@@ -46,6 +46,7 @@ export class HostLink implements ChannelHandler {
 		this.limits = options.limits;
 		this.context = context;
 		this.consumer = new ConsumerSide(this);
+		this.#calls = options.trusted ? undefined : host.callWindow;
 		this.#channel = new Channel(
 			link,
 			this,
@@ -53,7 +54,7 @@ export class HostLink implements ChannelHandler {
 				codec: options.codec,
 				trusted: options.trusted,
 				incarnation: host.incarnation,
-				calls: concurrency,
+				calls: this.#calls,
 				report: (error) => host.report({ kind: "protocol_error", error }),
 			},
 			context,
@@ -112,7 +113,7 @@ export class HostLink implements ChannelHandler {
 				const origin = message.origin ?? 0;
 				let provider = this.#origins.get(origin);
 				if (!provider) {
-					provider = new ProviderSide(this, origin, concurrency);
+					provider = new ProviderSide(this, origin, this.#calls);
 					this.#origins.set(origin, provider);
 				}
 				return provider.message(message);
@@ -134,6 +135,7 @@ export class HostLink implements ChannelHandler {
 			case "result":
 			case "error":
 			case "gone":
+			case "event":
 				return this.consumer.message(message);
 			case "revoke":
 				if (this.role === "parent") this.host.revoke(message.revocation as JsonValue, this.context);

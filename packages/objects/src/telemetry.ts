@@ -39,6 +39,13 @@ export const OBJECTS_TELEMETRY_SCHEMA = defineTelemetrySchema({
 		"objects.http": { ...span("A routed HTTP request.", root, { "objects.host": host, method: text, route: text }, { status: { type: "number", description: "Response status." } }), events: { "objects.commit": commit } },
 	},
 	metrics: {
+		"objects.events.emitted": counter("Emitted event values."),
+		"objects.events.sent": counter("Event entries sent to holders."),
+		"objects.events.encodes": counter("Encoded event representations."),
+		"objects.events.dropped": {
+			...counter("Dropped event entries."),
+			attributes: { reason: { ...text, values: ["window", "too_large", "mapping"] } },
+		},
 		"objects.data.compilations": counter("Compiled validators."),
 		"objects.data.validations": counter("Validated values."),
 		"objects.data.walks": counter("Full-value traversals."),

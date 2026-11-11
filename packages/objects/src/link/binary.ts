@@ -22,6 +22,7 @@ const kinds = [
 	"ping",
 	"pong",
 	"revoke",
+	"event",
 ] as const;
 type Scalar = "integer" | "text" | "uuid" | "hex" | "json";
 const layouts = new Map<Message["kind"], readonly [string, Scalar][]>([
@@ -236,6 +237,14 @@ class PacketReader {
 
 function writeComplex(writer: PacketWriter, message: Message): void {
 	switch (message.kind) {
+		case "event":
+			writer.list(message.events, (event) => {
+				writer.integer(event.hold);
+				writer.integer(event.member);
+				writer.integer(event.at);
+				writer.part(event.value);
+			});
+			return;
 		case "hold": {
 			writer.integer(message.hold);
 			writer.text(message.type);
@@ -307,6 +316,16 @@ function writeComplex(writer: PacketWriter, message: Message): void {
 }
 function readComplex(reader: PacketReader, kind: Message["kind"]): Record<string, unknown> {
 	switch (kind) {
+		case "event":
+			return {
+				kind,
+				events: reader.list(() => ({
+					hold: reader.integer(),
+					member: reader.integer(),
+					at: reader.integer(),
+					value: reader.part(),
+				})),
+			};
 		case "hold": {
 			const hold = reader.integer(),
 				type = reader.field("text"),
@@ -400,12 +419,20 @@ export const binaryCodec: Codec = {
 			code = kinds.indexOf(message.kind),
 			origin = "origin" in message ? message.origin : undefined,
 			trace = "trace" in message ? message.trace : undefined;
-		writer.byte(code | (origin === undefined ? 0 : 128) | (trace === undefined ? 0 : 64) | (message.kind === "call" && message.old === true ? 32 : 0));
+		const flag =
+			(message.kind === "call" && message.old === true) || (message.kind === "ack" && message.events !== undefined);
+		writer.byte(code | (origin === undefined ? 0 : 128) | (trace === undefined ? 0 : 64) | (flag ? 32 : 0));
 		if (origin !== undefined) writer.integer(origin);
 		if (trace !== undefined) writer.json(trace);
 		const layout = layouts.get(message.kind);
-		if (layout) for (const [field, type] of layout) writer.field(type, Reflect.get(message, field));
+		if (layout)
+			for (const [field, type] of layout)
+				writer.field(
+					type,
+					message.kind === "hello" && field === "calls" ? (message.calls ?? 0) : Reflect.get(message, field),
+				);
 		else writeComplex(writer, message);
+		if (message.kind === "ack" && message.events !== undefined) writer.integer(message.events);
 		return writer.finish();
 	},
 	decode(bytes) {
@@ -413,21 +440,25 @@ export const binaryCodec: Codec = {
 			tag = reader.byte(),
 			kind = kinds[tag & 31];
 		if (kind === undefined) throw new Error("binary: an unknown kind");
-		if (tag & 32 && kind !== "call") throw new Error("binary: an unknown kind");
+		if (tag & 32 && kind !== "call" && kind !== "ack") throw new Error("binary: an unknown kind");
 		const origin = tag & 128 ? reader.integer() : undefined;
 		const trace = tag & 64 ? reader.field("json") : undefined;
 		const layout = layouts.get(kind),
-			value = layout
-				? {
-						kind,
-						...(kind === "closed" ? { origin: 0 } : {}),
-						...Object.fromEntries(layout.map(([field, type]) => [field, reader.field(type)])),
-					}
-				: readComplex(reader, kind);
+			value =
+				kind === "ack" && tag & 32
+					? { kind, events: reader.integer() }
+					: layout
+						? {
+								kind,
+								...(kind === "closed" ? { origin: 0 } : {}),
+								...Object.fromEntries(layout.map(([field, type]) => [field, reader.field(type)])),
+							}
+						: readComplex(reader, kind);
 		reader.end();
 		if (origin !== undefined) value.origin = origin;
 		if (trace !== undefined) value.trace = trace;
-		if (tag & 32) value.old = true;
+		if (kind === "call" && tag & 32) value.old = true;
+		if (kind === "hello" && value.calls === 0) delete value.calls;
 		// Parts stay opaque. Schema validation belongs to the receiving channel.
 		return value as Message;
 	},

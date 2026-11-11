@@ -12,7 +12,7 @@ import type { Watchable } from "../watch.ts";
 import type { Address, Contract, HostKind, ParamsOf } from "../contracts/index.ts";
 import { contractData, type Params } from "../contracts/internal.ts";
 import { ObjectsError, type FailureCause, type Principal, type PrincipalKeyFunction } from "../data/index.ts";
-import { OpenSpan, capped, countingOnly, ended, parentOf, untraced } from "../telemetry.ts";
+import { OpenSpan, capped, countingOnly, ended, objectsMetrics, parentOf, untraced } from "../telemetry.ts";
 import {
 	asObjectsError,
 	binds,
@@ -40,6 +40,7 @@ import { notLive } from "./attempt.ts";
 import { Backoff } from "./backoff.ts";
 import { type Caller, type Ctx, type GetOptions, withLinkedAbortSignal } from "./ctx.ts";
 import { Destination, type Placed } from "./destination.ts";
+import { HostEvents } from "./events.ts";
 import type { Facet } from "./facet.ts";
 import { deleteFrom, HostDataGate, type HostDataSite, importInto } from "./host-data.ts";
 import {
@@ -82,6 +83,8 @@ export type HostOptions<P extends Principal = Principal, R extends JsonValue = J
 	readonly reloadDrainTimeout?: number;
 	readonly readyTimeout?: number;
 	readonly heartbeat?: { readonly ping?: number; readonly close?: number };
+	readonly callWindow?: number;
+	readonly eventWindow?: number;
 	readonly revokedBy?: RevokedBy<P, R>;
 	readonly compression?: Compression;
 	readonly store?: Store;
@@ -165,6 +168,9 @@ type ReloadPlan<P extends Principal> = {
 	readonly actions: readonly Action[];
 };
 export class ObjectsHost<P extends Principal = Principal, R extends JsonValue = JsonValue> implements Host<P, R> {
+	readonly callWindow: number;
+	readonly eventWindow: number;
+	readonly events: HostEvents;
 	readonly hostData = new HostDataGate();
 	readonly batch: Batch;
 	readonly timeouts: { readonly close: number; readonly ready: number; readonly reload: number };
@@ -216,6 +222,9 @@ export class ObjectsHost<P extends Principal = Principal, R extends JsonValue = 
 		this.address = options.address;
 		this.spanHost = (options.address?.key ?? "client").slice(0, 256);
 		this.telemetry = options.telemetry ?? NOOP_TELEMETRY_CONTEXT;
+		this.callWindow = options.callWindow ?? 10_000;
+		this.eventWindow = options.eventWindow ?? 32;
+		this.events = new HostEvents(objectsMetrics(this.telemetry.metrics), (error) => this.report(error));
 		this.principal = options.principal;
 		this.#key = options.principalKey;
 		this.#principalAttributes = options.principalAttributes;
@@ -526,7 +535,7 @@ export class ObjectsHost<P extends Principal = Principal, R extends JsonValue = 
 	}
 	reference(type: Contract, dependent: LocalTarget | undefined, caller: Caller, options: GetOptions): Binding {
 		this.#assertOpen();
-		return new Binding(type, this.batch, dependent, caller, options.readyTimeout ?? this.timeouts.ready);
+		return new Binding(type, this.batch, dependent, caller, options.readyTimeout ?? this.timeouts.ready, this.events);
 	}
 	bind(binding: Binding, type: Contract, checked: CheckedParams, context: Context): Target | undefined {
 		binding.whenUnbound((cause) =>

@@ -2,7 +2,7 @@ import { RETRY_HOPS } from "../link/internal.ts";
 import { BACKGROUND_CONTEXT, type Context } from "../context/index.ts";
 import type { JsonValue } from "../json.ts";
 import type { NativeWatchable, Watch, Watchable } from "../watch.ts";
-import type { Contract, Implementation, KindShape, ParamsOf } from "../contracts/index.ts";
+import type { Contract, EventSubscription, Implementation, KindShape, ParamsOf } from "../contracts/index.ts";
 import {
 	currentVariants,
 	keyOfAddress,
@@ -23,6 +23,8 @@ import { ParkedCalls } from "./parked.ts";
 import { MemberSource } from "./member-source.ts";
 import { HeldKeys } from "./held-keys.ts";
 import { LOADING, ReferenceState, type Ended, type Failed, type RefState } from "./ref-state.ts";
+import { subscribe, type EventListener, type EventNode, type HostEvents } from "./events.ts";
+import { ReferenceEvents, ReferenceEventTaps } from "./reference-events.ts";
 
 type Lifecycle = {
 	readonly state: NativeWatchable<RefState>;
@@ -68,6 +70,7 @@ export type KeyedBinding =
 export interface Target {
 	readonly kind: "local" | "remote";
 	readonly instance?: unknown;
+	readonly attachable?: Attachable;
 	readonly label: string;
 	readonly state: RefState;
 	readonly hydrated: boolean;
@@ -89,6 +92,11 @@ export interface Target {
 	retry(operation: RetryOperation): void;
 	pathTo(target: LocalTarget, visited: Set<Target>): LocalTarget[] | undefined;
 }
+export type Attachable = {
+	readonly variant: string | undefined;
+	eventNode(member: string, version: number): EventNode | undefined;
+};
+type EventsAt = { readonly instance: Attachable; readonly boundAt: number };
 export interface LocalTarget extends Target {
 	dependencyMoved(): void;
 }
@@ -133,6 +141,7 @@ export class Binding {
 	#attached = false;
 	#variant: string = LOCAL;
 	#heldKeys: HeldKeys | undefined;
+	#events: { readonly host: HostEvents; at: EventsAt | undefined; taps: ReferenceEventTaps | undefined } | undefined;
 	#listed = true;
 	get listed(): boolean {
 		return this.#listed;
@@ -146,6 +155,7 @@ export class Binding {
 		dependent: LocalTarget | undefined,
 		caller: Caller,
 		parkTimeout: number,
+		events: HostEvents,
 	) {
 		this.#name = contract.name;
 		this.version = contract.version;
@@ -164,6 +174,10 @@ export class Binding {
 		});
 		const methods = new Map<string, MethodData>();
 		for (const variant of currentVariants(contract).values()) {
+			if (variant.events.size) {
+				this.#events ??= { host: events, at: undefined, taps: undefined };
+				for (const name of variant.events.keys()) members[name] = new ReferenceEvents(this, name);
+			}
 			for (const name of variant.state.keys()) members[name] = new ReferenceMember(this, name);
 			for (const [name, { key }] of variant.keyed) members[name] = new ReferenceKeyed(this, name, key);
 			for (const [name, method] of variant.methods) methods.set(name, method);
@@ -231,6 +245,10 @@ export class Binding {
 		const target = this.target;
 		this.freeze();
 		this.#status = { kind: "unbound" };
+		if (this.#events) {
+			this.#events.at = undefined;
+			this.#events.taps?.retarget(undefined);
+		}
 		target?.unhold(this);
 		if (this.#place) this.#place(cause);
 		else this.refuse(cause, () => {});
@@ -283,6 +301,13 @@ export class Binding {
 	retarget(): void {
 		if (this.#status.kind === "released") return;
 		const state = this.refState;
+		if (this.#events) {
+			const instance = state.kind === "live" ? this.target?.attachable : undefined;
+			if (instance !== this.#events.at?.instance) {
+				this.#events.at = instance ? { instance, boundAt: this.#events.host.counter } : undefined;
+				this.#events.taps?.retarget(this.#events.at);
+			}
+		}
 		if (state.kind === "loading") {
 			this.#takeMembers();
 			if (!this.target?.lastValues) for (const source of this.#remoteMembers.values()) source.freeze();
@@ -358,6 +383,27 @@ export class Binding {
 			this.#remoteMembers.set(name, source);
 		}
 		return source;
+	}
+	subscribeEvents(member: string, listener: EventListener, context: Context): Promise<EventSubscription> {
+		if (this.#status.kind === "released") return Promise.reject(this.#status.state.error);
+		const taps = this.#eventTaps();
+		return subscribe(
+			this.#events!.host,
+			listener,
+			context,
+			(subscription) => taps.subscribe(member, subscription),
+			(subscription) => this.#events?.taps?.unsubscribe(member, subscription),
+		);
+	}
+	forwardEvents(member: string, node: EventNode): void {
+		if (this.#status.kind !== "released") this.#eventTaps().forward(member, node);
+	}
+	unforwardEvents(member: string, node: EventNode): void {
+		this.#events?.taps?.unforward(member, node);
+	}
+	#eventTaps(): ReferenceEventTaps {
+		const events = this.#events!;
+		return (events.taps ??= new ReferenceEventTaps(this.version, events.at));
 	}
 	keyedMapping(name: string): ((value: JsonValue) => JsonValue) | undefined {
 		return this.#requireTarget().keyedMapping?.(name, this.version);
@@ -451,6 +497,9 @@ export class Binding {
 			ended: Ended = { kind: "ended", error };
 		this.#status = { kind: "released", state: ended };
 		this.#owner = undefined;
+		const eventTaps = this.#events?.taps;
+		this.#events = undefined;
+		eventTaps?.end();
 		this.#place = undefined;
 		this.#heldKeys?.end(error);
 		this.#heldKeys = undefined;

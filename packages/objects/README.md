@@ -4,6 +4,8 @@
 
 An object factory declares what the object needs. The host activates those dependencies, opens its resources and admits calls. A reference owns access to the object. Release the reference when its caller finishes.
 
+Event members send transient JSON notifications locally or across a link. Subscriptions follow reference reloads and end on cancellation. Events are bounded on the link and are not saved or replayed. See [events](docs/spec.md#events) and the [client bindings](docs/clients.md).
+
 Persistent documents, tables and jobs use a shared SQLite Store. The Store commits a transaction before the host publishes its changes. The application owns the Store and closes it after the host.
 
 ## Package imports

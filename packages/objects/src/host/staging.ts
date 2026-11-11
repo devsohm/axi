@@ -209,6 +209,7 @@ export function recordFactory(object: ObjectsObject, served: Served, context: Co
 		},
 		derive: () => unused,
 		writable: () => unused,
+		events: () => ({ emit() {}, on: async () => ({ stop() {} }) }),
 		follow: () => unused,
 		on: () => undefined,
 		onLive: () => undefined,

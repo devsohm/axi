@@ -14,14 +14,26 @@ type StateMappings<Old extends VariantShape, Now extends VariantShape, X, Change
 type RemoteState<Old extends Variants, Now extends Variants, Changes extends Change> = Defined<{
 	[X in keyof Old & keyof Now]: [keyof StateMappings<Old[X], Now[X], X, Changes>] extends [never] ? never : StateMappings<Old[X], Now[X], X, Changes>;
 }>;
+type EventMappings<Old extends VariantShape, Now extends VariantShape, X, Changes extends Change> = Defined<{
+	[M in keyof NonNullable<Old["events"]>]: M extends keyof NonNullable<Now["events"]>
+		? [X, M, "event"] extends Changes
+			? "refuse" | ((value: Static<NonNullable<Now["events"]>[M]>) => Static<NonNullable<Old["events"]>[M]>)
+			: never
+		: never;
+}>;
+type RemoteEvents<Old extends Variants, Now extends Variants, Changes extends Change> = Defined<{
+	[X in keyof Old & keyof Now]: [keyof EventMappings<Old[X], Now[X], X, Changes>] extends [never]
+		? never
+		: EventMappings<Old[X], Now[X], X, Changes>;
+}>;
 type KeyedMappings<Old extends VariantShape, Now extends VariantShape, C extends Change> = Defined<{
 	[M in keyof NonNullable<Old["keyed"]>]: M extends keyof NonNullable<Now["keyed"]>
 		? [typeof LOCAL, M, "keyed"] extends C ? "refuse" | ((value: Static<NonNullable<Now["keyed"]>[M]>) => Static<NonNullable<Old["keyed"]>[M]>) : never
 		: "refuse";
 }>;
 type Replaced<M extends Method> = "refuse" | { readonly call: (args: Static<M["args"]>, context: Context) => Promise<Static<M["result"]>>; readonly args?: never; readonly result?: never };
-type Removed<V extends Variants, X, M> = X extends keyof V ? M extends keyof V[X]["methods"] ? never : X : never;
-type Changed<C, X, M, Side> = X extends unknown ? [X, M, Side] extends C ? true : never : never;
+type Removed<V extends Variants, X, M> = X extends keyof V ? (M extends keyof V[X]["methods"] ? never : X) : never;
+type Changed<C, X, M, Side> = X extends unknown ? ([X, M, Side] extends C ? true : never) : never;
 type Adapt<A, R, Old extends Method, Now extends Method> = [A | R] extends [never] ? never
 	: Replaced<Old> | ({ readonly call?: never } & ([A] extends [never] ? { readonly args?: never }
 		: { readonly args: (old: Static<Old["args"]>) => Static<Now["args"]> }) & ([R] extends [never] ? { readonly result?: never }
@@ -30,10 +42,16 @@ type MethodMappings<Old extends Variants, Now extends Variants, C extends Change
 	[M in MemberNames<Old, "methods">]: [Removed<Now, VariantsWith<Old, M>, M>] extends [never]
 		? Adapt<Changed<C, VariantsWith<Old, M>, M, "args">, Changed<C, VariantsWith<Old, M>, M, "result">, MethodAt<Old, M>, MethodAt<Now, M>> : Replaced<MethodAt<Old, M>>;
 }>;
-type Mappings<K extends Kind, Old extends Variants, Now extends Variants, C extends Change> =
-	Section<"state", K extends "local" ? StateMappings<Old[typeof LOCAL], Now[typeof LOCAL], typeof LOCAL, C> : RemoteState<Old, Now, C>> &
+type Mappings<K extends Kind, Old extends Variants, Now extends Variants, C extends Change> = Section<
+	"state",
+	K extends "local" ? StateMappings<Old[typeof LOCAL], Now[typeof LOCAL], typeof LOCAL, C> : RemoteState<Old, Now, C>
+> &
 	Section<"methods", MethodMappings<Old, Now, C>> &
-	Section<"keyed", K extends "local" ? KeyedMappings<Old[typeof LOCAL], Now[typeof LOCAL], C> : Record<never, never>>;
+	Section<"keyed", K extends "local" ? KeyedMappings<Old[typeof LOCAL], Now[typeof LOCAL], C> : Record<never, never>> &
+	Section<
+		"events",
+		K extends "local" ? EventMappings<Old[typeof LOCAL], Now[typeof LOCAL], typeof LOCAL, C> : RemoteEvents<Old, Now, C>
+	>;
 export type AcceptsTable<C extends Contract> = {
 	readonly [V in OlderVersions<ShapeOf<C>["history"]>]?: Mappings<ShapeOf<C>["kind"], StepAt<ShapeOf<C>["history"], V>["variants"],
 		CurrentStep<ShapeOf<C>["history"]>["variants"], ChangesAfter<ShapeOf<C>["history"], V>>;
@@ -76,7 +94,10 @@ function methodMapping(raw: unknown, need: MethodNeed, path: string): void {
 		if (need[key] && typeof supplied !== "function") throw new Error(`${path}.${key}: expected a function`);
 	}
 }
-export function checkAccepts<C extends Contract>(contract: C, accepts: AcceptsTable<C>): { readonly versions: readonly AcceptedVersion[] } {
+export function checkAccepts<C extends Contract>(
+	contract: C,
+	accepts: AcceptsTable<C>,
+): { readonly versions: readonly AcceptedVersion[] } {
 	const data = contractData(contract), current = data.versions.at(-1)!;
 	const versions = entriesOf(accepts, `${data.name} accepts`).map(([key, raw]) => {
 		const path = `${data.name} accepts[${key}]`, index = data.versions.findIndex((item) => String(item.version) === key);
@@ -89,9 +110,14 @@ export function checkAccepts<C extends Contract>(contract: C, accepts: AcceptsTa
 			edits.has(JSON.stringify([variant, member, side]));
 		const states = new Map<string, Map<string, StateNeed>>(),
 			methods = new Map<string, MethodNeed>(),
+			events = new Map<string, Map<string, true>>(),
 			keyed = new Map<string, KeyedNeed>();
 		for (const [variant, previous] of old.variants) {
 			const now = current.variants.get(variant)!, needs = new Map<string, StateNeed>();
+			const eventNeeds = new Map<string, true>();
+			for (const member of previous.events.keys())
+				if (now.events.has(member) && changed(variant, member, "event")) eventNeeds.set(member, true);
+			if (eventNeeds.size) events.set(variant, eventNeeds);
 			for (const [member, oldKeyed] of previous.keyed) {
 				if (!now.keyed.has(member)) keyed.set(member, "removed");
 				else if (now.keyed.get(member)!.key?.kind !== oldKeyed.key?.kind) keyed.set(member, "rekeyed");
@@ -110,11 +136,18 @@ export function checkAccepts<C extends Contract>(contract: C, accepts: AcceptsTa
 				methods.set(member, need);
 			}
 		}
-		checkKeys(raw, ["state", "methods", "keyed"], path);
+		checkKeys(raw, ["state", "methods", "keyed", "events"], path);
 		const mappings = raw as Record<string, unknown>;
 		const variantSection = (value: unknown, needs: ReadonlyMap<string, StateNeed>, at: string) => section(value, needs, at, stateMapping);
 		if (data.kind === "local") variantSection(mappings.state, states.get(LOCAL) ?? new Map(), `${path}.state`);
 		else section(mappings.state, states, `${path}.state`, variantSection);
+		const eventSection = (value: unknown, needs: ReadonlyMap<string, true>, at: string) =>
+			section(value, needs, at, (mapping, _need, label) => {
+				if (mapping !== "refuse" && typeof mapping !== "function")
+					throw new Error(`${label}: expected a function or "refuse"`);
+			});
+		if (data.kind === "local") eventSection(mappings.events, events.get(LOCAL) ?? new Map(), `${path}.events`);
+		else section(mappings.events, events, `${path}.events`, eventSection);
 		section(mappings.methods, new Map([...methods].filter(([, need]) => need.removed || need.args || need.result)), `${path}.methods`, methodMapping);
 		section(mappings.keyed, keyed, `${path}.keyed`, keyedMapping);
 		return { version: old.version, fingerprint: old.fingerprint };

@@ -45,6 +45,13 @@
 					]
 				},
 				{
+					"behavior": "event contracts, subscription cancellation, reload rebinding and remote terminal delivery",
+					"tests": [
+						"packages/objects/test/event-contracts.test.ts",
+						"packages/objects/test/events.test.ts"
+					]
+				},
+				{
 					"behavior": "object routing, links and host lifecycle",
 					"tests": [
 						"packages/objects/test/route-controls.test.ts",

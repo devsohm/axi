@@ -1,6 +1,6 @@
-export type QueuedCall = { readonly hold: number; readonly send: () => void };
+export type QueuedCall<H = number> = { readonly hold: H; readonly send: () => void };
 
-export class CallWindow<C extends QueuedCall = QueuedCall> {
+export class CallWindow<C extends QueuedCall<unknown> = QueuedCall> {
 	#capacity = 0;
 	#active = 0;
 	readonly #queued = new Set<C>();
@@ -11,8 +11,8 @@ export class CallWindow<C extends QueuedCall = QueuedCall> {
 			call.send();
 		}
 	}
-	opened(limit: number): void {
-		this.#capacity = limit;
+	opened(limit: number | undefined): void {
+		this.#capacity = limit ?? Infinity;
 		this.#dispatch();
 	}
 	freed(): void {
@@ -22,7 +22,7 @@ export class CallWindow<C extends QueuedCall = QueuedCall> {
 	remove(call: C): void {
 		this.#queued.delete(call);
 	}
-	removeHold(hold: number): C[] {
+	removeHold(hold: C["hold"]): C[] {
 		const removed: C[] = [];
 		for (const call of this.#queued)
 			if (call.hold === hold) {

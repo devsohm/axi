@@ -1,3 +1,5 @@
+import { HostEvents } from "../src/host/events.ts";
+import { objectsMetrics } from "../src/telemetry.ts";
 import { expect, it, vi } from "vitest";
 import { local } from "../src/index.ts";
 import { ObjectsError } from "../src/data/index.ts";
@@ -9,7 +11,8 @@ import { Batch } from "../src/state/internal.ts";
 it("parks on recoverable failures and breaks on lost authority or an ended dependency", () => {
 	const type = local("app.dependency", { version: 1, params: {}, members: {} }),
 		batch = new Batch(() => {}, undefined);
-	const binding = new Binding(type, batch, undefined, { principal: undefined, incarnation: "host" }, 100);
+	const events = new HostEvents(objectsMetrics(undefined), () => {});
+	const binding = new Binding(type, batch, undefined, { principal: undefined, incarnation: "host" }, 100, events);
 	expect(checkDependencies([])).toEqual({ kind: "live" });
 	expect(checkDependencies([{ kind: "reference", binding }])).toEqual({
 		kind: "parked",

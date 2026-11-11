@@ -85,6 +85,93 @@ const create = (key: string) =>
 		{ version: 1, fingerprint: "one", value: { key } },
 		JSON.stringify({ key }),
 	);
+it("announces grouped commits only after adoption and removes failing observers without undoing storage", async () => {
+	const store = (await openStore(
+		sqliteBackend(await openNodeSqliteDatabase(":memory:")),
+		context,
+	)) as ObjectsStore;
+	const adopted: number[] = [],
+		seen: number[] = [],
+		errors: unknown[] = [];
+	const failure = new Error("observer failed");
+	let failingCalls = 0;
+	const remove = store.onCommitted(
+		(seq) => {
+			expect(adopted.at(-1)).toBe(seq);
+			seen.push(seq);
+		},
+		(error) => {
+			throw error;
+		},
+	);
+	store.onCommitted(
+		() => {
+			failingCalls++;
+			throw failure;
+		},
+		(error) => {
+			errors.push(error);
+		},
+	);
+	try {
+		const commitFence = {
+			admit: () => true,
+			adopt: (seq: number) => {
+				adopted.push(seq);
+			},
+		};
+		await Promise.all([
+			store.commit([create("one")], commitFence, context),
+			store.commit([create("two")], commitFence, context),
+		]);
+		expect([adopted, seen, errors, failingCalls]).toEqual([[1, 2], [2], [failure], 1]);
+		await store.commit([create("three")], commitFence, context);
+		expect(seen).toEqual([2, 3]);
+		remove();
+		await store.commit([create("four")], commitFence, context);
+		expect([seen, failingCalls, store.lastSeq]).toEqual([[2, 3], 1, 4]);
+	} finally {
+		await store.close(context);
+	}
+});
+
+it("leaves commit observers quiet for empty work and a rolled-back write", async () => {
+	const store = (await openStore(
+		sqliteBackend(await openNodeSqliteDatabase(":memory:")),
+		context,
+	)) as ObjectsStore;
+	const seen: number[] = [];
+	store.onCommitted(
+		(seq) => {
+			seen.push(seq);
+		},
+		(error) => {
+			throw error;
+		},
+	);
+	try {
+		await store.commit([], fence, context);
+		await expect(
+			store.commit(
+				[
+					{
+						order: "write",
+						async apply() {
+							throw new Error("refused");
+						},
+					},
+				],
+				fence,
+				context,
+			),
+		).rejects.toThrow("refused");
+		expect(seen).toEqual([]);
+		await store.commitSeries([{ check: async () => {}, writes: [create("series")] }], () => {}, context);
+		expect(seen).toEqual([1]);
+	} finally {
+		await store.close(context);
+	}
+});
 it("lets an admitted outbox trim finish while close waits for it", async () => {
 	const db = await openNodeSqliteDatabase(":memory:");
 	const store = (await openStore(sqliteBackend(db), context, { outbox: true })) as ObjectsStore;

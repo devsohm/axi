@@ -1,3 +1,5 @@
+import { HostEvents } from "../src/host/events.ts";
+import { objectsMetrics } from "../src/telemetry.ts";
 import { LiveQueries } from "../src/store/live-query.ts";
 import { expect, it } from "vitest";
 import { BACKGROUND_CONTEXT as context } from "../src/context/index.ts";
@@ -37,7 +39,9 @@ function environment(factory: (self: Self) => unknown) {
 			throw error;
 		},
 	});
+	const events = new HostEvents(objectsMetrics(undefined), (error) => errors.push(error));
 	const host = {
+		events,
 		hostData: new HostDataGate(),
 		oldWork: new OldWork(),
 		spanHost: "client",
@@ -56,7 +60,7 @@ function environment(factory: (self: Self) => unknown) {
 			throw new Error("No dependency");
 		},
 		reference(contract: typeof type, _dependent: unknown, caller: { principal: undefined; incarnation: string }) {
-			return new Binding(contract, batch, undefined, caller, 100);
+			return new Binding(contract, batch, undefined, caller, 100, events);
 		},
 		bind() {
 			throw new Error("No dependency");

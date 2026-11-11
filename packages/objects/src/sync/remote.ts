@@ -40,6 +40,8 @@ export interface SessionSyncStore {
 	putMeta(sessionId: string, meta: JsonObject, context: Context): Promise<void>;
 	getMeta(sessionId: string, context: Context): Promise<JsonObject | undefined>;
 }
+export type SessionSyncUploader = Pick<SessionSyncStore, "putBatch">;
+
 export interface SessionSyncMaintenance extends SessionSyncStore {
 	putSnapshot(sessionId: string, to: Seq, body: SyncBody, context: Context): Promise<void>;
 	foldBatches(sessionId: string, afters: readonly Seq[], context: Context): Promise<void>;

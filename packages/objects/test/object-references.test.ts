@@ -1,3 +1,5 @@
+import { HostEvents } from "../src/host/events.ts";
+import { objectsMetrics } from "../src/telemetry.ts";
 import { getEventListeners } from "node:events";
 import { expect, it } from "vitest";
 import { BACKGROUND_CONTEXT as context, withAbortSignal } from "../src/context/index.ts";
@@ -17,6 +19,7 @@ const contract = local("test.counter", {
 const caller = { principal: { kind: "user" }, incarnation: "test" };
 
 function provider() {
+	const events = new HostEvents(objectsMetrics(undefined), () => {});
 	const batch = new Batch(() => {}, undefined),
 		holders = new Set<Binding>(),
 		calls: unknown[] = [];
@@ -63,6 +66,7 @@ function provider() {
 		},
 	};
 	return {
+		events,
 		batch,
 		calls,
 		holders,
@@ -77,7 +81,7 @@ function provider() {
 
 it("parks methods until live, forwards caller identity, and ends member watches on release", async () => {
 	const app = provider(),
-		binding = new Binding(contract, app.batch, undefined, caller, 100);
+		binding = new Binding(contract, app.batch, undefined, caller, 100, app.events);
 	const ref = binding.reference as Reference<typeof contract>;
 	const first = ref.echo({ text: "one" }, context),
 		second = ref.echo({ text: "two" }, context);
@@ -109,8 +113,8 @@ it("releases call-scoped references and rejects a get that resolves after its sc
 	const scope = new CallContext(context, caller, host);
 	const first = scope.get(contract, {}),
 		second = scope.get(contract, {});
-	const one = new Binding(contract, app.batch, undefined, caller, 100),
-		two = new Binding(contract, app.batch, undefined, caller, 100);
+	const one = new Binding(contract, app.batch, undefined, caller, 100, app.events),
+		two = new Binding(contract, app.batch, undefined, caller, 100, app.events);
 	for (const binding of [one, two]) {
 		binding.bind(app.target);
 		acquired.push(binding);

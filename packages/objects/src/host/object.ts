@@ -156,7 +156,7 @@ export class ObjectsObject implements LocalTarget {
 	get hydrated(): boolean {
 		return this.#status.kind === "live" || this.openOldAttempt !== undefined;
 	}
-	get attachable(): unknown {
+	get attachable(): Attempt | undefined {
 		return this.#exposed;
 	}
 	get instance(): Attempt | undefined {

@@ -16,6 +16,16 @@ A local contract has one member set. A remote contract has named variants and a 
 
 Host address keys encode the kind and parameter values in declaration order. Separators and backslashes in values are escaped. Key conversion checks field types and enum choices and computes the key from parameters, rather than trusting a supplied key. Routing checks the remaining parameter constraints. Stored keys decode numeric and boolean fields to their declared types.
 
+## Events
+
+An event member sends transient JSON values. Declare one with `event(schema)` in a local contract, or in a remote variant's `events` map. Its implementation is a source from `self.events<T>()`, or an event member obtained through that object's reference. Byte schemas are refused.
+
+`emit(value)` records a timestamp immediately and queues delivery in a microtask. Events are delivered in emission order, then subscription order. An emission is independent of a transaction: rollback does not retract it. Events have no stored history and are never replayed. An ended attempt refuses further emissions.
+
+`member.on(listener, context)` returns a subscription with `stop()`. Cancellation, reference release or a throwing listener ends that subscription. A listener failure is reported without stopping other listeners. A subscription follows its reference when an implementation reloads. Events emitted while no eligible binding exists are lost. Re-exposed members preserve the original value and timestamp.
+
+Changing an event schema requires an explicit older-version mapping, including an edit that retains the same schema. A mapping failure drops that version's event and reports once until the mapping succeeds again.
+
 ## Host lifecycle
 
 `load()` runs once. Local acquisition before loading fails with `not_ready`. Loading publishes accepted declarations together and starts empty-parameter local objects. Its report waits for their first outcome. Failed setup excludes that plugin. Invalid plugin names reject before host state changes.
@@ -31,6 +41,8 @@ Host close stops new work, closes links, seals scopes and objects, drains admitt
 Transactions serialize changes to one object's documents. Store commits order writes across owners. A transaction publishes no draft before storage adoption. Document changes, table changes and live-query refreshes publish in one batch. A failed refresh keeps the last live rows and reports its failure once per episode.
 
 Commits queued behind a running Store step share the next database transaction. Each retains its own sequence, outbox record and adoption. Metadata is written once per group. If a member's writes refuse, the group rolls back and runs its admitted members individually. A failed transaction boundary stops the Store instead of retrying an uncertain outcome.
+
+`store.onCommitted(listener, onError)` reports the latest adopted sequence in a microtask. Commits adopted before that notification share one call. Empty work and refused writes produce no notification. The returned function removes the listener. A throwing listener is removed and its error reaches `onError`; stored commits remain intact. Applied remote history produces the same notification.
 
 Persisted state declares a schema version and checkpoint policy. A schema change requires a compatible migration. Tables record version history and bounded migrations. Jobs persist unsettled run records separately from their state. Recovery uses committed records, not unfinished in-memory callbacks.
 
@@ -75,6 +87,8 @@ Links handshake before queued work. Untrusted envelopes are validated. Malformed
 Only parent links can stamp principals and incarnations. Routes authorize each hold before resolution. Revocation ends matching external objects, unbound work and downstream links. The host's own principal is exempt.
 
 Each origin has independent call and state windows. Two unacknowledged local state messages fill the state window. Method replies and control messages remain independent. Remote views keep their last snapshot while disconnected. Sent calls fail on loss and are never replayed automatically.
+
+An untrusted link admits up to `callWindow` outstanding calls, default 10,000. Trusted links have no call-window limit. Events have a separate per-origin window, default 32 messages. A full event window drops new events before encoding. Event acknowledgements do not release state credit. A relay returns event credit only when its downstream consumer acknowledges delivery.
 
 Before a result or error is sent, the answering host sends that origin's pending state, even when the ordinary state window is full. A relay sends its own pending state before forwarding an answer. These extra state messages use the same ordered acknowledgements. The guarantee covers changes committed by those answering hosts before the answer, not effects left running after it.
 

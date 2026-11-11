@@ -1,12 +1,68 @@
 import { ObjectsError } from "../data/index.ts";
 import type { TelemetryCarrier, TelemetrySpan } from "@axi/telemetry";
-import { OpenSpan, carrierOf, parentOf, spanFailed, untraced } from "../telemetry.ts";
+import { OpenSpan, carrierOf, ended, parentOf, spanFailed, untraced } from "../telemetry.ts";
 import type { Caller } from "../host/ctx.ts";
-import { type Message, wireError } from "../link/internal.ts";
+import { errorFromWire, type Message, type OriginMessage, wireError } from "../link/internal.ts";
+import type { CallWindow } from "./calls.ts";
 import { actingFor, type HoldRequest } from "./hold.ts";
 import type { HostLink } from "./host-link.ts";
 import type { Path } from "./path.ts";
 import type { ProviderSide } from "./provider.ts";
+type CallMessage = Extract<Message, { kind: "call" }>;
+type Reply = Extract<OriginMessage, { kind: "result" | "error" }>;
+type CallState =
+	| { kind: "new" | "ended" }
+	| { kind: "queued"; window: CallWindow<RelayedCall> }
+	| { kind: "forwarded"; window: CallWindow<RelayedCall>; span: OpenSpan | undefined };
+export class RelayedCall {
+	readonly kind = "relayed";
+	readonly hold: RelayedHold;
+	readonly message: CallMessage;
+	#state: CallState = { kind: "new" };
+	constructor(hold: RelayedHold, message: CallMessage) {
+		this.hold = hold;
+		this.message = message;
+	}
+	get forwarded(): boolean {
+		return this.#state.kind === "forwarded";
+	}
+	queue(window: CallWindow<RelayedCall>): void {
+		this.#state = { kind: "queued", window };
+		window.submit(this);
+	}
+	send(): void {
+		const { window } = this.#state as Extract<CallState, { kind: "queued" }>;
+		this.#state = { kind: "forwarded", window, span: this.hold.call(this.message) };
+	}
+	unqueue(): boolean {
+		const state = this.#state;
+		if (state.kind !== "queued") return false;
+		this.#state = { kind: "ended" };
+		state.window.remove(this);
+		return true;
+	}
+	end(reply?: Reply): void {
+		const state = this.#state;
+		this.#state = { kind: "ended" };
+		if (state.kind === "queued") state.window.remove(this);
+		if (state.kind !== "forwarded") return;
+		if (state.span) {
+			state.span.span.setAttributes({
+				outcome: !reply
+					? "aborted"
+					: reply.kind === "result"
+						? "ok"
+						: ended(state.span.span, "relay_failed", errorFromWire(reply.error)),
+			});
+			state.span.end();
+		}
+		state.window.freed();
+	}
+}
+export function endAll(calls: readonly RelayedCall[]): void {
+	for (const call of calls) call.unqueue();
+	for (const call of calls) call.end();
+}
 export class RelayedHold {
 	readonly kind = "relayed";
 	readonly id: number;
@@ -88,15 +144,28 @@ export class RelayedHold {
 		this.drop();
 		this.#provider.forget(this);
 	}
-	call(message: Extract<Message, { kind: "call" }>): OpenSpan | undefined {
+	submit(call: RelayedCall): void {
+		const connection = this.#connection;
+		if (connection) call.queue(connection.link.consumer.relayWindow(connection.origin));
+		else
+			this.#provider.reply(call.message.call, {
+				kind: "error",
+				call: call.message.call,
+				error: wireError(
+					new ObjectsError({ code: "unavailable", message: `hold ${this.id}: its upstream link is down` }),
+				),
+			});
+	}
+	call(message: CallMessage): OpenSpan | undefined {
 		if (this.#connection) {
 			const { link, origin } = this.#connection;
+			const { old, ...unmarked } = message;
+			const forwarded = old && !this.#provider.link.trusted ? unmarked : message;
 			const span = untraced(link.host.telemetry) ? undefined : new OpenSpan(parentOf(message.trace, link.host.telemetry), "objects.relay", this.#attributes(`#${message.method}`));
 			const trace = span ? carrierOf(span.span) ?? message.trace : message.trace;
-			link.send({ ...message, origin, ...(trace === undefined ? {} : { trace }) });
+			link.send({ ...forwarded, origin, ...(trace === undefined ? {} : { trace }) });
 			return span;
-		}
-		else
+		} else
 			this.#provider.reply(message.call, {
 				kind: "error",
 				call: message.call,

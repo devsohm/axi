@@ -10,6 +10,7 @@ export {
 	type Codec,
 	type BoundEntry,
 	type StateEntry,
+	type WireEvent,
 	type WireAddress,
 	type ConsumerMessage,
 	type ProviderMessage,

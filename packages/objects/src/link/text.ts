@@ -23,9 +23,21 @@ const pairFailures = (failures: readonly { readonly member: number; readonly err
 	json(failures.map(({ member, error }) => [member, error]));
 
 function ownMessage(message: Message): string {
+	if (message.kind === "hello" && message.calls === undefined)
+		return json(["h", message.protocol, message.incarnation]);
+	if (message.kind === "ack" && message.events !== undefined) return json(["a", message.events]);
 	const layout = byKind.get(message.kind);
 	if (layout) return json([layout.tag, ...layout.fields.map((field) => Reflect.get(message, field))]);
 	switch (message.kind) {
+		case "event":
+			return tuple([
+				json("E"),
+				tuple(
+					message.events.map((event) =>
+						tuple([json(event.hold), json(event.member), json(event.at), partText(event.value)]),
+					),
+				),
+			]);
 		case "hold": {
 			const fields = [
 				json("H"),
@@ -144,14 +156,32 @@ function envelope(fields: unknown[], rest: Uint8Array): Record<string, unknown> 
 		throw new Error("text: byte segments without a payload that carries them");
 	const fixed = typeof tag === "string" ? byTag.get(tag) : undefined;
 	if (fixed) {
-		arity(fixed.fields.length);
+		if (fixed.kind === "hello") arity(2, 3);
+		else if (fixed.kind === "ack") arity(0, 1);
+		else arity(fixed.fields.length);
+		const fields =
+			fixed.kind === "hello"
+				? fixed.fields.slice(0, args.length)
+				: fixed.kind === "ack" && args.length
+					? ["events"]
+					: fixed.fields;
 		return {
 			kind: fixed.kind,
 			...(fixed.kind === "closed" ? { origin: 0 } : {}),
-			...Object.fromEntries(fixed.fields.map((field, index) => [field, args[index]])),
+			...Object.fromEntries(fields.map((field, index) => [field, args[index]])),
 		};
 	}
 	switch (tag) {
+		case "E":
+			arity(1);
+			return {
+				kind: "event",
+				events: list(args[0]).map((item) => {
+					const entry = list(item);
+					if (entry.length !== 4) throw new Error(`text: an event entry with ${entry.length} fields`);
+					return { hold: entry[0], member: entry[1], at: entry[2], value: textPart(entry[3]) };
+				}),
+			};
 		case "H": {
 			arity(6, 7, 8, 9, 10, 11);
 			const address = list(args[5]);

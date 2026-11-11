@@ -3,13 +3,15 @@ import {
 	createElement,
 	useContext,
 	useEffect,
+	useLayoutEffect,
 	useMemo,
+	useRef,
 	useState,
 	useSyncExternalStore,
 	type ReactNode,
 } from "react";
 import { BACKGROUND_CONTEXT, withAbortSignal } from "../context/index.ts";
-import type { Contract, ParamsOf } from "../contracts/index.ts";
+import type { Contract, EventMember, ParamsOf } from "../contracts/index.ts";
 import type { Principal } from "../data/index.ts";
 import { canonicalJson } from "../data/principal.ts";
 import type { Held, Host, RefState } from "../host/index.ts";
@@ -48,6 +50,24 @@ export function useHold<C extends Contract>(Type: C, params: ParamsOf<C>): Held<
 export function useWatch<T>(source: Watchable<T> | NativeWatchable<T> | undefined): T | undefined {
 	const store = useMemo(() => watchStore(source), [source]);
 	return useSyncExternalStore(store.subscribe, store.snapshot, store.snapshot);
+}
+export function useEvents<T>(
+	member: EventMember<T> | undefined,
+	listener: (event: { readonly value: T; readonly at: number }) => void,
+): void {
+	const current = useRef(listener);
+	// Events flushed before passive effects must see the listener from the committed render.
+	useLayoutEffect(() => {
+		current.current = listener;
+	});
+	useEffect(() => {
+		if (!member) return;
+		const controller = new AbortController();
+		void member
+			.on((event) => current.current(event), withAbortSignal(controller.signal, BACKGROUND_CONTEXT))
+			.catch(() => {});
+		return () => controller.abort();
+	}, [member]);
 }
 export function useRegistry<C, V>(registry: Registry<C, V>): V | undefined {
 	const host = useHost(),

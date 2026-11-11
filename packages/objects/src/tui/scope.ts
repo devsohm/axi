@@ -1,5 +1,5 @@
 import { BACKGROUND_CONTEXT, withAbortSignal } from "../context/index.ts";
-import type { Contract, ParamsOf } from "../contracts/index.ts";
+import type { Contract, EventMember, ParamsOf } from "../contracts/index.ts";
 import type { Principal } from "../data/index.ts";
 import type { Held, Host } from "../host/index.ts";
 import type { Registry } from "../registries/index.ts";
@@ -45,6 +45,9 @@ export class TuiScope<P extends Principal = Principal> {
 				return undefined;
 			}
 		};
+	}
+	on<T>(member: EventMember<T>, listener: (event: { readonly value: T; readonly at: number }) => void): void {
+		void member.on(listener, this.#context()).catch(() => {});
 	}
 	registry<C, V>(registry: Registry<C, V>): () => V | undefined {
 		let read: () => V | undefined = () => undefined;

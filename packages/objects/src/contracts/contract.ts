@@ -24,6 +24,15 @@ export interface KeyedWatchable<T, Key = string> {
 	watch(key: Key, context: Context): Promise<WatchHandle<T> | undefined>;
 	at(key: Key): Watchable<T>;
 }
+export interface EventSubscription {
+	stop(): void;
+}
+export interface EventMember<T> {
+	on(listener: (event: { readonly value: T; readonly at: number }) => void, ctx: Context): Promise<EventSubscription>;
+}
+export interface EventSource<T> extends EventMember<T> {
+	emit(value: T): void;
+}
 export type HostKeyed<S, K extends KindShape> = S & { readonly "~key"?: K };
 export type KeyOfMember<S> = S extends { readonly "~key"?: infer K }
 	? K extends KindShape
@@ -31,18 +40,24 @@ export type KeyOfMember<S> = S extends { readonly "~key"?: infer K }
 		: string
 	: string;
 export type VariantImplementation<V extends VariantShape, X extends Context = Context> = {
-	[M in keyof V["state"] | keyof V["methods"] | keyof NonNullable<V["keyed"]>]: M extends keyof V["methods"]
+	[M in
+		| keyof V["state"]
+		| keyof V["methods"]
+		| keyof NonNullable<V["keyed"]>
+		| keyof NonNullable<V["events"]>]: M extends keyof V["methods"]
 		? Call<V["methods"][M], X>
 		: M extends keyof V["state"]
 			? Watchable<Static<V["state"][M]>>
 			: M extends keyof NonNullable<V["keyed"]>
 				? KeyedWatchable<Static<NonNullable<V["keyed"]>[M]>, KeyOfMember<NonNullable<V["keyed"]>[M]>>
-				: never;
+				: M extends keyof NonNullable<V["events"]>
+					? EventMember<Static<NonNullable<V["events"]>[M]>>
+					: never;
 };
 type Implement<K extends Kind, V extends Variants, X extends Context> = K extends "local"
 	? VariantImplementation<V[typeof LOCAL], X> : { [N in keyof V]: { readonly variant: N; readonly members: VariantImplementation<V[N], X> } }[keyof V];
 export type Implementation<C extends Contract, X extends Context = Context> = Implement<ShapeOf<C>["kind"], CurrentVariants<C>, X>;
-export type MemberKind = "state" | "method" | "keyed";
+export type MemberKind = "state" | "method" | "keyed" | "event";
 export type HostAddress = (params: ParamsOf<Contract>) => Address;
 export type MethodData = { readonly args: Snapshot; readonly result: Snapshot };
 export type KeyedSnapshot = Snapshot & { readonly key?: KindShape };
@@ -50,6 +65,7 @@ export type VariantData = {
 	readonly state: ReadonlyMap<string, Snapshot>;
 	readonly methods: ReadonlyMap<string, MethodData>;
 	readonly keyed: ReadonlyMap<string, KeyedSnapshot>;
+	readonly events: ReadonlyMap<string, Snapshot>;
 };
 export type VersionData = {
 	readonly version: number;
@@ -86,5 +102,16 @@ export function variantsAt(contract: Contract, version: number): ReadonlyMap<str
 	return contractData(contract).versions.find(item => item.version === version)!.variants;
 }
 export function variantOrder(contract: Contract): readonly string[] { return [...currentVariants(contract).keys()].sort(); }
-export type VariantNames = { readonly state: readonly string[]; readonly methods: readonly string[] };
-export function variantNames(variant: VariantData): VariantNames { return { state: [...variant.state.keys()].sort(), methods: [...variant.methods.keys()].sort() }; }
+export type VariantNames = {
+	readonly state: readonly string[];
+	readonly methods: readonly string[];
+	readonly events: readonly string[];
+};
+const noEvents: readonly string[] = [];
+export function variantNames(variant: VariantData): VariantNames {
+	return {
+		state: [...variant.state.keys()].sort(),
+		methods: [...variant.methods.keys()].sort(),
+		events: variant.events.size ? [...variant.events.keys()].sort() : noEvents,
+	};
+}

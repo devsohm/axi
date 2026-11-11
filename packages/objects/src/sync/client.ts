@@ -13,6 +13,7 @@ import {
 	type Seq,
 	type SessionSyncMaintenance,
 	type SessionSyncStore,
+	type SessionSyncUploader,
 } from "./remote.ts";
 
 export const BATCH_BYTES = 8 * 1024 * 1024;
@@ -127,7 +128,7 @@ export async function uploadSession(options: {
 	readonly sessionId: string;
 	readonly device: string;
 	readonly source: Store;
-	readonly store: SessionSyncStore;
+	readonly store: SessionSyncUploader;
 	readonly state: SyncStateStore;
 	readonly epoch?: number;
 	readonly context: Context;

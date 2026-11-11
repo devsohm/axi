@@ -10,7 +10,7 @@ import {
 	type MemberKind,
 	type ShapeOf,
 } from "./contract.ts";
-import { checkMembers, keyedSnapshot, memberPath, readMethod } from "./declare.ts";
+import { checkMembers, eventSnapshot, keyedSnapshot, memberPath, readMethod } from "./declare.ts";
 import type { HostKind, KindShape } from "./host-kind.ts";
 import type { Params } from "./params.ts";
 import { materialize } from "./fingerprint.ts";
@@ -33,6 +33,25 @@ type DropKeyed<V extends Variants, M extends string> = {
 		keyed: Omit<NonNullable<V[X]["keyed"]>, M>;
 	} : V[X];
 };
+type EventNames<V extends Variants, X extends keyof V> = keyof NonNullable<V[X]["events"]> & string;
+type PutEvent<V extends Variants, X, M extends string, T> = {
+	[Y in keyof V]: Y extends X
+		? Omit<V[Y], "events"> & {
+				events: {
+					[N in keyof NonNullable<V[Y]["events"]> | M]: N extends M
+						? T
+						: NonNullable<V[Y]["events"]>[N & keyof NonNullable<V[Y]["events"]>];
+				};
+			}
+		: V[Y];
+};
+type DropEvent<V extends Variants, X, M extends string> = {
+	[Y in keyof V]: Y extends X
+		? Omit<V[Y], "events"> & {
+				events: Omit<NonNullable<V[Y]["events"]>, M>;
+			}
+		: V[Y];
+};
 interface Methods<K extends Kind, V extends Variants, C extends Change> {
 	readonly "~variants"?: V;
 	readonly "~changes"?: C;
@@ -42,12 +61,51 @@ interface Methods<K extends Kind, V extends Variants, C extends Change> {
 	removeMethod<M extends MemberNames<V, "methods">>(member: M): Editor<K, Drop<V, keyof V, "methods", M>, C>;
 }
 interface RemoteEditor<V extends Variants, C extends Change> extends Methods<"remote", V, C> {
-	state<X extends keyof V & string, M extends keyof V[X]["state"] & string, S extends TSchema>(variant: X, member: M, schema: S): RemoteEditor<Put<V, X, "state", M, S>, C | [X, M, "state"]>;
-	addState<X extends keyof V & string, const M extends string, S extends TSchema>(variant: X, member: M, schema: S): RemoteEditor<Put<V, X, "state", M, S>, C | [X, M, "state"]>;
-	removeState<X extends keyof V & string, M extends keyof V[X]["state"] & string>(variant: X, member: M): RemoteEditor<Drop<V, X, "state", M>, C>;
-	addMethod<X extends keyof V & string, const M extends string, A extends TSchema, R extends TSchema>(variant: X, member: M, args: A, result: R): RemoteEditor<Put<V, X, "methods", M, Method<A, R>>, C | [X, M, "args" | "result"]>;
+	event<X extends keyof V & string, M extends EventNames<V, X>, S extends TSchema>(
+		variant: X,
+		member: M,
+		schema: S,
+	): RemoteEditor<PutEvent<V, X, M, S>, C | [X, M, "event"]>;
+	addEvent<X extends keyof V & string, const M extends string, S extends TSchema>(
+		variant: X,
+		member: M,
+		schema: S,
+	): RemoteEditor<PutEvent<V, X, M, S>, C | [X, M, "event"]>;
+	removeEvent<X extends keyof V & string, M extends EventNames<V, X>>(
+		variant: X,
+		member: M,
+	): RemoteEditor<DropEvent<V, X, M>, C>;
+	state<X extends keyof V & string, M extends keyof V[X]["state"] & string, S extends TSchema>(
+		variant: X,
+		member: M,
+		schema: S,
+	): RemoteEditor<Put<V, X, "state", M, S>, C | [X, M, "state"]>;
+	addState<X extends keyof V & string, const M extends string, S extends TSchema>(
+		variant: X,
+		member: M,
+		schema: S,
+	): RemoteEditor<Put<V, X, "state", M, S>, C | [X, M, "state"]>;
+	removeState<X extends keyof V & string, M extends keyof V[X]["state"] & string>(
+		variant: X,
+		member: M,
+	): RemoteEditor<Drop<V, X, "state", M>, C>;
+	addMethod<X extends keyof V & string, const M extends string, A extends TSchema, R extends TSchema>(
+		variant: X,
+		member: M,
+		args: A,
+		result: R,
+	): RemoteEditor<Put<V, X, "methods", M, Method<A, R>>, C | [X, M, "args" | "result"]>;
 }
 interface LocalEditor<V extends Variants, C extends Change> extends Methods<"local", V, C> {
+	event<M extends EventNames<V, typeof LOCAL>, S extends TSchema>(
+		member: M,
+		schema: S,
+	): LocalEditor<PutEvent<V, typeof LOCAL, M, S>, C | [typeof LOCAL, M, "event"]>;
+	addEvent<const M extends string, S extends TSchema>(
+		member: M,
+		schema: S,
+	): LocalEditor<PutEvent<V, typeof LOCAL, M, S>, C | [typeof LOCAL, M, "event"]>;
+	removeEvent<M extends EventNames<V, typeof LOCAL>>(member: M): LocalEditor<DropEvent<V, typeof LOCAL, M>, C>;
 	state<M extends keyof V[typeof LOCAL]["state"] & string, S extends TSchema>(
 		member: M,
 		schema: S,
@@ -94,12 +152,22 @@ export function editWith<E>(editor: E, edit: (editor: E) => unknown, what: strin
 	if (edit(editor) !== editor) throw new Error(`${what} must return the editor it was given`);
 }
 export function evolve<C extends Contract, E extends Methods<ShapeOf<C>["kind"], Variants, Change>>(
-	previous: C, edit: (editor: Editor<ShapeOf<C>["kind"], CurrentVariants<C>, never>) => E,
+	previous: C,
+	edit: (editor: Editor<ShapeOf<C>["kind"], CurrentVariants<C>, never>) => E,
 ): Contract<Next<ShapeOf<C>, E>> {
 	const data = contractData(previous), latest = data.versions.at(-1)!, version = latest.version + 1;
 	const path = `${data.name} v${version}`;
-	const variants = new Map([...latest.variants].map(([name, value]) => [name,
-		{ state: new Map(value.state), methods: new Map(value.methods), keyed: new Map(value.keyed) }]));
+	const variants = new Map(
+		[...latest.variants].map(([name, value]) => [
+			name,
+			{
+				state: new Map(value.state),
+				methods: new Map(value.methods),
+				keyed: new Map(value.keyed),
+				events: new Map(value.events),
+			},
+		]),
+	);
 	const kinds = new Map(data.kinds), changes: Change[] = [];
 	let editor: object;
 	const at = (variant: string, member: string, kind: MemberKind) => memberPath(path, data.kind, variant, member, kind);
@@ -111,7 +179,8 @@ export function evolve<C extends Contract, E extends Methods<ShapeOf<C>["kind"],
 	const checked = () => { checkMembers(variants, kinds, at); return editor; };
 	const ensureNew = (variant: string, member: string, kind: MemberKind) => {
 		const value = variantAt(variant);
-		if (value.state.has(member) || value.methods.has(member) || value.keyed.has(member)) throw new Error(`${at(variant, member, kind)}: already declared`);
+		if (value.state.has(member) || value.methods.has(member) || value.keyed.has(member) || value.events.has(member))
+			throw new Error(`${at(variant, member, kind)}: already declared`);
 	};
 	const state = (adding: boolean, variant: string, member: string, schema: TSchema) => {
 		const value = variantAt(variant);
@@ -135,6 +204,19 @@ export function evolve<C extends Contract, E extends Methods<ShapeOf<C>["kind"],
 	};
 	const removeKeyed = (member: string) => {
 		if (!variantAt(LOCAL).keyed.delete(member)) throw new Error(`${at(LOCAL, member, "keyed")}: no such keyed member`);
+		return editor;
+	};
+	const event = (adding: boolean, variant: string, member: string, schema: TSchema) => {
+		const value = variantAt(variant);
+		if (adding) ensureNew(variant, member, "event");
+		else if (!value.events.has(member)) throw new Error(`${at(variant, member, "event")}: no such event member`);
+		value.events.set(member, eventSnapshot(schema, at(variant, member, "event")));
+		changes.push([variant, member, "event"]);
+		return checked();
+	};
+	const removeEvent = (variant: string, member: string) => {
+		if (!variantAt(variant).events.delete(member))
+			throw new Error(`${at(variant, member, "event")}: no such event member`);
 		return editor;
 	};
 	const methodVariants = (member: string) => {
@@ -180,6 +262,9 @@ export function evolve<C extends Contract, E extends Methods<ShapeOf<C>["kind"],
 					keyed: (name: string, schema: TSchema, key?: KindShape) => keyed(false, name, schema, key),
 					addKeyed: (name: string, schema: TSchema, key?: KindShape) => keyed(true, name, schema, key),
 					removeKeyed,
+					event: (name: string, schema: TSchema) => event(false, LOCAL, name, schema),
+					addEvent: (name: string, schema: TSchema) => event(true, LOCAL, name, schema),
+					removeEvent: (name: string) => removeEvent(LOCAL, name),
 				}
 			: {
 					...shared,
@@ -187,7 +272,14 @@ export function evolve<C extends Contract, E extends Methods<ShapeOf<C>["kind"],
 					addState: (variant: string, name: string, schema: TSchema) => state(true, variant, name, schema),
 					removeState,
 					addMethod,
+					event: (variant: string, name: string, schema: TSchema) => event(false, variant, name, schema),
+					addEvent: (variant: string, name: string, schema: TSchema) => event(true, variant, name, schema),
+					removeEvent,
 				};
 	editWith(editor as unknown as Editor<ShapeOf<C>["kind"], CurrentVariants<C>, never>, edit, `${path}: evolve`);
-	return createContract({ ...data, kinds, versions: [...data.versions, materialize(data.kind, data.params, version, variants, changes)] });
+	return createContract({
+		...data,
+		kinds,
+		versions: [...data.versions, materialize(data.kind, data.params, version, variants, changes)],
+	});
 }

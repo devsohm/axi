@@ -12,14 +12,14 @@ export interface ChannelHandler {
 type ChannelOptions = {
 	readonly codec: Codec;
 	readonly incarnation: string;
-	readonly calls: number;
+	readonly calls: number | undefined;
 	readonly trusted: boolean;
 	readonly report: (error: unknown) => void;
 	readonly metrics?: ObjectsMetrics;
 };
 type Connection =
 	| { readonly kind: "greeting"; readonly outgoing: Uint8Array[] }
-	| { readonly kind: "open"; readonly peer: string; readonly calls: number }
+	| { readonly kind: "open"; readonly peer: string; readonly calls: number | undefined }
 	| { readonly kind: "closed" };
 
 export class Channel {
@@ -33,12 +33,7 @@ export class Channel {
 	readonly #options: ChannelOptions;
 	readonly #context: Context;
 	readonly #bytes: { add(value: number, attributes: { readonly direction: "sent" | "received" }): void };
-	constructor(
-		link: Link,
-		handler: ChannelHandler,
-		options: ChannelOptions,
-		context: Context,
-	) {
+	constructor(link: Link, handler: ChannelHandler, options: ChannelOptions, context: Context) {
 		this.#link = link;
 		this.#handler = handler;
 		this.#options = options;
@@ -48,14 +43,14 @@ export class Channel {
 			kind: "hello",
 			protocol: PROTOCOL_VERSION,
 			incarnation: options.incarnation,
-			calls: options.calls,
+			...(options.calls === undefined ? {} : { calls: options.calls }),
 		});
 	}
 	get peer(): string {
 		return this.#connection.kind === "open" ? this.#connection.peer : "";
 	}
-	get peerCalls(): number {
-		return this.#connection.kind === "open" ? this.#connection.calls : 0;
+	get peerCalls(): number | undefined {
+		return this.#connection.kind === "open" ? this.#connection.calls : undefined;
 	}
 	get opened(): boolean {
 		return this.#connection.kind === "open";

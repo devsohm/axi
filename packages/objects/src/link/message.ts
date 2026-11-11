@@ -40,7 +40,7 @@ const schema = union([
 	message("hello", {
 		protocol: int({ min: 0 }),
 		incarnation,
-		calls: int({ min: 1 }),
+		calls: opt(int({ min: 1 })),
 	}),
 	message("hold", {
 		...hold,
@@ -92,7 +92,7 @@ const schema = union([
 			}),
 		),
 	}),
-	message("ack", { origin: opt(origin) }),
+	message("ack", { origin: opt(origin), events: opt(int({ min: 1 })) }),
 	message("closed", { origin }),
 	message("revoke", { revocation: unknown() }),
 	message("ping", {}),
@@ -106,6 +106,10 @@ const schema = union([
 	message("result", { ...call, value: opt(part), segments }),
 	message("error", { ...call, error }),
 	message("gone", { ...hold, error }),
+	message("event", {
+		origin: opt(origin),
+		events: arr(obj({ hold: id, member: index, at: int({ min: 0 }), value: part })),
+	}),
 ]);
 type WireMessage = Static<typeof schema>;
 type WireState = Extract<WireMessage, { readonly kind: "state" }>;
@@ -119,6 +123,7 @@ export type WireError = Static<typeof error>;
 export type WireAddress = Static<typeof address>;
 export type FailedMember = Static<typeof failures>[number];
 export type BoundEntry = Extract<Message, { readonly kind: "bound" }>["holds"][number];
+export type WireEvent = Extract<Message, { readonly kind: "event" }>["events"][number];
 export type OriginMessage = Exclude<Message, { readonly kind: "hello" | "revoke" | "ping" | "pong" }>;
 export type ProviderMessage = Extract<
 	Message,
@@ -127,7 +132,7 @@ export type ProviderMessage = Extract<
 export type ConsumerMessage = Extract<
 	Message,
 	{
-		readonly kind: "bound" | "state" | "failed" | "loading" | "result" | "error" | "gone";
+		readonly kind: "bound" | "state" | "failed" | "loading" | "result" | "error" | "gone" | "event";
 	}
 >;
 export const NO_RETIRED: readonly number[] = [];
