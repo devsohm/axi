@@ -20,7 +20,7 @@ export function anthropicCompat(model: Model<"anthropic-messages">) {
 		supportsMidConvoToolChanges: model.compat?.supportsMidConvoToolChanges ?? false,
 		supportsMessageThreads:
 			model.compat?.supportsMessageThreads ??
-			(model.provider === "anthropic" && model.baseUrl.includes("api.anthropic.com")),
+			model.baseUrl.includes("api.anthropic.com"),
 	};
 }
 export function anthropicRetention(options: AnthropicOptions): CacheRetention {

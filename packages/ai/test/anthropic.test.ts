@@ -103,6 +103,32 @@ it("continues a session with new messages while cache warming preserves its chec
 	}
 });
 
+it("defaults message threads from the endpoint for provider aliases and honors explicit overrides", async () => {
+	for (const [baseUrl, override, enabled] of [
+		["https://api.anthropic.com", undefined, true],
+		["https://api.anthropic.com", false, false],
+		["https://gateway.invalid", undefined, false],
+		["https://gateway.invalid", true, true],
+	] as const) {
+		const selected: Model<"anthropic-messages"> = { ...model, id: "served-model", provider: "company-alias", baseUrl,
+			...(override === undefined ? {} : { compat: { supportsMessageThreads: override } }) };
+		const bodies: unknown[] = [], messages: Message[] = [{ role: "user", content: "first", timestamp: 1 }];
+		const options = { apiKey: "test", sessionId: `endpoint-${baseUrl}-${override}`, fetch: async (_url: unknown, init?: RequestInit) => {
+			bodies.push(JSON.parse(String(init?.body)));
+			return answer();
+		} };
+		try {
+			messages.push(await stream(selected, normalizeContext({ messages }), options).result());
+			messages.push({ role: "user", content: "next", timestamp: 2 });
+			await stream(selected, normalizeContext({ messages }), options).result();
+			if (enabled) {
+				expect(bodies[0]).toMatchObject({ thread: { type: "create" } });
+				expect(bodies[1]).toMatchObject({ thread: { type: "continue", previous_message_id: "response-1" } });
+			} else for (const body of bodies) expect(body).not.toHaveProperty("thread");
+		} finally { cleanupSessionResources(options.sessionId); }
+	}
+});
+
 it("retries an unsupported thread as a full request and disables continuation for that session", async () => {
 	const selected: Model<"anthropic-messages"> = {
 		...model,

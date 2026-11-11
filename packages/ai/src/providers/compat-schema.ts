@@ -278,7 +278,7 @@ export const AnthropicMessagesCompatSchema = Type.Object(
 		),
 		allowEmptySignature: bool("Replay empty reasoning signatures rather than converting the reasoning to text.", false),
 		supportsMessageThreads: bool(
-			"Allow session requests to create and continue server-side message threads. Detected from the provider and endpoint when omitted.",
+			"Allow session requests to create and continue server-side message threads. Enabled for api.anthropic.com endpoints when omitted, regardless of provider ID.",
 		),
 		supportsStrictTools: bool(
 			"Accept Anthropic strict tool schemas; capable catalog models enable this explicitly.",

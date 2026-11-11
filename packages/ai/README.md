@@ -60,7 +60,7 @@ export function request(model: Model<"openai-responses">, apiKey: string) {
 }
 ```
 
-Anthropic requests with a `sessionId` use server-side message threads on the Anthropic endpoint. After a completed reply, unchanged history is sent as a continuation with only the new messages. Changed prompts, tools or fixed request settings start a new thread. Thread rejection triggers one full-request fallback. Set `cacheRetention: "none"` to avoid threads, or `disableContinuation: true` for a replay such as cache warming. Call `cleanupSessionResources(sessionId)` when the session ends. Gateways must opt in with `compat.supportsMessageThreads`.
+Anthropic requests with a `sessionId` use server-side message threads on the Anthropic endpoint, including provider aliases using that endpoint. After a completed reply, unchanged history is sent as a continuation with only the new messages. Changed prompts, tools or fixed request settings start a new thread. Thread rejection triggers one full-request fallback. Set `cacheRetention: "none"` to avoid threads, or `disableContinuation: true` for a replay such as cache warming. Call `cleanupSessionResources(sessionId)` when the session ends. Gateways must opt in with `compat.supportsMessageThreads`; setting it to `false` disables threads on any endpoint.
 
 Login flows support legacy Codex, Anthropic, GitHub Copilot, OpenRouter, Kimi, Meta and xAI. The legacy Codex request adapter supports SSE, WebSockets, account-scoped connection reuse, continuation requests, and session cleanup. Newer ChatGPT sign-in and partner authentication are excluded. The `axi-ai list` command lists login providers. `axi-ai login <provider>` stores credentials in `auth.json` in the current directory.
 
