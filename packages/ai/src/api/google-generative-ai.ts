@@ -17,12 +17,15 @@ export const stream: StreamFunction<"google-generative-ai", GoogleOptions> = (mo
 		async () => {
 			if (options.fetch && options.fetch !== globalThis.fetch)
 				throw new Error("Custom fetch is not supported by the Google Generative AI adapter");
-			if (!options.apiKey) throw new Error(`No API key for provider: ${model.provider}`);
+			const apiKey = options.apiKey;
+			if (!apiKey) throw new Error(`No API key for provider: ${model.provider}`);
+			const headers = options.headers,
+				identity = options.identity;
 			const client = new GoogleGenAI({
-				apiKey: options.apiKey,
+				apiKey,
 				httpOptions: {
 					...(model.baseUrl ? { baseUrl: model.baseUrl, apiVersion: "" } : {}),
-					headers: providerHeadersToRecord(getIdentityHeaders(model, options.identity), model.headers, options.headers),
+					headers: providerHeadersToRecord(getIdentityHeaders(model, identity), model.headers, headers),
 				},
 			});
 			const params = googleRequest(model, transcript, options);
@@ -43,6 +46,7 @@ export const streamSimple: StreamFunction<"google-generative-ai", SimpleStreamOp
 	context,
 	options = {},
 ) => {
-	if (!options.apiKey) throw new Error(`No API key for provider: ${model.provider}`);
-	return stream(model, context, googleSimpleOptions(model, context, options));
+	const apiKey = options.apiKey;
+	if (!apiKey) throw new Error(`No API key for provider: ${model.provider}`);
+	return stream(model, context, googleSimpleOptions(model, context, options, apiKey));
 };

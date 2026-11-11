@@ -88,6 +88,37 @@ beforeEach(() => {
 });
 afterEach(() => vi.useRealTimers());
 describe("Google adapters", () => {
+	it.each(["stream", "streamSimple"] as const)(
+		"%s keeps the Google API key selected before client setup",
+		async (operation) => {
+			let reads = 0;
+			const result = await google[operation](model, context, {
+				get apiKey() {
+					return ++reads === 1 ? "first-key" : "replacement-key";
+				},
+			}).result();
+			expect(result.stopReason).toBe("stop");
+			expect(sdk.clients[0]).toMatchObject({ apiKey: "first-key" });
+			expect(reads).toBe(1);
+		},
+	);
+	it.each(["stream", "streamSimple"] as const)(
+		"%s selects identity after dynamic request headers",
+		async (operation) => {
+			const options = {
+				apiKey: "test",
+				identity: { userAgent: { custom: "initial-client" } },
+				get headers() {
+					options.identity = { userAgent: { custom: "selected-client" } };
+					return {};
+				},
+			} satisfies google.GoogleOptions;
+			expect((await google[operation](model, context, options).result()).stopReason).toBe("stop");
+			expect(sdk.clients[0]).toMatchObject({
+				httpOptions: { headers: { "User-Agent": "selected-client" } },
+			});
+		},
+	);
 	it("rejects an unsupported continuation finish reason while retaining partial output", async () => {
 		sdk.chunks = [{ candidates: [{ content: { parts: [{ text: "partial answer" }] }, finishReason: "CONTINUATION" }] }];
 		const result = await google.stream(model, context, { apiKey: "test" }).result();
@@ -277,6 +308,36 @@ describe("Google adapters", () => {
 				httpOptions: { headers: { "User-Agent": formatUserAgent() } },
 			},
 		]);
+	});
+	it("captures Vertex routing before reading dynamic request headers", async () => {
+		const options: vertex.GoogleVertexOptions = {
+			project: "first-project",
+			location: "global",
+			env: {},
+			get headers() {
+				options.project = "replacement-project";
+				return {};
+			},
+		};
+		expect((await vertex.stream(vertexModel, context, options).result()).stopReason).toBe("stop");
+		expect(sdk.clients[0]).toMatchObject({ project: "first-project", location: "global" });
+		expect(options.project).toBe("replacement-project");
+	});
+	it("reports missing Vertex routing before accessing request headers", async () => {
+		const result = await vertex
+			.stream(vertexModel, context, {
+				env: {},
+				get headers(): never {
+					throw new Error("Request headers are unavailable");
+				},
+			})
+			.result();
+		expect(result).toMatchObject({
+			stopReason: "error",
+			errorMessage:
+				"Vertex AI requires a project ID. Set GOOGLE_CLOUD_PROJECT/GCLOUD_PROJECT or pass project in options.",
+		});
+		expect(sdk.clients).toEqual([]);
 	});
 	it("uses Vertex API keys without ADC and avoids doubling versioned base paths", async () => {
 		await vertex

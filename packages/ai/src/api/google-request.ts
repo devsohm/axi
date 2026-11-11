@@ -57,8 +57,9 @@ export function googleSimpleOptions(
 	model: GoogleModel,
 	context: TranscriptContext,
 	options: SimpleStreamOptions,
+	apiKey?: string,
 ): GoogleOptions {
-	const base = { ...buildBaseOptions(model, context, options, options.apiKey), toolChoice: options.toolChoice };
+	const base = { ...buildBaseOptions(model, context, options, apiKey), toolChoice: options.toolChoice };
 	const level = options.reasoning ? clampThinkingLevel(model, options.reasoning) : "off";
 	if (level === "off") return { ...base, thinking: { enabled: false } };
 	const resolved = resolveGoogleThinkingLevel(model, level);

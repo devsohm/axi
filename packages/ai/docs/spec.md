@@ -144,6 +144,8 @@ A persistent `CredentialStore` implements `read`, `list`, `modify`, and `delete`
 
 A configuration check uses the API-key authentication method selected at its start. Replacing that method does not redirect a check that is already running.
 
+Google requests retain the selected API key during client setup. Vertex's application-credential setup selects its project and location before reading request headers. Request headers resolve before client identity.
+
 OAuth resolution refreshes tokens with at most five minutes remaining, or a larger requested `minOAuthValidityMs`. Concurrent requests check expiry again under the credential lock. Cancellation stops a caller waiting for that lock. After a refresh starts, it has a separate 15-second timeout and still saves the result if the caller cancels, because the previous refresh token may no longer work. An explicit `minOAuthValidityMs` also checks the refreshed token; the ordinary five-minute window only triggers refresh.
 
 ## Catalog refresh

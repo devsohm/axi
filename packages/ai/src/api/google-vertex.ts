@@ -1,19 +1,21 @@
 import { type GenerateContentParameters, GoogleGenAI, type HttpOptions, ResourceScope } from "@google/genai";
-import type { Model, SimpleStreamOptions, StreamFunction } from "../types.ts";
+import type { Model, ProviderHeaders, SimpleStreamOptions, StreamFunction } from "../types.ts";
 import { providerHeadersToRecord } from "../utils/headers.ts";
 import { getProviderEnvValue } from "../utils/provider-env.ts";
 import { collapseSystemMessages } from "../utils/transcript.ts";
-import { getIdentityHeaders } from "../utils/identity.ts";
+import { type ClientIdentity, getIdentityHeaders } from "../utils/identity.ts";
 import { googleRequest, googleSimpleOptions } from "./google-request.ts";
 import { retryGoogleRequest } from "./google-shared.ts";
 import { googleStream } from "./google-stream.ts";
 import type { GoogleVertexOptions } from "./options.ts";
 export type { GoogleVertexOptions } from "./options.ts";
 let toolId = 0;
-function clientFor(model: Model<"google-vertex">, options: GoogleVertexOptions): GoogleGenAI {
-	const httpOptions: HttpOptions = {
-		headers: providerHeadersToRecord(getIdentityHeaders(model, options.identity), model.headers, options.headers),
-	};
+function vertexHttp(
+	model: Model<"google-vertex">,
+	headers: ProviderHeaders | undefined,
+	identity: ClientIdentity | undefined,
+): HttpOptions {
+	const httpOptions: HttpOptions = {};
 	const baseUrl = model.baseUrl.trim();
 	if (baseUrl && !baseUrl.includes("{location}")) {
 		httpOptions.baseUrl = baseUrl;
@@ -26,26 +28,41 @@ function clientFor(model: Model<"google-vertex">, options: GoogleVertexOptions):
 		}
 		if (/(?:^|\/)v\d+(?:beta\d*)?(?:\/|$)/.test(path)) httpOptions.apiVersion = "";
 	}
+	httpOptions.headers = providerHeadersToRecord(getIdentityHeaders(model, identity), model.headers, headers);
+	return httpOptions;
+}
+function clientFor(model: Model<"google-vertex">, options: GoogleVertexOptions): GoogleGenAI {
+	// Select auth routing before a dynamic header supplier can change the options.
 	const apiKey = options.apiKey?.trim();
 	if (apiKey && apiKey !== "gcp-vertex-credentials" && !/^<[^>]+>$/.test(apiKey))
-		return new GoogleGenAI({ vertexai: true, apiVersion: "v1", apiKey, httpOptions });
-	const env = (name: string) => getProviderEnvValue(name, options.env);
-	const project = options.project || env("GOOGLE_CLOUD_PROJECT") || env("GCLOUD_PROJECT");
+		return new GoogleGenAI({
+			vertexai: true,
+			apiVersion: "v1",
+			apiKey,
+			httpOptions: vertexHttp(model, options.headers, options.identity),
+		});
+	const project =
+		options.project ||
+		getProviderEnvValue("GOOGLE_CLOUD_PROJECT", options.env) ||
+		getProviderEnvValue("GCLOUD_PROJECT", options.env);
 	if (!project)
 		throw new Error(
 			"Vertex AI requires a project ID. Set GOOGLE_CLOUD_PROJECT/GCLOUD_PROJECT or pass project in options.",
 		);
-	const location = options.location || env("GOOGLE_CLOUD_LOCATION");
+	const location = options.location || getProviderEnvValue("GOOGLE_CLOUD_LOCATION", options.env);
 	if (!location)
 		throw new Error("Vertex AI requires a location. Set GOOGLE_CLOUD_LOCATION or pass location in options.");
-	const keyFilename = env("GOOGLE_APPLICATION_CREDENTIALS");
+	const headers = options.headers,
+		env = options.env,
+		identity = options.identity;
+	const keyFilename = getProviderEnvValue("GOOGLE_APPLICATION_CREDENTIALS", env);
 	return new GoogleGenAI({
 		vertexai: true,
 		apiVersion: "v1",
 		project,
 		location,
-		httpOptions,
 		...(keyFilename ? { googleAuthOptions: { keyFilename } } : {}),
+		httpOptions: vertexHttp(model, headers, identity),
 	});
 }
 export const stream: StreamFunction<"google-vertex", GoogleVertexOptions> = (model, context, options = {}) => {
