@@ -224,7 +224,6 @@ Exports from the package root. The linked declarations contain exact signatures.
 | `ToolExecutionMode` | typealias | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
 | `ToolExecutionResult` | typealias | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
 | `ToolPark` | typealias | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
-| `GateSleep` | typealias | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
 | `ToolHookCall` | typealias | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
 | `ToolHooks` | interface | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
 | `ToolRegistration` | typealias | [`harness/types.d.ts`](../dist/harness/types.d.ts) |

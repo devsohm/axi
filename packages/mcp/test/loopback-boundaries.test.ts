@@ -85,6 +85,24 @@ test("browser completion cancels the manual prompt and preserves its response", 
 	}
 });
 
+test("a pending manual prompt keeps the authorization it started with", async () => {
+	const callback = await OAuthCallbackServer.listen();
+	const input = Promise.withResolvers<string>();
+	const options = {
+		callback,
+		authorization: authorization("original", callback.redirectUrl),
+		promptForRedirectUrl: () => input.promise,
+	};
+	try {
+		const result = waitForLoopbackSignIn(options);
+		options.authorization = authorization("replacement", callback.redirectUrl);
+		input.resolve(`${callback.redirectUrl}?state=original&code=accepted`);
+		await expect(result).resolves.toEqual({ state: "original", code: "accepted" });
+	} finally {
+		await callback.close();
+	}
+});
+
 test.each([undefined, "", "  "])("an empty manual response cancels authorization: %j", async (input) => {
 	const callback = await OAuthCallbackServer.listen();
 	try {

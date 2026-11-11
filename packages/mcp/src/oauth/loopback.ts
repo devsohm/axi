@@ -71,16 +71,14 @@ export async function waitForLoopbackSignIn(options: {
 	promptForRedirectUrl?: (signal: AbortSignal) => Promise<string | undefined>;
 	signal?: AbortSignal;
 }): Promise<McpAuthorizationResponse> {
+	const { authorization } = options;
 	const prompt = new AbortController();
 	const signal = options.signal ? AbortSignal.any([options.signal, prompt.signal]) : prompt.signal;
-	const browser = options.callback.waitForCallback(
-		options.authorization.state,
-		new URL(options.authorization.redirectUrl).pathname,
-	);
+	const browser = options.callback.waitForCallback(authorization.state, new URL(authorization.redirectUrl).pathname);
 	const manual = options.promptForRedirectUrl
 		? options.promptForRedirectUrl(signal).then((input) => {
 				if (!input?.trim()) throw new McpSignInCancelledError();
-				return responseFromRedirectUrl(input, options.authorization);
+				return responseFromRedirectUrl(input, authorization);
 			})
 		: new Promise<never>((_, reject) => {
 				signal.addEventListener("abort", () => reject(new McpSignInCancelledError()), { once: true });

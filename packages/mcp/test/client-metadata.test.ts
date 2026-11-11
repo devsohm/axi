@@ -15,6 +15,29 @@ import type { McpOAuthState } from "../src/oauth/provider.ts";
 const callback = "http://localhost/callback";
 const documents = { baseUrl: "https://app.example.test", listsRedirectUrl: (url: string) => url === callback };
 
+test("an existing provider keeps its server-specific metadata identity when caller options change", () => {
+	const options = {
+		serverUrl: "https://original.example.test/mcp",
+		clientName: "Axi",
+		settings: {},
+		clientMetadataDocuments: documents,
+		store: { load: () => undefined, save() {}, withRefreshLock: async <T>(fn: () => Promise<T>) => fn() },
+	};
+	const provider = createOAuthClientProvider(options, callback);
+	const metadata = {
+		issuer: "https://login.example.test",
+		authorization_endpoint: "https://login.example.test/authorize",
+		token_endpoint: "https://login.example.test/token",
+		response_types_supported: ["code"],
+		client_id_metadata_document_supported: true,
+		token_endpoint_auth_methods_supported: ["none"],
+	};
+	const initial = provider.clientMetadataDocument?.(metadata);
+	expect(initial?.redirectUrl).toBe("http://localhost" + serverSpecificPath("/callback", options.serverUrl));
+	options.serverUrl = "https://replacement.example.test/mcp";
+	expect(provider.clientMetadataDocument?.(metadata)).toEqual(initial);
+});
+
 test("client metadata registration respects explicit choices and automatic eligibility", () => {
 	for (const [settings, listed, expected] of [
 		[{}, true, true],

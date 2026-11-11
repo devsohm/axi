@@ -49,9 +49,9 @@ export function createOAuthClientProvider(
 	redirectUrl: string,
 	onRedirect: (url: URL) => void = () => {},
 ): McpOAuthProvider {
-	const { settings, clientMetadataDocuments: documents } = options;
+	const { serverUrl, settings, clientMetadataDocuments: documents } = options;
 	return new McpOAuthProvider({
-		serverUrl: options.serverUrl,
+		serverUrl,
 		redirectUrl,
 		store: options.store,
 		onRedirect,
@@ -77,9 +77,9 @@ export function createOAuthClientProvider(
 					if (metadata.authorization_response_iss_parameter_supported)
 						return { url: documents.baseUrl + "/client.json", redirectUrl };
 					const scoped = new URL(redirectUrl);
-					scoped.pathname = serverSpecificPath(scoped.pathname, options.serverUrl);
+					scoped.pathname = serverSpecificPath(scoped.pathname, serverUrl);
 					return {
-						url: documents.baseUrl + "/" + callbackId(options.serverUrl) + "/client.json",
+						url: documents.baseUrl + "/" + callbackId(serverUrl) + "/client.json",
 						redirectUrl: scoped.href,
 					};
 				}

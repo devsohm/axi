@@ -74,6 +74,10 @@ Code exchange checks `iss` against discovered metadata when supplied or promised
 
 `McpOAuthProvider` binds state to one exact normalized server URL. Configured client credentials take precedence over stored registration. Its default memory store returns detached copies; applications inject a store for persistence. Writes are serialized. Token expiration is recorded from `expires_in`. Invalidation can clear client, tokens, verifier, discovery or all state.
 
+The sign-in client captures its server URL when creating an OAuth provider. Server-specific metadata and callback paths keep that identity if the caller later replaces its options.
+
+A pending loopback sign-in keeps the authorization object supplied when the wait began. Replacing the caller's authorization field does not change validation of a pasted redirect URL.
+
 `createMcpAuthProvider()` captures its state store and redirect URI when created. Replacing those fields on the original options object does not change token reads or the redirect URI used for refresh. The `settings` callback supplies current settings when a refresh is needed.
 
 `OAuthCallbackServer.listen()` defaults to `127.0.0.1`, an ephemeral port, `/callback` and a five-minute wait. Options select advertised host, extra paths, timeout and page renderer. Callback state must match one pending wait. An optional expected path prevents accepting a response on another configured path. Duplicate pending states fail. OAuth errors, missing codes and expired state produce failed responses; successful results contain code, state and optional issuer.
