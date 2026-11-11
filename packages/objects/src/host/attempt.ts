@@ -43,6 +43,7 @@ import type { ObjectsStore } from "../store/store.ts";
 import type { TableDefinition } from "../store/table.ts";
 import { TableHandle, type Table } from "../store/table-handle.ts";
 import { prepareTables } from "../store/table-migration.ts";
+import type { HostDataGate } from "./host-data.ts";
 import { CallContext, withLinkedAbortSignal, type Acquirer, type Caller, type Ctx, type GetOptions } from "./ctx.ts";
 import { AdaptedMembers } from "./adapted.ts";
 import { Deadline } from "./deadline.ts";
@@ -112,6 +113,7 @@ export type Factory<C extends Contract, P extends Principal = Principal> = Shape
 	: (params: ParamsOf<C>, principal: P, self: Self<P>) => Implementation<C, Ctx<P>>;
 
 export type AttemptHost = Acquirer & {
+	readonly hostData: HostDataGate;
 	readonly telemetry?: import("@axi/telemetry").TelemetryContext;
 	principalAttributes?(principal: Principal | undefined, context: Context): Readonly<import("@axi/telemetry").SpanAttributes>;
 	readonly batch: Batch;
@@ -696,6 +698,10 @@ export class Attempt implements StoreSelf, KeyDeclarer, RegistryWaiter {
 				dependency.binding.retry(operation);
 		this.dependencyMoved();
 	}
+	declaredTable(table: string): TableDefinition | undefined {
+		for (const handle of this.#tables.values()) if (handle.sql.table === table) return handle.definition;
+		return undefined;
+	}
 	async #activate(deadline: Deadline): Promise<Activation> {
 		let implementation: unknown;
 		const dependencies: Dependency[] = [];
@@ -704,10 +710,13 @@ export class Attempt implements StoreSelf, KeyDeclarer, RegistryWaiter {
 			const object = this.#object,
 				host = object.host;
 			object.retryOn(this.#registry?.retry ?? none);
-			object.documents.hydrate(this.#declared, this.#pins.splice(0), this.#opening);
-			const loading = object.documents.load(this.#opening);
-			if (loading) await loading;
-			if (this.#tables.size) {
+			const entering = host.hostData.enter();
+			if (entering) await entering;
+			try {
+				object.documents.hydrate(this.#declared, this.#pins.splice(0), this.#opening);
+				const loading = object.documents.load(this.#opening);
+				if (loading) await loading;
+				if (this.#tables.size) {
 				const tables = [...this.#tables.values()];
 				deadline.pause();
 				try {
@@ -721,8 +730,11 @@ export class Attempt implements StoreSelf, KeyDeclarer, RegistryWaiter {
 				} finally {
 					deadline.resume();
 				}
+				}
+				for (const query of this.#queries) await query.load(this.#opening);
+			} finally {
+				host.hostData.leave();
 			}
-			for (const query of this.#queries) await query.load(this.#opening);
 			for (const job of this.#jobs.values()) await job.load(this.#opening);
 			for (const { binding, contract, params } of this.#references) {
 				host.bind(binding, contract, params, this.#opening);

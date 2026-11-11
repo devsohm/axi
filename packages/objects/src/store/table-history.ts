@@ -60,13 +60,7 @@ export function planTable(
 		throw new Error(
 			`${what}: the store has version ${recorded.version}, newer than the code's ${definition.version}`,
 		);
-	const versions: TableDefinition[] = [];
-	let current: TableDefinition | undefined = definition;
-	while (current) {
-		versions.push(current);
-		current = current.evolution?.previous;
-	}
-	versions.reverse();
+	const versions = historyOf(definition);
 	const found = versions.find(
 		(version) => version.version === recorded.version,
 	);
@@ -94,4 +88,10 @@ export function planTable(
 		),
 		first: resuming ? "resume" : "begin",
 	};
+}
+export function historyOf(definition: TableDefinition): TableDefinition[] {
+	const versions: TableDefinition[] = [];
+	for (let current: TableDefinition | undefined = definition; current; current = current.evolution?.previous)
+		versions.push(current);
+	return versions.reverse();
 }

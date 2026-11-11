@@ -39,7 +39,7 @@ export async function importStore(
 		const meta = await db.transaction(async (executor) => {
 			const metadata = await applyStoreSchema(inTransaction(executor)),
 				input = new ImportArchive(executor, context);
-			await consume(parts, context, (part) => input.take(part));
+			await each(parts, context, (part) => input.take(part));
 			return input.finish(metadata, options.outbox === true);
 		});
 		return new ObjectsStore(db, meta, await readCatalog(db));
@@ -265,7 +265,7 @@ class ImportArchive {
 		};
 	}
 }
-async function consume(
+export async function each(
 	parts: AsyncIterable<unknown> | Iterable<unknown>,
 	context: Context,
 	take: (part: unknown) => Promise<void>,

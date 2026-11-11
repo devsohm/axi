@@ -1,27 +1,30 @@
 import { awaitWithContext, type Context } from "../context/index.ts";
+import { kindOfKey } from "../contracts/host-kind.ts";
 import type { JsonValue } from "../json.ts";
 import type { SqliteValue } from "../sqlite/index.ts";
 import { ObjectsError } from "../data/index.ts";
 import { ARCHIVE_FORMAT, type ArchivePart } from "./archive.ts";
 import type { TableRecord } from "./catalog.ts";
-import { listRecords, listRevisions } from "./engine.ts";
+import { listHostRecords, listRecords, listRevisions } from "./engine.ts";
 import { ROW_VERSION, versionColumn, type Scalar } from "./rows.ts";
 import { STORE_SCHEMA } from "./schema.ts";
 import { quote, recordedPut } from "./sql.ts";
 import type { ObjectsStore } from "./store.ts";
 
 export const EXPORT_PAGE = 100;
+export type ExportSelection = { readonly kind: "all" } | { readonly kind: "host"; readonly key: string };
 export class StoreExport implements AsyncIterableIterator<ArchivePart> {
 	readonly #context: Context;
 	#iterator: AsyncGenerator<ArchivePart> | undefined;
 	#state: "active" | "aborted" | "closed" | "done" = "active";
 	#release: (() => void) | undefined;
 	readonly #abort = (): void => this.#finish("aborted");
-	constructor(store: ObjectsStore, context: Context) {
+	constructor(store: ObjectsStore, context: Context, selection: ExportSelection = { kind: "all" }) {
 		this.#context = context;
 		this.#iterator = parts(
 			store,
 			context,
+			selection,
 			(release) => {
 				if (this.#state !== "active") release();
 				else {
@@ -88,6 +91,7 @@ export class StoreExport implements AsyncIterableIterator<ArchivePart> {
 async function* parts(
 	store: ObjectsStore,
 	context: Context,
+	selection: ExportSelection,
 	hold: (release: () => void) => void,
 	close: () => void,
 ): AsyncGenerator<ArchivePart> {
@@ -105,11 +109,12 @@ async function* parts(
 			schema: STORE_SCHEMA,
 			lastSeq: store.lastSeq,
 			nextId: store.nextId,
+			...(selection.kind === "host" ? { host: selection.key } : {}),
 		};
 		let writes = 0;
-		for (const record of [...store.tables.values()].sort((a, b) =>
-			a.table < b.table ? -1 : 1,
-		)) {
+		for (const record of [...store.tables.values()]
+			.filter((table) => selection.kind === "all" || hostColumn(table, kindOfKey(selection.key)) !== undefined)
+			.sort((a, b) => (a.table < b.table ? -1 : 1))) {
 			const { indexes, ...table } = record;
 			yield { kind: "table", ...table };
 			writes++;
@@ -118,15 +123,16 @@ async function* parts(
 					.physical.map(quote)
 					.join(", ");
 			let after: SqliteValue[] | undefined;
+			const host = selection.kind === "host" ? [`${quote(hostColumn(record, kindOfKey(selection.key))!)} = ?`] : [];
+			const params = selection.kind === "host" ? [selection.key] : [];
 			for (;;) {
-				const filter =
-					after === undefined
-						? ""
-						: ` WHERE (${key}) > (${after.map(() => "?").join(", ")})`;
+				const conditions = after === undefined ? host : [...host, `(${key}) > (${after.map(() => "?").join(", ")})`];
+				const filter = conditions.length === 0 ? "" : ` WHERE ${conditions.join(" AND ")}`;
 				const rows = await store.read(
 					(executor) =>
 						executor.all<Record<string, SqliteValue>>(
 							`SELECT ${columns} FROM ${quote(record.table)}${filter} ORDER BY ${key} LIMIT ?`,
+							...params,
 							...(after ?? []),
 							EXPORT_PAGE,
 						),
@@ -147,7 +153,10 @@ async function* parts(
 		let lastId = 0;
 		for (;;) {
 			const documents = await store.read(
-				(executor) => listRecords(executor, lastId, EXPORT_PAGE),
+				(executor) =>
+					selection.kind === "host"
+						? listHostRecords(executor, selection.key, lastId, EXPORT_PAGE)
+						: listRecords(executor, lastId, EXPORT_PAGE),
 				context,
 			);
 			for (const record of documents) {
@@ -175,6 +184,9 @@ async function* parts(
 	} finally {
 		release();
 	}
+}
+export function hostColumn(record: Pick<TableRecord, "columns">, kind: string): string | undefined {
+	return Object.entries(record.columns).find(([, column]) => column.host === kind)?.[0];
 }
 function putOf(
 	record: TableRecord,

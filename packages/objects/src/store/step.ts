@@ -31,6 +31,9 @@ export class Step {
 	table(name: string): TableRecord | undefined {
 		return this.tables.get(name) ?? this.#catalog.get(name);
 	}
+	records(): TableRecord[] {
+		return [...new Map([...this.#catalog, ...this.tables]).values()];
+	}
 	run(sql: string, ...params: SqliteValue[]): Promise<void> {
 		this.statements += 1;
 		return this.executor.run(sql, ...params);

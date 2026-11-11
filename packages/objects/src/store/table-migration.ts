@@ -147,17 +147,7 @@ function patchRow(
 	context: Context,
 ): StagedWrite {
 	const definition = step.table,
-		patch = step.patch(definition.rows.decode(stored, context)),
-		label = `${definition.name} version ${version}: rows`;
-	if (!patch || typeof patch !== "object" || Array.isArray(patch))
-		throw new Error(`${label}: expected an object of column values`);
-	const set: Record<string, SetNode[string]> = {};
-	for (const [name, value] of Object.entries(patch)) {
-		const column = definition.byName.get(name);
-		if (!column) throw new Error(`${label}: no column "${name}"`);
-		if (definition.key.includes(name)) throw new Error(`${label}: key column "${name}" cannot change`);
-		set[name] = cell(column, value, `${label}: column "${name}"`);
-	}
+		set = patchSet(step, definition.rows.decode(stored, context), version);
 	const versions = jsonVersions(definition, set),
 		key = Object.fromEntries(definition.key.map((name) => [name, stored[name] as Scalar]));
 	return stageUpdate(
@@ -172,6 +162,25 @@ function patchRow(
 		recordedVersions(set, versions),
 		version,
 	);
+}
+export function patchSet(
+	step: Extract<DataStep, { readonly kind: "rows" }>,
+	row: Readonly<Record<string, unknown>>,
+	version: number,
+): SetNode {
+	const definition = step.table,
+		patch = step.patch(row),
+		label = `${definition.name} version ${version}: rows`;
+	if (!patch || typeof patch !== "object" || Array.isArray(patch))
+		throw new Error(`${label}: expected an object of column values`);
+	const set: Record<string, SetNode[string]> = {};
+	for (const [name, value] of Object.entries(patch)) {
+		const column = definition.byName.get(name);
+		if (!column) throw new Error(`${label}: no column "${name}"`);
+		if (definition.key.includes(name)) throw new Error(`${label}: key column "${name}" cannot change`);
+		set[name] = cell(column, value, `${label}: column "${name}"`);
+	}
+	return set;
 }
 function cell(column: Column, value: unknown, what: string): SetNode[string] {
 	if (value === undefined) {

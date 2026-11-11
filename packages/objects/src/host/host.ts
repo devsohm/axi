@@ -32,6 +32,8 @@ import { Path, type Upstream } from "../remote/path.ts";
 import type { ProviderSide } from "../remote/provider.ts";
 import { RemoteObject } from "../remote/remote-object.ts";
 import { Batch, handedOut } from "../state/internal.ts";
+import type { ArchivePart } from "../store/archive.ts";
+import { exportHostData, type HostDataCounts, type HostImportOptions } from "../store/host-data.ts";
 import type { ObjectsStore, Store } from "../store/store.ts";
 import { Activity, type ActivityCounts } from "./activity.ts";
 import { notLive } from "./attempt.ts";
@@ -39,6 +41,7 @@ import { Backoff } from "./backoff.ts";
 import { type Caller, type Ctx, type GetOptions, withLinkedAbortSignal } from "./ctx.ts";
 import { Destination, type Placed } from "./destination.ts";
 import type { Facet } from "./facet.ts";
+import { deleteFrom, HostDataGate, type HostDataSite, importInto } from "./host-data.ts";
 import {
 	addStaged,
 	emptyStaged,
@@ -109,6 +112,13 @@ export interface Host<P extends Principal = Principal, R extends JsonValue = Jso
 	readonly activity: Watchable<ActivityCounts>;
 	registry<C, V>(registry: Registry<C, V>, context: Context, options?: GetOptions): Promise<RegistryValue<V>>;
 	root<T>(fn: (context: Ctx<P>) => Promise<T>, context: Context, options?: RootOptions<P>): Promise<T>;
+	exportHostData(address: Address, context: Context): AsyncIterableIterator<ArchivePart>;
+	importHostData(
+		parts: AsyncIterable<unknown> | Iterable<unknown>,
+		context: Context,
+		options?: HostImportOptions,
+	): Promise<HostDataCounts>;
+	deleteHostData(address: Address, context: Context): Promise<HostDataCounts>;
 	close(context: Context): Promise<void>;
 }
 export type AnyHost = Omit<ObjectsHost, "load" | "reload" | "accept" | "connect" | "route" | "references" | "root">;
@@ -155,6 +165,7 @@ type ReloadPlan<P extends Principal> = {
 	readonly actions: readonly Action[];
 };
 export class ObjectsHost<P extends Principal = Principal, R extends JsonValue = JsonValue> implements Host<P, R> {
+	readonly hostData = new HostDataGate();
 	readonly batch: Batch;
 	readonly timeouts: { readonly close: number; readonly ready: number; readonly reload: number };
 	readonly oldWork = new OldWork();
@@ -386,6 +397,35 @@ export class ObjectsHost<P extends Principal = Principal, R extends JsonValue = 
 			this.#closingSignal.signal.removeEventListener("abort", close);
 			linked.release();
 		}
+	}
+	exportHostData(address: Address, context: Context): AsyncIterableIterator<ArchivePart> {
+		return exportHostData(this.#dataSite("exportHostData").store, address, context);
+	}
+	async importHostData(
+		parts: AsyncIterable<unknown> | Iterable<unknown>,
+		context: Context,
+		options: HostImportOptions = {},
+	): Promise<HostDataCounts> {
+		return importInto(this.#dataSite("importHostData"), parts, context, options);
+	}
+	async deleteHostData(address: Address, context: Context): Promise<HostDataCounts> {
+		return deleteFrom(this.#dataSite("deleteHostData"), address, context);
+	}
+	#dataSite(what: string): HostDataSite {
+		this.batch.assertOutside(what);
+		if (this.store === undefined) throw invalid("args", `${what}: the host has no store`);
+		return {
+			store: this.store,
+			batch: this.batch,
+			gate: this.hostData,
+			objects: () => this.#objects.values(),
+			activate: async (owner, context) => {
+				const served = this.#served.get(owner);
+				if (served === undefined || served.kind !== "local") return undefined;
+				const binding = await this.acquire(served.contract, {}, this.#caller(), context, {});
+				return () => binding.release();
+			},
+		};
 	}
 	async root<T>(fn: (context: Ctx<P>) => Promise<T>, context: Context, options: RootOptions<P> = {}): Promise<T> {
 		this.batch.assertOutside("root");

@@ -2,6 +2,7 @@ import { objectsMetrics } from "../telemetry.ts";
 import { awaitWithContext, type Context } from "../context/index.ts";
 import type { TelemetryContext } from "@axi/telemetry";
 import { LiveQueries } from "../store/live-query.ts";
+import type { TableDefinition } from "../store/table.ts";
 import type { JsonValue } from "../json.ts";
 import type { Contract, ParamsOf } from "../contracts/index.ts";
 import type { ContractShape } from "../contracts/internal.ts";
@@ -158,7 +159,7 @@ export class ObjectsObject implements LocalTarget {
 	get attachable(): unknown {
 		return this.#exposed;
 	}
-	get instance(): unknown {
+	get instance(): Attempt | undefined {
 		return this.#status.kind === "live" ? this.#exposed : this.openOldAttempt;
 	}
 	get openOldAttempt(): Attempt | undefined { return this.#old?.draining ? this.#old : undefined; }
@@ -375,6 +376,12 @@ export class ObjectsObject implements LocalTarget {
 	}
 	claimTable(table: string): void {
 		this.host.store!.claims.table(table, this);
+	}
+	get owner(): string {
+		return this.served.contract.name;
+	}
+	declaredTable(table: string): TableDefinition | undefined {
+		return this.instance?.declaredTable(table);
 	}
 	claimDocuments(namespace: string): void {
 		this.host.store!.claims.documents(this.served.contract.name, namespace, this);

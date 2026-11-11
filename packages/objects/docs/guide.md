@@ -75,6 +75,8 @@ A lost link fails in-flight calls. Their remote effect may already have happened
 
 Open a database through `@axi/objects/sqlite/node` or `@axi/objects/sqlite/cloudflare`. Pass `sqliteBackend(database)` to `openStore()`, then pass the Store to `createHost()`. Close the host before closing the Store. The Store owns its database after opening.
 
+Group data by host with `keyed: Kind` document definitions and `host(Kind)` table columns. Call `host.exportHostData(address, context)` to inspect or save that address's archive. Call `host.importHostData(parts, context)` to restore it, or pass `{ address: otherAddress }` to copy it. Existing data is refused unless you pass `existing: "replace"`. `host.deleteHostData(address, context)` removes only its owned records and rows. These operations update live documents and queries together. Plain string-keyed documents remain separate, even when their keys resemble host addresses.
+
 Store commits apply document and table writes atomically. Adoption follows the database commit. An uncertain commit outcome stops the Store. An optional outbox retains applied writes for ordered replay.
 
 `store.export(context)` holds the commit queue while yielding an archive. `encodeJsonl()` and `decodeJsonl()` encode archive records as UTF-8 lines. `importStore()` validates an archive and imports it atomically into an empty database. Export records are separate from Durable's JSONL session backend.

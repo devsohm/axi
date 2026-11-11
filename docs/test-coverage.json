@@ -82,6 +82,7 @@
 						"packages/objects/test/store-schema.test.ts",
 						"packages/objects/test/store-table.test.ts",
 						"packages/objects/test/host-table-columns.test.ts",
+						"packages/objects/test/host-data.test.ts",
 						"packages/objects/test/table-evolution.test.ts",
 						"packages/objects/test/store-query.test.ts",
 						"packages/objects/test/store-expression-behavior.test.ts",

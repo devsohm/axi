@@ -51,6 +51,11 @@ export class LiveQueries {
 	on(table: string): ReadonlySet<LiveQuery> | undefined {
 		return this.#tables.get(table);
 	}
+	onHostKind(kind: string): LiveQuery[] {
+		return [...this.#tables.values()].flatMap((queries) =>
+			[...queries].filter((query) => query.handle.definition.hostColumn?.host.kind.kind === kind),
+		);
+	}
 }
 
 export function refreshOf(handles: Iterable<TableHandle>, context: Context): QueryRefresh | undefined {

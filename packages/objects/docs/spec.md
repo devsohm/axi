@@ -40,6 +40,10 @@ Persisted state declares a schema version and checkpoint policy. A schema change
 
 Store schema version 3 adds an optional, indexed host field to document records. Existing records keep no host owner. A string key matching a host address does not make the record host-owned. Table records and archives retain host-column kinds. Schema migration preserves existing document values and lifetimes.
 
+`exportHostData()` selects one address's live documents and table rows. Its archive uses the Store format with a host key in the manifest. `readHostArchive()` validates ordering, ownership, revision chains and the end count. Import and delete run through the Host, which coordinates live owners. Import refuses existing data by default; `existing: "replace"` replaces it in one commit. Copying to another address of the same kind rewrites ownership keys, without rewriting addresses inside JSON values. Row-key collisions with another address are refused. Older rows require their owner's declared table history; row and JSON-cell versions are preserved through migration.
+
+Host data operations run in call order. Their exclusive phase waits for activation loads, blocks later loads and takes affected owners' document lines in identity order. It reads the new documents and query results inside the storage transaction, then publishes them together after commit. An unreadable document fails its owner after that batch; other owners still adopt. Cancellation before admission writes nothing. Once admitted, an operation completes and publishes even if its caller cancels.
+
 An uncertain database outcome is terminal for the Store. Export holds its queue until the iterator ends or is cancelled. Import validates and applies the complete archive to an empty database. Optional outbox replay accepts consecutive commits and checks row counts.
 
 ## Store sync

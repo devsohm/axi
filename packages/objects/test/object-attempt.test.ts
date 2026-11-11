@@ -11,6 +11,7 @@ import { Binding } from "../src/host/reference.ts";
 import { LOADING } from "../src/host/ref-state.ts";
 import type { HostError } from "../src/host/report.ts";
 import { OldWork } from "../src/host/old-work.ts";
+import { HostDataGate } from "../src/host/host-data.ts";
 import { RegistryRecord } from "../src/registries/internal.ts";
 import { Batch } from "../src/state/internal.ts";
 const counter = defineState("counter", { version: 1, schema: obj({ n: int() }), initial: () => ({ n: 0 }) });
@@ -37,6 +38,7 @@ function environment(factory: (self: Self) => unknown) {
 		},
 	});
 	const host = {
+		hostData: new HostDataGate(),
 		oldWork: new OldWork(),
 		spanHost: "client",
 		batch,

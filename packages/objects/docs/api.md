@@ -2,6 +2,8 @@
 
 Exports from the package root. The linked declarations contain exact signatures. Other public import paths appear in the package README.
 
+Host data uses `exportHostData`, `readHostArchive`, `HostArchive`, `HostDataCounts` and `HostImportOptions` from [`store/host-data.d.ts`](../dist/store/host-data.d.ts). The Host provides coordinated import and delete. `KeyedBy` in [`documents/definition.d.ts`](../dist/documents/definition.d.ts) accepts boolean keyedness or a declared host kind.
+
 | Export | Kind | Declaration |
 | --- | --- | --- |
 | `AcceptsTable` | typealias | [`contracts/accepts.d.ts`](../dist/contracts/accepts.d.ts) |

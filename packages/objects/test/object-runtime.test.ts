@@ -10,6 +10,7 @@ import { ObjectsObject, type ObjectHost, type Served } from "../src/host/object.
 import { Binding, type Reference } from "../src/host/reference.ts";
 import type { HostError } from "../src/host/report.ts";
 import { OldWork } from "../src/host/old-work.ts";
+import { HostDataGate } from "../src/host/host-data.ts";
 import { ReloadCycles } from "../src/host/reload-cycle.ts";
 import { RegistryRecord } from "../src/registries/internal.ts";
 import { Batch } from "../src/state/internal.ts";
@@ -31,6 +32,7 @@ function fixture(factory: (self: Self) => unknown, linger = 0) {
 	const batch = new Batch((error) => errors.push(error), undefined),
 		backoff = new Backoff(() => object.attempt());
 	const host: ObjectHost = {
+		hostData: new HostDataGate(),
 		spanHost: "client",
 		batch,
 		backoff,
