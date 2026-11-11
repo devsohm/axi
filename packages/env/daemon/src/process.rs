@@ -165,6 +165,7 @@ pub fn run(
             return;
         };
         let waited = sys::wait_process(&mut child);
+        // Remove this PID before reaping it so later cleanup cannot target a reused PID.
         let mut active = waiter_groups.lock().unwrap();
         group.terminate();
         active.remove(&pid);

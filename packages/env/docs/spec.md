@@ -57,3 +57,5 @@ SSH uses a 15-second connection timeout and keepalives for an established connec
 The client follows the remote machine's path, file, environment and executable-search rules. Platform and architecture names from Rust are converted by `nodePlatform()` for Node callers. Filesystem edge cases remain subject to native semantics documented in the guide.
 
 Pseudo-terminals require a Unix daemon. Unsupported terminal requests fail on Windows. String command execution and direct argument-array execution remain distinct. Applications supply authentication, authorization, isolation policy, release binaries and any retry policy for operations whose outcome is unknown.
+
+On Unix, descendants that move to another process group are outside group cleanup. On Windows, a process starts before its job assignment. Children started during that gap can escape the job. Terminating the daemon stops ordinary commands but can leave their descendants running. Process-pipe programs have a separate job for descendants created after assignment.

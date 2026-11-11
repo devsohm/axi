@@ -279,6 +279,7 @@ impl Server {
             Err(failure) => Frame::new(ERROR, id, failure.to_json()),
         };
         self.controls.lock().unwrap().remove(&id);
+        // Finishing a command must not let its result overtake its buffered output.
         if command || reply.payload.len() > 65536 {
             self.output.bulk(reply, None);
         } else {
@@ -304,6 +305,7 @@ fn workers() -> Sender<Job> {
     sender
 }
 fn ordered(pool: &Sender<Job>, file: Arc<OpenFile>, job: Job) {
+    // Concurrent handles share the pool; writes within one handle keep their arrival order.
     let mut serial = file.serial.lock().unwrap();
     serial.queue.push_back(job);
     if serial.running {
