@@ -33,6 +33,7 @@ export async function refreshStoredOAuthCredential(
 		const current = await store.modify(
 			providerId,
 			async (credential) => {
+				// Once refresh starts, caller cancellation must not discard a rotated refresh token.
 				signal.removeEventListener("abort", cancel);
 				signal.throwIfAborted();
 				if (credential?.type !== "oauth" || !needsRefresh(credential)) return undefined;

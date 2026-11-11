@@ -139,6 +139,8 @@ A persistent `CredentialStore` implements `read`, `list`, `modify`, and `delete`
 
 `models.login()` uses the registered provider's login method. Expired OAuth credentials refresh through the credential store. Logout deletes the stored record. Login availability and model availability are separate checks.
 
+OAuth resolution refreshes tokens with at most five minutes remaining, or a larger requested `minOAuthValidityMs`. Concurrent requests check expiry again under the credential lock. Cancellation stops a caller waiting for that lock. After a refresh starts, it has a separate 15-second timeout and still saves the result if the caller cancels, because the previous refresh token may no longer work. An explicit `minOAuthValidityMs` also checks the refreshed token; the ordinary five-minute window only triggers refresh.
+
 ## Catalog refresh
 
 `ModelsStore` implements `read`, `write`, and `delete` for provider catalog snapshots. `refresh({ allowNetwork: false })` restores stored overlays without a network fetch. Network refresh is enabled by default. `providers`, `force`, and `signal` narrow or cancel the operation. The result reports `aborted` and a map of provider errors.

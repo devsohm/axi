@@ -262,6 +262,7 @@
 						"packages/ai/test/oauth-flows.test.ts",
 						"packages/ai/test/anthropic-login-boundaries.test.ts",
 						"packages/ai/test/catalog-auth.test.ts",
+						"packages/ai/test/auth-resolution.test.ts",
 						"packages/ai/test/entrypoints.test.ts",
 						"packages/ai/test/compat-dispatch.test.ts",
 						"packages/ai/test/cli-auth.test.ts",
