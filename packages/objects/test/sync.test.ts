@@ -81,6 +81,22 @@ it("round-trips streamed log records and rejects malformed envelope fields", asy
 	}
 });
 
+it("captures session metadata before asynchronous filesystem work starts", async () => {
+	const { remote } = await fixture();
+	const metadata = { title: "before" };
+	const pending = remote.putMeta("shared", metadata, context);
+	metadata.title = "after";
+	await pending;
+	expect(await remote.getMeta("shared", context)).toEqual({ title: "before" });
+});
+
+it("rejects metadata serialization failures through its promise without publishing a session", async () => {
+	const { remote } = await fixture();
+	const failure = new Error("metadata unavailable");
+	await expect(remote.putMeta("shared", { toJSON() { throw failure; } }, context)).rejects.toBe(failure);
+	expect((await remote.sessions(undefined, context)).sessions).toEqual([]);
+});
+
 it("recovers a lost upload reply, restores a copy and folds its history through real files", async () => {
 	const { remote, state } = await fixture(),
 		source = await local();

@@ -74,6 +74,8 @@ The experimental sync API uploads committed outbox records in ordered batches. A
 
 Pull saves a target sequence before applying a batch. After interruption, that marker distinguishes the applied prefix from new local work. Pull refuses unsynced local commits. Archives restore only into an empty backend. Snapshot folding preserves slot ownership after removing old batch bodies.
 
+Filesystem metadata writes serialize the supplied object before starting asynchronous file operations. A serialization failure rejects the write's promise and creates no session directory.
+
 Batch bodies are gzip streams of version 2 JSON lines. Snapshot bodies compress the existing Store archive format. Upload targets 8 MiB batches. Pull applies about 4 MiB per transaction. A single large record can exceed either target. The filesystem remote supports one writer process and does not enforce epochs. See [Store sync](sync.md).
 
 ## Reload

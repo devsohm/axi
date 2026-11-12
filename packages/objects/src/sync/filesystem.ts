@@ -14,8 +14,10 @@ import {
 
 const sessionName = /^[A-Za-z0-9_-][A-Za-z0-9._-]*$/;
 const numberName = (value: number) => String(value).padStart(16, "0");
-const bodyOf = async function* (value: unknown): SyncBody {
-	yield new TextEncoder().encode(JSON.stringify(value));
+const bodyOf = (value: unknown): SyncBody => {
+	// Capture metadata before filesystem waits let the caller change it.
+	const bytes = new TextEncoder().encode(JSON.stringify(value));
+	return (async function* () { yield bytes; })();
 };
 export function checkSessionId(sessionId: string): string {
 	if (sessionName.test(sessionId)) return sessionId;
@@ -150,7 +152,7 @@ export class FileSystemSyncRemote implements SessionSyncMaintenance {
 			sessions.push({ id, head: remoteHead(await this.list(id, context)), meta: await this.getMeta(id, context) });
 		return { sessions, cursor: "", more: false };
 	}
-	putMeta(id: string, meta: JsonObject, context: Context): Promise<void> {
+	async putMeta(id: string, meta: JsonObject, context: Context): Promise<void> {
 		return this.#write(id, context, [], "meta.json", bodyOf(meta));
 	}
 	getMeta(id: string, context: Context): Promise<JsonObject | undefined> {
