@@ -188,6 +188,10 @@ the test resumes the pending safe tool and verifies submission deduplication.
 Completed tool effects and nested Code Mode calls are not repeated. The resumed
 script saves its final values. The fixture uses synthetic model responses.
 
+Recovery checks also kill a process after its answer and a review task checkpoint
+are stored. Reopening SQLite and JSONL must finish that task without repeating
+the answer, the hook or the saved checkpoint.
+
 `packages/durable/test/process-restart-limit.test.ts` kills the waiting process
 twice on both storage backends. It verifies that the restart limit ends the
 interrupted tool, retains the completed sibling effect, and lets the model answer.

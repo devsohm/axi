@@ -411,6 +411,7 @@
 						"packages/durable/test/storage.test.ts",
 						"packages/durable/test/testing.test.ts",
 						"packages/durable/test/process-recovery.test.ts",
+						"packages/durable/test/after-run-process-recovery.test.ts",
 						"packages/durable/test/document-checkpoints.test.ts",
 						"packages/durable/test/live-state-migration.test.ts",
 						"packages/durable/test/jsonl.test.ts",
