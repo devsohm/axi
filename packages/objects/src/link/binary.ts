@@ -71,13 +71,12 @@ class PacketWriter {
 		this.#room(1);
 		this.#bytes[this.#used++] = value;
 	}
-	integer(value: number, width = 0): void {
-		do {
-			const low = value % 128;
+	integer(value: number): void {
+		while (value >= 128) {
+			this.byte((value % 128) | 128);
 			value = Math.floor(value / 128);
-			this.byte(low | (value || width > 1 ? 128 : 0));
-			width--;
-		} while (value || width > 0);
+		}
+		this.byte(value);
 	}
 	raw(bytes: Uint8Array): void {
 		this.#room(bytes.length);
@@ -251,13 +250,14 @@ function writeComplex(writer: PacketWriter, message: Message): void {
 			writer.integer(message.version);
 			writer.field("hex", message.fingerprint);
 			writer.part(message.params);
-			writer.text(message.address.kind);
-			writer.json(message.address.params);
+			const { address, principal, incarnation, chain, limit } = message;
+			writer.text(address.kind);
+			writer.json(address.params);
 			const optionals: [unknown, () => void][] = [
-				[message.principal, () => writer.json(message.principal)],
-				[message.incarnation, () => writer.field("uuid", message.incarnation)],
-				[message.chain, () => writer.list(message.chain!, (value) => writer.field("uuid", value))],
-				[message.limit, () => writer.integer(message.limit!)],
+				[principal, () => writer.json(principal)],
+				[incarnation, () => writer.field("uuid", incarnation)],
+				[chain, () => writer.list(chain!, (value) => writer.field("uuid", value))],
+				[limit, () => writer.integer(limit!)],
 			];
 			writer.byte(optionals.reduce((flags, [value], index) => flags | (value === undefined ? 0 : 1 << index), 0));
 			for (const [value, write] of optionals) if (value !== undefined) write();
@@ -418,7 +418,7 @@ export const binaryCodec: Codec = {
 		const writer = new PacketWriter(),
 			code = kinds.indexOf(message.kind),
 			origin = "origin" in message ? message.origin : undefined,
-			trace = "trace" in message ? message.trace : undefined;
+			trace = message.kind === "hold" || message.kind === "call" ? message.trace : undefined;
 		const flag =
 			(message.kind === "call" && message.old === true) || (message.kind === "ack" && message.events !== undefined);
 		writer.byte(code | (origin === undefined ? 0 : 128) | (trace === undefined ? 0 : 64) | (flag ? 32 : 0));

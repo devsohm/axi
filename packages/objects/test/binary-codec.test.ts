@@ -1,9 +1,36 @@
+import { spawnSync } from "node:child_process";
 import { expect, it } from "vitest";
 import { BACKGROUND_CONTEXT as context } from "../src/context/index.ts";
 import { binaryCodec } from "../src/link/binary.ts";
 import { checkMessage } from "../src/link/message.ts";
 import { DeflatedPart } from "../src/link/part.ts";
 import { parsePart, parsePayload } from "../src/link/values.ts";
+
+it("terminates when given negative identifiers", () => {
+	const module = new URL("../src/link/index.ts", import.meta.url).href;
+	const result = spawnSync(
+		process.execPath,
+		[
+			"--conditions=source",
+			"--input-type=module",
+			"-e",
+			`import { binaryCodec } from ${JSON.stringify(module)};
+			 console.log(JSON.stringify([-1, -2, -128, -129, -256, -300].map(hold =>
+			  [...binaryCodec.encode({ kind: "release", hold })])));`,
+		],
+		{ encoding: "utf8", timeout: 4000 },
+	);
+	expect(result.error).toBeUndefined();
+	expect(result.status, result.stderr).toBe(0);
+	expect(JSON.parse(result.stdout)).toEqual([
+		[2, 255],
+		[2, 254],
+		[2, 128],
+		[2, 127],
+		[2, 0],
+		[2, 212],
+	]);
+});
 
 it("writes protocol tags, safe-integer varints, origin flags and retirement indexes", () => {
 	expect([...binaryCodec.encode({ kind: "release", hold: 300 })]).toEqual([

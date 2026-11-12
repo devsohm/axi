@@ -39,6 +39,7 @@ function ownMessage(message: Message): string {
 				),
 			]);
 		case "hold": {
+			const { address, principal, incarnation, chain, limit, trace } = message;
 			const fields = [
 				json("H"),
 				json(message.hold),
@@ -46,9 +47,9 @@ function ownMessage(message: Message): string {
 				json(message.version),
 				json(message.fingerprint),
 				partText(message.params),
-				json([message.address.kind, message.address.params]),
+				json([address.kind, address.params]),
 			];
-			const optional = [message.principal, message.incarnation, message.chain, message.limit, message.trace];
+			const optional = [principal, incarnation, chain, limit, trace];
 			while (optional.length && optional.at(-1) === undefined) optional.pop();
 			return tuple([...fields, ...optional.map(json)]);
 		}
@@ -59,14 +60,17 @@ function ownMessage(message: Message): string {
 					? [json("c"), json(message.call), json(message.hold), json(message.method)]
 					: [json("r"), json(message.call)];
 			const part = message.kind === "call" ? message.args : message.value;
+			const segments = message.segments;
+			const trace = message.kind === "call" ? message.trace : undefined;
+			const old = message.kind === "call" ? message.old : undefined;
 			if (part !== undefined) {
 				fields.push(partText(part));
-				if (message.segments !== undefined) fields.push(json(message.segments.map((bytes) => bytes.byteLength)));
+				if (segments !== undefined) fields.push(json(segments.map((bytes) => bytes.byteLength)));
 			}
-			if (message.kind === "call" && (message.trace !== undefined || message.old !== undefined)) {
+			if (message.kind === "call" && (trace !== undefined || old === true)) {
 				while (fields.length < 6) fields.push("null");
-				fields.push(json(message.trace));
-				if (message.old !== undefined) fields.push(json(message.old));
+				fields.push(json(trace));
+				if (old === true) fields.push("true");
 			}
 			return tuple(fields);
 		}
@@ -114,8 +118,9 @@ function ownMessage(message: Message): string {
 }
 
 export function describeMessage(message: Message): string {
+	const origin = "origin" in message ? message.origin : undefined;
 	const content = ownMessage(message);
-	return "origin" in message && message.origin !== undefined ? `["@",${message.origin},${content}]` : content;
+	return origin === undefined ? content : `["@",${origin},${content}]`;
 }
 
 function list(value: unknown): unknown[] {

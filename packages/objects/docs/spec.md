@@ -96,6 +96,8 @@ Trusted links propagate outgoing-call ancestry through `call.old`. Untrusted lin
 
 Links handshake before queued work. Untrusted envelopes are validated. Malformed messages, duplicate identifiers and control traffic from an unauthorized role close the channel. Asynchronous handling holds later messages until it completes.
 
+Hold encoding captures one address and principal before writing their fields. Trace carriers are encoded only on holds and calls. Codecs frame messages; the receiving channel checks the envelope schema.
+
 Only parent links can stamp principals and incarnations. Routes authorize each hold before resolution. Revocation ends matching external objects, unbound work and downstream links. The host's own principal is exempt.
 
 Each origin has independent call and state windows. Two unacknowledged local state messages fill the state window. Method replies and control messages remain independent. Remote views keep their last snapshot while disconnected. Sent calls fail on loss and are never replayed automatically.
