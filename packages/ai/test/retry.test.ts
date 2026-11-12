@@ -6,6 +6,10 @@ import { isRetryableAssistantError, retryAssistantCall } from "../src/utils/retr
 it.each([
 	["HTTP 503 temporarily unavailable", true],
 	["stream disconnected before completion", true],
+	["Connection closed.", true],
+	['{"error":{"type":"api_error","message":"Connection closed."}}', true],
+	["Connection closed by proxy server before the response completed", true],
+	["Connection closed. Billing account unavailable", false],
 	["The upstream stream was cut short after the reply had begun", true],
 	["Request id a503b failed", false],
 	["Input has 150000 bytes", false],

@@ -27,6 +27,7 @@ const transient = new RegExp(
 		"connection.?error",
 		"connection.?refused",
 		"connection.?lost",
+		"connection.?closed",
 		"other side closed",
 		"fetch failed",
 		"request to \\S+ failed, reason:",

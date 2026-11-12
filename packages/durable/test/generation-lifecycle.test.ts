@@ -29,46 +29,57 @@ function setup(settings: HarnessSettings = {}, providerOptions: Parameters<typeo
 		model: { provider: provider.provider.id, modelId: provider.getModel().id },
 	};
 }
-const serviceError = () =>
-	fauxAssistantMessage([], { stopReason: "error", errorMessage: "503 temporarily unavailable" });
+const serviceError = (errorMessage = "503 temporarily unavailable") =>
+	fauxAssistantMessage([], { stopReason: "error", errorMessage });
 
-for (const recover of [true, false])
-	test(`generation ${recover ? "recovers after" : "exhausts"} a bounded durable retry`, async () => {
-		const f = setup({ retry: { enabled: true, maxRetries: 1, baseDelayMs: 1 } });
-		f.provider.setResponses([
-			serviceError(),
-			recover ? fauxAssistantMessage("Recovered answer") : serviceError(),
-			fauxAssistantMessage("unused"),
+test.each(
+	["503 temporarily unavailable", "Connection closed."].flatMap((errorMessage) =>
+		[true, false].map((recover) => ({ errorMessage, recover })),
+	),
+)("generation retry recovers=$recover for $errorMessage", async ({ errorMessage, recover }) => {
+	const f = setup({ retry: { enabled: true, maxRetries: 1, baseDelayMs: 1 } });
+	f.provider.setResponses([
+		serviceError(errorMessage),
+		recover ? fauxAssistantMessage("Recovered answer") : serviceError(errorMessage),
+		fauxAssistantMessage("unused"),
+	]);
+	const harness = await Harness.open(new MemoryStorage(), f.options, context);
+	try {
+		const conversation = await harness.root(context, { agent: { model: f.model } });
+		const receipt = await (await conversation.submit({ type: "input", content: "Try this request" }, context)).wait(
+			context,
+		);
+		expect(receipt).toMatchObject(
+			recover ? { status: "done" } : { status: "unanswered", reason: "model_error", detail: errorMessage },
+		);
+		const entries = await conversation.entries({}, 100, undefined, context);
+		const messages = entries.items
+			.toReversed()
+			.filter(AssistantEntry.is)
+			.flatMap((entry) => entry.model ?? []);
+		expect(messages.map((message) => (message.role === "assistant" ? message.stopReason : message.role))).toEqual([
+			"error",
+			recover ? "stop" : "error",
 		]);
-		const harness = await Harness.open(new MemoryStorage(), f.options, context);
-		try {
-			const conversation = await harness.root(context, { agent: { model: f.model } });
-			const receipt = await (await conversation.submit({ type: "input", content: "Try this request" }, context)).wait(
-				context,
-			);
-			expect(receipt).toMatchObject(
-				recover
-					? { status: "done" }
-					: { status: "unanswered", reason: "model_error", detail: "503 temporarily unavailable" },
-			);
-			const entries = await conversation.entries({}, 100, undefined, context);
-			const messages = entries.items
-				.toReversed()
-				.filter(AssistantEntry.is)
-				.flatMap((entry) => entry.model ?? []);
-			expect(messages.map((message) => (message.role === "assistant" ? message.stopReason : message.role))).toEqual([
-				"error",
-				recover ? "stop" : "error",
-			]);
-			expect(f.provider.state.callCount).toBe(2);
-			expect(f.provider.getPendingResponseCount()).toBe(1);
-			expect(await harness.snapshot(LiveDoc, conversation.id, context)).toEqual(recover ? {} : { runFailure: {
-			taskId: expect.any(Number), inputs: [receipt.id], reason: "model_error", detail: "503 temporarily unavailable", first: entries.items.at(-1)!.id,
-		} });
-		} finally {
-			await harness.close(context);
-		}
-	});
+		expect(f.provider.state.callCount).toBe(2);
+		expect(f.provider.getPendingResponseCount()).toBe(1);
+		expect(await harness.snapshot(LiveDoc, conversation.id, context)).toEqual(
+			recover
+				? {}
+				: {
+						runFailure: {
+							taskId: expect.any(Number),
+							inputs: [receipt.id],
+							reason: "model_error",
+							detail: errorMessage,
+							first: entries.items.at(-1)!.id,
+						},
+					},
+		);
+	} finally {
+		await harness.close(context);
+	}
+});
 
 test("a missing model settles the request and configuring a usable model restores generation", async () => {
 	const f = setup(),
