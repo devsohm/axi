@@ -1,6 +1,7 @@
 import { expect, test, vi } from "vitest";
 import { BACKGROUND_CONTEXT as context, awaitWithContext, withAbortSignal } from "../src/context/index.ts";
 import {
+	binaryCodec,
 	createHost,
 	defineFacet,
 	defineState,
@@ -10,10 +11,74 @@ import {
 	method,
 	obj,
 	ObjectsError,
+	PluginError,
 	remote,
 	str,
+	textCodec,
 	type Link,
 } from "../src/index.ts";
+
+test.each([binaryCodec, textCodec])(
+	"%s captures plugin error details once before sending a failed call",
+	async (codec) => {
+		const Service = hostKind("errors.snapshot-service");
+		const Failure = remote("errors.snapshot-call", {
+			version: 1,
+			params: {},
+			hostAddress: () => Service(),
+			variants: { ready: { methods: { fail: method(undefined, int()) } } },
+		});
+		const reports: unknown[] = [];
+		const server = createHost({
+			address: Service(),
+			principal: { kind: "server" },
+			onError: (error) => reports.push(error),
+		});
+		const client = createHost({ principal: { kind: "client" }, onError: (error) => reports.push(error) });
+		let reads = 0;
+		try {
+			await server.load(
+				[
+					{
+						name: "failure",
+						facet: defineFacet((facet) =>
+							facet.serve(Failure, () => ({
+								variant: "ready",
+								members: {
+									async fail() {
+										const error = new PluginError("retry", "Try this call again");
+										Object.defineProperty(error, "details", { get: () => ({ sample: ++reads }) });
+										throw error;
+									},
+								},
+							})),
+						),
+					},
+				],
+				context,
+			);
+			await client.load([], context);
+			const [incoming, outgoing] = memoryLinkPair();
+			server.accept(incoming, { principal: { kind: "client" }, codec }, context);
+			client.connect(outgoing, { principal: { kind: "server" }, codec }, context);
+			const reference = await client.get(Failure, {}, context);
+			try {
+				await expect(reference.fail(context)).rejects.toMatchObject({
+					code: "retry",
+					message: "Try this call again",
+					details: { sample: 1 },
+				});
+				expect(reads).toBe(1);
+				expect(reports).toEqual([]);
+			} finally {
+				reference.release();
+			}
+		} finally {
+			await client.close(context);
+			await server.close(context);
+		}
+	},
+);
 
 async function network(relayed: boolean) {
 	const Service = hostKind("lifecycle.remote-service"),

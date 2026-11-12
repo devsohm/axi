@@ -5,13 +5,15 @@ import type { WireError } from "./message.ts";
 
 export function wireError(error: unknown): WireError {
 	if (isObjectsError(error)) return { kind: "objects", error: error.toJSON() };
-	if (error instanceof PluginError)
+	if (error instanceof PluginError) {
+		const { code, message, details } = error;
 		return {
 			kind: "plugin",
-			code: error.code,
-			message: error.message,
-			...(error.details === undefined ? {} : { details: error.details }),
+			code,
+			message,
+			...(details === undefined ? {} : { details }),
 		};
+	}
 	return {
 		kind: "plugin",
 		code: "internal",
