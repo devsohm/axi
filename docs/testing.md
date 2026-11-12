@@ -137,6 +137,8 @@ cancellation, retirement and historical entry boundaries.
 Live-state migration tests open version 1 and 2 documents on SQLite and JSONL.
 They check read-only migration, the saved version after a transaction, and the
 value after closing and reopening storage.
+Tool-result boundary checks reject non-finite numeric details, clear the tool's
+live progress, and let the next generation run.
 
 Fullscreen tests cover captured mouse drags, nested wheel scrolling, search
 controls, selection auto-scroll and terminal mode restoration. Scrollback tests
