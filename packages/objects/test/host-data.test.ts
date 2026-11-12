@@ -153,6 +153,33 @@ it("copies only ownership keys and rejects collisions without publishing a parti
 	expect(f.reference.summary.value).toBe("5:1");
 });
 
+it("retains an import's collision policy while an earlier host operation holds its turn", async () => {
+	const f = await fixture();
+	await f.write("left", 5, ["saved"]);
+	const archive = await collect(f.app.exportHostData(left, context));
+	await f.write("left", 9, ["current"]);
+	const entered = Promise.withResolvers<void>(),
+		released = Promise.withResolvers<void>();
+	const holding = f.transaction(async () => {
+		entered.resolve();
+		await released.promise;
+	});
+	await entered.promise;
+	const earlier = f.app.deleteHostData(right, context);
+	const options: { existing: "refuse" | "replace" } = { existing: "refuse" };
+	const refused = expect(f.app.importHostData(archive, context, options)).rejects.toThrow("has data in this store");
+	try {
+		await turn();
+		options.existing = "replace";
+	} finally {
+		released.resolve();
+		await holding;
+	}
+	await earlier;
+	await refused;
+	expect(f.reference.summary.value).toBe("9:2");
+});
+
 it("validates archive order, ownership and document revisions before admitting a commit", async () => {
 	const f = await fixture();
 	await f.write("left", 3, ["a"]);

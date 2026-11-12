@@ -97,6 +97,7 @@ export async function importInto(
 ): Promise<HostDataCounts> {
 	const archive = await readHostArchive(parts, context),
 		target = options.address === undefined ? archive.host : storedText(options.address.key, "importHostData: address");
+	const existing = options.existing ?? "refuse";
 	return site.gate.turn(async (exclusive) => {
 		const activated = new Map<string, () => void>();
 		try {
@@ -116,7 +117,7 @@ export async function importInto(
 						importHostData(
 							site.store,
 							archive,
-							{ target, existing: options.existing ?? "refuse", histories },
+							{ target, existing, histories },
 							commit,
 							context,
 						),
