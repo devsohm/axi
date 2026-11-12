@@ -88,11 +88,11 @@ class ServerComponent<P extends Principal> implements HttpComponent<P>, Handler 
 			socket.on("error", () => socket.destroy());
 			void this.#upgrade(message, socket, head).catch(() => socket.destroy());
 		};
+		const address = options.listen;
 		this.facet = defineFacet<P>((facet) => {
 			facet.serve(Http, { compose: composeRouter });
 			facet.serve(Authenticators, { compose: composeAuthenticators });
-			if (options.listen === undefined) return;
-			const address = options.listen;
+			if (address === undefined) return;
 			facet.serve(HttpListener, (_params, self) => {
 				self.open(
 					async (opening) => {

@@ -140,6 +140,8 @@ Package installation accepts both npm's array pack result and its package-name-k
 
 HTTP routes deny anonymous callers unless explicitly public. Cross-site routes are public and anonymous. Authentication, host, origin, header and response-body checks run at the request boundary. Resource and root scopes last through response completion or cancellation.
 
+The HTTP component selects its listening address at construction. Replacing the caller's `listen` option before host startup does not change that selection.
+
 Worker starts serialize per address and hold process locks. Stale file locks are cleared only when no process is listening. A missing child PID is never a signal target. A running worker's lost link permits one recovery per minute for its address. Another loss within that window, a crash or a failed start requires retry or rollout.
 
 ## App host and clients

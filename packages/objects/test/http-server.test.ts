@@ -133,6 +133,20 @@ it("uses unbound authentication and route callbacks and reports errors on the HT
 	}
 });
 
+it("keeps the listener selected at construction when the caller replaces its settings", async () => {
+	const host = createHost({ onError() {} });
+	const options = { listen: { host: "127.0.0.1", port: 0 }, closeTimeout: 50, onError() {} };
+	const http = createHttp(host, options, context);
+	options.listen = { host: "localhost", port: 0 };
+	try {
+		expect((await host.load([{ name: "http", facet: http.facet }], context)).failed).toEqual([]);
+		expect((await http.listening(context)).host).toBe("127.0.0.1");
+	} finally {
+		await http.close(context);
+		await host.close(context);
+	}
+});
+
 it("serves typed routes on a real listener with authentication, cookies and response headers", async () => {
 	await using s = await server({
 		routes: {
