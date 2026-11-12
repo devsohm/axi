@@ -122,6 +122,8 @@ A job runs outside its finish transaction. Its successful finish commits cleanup
 
 Job declaration checks read the resume policy once after checking its keys. Version-adapter functions can be non-enumerable properties; their values must still be functions.
 
+Job start setup failures reject the returned promise. A traced start keeps its selected telemetry parent. State-change validation reads a deferred persistence deadline once before admitting the change.
+
 ## Node helpers
 
 Plugin roots may be required or optional. Discovery reports collisions and invalid entries. Builds restrict imports to permitted plugin, shared and host-package paths. Plugin scripts execute as trusted code. File watching marks changes without applying them. Rollouts ship built generations through ordered host steps. Workers evaluate prebuilt scripts without rebuilding them.

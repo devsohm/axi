@@ -1,5 +1,5 @@
 import { expect, it, vi } from "vitest";
-import { NOOP_TELEMETRY_CONTEXT } from "@axi/telemetry";
+import { InMemoryTelemetryContext, NOOP_TELEMETRY_CONTEXT } from "@axi/telemetry";
 import { BACKGROUND_CONTEXT as context, withTelemetry } from "../src/context/index.ts";
 import { defineJob, defineState, obj, str } from "../src/index.ts";
 import { ObjectsError } from "../src/data/index.ts";
@@ -30,6 +30,7 @@ function setup(implementation: AnyJobImplementation) {
 	const batch = new Batch((error) => errors.push(error), undefined);
 	const host = {
 		spanHost: "client",
+		telemetry: context.telemetry,
 		report(error: HostError) {
 			errors.push(error);
 		},
@@ -40,6 +41,8 @@ function setup(implementation: AnyJobImplementation) {
 	const documents = new Documents({
 		label: "test",
 		context,
+		telemetry: context.telemetry,
+		report(error) { errors.push(error); },
 		batch,
 		store: undefined,
 		fail(error) {
@@ -99,6 +102,58 @@ function setup(implementation: AnyJobImplementation) {
 const flushed = async (): Promise<void> => {
 	for (let i = 0; i < 8; i++) await Promise.resolve();
 };
+
+it("rejects job start setup failures through the returned promise", async () => {
+	const failure = new Error("telemetry unavailable");
+	const app = setup({ run: async () => "done" });
+	try {
+		app.job.live();
+		const request = withTelemetry(context.telemetry, context);
+		Object.defineProperty(request, "telemetry", { get() { throw failure; } });
+		await expect(app.job.start({}, request)).rejects.toBe(failure);
+	} finally {
+		await app.close();
+	}
+});
+
+it("retains the telemetry context selected for a job start", async () => {
+	const telemetry = new InMemoryTelemetryContext();
+	let reads = 0;
+	const app = setup({ run: async () => "done" });
+	try {
+		app.job.live();
+		await telemetry.startSpan({ name: "request" }, async (span) => {
+			const request = withTelemetry(span, context);
+			Object.defineProperty(request, "telemetry", { get() { reads++; return span; } });
+			const run = await app.job.start({}, request);
+			expect(await run.outcome(context)).toMatchObject({ kind: "done" });
+			expect(reads).toBe(1);
+		});
+	} finally {
+		await app.close();
+	}
+});
+
+it.each([0, 100, Infinity])("captures a job state persistence deadline once: %s", async (withinMs) => {
+	let reads = 0;
+	const app = setup({
+		async run(_args, ctx) {
+			if (!ctx.state) throw new Error("Missing run state");
+			await ctx.state.change((draft) => { draft.output = "saved"; }, ctx, {
+				persistence: { kind: "deferred", get withinMs() { reads++; return withinMs; } },
+			});
+			return "done";
+		},
+	});
+	try {
+		app.job.live();
+		const run = await app.job.start({}, context);
+		expect(await run.outcome(context)).toMatchObject({ kind: "done", state: { output: "saved" } });
+		expect(reads).toBe(1);
+	} finally {
+		await app.close();
+	}
+});
 
 it("does not inject a job trace carrier when recording is disabled", async () => {
 	const inject = vi.fn(() => ({ trace: "unrecorded" }));

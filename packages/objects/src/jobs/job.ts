@@ -73,10 +73,11 @@ export class Job implements JobHandle<JsonValue, unknown, JsonValue | undefined>
 	get running(): Watchable<readonly RunningEntry<JsonValue, JsonValue | undefined>[]> {
 		return this.#records.running as unknown as Watchable<readonly RunningEntry<JsonValue, JsonValue | undefined>[]>;
 	}
-	start(args: JsonValue, context: Context, options: StartOptions = {}): Promise<Run<AnyOutcome>> {
+	async start(args: JsonValue, context: Context, options: StartOptions = {}): Promise<Run<AnyOutcome>> {
 		const { documents, token, host } = this.#owner;
-		if (untraced(context.telemetry)) return documents.tx((tx) => this.stage(tx, args, context, options), token, context);
-		return context.telemetry.startSpan({ name: "objects.job", attributes: {
+		const parent = context.telemetry;
+		if (untraced(parent)) return documents.tx((tx) => this.stage(tx, args, context, options), token, context);
+		return parent.startSpan({ name: "objects.job", attributes: {
 			"objects.host": host.spanHost, object: documents.label.slice(0, 256), job: this.#definition.name, phase: "intent",
 		} }, async (span) => {
 			const traced = withTelemetry(span, context);
@@ -304,17 +305,16 @@ export class Job implements JobHandle<JsonValue, unknown, JsonValue | undefined>
 				try {
 					const input = options.persistence;
 					if (input === undefined || input.kind === "immediate") persistence = { kind: "immediate" };
-					else if (
-						input.kind === "deferred" &&
-						(input.withinMs === undefined || (typeof input.withinMs === "number" && input.withinMs >= 0))
-					)
+					else {
+						const { withinMs } = input;
+						if (input.kind !== "deferred" || (withinMs !== undefined && !(typeof withinMs === "number" && withinMs >= 0)))
+							throw new ObjectsError({
+								code: "invalid",
+								reason: "args",
+								message: `${records.name}: persistence is immediate or deferred with withinMs >= 0`,
+							});
 						persistence = input;
-					else
-						throw new ObjectsError({
-							code: "invalid",
-							reason: "args",
-							message: `${records.name}: persistence is immediate or deferred with withinMs >= 0`,
-						});
+					}
 				} catch (error) {
 					return Promise.reject(error);
 				}
