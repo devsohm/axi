@@ -14,7 +14,7 @@ Record lookups and fork-aware scans use the declared indexes. Document reads com
 
 A Session owns conversations, immutable entries, tasks, submissions, and JSON documents. It executes mutation callbacks in order through `commit(change, context)`. Independent prepared commits can share a storage call while earlier I/O is pending. Each remains atomic and publishes in callback order.
 
-A commit proceeds through callback execution, preparation, storage settlement, adoption, and publication. Documents and records become observable together after storage succeeds. A thrown callback or preparation failure discards its changes. Drafts expire when the callback settles.
+A commit proceeds through callback execution, preparation, storage settlement, adoption, and publication. After storage settles, each batch confirmed durable makes its documents and records observable together, even if the storage call rejects. A thrown callback or preparation failure discards its changes. Drafts expire when the callback settles.
 
 External effects run outside the mutation transaction. A database commit cannot atomically include a remote request, process execution, or human interaction.
 
@@ -292,7 +292,7 @@ Host adapters supply settings, models, execution environments, conversation init
 
 Task creation inherits the caller's injected carrier unless `trace` is supplied. `trace: "root"` stores no carrier. Creation `links` are attached during the first invocation, including its successive phases. After reopening, the first invocation is marked `resumed`. Queued inputs retain their admission traces; combined runs use the first input as parent and link the others. Carriers are stored with records in every backend.
 
-Committed entry and settlement events are emitted after storage succeeds, including when no commit listener exists. Reports record fixed categories without error payloads. Phase faults and AI request errors can include diagnostics limited to 500 characters. Prompts, entry data, tool arguments and tool outputs are not recorded. Hosts own exporters, adapter lifetime and carrier transport limits.
+Committed entry and settlement events are emitted when confirmed durable batches publish, including when no commit listener exists. Reports record fixed categories without error payloads. Phase faults and AI request errors can include diagnostics limited to 500 characters. Prompts, entry data, tool arguments and tool outputs are not recorded. Hosts own exporters, adapter lifetime and carrier transport limits.
 
 ## Integration checks
 

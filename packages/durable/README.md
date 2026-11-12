@@ -30,7 +30,7 @@ try {
 
 The package root exports `createSession`, `defineDoc`, `defineDocFamily`, `defineEntry`, `defineTask`, `MemoryStorage`, and their types. Memory storage commits mixed record batches atomically. It supports indexed scans, fork-aware conversation history, document revisions, retirement, and detached reads.
 
-A Session prepares transactions in order. Immediate commits publish after storage succeeds. Deferred document commits publish in memory and are stored before a dependent commit, at their deadline, or during close. Document drafts support structural updates, checkpoints, version conversion, retirement, and replacement. Snapshots expose published values. Document watches and observers follow the same address through retirement and recreation. Closing a Session stops observation and waits for admitted work before closing storage. A storage failure closes the Session.
+A Session prepares transactions in order. Immediate commits publish confirmed durable batches after storage settles, even if the storage call rejects. Deferred document commits publish in memory and are stored before a dependent commit, at their deadline, or during close. Document drafts support structural updates, checkpoints, version conversion, retirement, and replacement. Snapshots expose published values. Document watches and observers follow the same address through retirement and recreation. Closing a Session stops observation and waits for admitted work before closing storage. A storage failure closes the Session.
 
 `@axi/durable/env` exports portable filesystem and shell contracts, result helpers, UTF-8 decoding and line scanning. Line scans report raw byte offsets and decoded sizes without retaining the file.
 
