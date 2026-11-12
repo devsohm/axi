@@ -222,6 +222,25 @@ test("timed-out color queries report late replies once without delivering termin
 	expect(late).toHaveLength(1);
 });
 
+test("an active color query retains its late callback when caller options change", async () => {
+	const { ui, terminal } = setup();
+	ui.start();
+	const selected = vi.fn((_colors: TerminalColors) => {}),
+		replacement = vi.fn((_colors: TerminalColors) => {});
+	const options = { timeoutMs: 1, onLateReply: selected };
+	const query = ui.queryTerminalColors(options);
+	options.onLateReply = replacement;
+	await query;
+	terminal.input("\x1b]11;#123456\x07");
+	terminal.input("\x1b[?1c");
+	expect(selected).toHaveBeenCalledExactlyOnceWith({
+		foreground: undefined,
+		background: { r: 18, g: 52, b: 86 },
+		palette: undefined,
+	});
+	expect(replacement).not.toHaveBeenCalled();
+});
+
 test("input filters, terminal notifications and key-release opt-in keep their separate contracts", () => {
 	const { ui, terminal } = setup();
 	const received: string[] = [],

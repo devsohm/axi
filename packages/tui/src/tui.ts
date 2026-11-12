@@ -676,6 +676,7 @@ export abstract class TuiBase extends Container implements TUI {
 		timeoutMs: number;
 		onLateReply?: (colors: TerminalColors) => void;
 	}): Promise<TerminalColors> {
+		const { timeoutMs, onLateReply } = options;
 		return new Promise((resolve) => {
 			const query: ColorQuery = {
 				palette: Array.from({ length: 16 }, () => undefined),
@@ -683,9 +684,9 @@ export abstract class TuiBase extends Container implements TUI {
 				deliver: resolve,
 			};
 			query.timer = setTimeout(() => {
-				query.deliver = options.onLateReply;
+				query.deliver = onLateReply;
 				resolve(this.#colors(query));
-			}, options.timeoutMs);
+			}, timeoutMs);
 			this.#queries.push(query);
 			this.terminal.write(
 				"\x1b]10;?\x07\x1b]11;?\x07" +
