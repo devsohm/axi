@@ -70,6 +70,7 @@ it.each([
 				{
 					name: "telemetry",
 					facet: telemetryIngestFacet({
+						admit: () => true,
 						target: {
 							ingest(batch) {
 								batches.push(batch);

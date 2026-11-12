@@ -31,7 +31,7 @@ vi.mock("@google/genai", async (importOriginal) => {
 import * as google from "../src/api/google-generative-ai.ts";
 import * as vertex from "../src/api/google-vertex.ts";
 import { googleGenerativeAIApi } from "../src/api/google-generative-ai.lazy.ts";
-import { convertMessages, convertTools, mapStopReasonString } from "../src/api/google-shared.ts";
+import { convertMessages, convertTools } from "../src/api/google-shared.ts";
 import { formatUserAgent } from "../src/utils/identity.ts";
 const model: Model<"google-generative-ai"> = {
 	api: "google-generative-ai",
@@ -119,16 +119,16 @@ describe("Google adapters", () => {
 			});
 		},
 	);
-	it("rejects an unsupported continuation finish reason while retaining partial output", async () => {
+	it("ends a continuation response at the length limit while retaining partial output", async () => {
 		sdk.chunks = [{ candidates: [{ content: { parts: [{ text: "partial answer" }] }, finishReason: "CONTINUATION" }] }];
 		const result = await google.stream(model, context, { apiKey: "test" }).result();
 		expect(result).toMatchObject({
-			stopReason: "error",
+			stopReason: "length",
 			rawStopReason: "CONTINUATION",
 			content: [{ type: "text", text: "partial answer" }],
-			errorMessage: "Unhandled stop reason: CONTINUATION",
 		});
-		expect(mapStopReasonString("CONTINUATION")).toBe("error");
+		expect(result.errorMessage).toBeUndefined();
+		expect(sdk.requests).toMatchObject([{ config: { automaticContinuation: false } }]);
 	});
 	it("uses ordinary property assignment for legacy schemas without changing JSON-schema declarations", () => {
 		const parameters = Type.Object(
@@ -305,7 +305,7 @@ describe("Google adapters", () => {
 				location: "global",
 				apiVersion: "v1",
 				googleAuthOptions: { keyFilename: "/test/key.json" },
-				httpOptions: { headers: { "User-Agent": formatUserAgent() } },
+				httpOptions: { fetch: globalThis.fetch, headers: { "User-Agent": formatUserAgent() } },
 			},
 		]);
 	});
@@ -351,6 +351,7 @@ describe("Google adapters", () => {
 			apiKey: "test",
 			apiVersion: "v1",
 			httpOptions: {
+				fetch: globalThis.fetch,
 				baseUrl: "https://proxy.invalid/v1/projects/project/locations/global",
 				baseUrlResourceScope: "COLLECTION",
 				apiVersion: "",
@@ -358,19 +359,19 @@ describe("Google adapters", () => {
 			},
 		});
 	});
-	it("rejects unsupported fetch overrides and missing keys before requests", async () => {
+	it("passes custom fetch to Google and Vertex key and project clients", async () => {
 		expect(() => google.streamSimple(model, context)).toThrow("No API key for provider: google");
+		const fetch = async () => new Response();
+		expect((await google.streamSimple(model, context, { apiKey: "test", fetch }).result()).stopReason).toBe("stop");
+		expect((await vertex.streamSimple(vertexModel, context, { apiKey: "test", fetch }).result()).stopReason).toBe(
+			"stop",
+		);
 		expect(
-			await google.stream(model, context, { apiKey: "test", fetch: async () => new Response() }).result(),
-		).toMatchObject({
-			stopReason: "error",
-			errorMessage: "Custom fetch is not supported by the Google Generative AI adapter",
-		});
-		expect(await vertex.stream(vertexModel, context, { fetch: async () => new Response() }).result()).toMatchObject({
-			stopReason: "error",
-			errorMessage: "Custom fetch is not supported by the Google Vertex adapter",
-		});
-		expect(sdk.clients).toEqual([]);
+			(await vertex.stream(vertexModel, context, { project: "project", location: "global", env: {}, fetch }).result())
+				.stopReason,
+		).toBe("stop");
+		expect(sdk.clients).toHaveLength(3);
+		for (const client of sdk.clients) expect(client).toMatchObject({ httpOptions: { fetch } });
 	});
 	it("keeps signed empty replay parts and nests image tool results", async () => {
 		const prior: AssistantMessage = {

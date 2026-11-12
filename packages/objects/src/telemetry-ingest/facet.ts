@@ -1,5 +1,5 @@
 import type { SpanAttributes, StoredSpan } from "@axi/telemetry";
-import type { Principal } from "../data/index.ts";
+import { forbidden, type Principal } from "../data/index.ts";
 import { defineFacet, type Facet } from "../host/index.ts";
 import { PageTelemetry, WorkerTelemetry } from "./batch.ts";
 import type { TelemetryBatch } from "./recorder.ts";
@@ -8,6 +8,7 @@ export const PAGE_SPANS_PER_MINUTE = 1200;
 export type TelemetryIngestTarget = { ingest(batch: TelemetryBatch): number };
 export type TelemetryIngestOptions<P extends Principal> = {
 	readonly target: TelemetryIngestTarget;
+	readonly admit: (principal: P) => boolean;
 	readonly workerHost: (principal: P) => string | undefined;
 	readonly principalAttributes: (principal: P) => Readonly<SpanAttributes>;
 };
@@ -15,6 +16,7 @@ export type TelemetryIngestOptions<P extends Principal> = {
 export function telemetryIngestFacet<P extends Principal>(options: TelemetryIngestOptions<P>): Facet<P> {
 	return defineFacet<P>((host) => {
 		host.serve(PageTelemetry, (_params, principal) => {
+			if (!options.admit(principal)) throw forbidden("objects.telemetry.page: not admitted");
 			const minutes = new Map<string, { since: number; used: number }>();
 			return { variant: "main", members: { ingest: async ({ spans }, ctx) => {
 				const now = Date.now();

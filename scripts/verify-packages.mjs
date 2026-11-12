@@ -199,6 +199,7 @@ import { Files, FilesFolder, type FileWrite, type FileInfo, type FolderListing, 
 import type { TerminalOptions } from "@axi/objects/tui/launcher";
 import { workerMain } from "@axi/objects/workers/child";
 import { uploadSession, type SyncStateStore } from "@axi/objects/sync";
+import { telemetryIngestFacet, type TelemetryIngestOptions } from "@axi/objects/telemetry-ingest";
 import { registerLazyOAuthFlows } from "@axi/ai/lazy-oauth";
 import { registerLazyBedrockProvider } from "@axi/ai/lazy-bedrock-provider";
 import { HostProvider } from "@axi/objects/react";
@@ -227,6 +228,7 @@ export const terminalOptions = (options: TerminalOptions) => options;
 export const clientProvider = HostProvider;
 export const newEntries = [workerMain, uploadSession, registerLazyOAuthFlows, registerLazyBedrockProvider];
 export const syncProgress = (progress: SyncStateStore) => progress;
+export const ingest = (options: TelemetryIngestOptions<{kind: "user"}>) => telemetryIngestFacet(options);
 `,
 	);
 	writeFileSync(

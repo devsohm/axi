@@ -55,6 +55,11 @@
 			"types": "./dist/telemetry-sqlite/node.d.ts",
 			"import": "./dist/telemetry-sqlite/node.js"
 		},
+		"./telemetry-ingest": {
+			"source": "./src/telemetry-ingest/index.ts",
+			"types": "./dist/telemetry-ingest/index.d.ts",
+			"import": "./dist/telemetry-ingest/index.js"
+		},
 		"./json": {
 			"source": "./src/json.ts",
 			"types": "./dist/json.d.ts",

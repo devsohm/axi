@@ -34,6 +34,8 @@ export function googleRequest(
 		...(systemText ? { systemInstruction: sanitizeSurrogates(systemText) } : {}),
 		...(tools.length ? { tools: convertTools(tools, false, strict) } : {}),
 		...(mode !== undefined ? { toolConfig: { functionCallingConfig: { mode } } } : {}),
+		// The caller controls additional requests after a token-limit response.
+		automaticContinuation: false,
 	};
 	if (model.reasoning && options.thinking) {
 		config.thinkingConfig = options.thinking.enabled

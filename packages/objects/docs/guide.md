@@ -103,3 +103,5 @@ Pass an explicit `Context` through calls. `withCancel()` and `withAbortSignal()`
 A host telemetry adapter records methods, holds, calls, activation, cleanup, jobs, routines, HTTP, routes and reloads. Remote carriers preserve supported parent context. Cancellation records an aborted outcome without a failure status. `ctx.trace()` adds an application span while preserving principal, incarnation and acquired-reference ownership.
 
 The SQLite telemetry recorder queues finished spans and ten-second metric aggregates. `flush()` writes them. `close()` flushes partial intervals and leaves its database open. Page ingestion checks sender identity, field bounds and per-minute span limits. Worker ingestion stamps its authenticated host. Senders keep unsent batches while disconnected and discard failed sends as best effort.
+
+Import `telemetryIngestFacet` from `@axi/objects/telemetry-ingest`. Set its required `admit(principal)` callback to choose whose pages may send spans. A refused page fails with `forbidden` before ingestion. The app host admits its authenticated pages; a custom host defines its own policy. Worker admission still uses `workerHost(principal)`.

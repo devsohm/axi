@@ -285,6 +285,7 @@ export async function startServer<P extends Principal>(options: AppOptions<P>, c
 			name: "objects.telemetry",
 			facet: telemetryIngestFacet({
 				target: options.telemetry,
+				admit: () => true,
 				workerHost: (principal) => workerHosts.get(principalKey(principal, context)),
 				principalAttributes: (principal) => host.principalAttributes(principal, context),
 			}),

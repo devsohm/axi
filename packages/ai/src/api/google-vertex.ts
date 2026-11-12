@@ -1,5 +1,5 @@
 import { type GenerateContentParameters, GoogleGenAI, type HttpOptions, ResourceScope } from "@google/genai";
-import type { Model, ProviderHeaders, SimpleStreamOptions, StreamFunction } from "../types.ts";
+import type { FetchFunction, Model, ProviderHeaders, SimpleStreamOptions, StreamFunction } from "../types.ts";
 import { providerHeadersToRecord } from "../utils/headers.ts";
 import { getProviderEnvValue } from "../utils/provider-env.ts";
 import { collapseSystemMessages } from "../utils/transcript.ts";
@@ -14,8 +14,10 @@ function vertexHttp(
 	model: Model<"google-vertex">,
 	headers: ProviderHeaders | undefined,
 	identity: ClientIdentity | undefined,
+	fetch: FetchFunction | undefined,
 ): HttpOptions {
-	const httpOptions: HttpOptions = {};
+	// Supplying fetch keeps the SDK from overriding dispatcher timeouts.
+	const httpOptions: HttpOptions = { fetch: fetch ?? globalThis.fetch };
 	const baseUrl = model.baseUrl.trim();
 	if (baseUrl && !baseUrl.includes("{location}")) {
 		httpOptions.baseUrl = baseUrl;
@@ -39,7 +41,7 @@ function clientFor(model: Model<"google-vertex">, options: GoogleVertexOptions):
 			vertexai: true,
 			apiVersion: "v1",
 			apiKey,
-			httpOptions: vertexHttp(model, options.headers, options.identity),
+			httpOptions: vertexHttp(model, options.headers, options.identity, options.fetch),
 		});
 	const project =
 		options.project ||
@@ -54,7 +56,8 @@ function clientFor(model: Model<"google-vertex">, options: GoogleVertexOptions):
 		throw new Error("Vertex AI requires a location. Set GOOGLE_CLOUD_LOCATION or pass location in options.");
 	const headers = options.headers,
 		env = options.env,
-		identity = options.identity;
+		identity = options.identity,
+		fetch = options.fetch;
 	const keyFilename = getProviderEnvValue("GOOGLE_APPLICATION_CREDENTIALS", env);
 	return new GoogleGenAI({
 		vertexai: true,
@@ -62,7 +65,7 @@ function clientFor(model: Model<"google-vertex">, options: GoogleVertexOptions):
 		project,
 		location,
 		...(keyFilename ? { googleAuthOptions: { keyFilename } } : {}),
-		httpOptions: vertexHttp(model, headers, identity),
+		httpOptions: vertexHttp(model, headers, identity, fetch),
 	});
 }
 export const stream: StreamFunction<"google-vertex", GoogleVertexOptions> = (model, context, options = {}) => {
@@ -71,8 +74,6 @@ export const stream: StreamFunction<"google-vertex", GoogleVertexOptions> = (mod
 		model,
 		options,
 		async () => {
-			if (options.fetch && options.fetch !== globalThis.fetch)
-				throw new Error("Custom fetch is not supported by the Google Vertex adapter");
 			const client = clientFor(model, options),
 				params = googleRequest(model, transcript, options);
 			const replacement = await options.onPayload?.(params, model);

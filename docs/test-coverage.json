@@ -283,6 +283,7 @@
 						"packages/ai/test/codex.test.ts",
 						"packages/ai/test/codex-socket-lifecycle.test.ts",
 						"packages/ai/test/google.test.ts",
+						"packages/ai/test/google-fetch.test.ts",
 						"packages/ai/test/google-contracts.test.ts",
 						"packages/ai/test/google-response.test.ts",
 						"packages/ai/test/bedrock.test.ts",

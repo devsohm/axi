@@ -221,4 +221,6 @@ The `telemetry` option accepts a `TelemetrySpan`. The model registry emits one l
 
 The Anthropic adapter pins `anthropic-version` to `2023-06-01` unless caller headers override it. Updating the SDK does not silently change the request protocol. Compatible endpoints can still receive `temperature` when enabled by model compatibility settings and not suppressed by thinking controls.
 
-Google's SDK mapper rejects unsupported finish reasons, including `CONTINUATION`. Streaming reports an error while retaining partial output and the raw stop reason. The raw string mapper classifies unknown reasons as `error`. Neither path automatically submits a continuation request.
+Google and Vertex pass the supplied `fetch` to the SDK. When it is absent, they pass the current global fetch explicitly so the SDK keeps the global dispatcher's timeout behavior. This applies to model requests from Vertex API-key and application-credential clients. Application-credential token requests still use the authentication library's HTTP client.
+
+Both adapters disable automatic continuation. A `CONTINUATION` finish returns `length`, retains partial output and the raw stop reason, and sends no continuation request. The caller decides whether to request more output.

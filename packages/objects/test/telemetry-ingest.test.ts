@@ -28,6 +28,7 @@ it("retains disconnected page spans, stamps the authenticated sender and never s
 	let principalReads = 0;
 	const server = createHost({ address: hostKind("server")(), principal: { kind: "server" }, onError: (error) => { throw error; } });
 	await server.load([{ name: "telemetry", facet: telemetryIngestFacet({
+		admit: () => true,
 		target: { ingest(batch) { batches.push(batch); return batch.spans.length; } },
 		workerHost: () => undefined,
 		principalAttributes: (principal) => { principalReads++; return { "identity.kind": principal.kind }; },
@@ -67,6 +68,7 @@ it("charges only visited spans when the principal callback fails partway through
 	const server = createHost({ address: hostKind("server")(), principal: { kind: "server" }, onError: () => {} });
 	const client = createHost({ onError: () => {} });
 	await server.load([{ name: "telemetry", facet: telemetryIngestFacet({
+		admit: () => true,
 		target: { ingest: (batch) => batch.spans.length },
 		workerHost: () => undefined,
 		principalAttributes: () => {
@@ -92,6 +94,35 @@ it("charges only visited spans when the principal callback fails partway through
 			written += (await page.ingest({ spans }, context)).written;
 		}
 		expect(written).toBe(PAGE_SPANS_PER_MINUTE - 1);
+	} finally {
+		await client.close(context);
+		await server.close(context);
+	}
+});
+
+it.each(["guest", "owner"])("checks the page principal before admitting %s telemetry", async (kind) => {
+	const batches: TelemetryBatch[] = [];
+	const server = createHost({ address: hostKind("server")(), principal: { kind: "server" }, onError() {} });
+	const client = createHost({ onError() {} });
+	await server.load([{ name: "telemetry", facet: telemetryIngestFacet({
+		admit: (principal) => principal.kind === "owner",
+		target: { ingest(batch) { batches.push(batch); return batch.spans.length; } },
+		workerHost: () => undefined,
+		principalAttributes: () => ({}),
+	}) }], context);
+	await client.load([], context);
+	const [a, b] = memoryLinkPair();
+	server.accept(a, { principal: { kind } }, context);
+	client.connect(b, { principal: { kind: "server" } }, context);
+	try {
+		const page = client.get(PageTelemetry, {}, context);
+		if (kind === "guest") {
+			await expect(page).rejects.toMatchObject({ code: "forbidden" });
+			expect(batches).toEqual([]);
+		} else {
+			expect(await (await page).ingest({ spans: [] }, context)).toEqual({ written: 0, dropped: 0 });
+			expect(batches).toEqual([{ spans: [], metrics: [] }]);
+		}
 	} finally {
 		await client.close(context);
 		await server.close(context);

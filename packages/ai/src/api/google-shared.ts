@@ -240,6 +240,7 @@ export function mapStopReason(reason: FinishReason): StopReason {
 		case "STOP":
 			return "stop";
 		case "MAX_TOKENS":
+		case "CONTINUATION":
 			return "length";
 		case "BLOCKLIST":
 		case "PROHIBITED_CONTENT":
@@ -258,16 +259,11 @@ export function mapStopReason(reason: FinishReason): StopReason {
 		case "TOO_MANY_TOOL_CALLS":
 		case "NO_IMAGE":
 			return "error";
-		case "CONTINUATION":
-			throw new Error(`Unhandled stop reason: ${reason}`);
 		default: {
 			const unhandled: never = reason;
 			throw new Error(`Unhandled stop reason: ${unhandled}`);
 		}
 	}
-}
-export function mapStopReasonString(reason: string): StopReason {
-	return reason === "STOP" ? "stop" : reason === "MAX_TOKENS" ? "length" : "error";
 }
 export function retryGoogleRequest<T>(
 	request: () => Promise<T>,

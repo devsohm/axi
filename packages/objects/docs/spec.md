@@ -190,6 +190,8 @@ Link byte counters use the host's telemetry recorder even when the link starts w
 
 Browser ingestion charges and stamps one accepted span at a time. If the principal callback fails, later spans in that batch do not consume its rate limit.
 
+`TelemetryIngestOptions.admit(principal)` is required. A page whose principal is refused cannot bind `PageTelemetry` and fails with `forbidden`. Per-page limits do not replace principal admission: one principal can open several pages. The app host admits its authenticated pages. `workerHost` controls worker ingestion independently.
+
 The exported telemetry schema lists each operation's allowed outcomes and lifecycle values. Start attributes declare whether callers must supply them. End attributes describe optional results without a start-time requirement.
 
 ## Limits
