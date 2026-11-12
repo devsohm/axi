@@ -108,6 +108,8 @@ Tasks belong to a conversation or another task. Owned work is joined during sett
 
 A task can commit `{ status: "sleeping", checkpoint, signals: [token.key(key)], until? }`. It releases its invocation until a value arrives or the deadline passes. A value delivered before the sleep is retained. `runtime.readSignal(token, key, context)` returns the value, an expired marker, or `undefined`; older values require an explicit migration. A key can wake one wait. A later wait cannot reuse a consumed or expired key.
 
+`harness.wake()` reports work ready now and the earliest deadline still waiting. A delivered signal removes that task's old deadline from the report; other sleeping tasks keep their deadlines. Reading the report does not resume a paused scheduler.
+
 `state.wake` identifies the signal, deadline, expiry, or ended tasks that resumed the task. It survives commits of the same checkpoint and restart recovery, then clears when the checkpoint changes. `any` waits resume after at least one listed task ends; the usual ownership join still applies before the waiting task becomes terminal.
 
 `SubmissionDraft.notify: { taskId, key }` delivers `SubmissionSettled` in the commit that settles the submission. The value is the same settled record returned by `Submission.wait()`. A closed or missing recipient does not prevent settlement.

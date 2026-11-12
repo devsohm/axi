@@ -494,12 +494,13 @@ export class TaskScheduler {
 	}
 	#notDue(
 		task: StoredTask,
+		now?: number,
 	): task is StoredTask & { readonly state: Extract<TaskState<JsonValue, JsonValue>, { status: "sleeping" }> } {
 		return (
 			task.state.status === "sleeping" &&
 			!task.abortRequested &&
 			!this.#gateWakes.has(task.id) &&
-			!sleepDue(task.state, task.memos, this.#options.now())
+			!sleepDue(task.state, task.memos, now ?? this.#options.now())
 		);
 	}
 	#wakeGate(task: StoredTask): void {
@@ -521,12 +522,7 @@ export class TaskScheduler {
 		let at: number | undefined;
 		for (const id of this.#sleeping) {
 			const task = this.#tree.live.get(id);
-			if (
-				task?.state.status === "sleeping" &&
-				!task.abortRequested &&
-				task.state.until !== undefined &&
-				task.state.until > now
-			) {
+			if (task !== undefined && this.#notDue(task, now) && task.state.until !== undefined) {
 				at = at === undefined ? task.state.until : Math.min(at, task.state.until);
 			}
 		}
