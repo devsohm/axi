@@ -15,10 +15,12 @@ import {
 	hook,
 	LiveDoc,
 	MemoryStorage,
+	ToolResultEntry,
 	ToolTask,
 	wrapTool,
 	type Extension,
 	type HookRegistration,
+	type Report,
 	type TaskId,
 	type ToolRegistration,
 	type WakeReason,
@@ -36,6 +38,7 @@ async function start(
 	const registry = createRegistry(),
 		models = createModels(),
 		provider = fauxProvider();
+	const reports: Report[] = [];
 	models.setProvider(provider.provider);
 	registry.install(defineExtension({ name: "jobs", tools, hooks }));
 	for (const extension of extensions) registry.install(extension);
@@ -45,14 +48,21 @@ async function start(
 	]);
 	const harness = await Harness.open(
 		new MemoryStorage(),
-		{ models, registry, now, onWake: () => {}, settings: { contextRetentionMs: 0, compaction: { enabled: false } } },
+		{
+			models,
+			registry,
+			now,
+			onWake: () => {},
+			onReport: (report) => reports.push(report),
+			settings: { contextRetentionMs: 0, compaction: { enabled: false } },
+		},
 		context,
 	);
 	const conversation = await harness.root(context, {
 		agent: { model: { provider: provider.provider.id, modelId: provider.getModel().id } },
 	});
 	const input = await conversation.submit({ type: "input", content: "Run the job" }, context);
-	return { harness, conversation, input, registry };
+	return { harness, conversation, input, registry, reports };
 }
 async function sleeping(f: Awaited<ReturnType<typeof start>>, phase: "call" | "parked" = "parked") {
 	const find = async () =>
@@ -170,6 +180,89 @@ test("aborting a parked tool calls its cleanup with the checkpoint and blocks ne
 			status: "terminal",
 			outcome: { status: "aborted" },
 		});
+	} finally {
+		await f.harness.close(context);
+	}
+});
+
+test.each(["wake", "abort"] as const)(
+	"a removed parked tool settles on %s without another invocation",
+	async (action) => {
+		let runs = 0;
+		const f = await start([
+			defineTool({
+				name: "removed-job",
+				description: "Wait for a removable service",
+				parameters: Type.Object({}),
+				async execute() {
+					runs++;
+					return { sleep: { signals: [Result.key("done")], checkpoint: "external-job" } };
+				},
+			}),
+		]);
+		try {
+			const task = await sleeping(f);
+			const installed = f.registry.snapshot().extension("jobs");
+			if (!installed) throw new Error("The extension was not installed");
+			f.registry.uninstall(installed);
+			if (action === "wake") await f.harness.signal(task.id, Result, "done", "ready", context);
+			else await f.conversation.abort(context);
+			expect(await f.input.wait(context)).toMatchObject(
+				action === "wake" ? { status: "done" } : { status: "unanswered", reason: "aborted" },
+			);
+			expect(runs).toBe(1);
+			expect((await f.harness.getTask(task.id, context))?.state).toMatchObject({
+				status: "terminal",
+				outcome: { status: action === "wake" ? "failed" : "aborted" },
+			});
+			const results = (await f.conversation.entries({}, 100, undefined, context)).items.filter(ToolResultEntry.is);
+			expect(results).toHaveLength(1);
+			expect(results[0]?.model?.[0]).toMatchObject({ role: "toolResult", isError: true });
+			expect(results[0]?.data?.diagnostics).toEqual([
+				expect.objectContaining({ code: action === "wake" ? "tool_unavailable" : "aborted" }),
+			]);
+			expect(f.reports).toHaveLength(1);
+			expect(f.reports[0]?.error).toBeInstanceOf(Error);
+			expect(String(f.reports[0]?.error)).toContain(action === "wake" ? "cannot run again" : "was not cancelled");
+		} finally {
+			await f.harness.close(context);
+		}
+	},
+);
+
+test("a parked tool's failing cancellation still settles its task and releases the live slot", async () => {
+	const cancelled: unknown[] = [];
+	const f = await start([
+		defineTool({
+			name: "cleanup-failure",
+			description: "Wait for work whose cleanup fails",
+			parameters: Type.Object({}),
+			async execute() {
+				return { sleep: { signals: [Result.key("done")], checkpoint: { job: "retained" } } };
+			},
+			async cancel(_args, api) {
+				cancelled.push(api.checkpoint);
+				throw new Error("The external cleanup service is unavailable");
+			},
+		}),
+	]);
+	try {
+		const task = await sleeping(f);
+		await f.conversation.abort(context);
+		expect(await f.input.wait(context)).toMatchObject({ status: "unanswered", reason: "aborted" });
+		expect(cancelled).toEqual([{ job: "retained" }]);
+		expect(f.reports).toHaveLength(1);
+		expect(f.reports[0]).toMatchObject({
+			kind: "extension_error",
+			extension: "jobs",
+			error: { message: "The external cleanup service is unavailable" },
+		});
+		expect((await f.harness.getTask(task.id, context))?.state).toMatchObject({
+			status: "terminal",
+			outcome: { status: "aborted" },
+		});
+		await f.harness.waitForIdle(context);
+		expect((await f.harness.snapshot(LiveDoc, f.conversation.id, context))?.tools).toBeUndefined();
 	} finally {
 		await f.harness.close(context);
 	}
