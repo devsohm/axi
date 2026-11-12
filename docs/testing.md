@@ -21,6 +21,8 @@ npm run verify
 
 This command builds the packages and native components, checks TypeScript, runs the JavaScript coverage suite, runs Rust and native tests, checks Durable Object execution, and verifies installed package archives. Archive verification installs dependencies into a temporary consumer and removes that consumer afterward. It does not contact model-provider APIs.
 
+The workspace build removes each package's generated `dist` directory first. This prevents deleted source files from remaining in package archives. Source files, native binaries and dependencies are preserved.
+
 A failed stage stops the command. A native test can skip when its platform or optional display tools are unavailable. Read the test summary before treating a run as complete.
 
 ## Run focused checks
@@ -156,7 +158,7 @@ Run `npm run test:coverage`, then open `coverage/test-map.md`. The report counts
 
 The area definitions are in [test-coverage.json](test-coverage.json). Keep this map current when adding a new capability. The report uses actual test results and rejects paths that no longer exist. A passed area means its listed scenarios passed; it does not claim every possible case is covered.
 
-The map must list every workspace exactly once. Each area needs test files owned by that package, and each package needs measured source execution. `npm run test:tooling` checks valid reports and rejects missing packages, empty areas, foreign test paths, and packages with no measured source execution. It also checks that the JavaScript runner selects every owned package and integration test.
+The map must list every workspace exactly once. Each area needs test files owned by that package, and each package needs measured source execution. `npm run test:tooling` checks valid reports and rejects missing packages, empty areas, foreign test paths, and packages with no measured source execution. It also checks that the JavaScript runner selects every owned package and integration test. Build checks verify stale output removal, source preservation and failure reporting in temporary workspaces.
 
 Use the report to find untested branches and missing behaviors. Add a scenario with explicit expected results. Do not hide untested files or create tests only to increase the percentage.
 

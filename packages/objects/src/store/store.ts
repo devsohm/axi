@@ -106,6 +106,7 @@ export class ObjectsStore implements Store {
 	#failure: { readonly error: unknown } | undefined;
 	#diverged = false;
 	#queue = Promise.resolve();
+	// Only the last queued turn accepts more commits. An export or series ends that group.
 	#pending: WaitingCommit[] | undefined;
 	#activeReads = 0;
 	#drained: (() => void) | undefined;
@@ -236,6 +237,7 @@ export class ObjectsStore implements Store {
 				}
 			});
 		} catch (error) {
+			// Rollback of the callback's own error is a refusal. Other errors leave the outcome unknown.
 			if (rejection && rejection.value === error) {
 				refused?.(error);
 				throw error;
