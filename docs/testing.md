@@ -150,6 +150,8 @@ pixel positions, orientation, dimensions and byte limits. Concurrent requests
 use separate limits and preserve their caller's input bytes.
 Controlled worker failures check startup fallback, rejection of pending images
 after worker loss, and isolation of individual image errors.
+File-tool scenarios check image size refusal, BMP conversion, resize diagnostics
+and continued use of the conversation after a decoder refusal.
 
 Fullscreen tests cover captured mouse drags, nested wheel scrolling, search
 controls, selection auto-scroll and terminal mode restoration. Scrollback tests

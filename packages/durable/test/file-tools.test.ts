@@ -1,23 +1,24 @@
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, truncate, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createModels, fauxAssistantMessage, fauxProvider, fauxToolCall } from "@axi/ai";
 import { BACKGROUND_CONTEXT as context } from "@axi/objects/context";
 import { expect, test } from "vitest";
+import { PhotonImage } from "@silvia-odwyer/photon/photon_rs.js";
 import { NodeExecutionEnv } from "../src/env/node.ts";
+import { createNodePhotonImages } from "../src/images/node.ts";
 import { createRegistry, Harness, MemoryStorage, ToolResultEntry } from "../src/index.ts";
 import { createReadTool } from "../src/tools/read.ts";
 import { createEditTool } from "../src/tools/edit.ts";
 
-async function fixture() {
+async function fixture(read = createReadTool()) {
 	const cwd = await mkdtemp(join(tmpdir(), "axi-file-tools-"));
 	const env = new NodeExecutionEnv({ cwd }),
 		models = createModels(),
 		provider = fauxProvider(),
 		registry = createRegistry();
 	models.setProvider(provider.provider);
-	const read = createReadTool(),
-		results = new Map<string, Awaited<ReturnType<typeof read.execute>>>();
+	const results = new Map<string, Awaited<ReturnType<typeof read.execute>>>();
 	const recordedRead: typeof read = {
 		...read,
 		execute: async (args, api, ctx) => {
@@ -89,6 +90,110 @@ test("read returns an image block to callers as well as the model", async () => 
 	expect(result.message.isError).toBe(false);
 	expect(result.structuredOutput).toMatchObject({ type: "image", mimeType: "image/png", data: expect.any(String) });
 	expect(result.message.content).toContainEqual(result.structuredOutput);
+});
+
+test("read rejects images with unavailable dimensions or excessive size", async () => {
+	await using files = await fixture();
+	await writeFile(join(files.cwd, "short.gif"), "GIF89a");
+	const png = Buffer.from("89504e470d0a1a0a0000000d4948445200000fa0000000020806000000", "hex");
+	await writeFile(join(files.cwd, "wide.png"), png);
+	await writeFile(join(files.cwd, "large.gif"), new Uint8Array([71, 73, 70, 56, 57, 97, 1, 0, 1, 0]));
+	await truncate(join(files.cwd, "large.gif"), 4 * 1024 * 1024);
+	for (const [path, message] of [
+		["short.gif", "whose size cannot be read"],
+		["wide.png", "larger than 2000x2000"],
+		["large.gif", "too large to send"],
+	]) {
+		const result = await files.invoke("read", { path });
+		expect(result.message.isError).toBe(true);
+		expect(result.message.content.some((block) => block.type === "image")).toBe(false);
+		expect(result.diagnostics).toEqual([
+			{ severity: "error", code: "unsupported_image", message: expect.stringContaining(message) },
+		]);
+	}
+});
+
+function bitmap(): Uint8Array {
+	const bytes = new Uint8Array(58);
+	const view = new DataView(bytes.buffer);
+	bytes.set([66, 77]);
+	for (const [offset, value] of [[2, 58], [10, 54], [14, 40], [18, 1], [22, 1], [34, 4]])
+		view.setUint32(offset, value, true);
+	view.setUint16(26, 1, true);
+	view.setUint16(28, 24, true);
+	bytes.set([120, 80, 40], 54);
+	return bytes;
+}
+
+test("read converts bitmap files with the configured image worker", async () => {
+	await createNodePhotonImages({ worker: false });
+	const bytes = bitmap();
+	await using plain = await fixture();
+	await writeFile(join(plain.cwd, "pixel.bmp"), bytes);
+	const refused = await plain.invoke("read", { path: "pixel.bmp" });
+	expect(refused.message.isError).toBe(true);
+	expect(refused.diagnostics).toEqual([
+		{ severity: "error", code: "unsupported_image", message: expect.stringContaining("needs converting") },
+	]);
+	const images = await createNodePhotonImages({ idleMs: 0 });
+	await using prepared = await fixture(createReadTool({ images }));
+	await writeFile(join(prepared.cwd, "pixel.bmp"), bytes);
+	const result = await prepared.invoke("read", { path: "pixel.bmp" });
+	expect(result.message.isError).toBe(false);
+	expect(result.diagnostics).toEqual([
+		{ severity: "info", code: "image", message: "Read image file [image/png]. Converted from image/bmp to image/png." },
+	]);
+	const image = result.message.content.find((block) => block.type === "image");
+	if (image?.type !== "image") throw new Error("The converted image is missing");
+	const decoded = PhotonImage.new_from_byteslice(Buffer.from(image.data, "base64"));
+	try {
+		expect([decoded.get_width(), decoded.get_height()]).toEqual([1, 1]);
+		expect([...decoded.get_raw_pixels()]).toEqual([40, 80, 120, 255]);
+	} finally {
+		decoded.free();
+	}
+});
+
+test("read resizes a valid oversized image and reports its coordinate scale", async () => {
+	await createNodePhotonImages({ worker: false });
+	const images = await createNodePhotonImages({ idleMs: 0 });
+	await using files = await fixture(createReadTool({ images }));
+	const source = new PhotonImage(new Uint8Array(4000 * 2 * 4).fill(255), 4000, 2);
+	try {
+		await writeFile(join(files.cwd, "wide.png"), source.get_bytes());
+	} finally {
+		source.free();
+	}
+	const result = await files.invoke("read", { path: "wide.png" });
+	expect(result.message.isError).toBe(false);
+	expect(result.diagnostics).toEqual([
+		{
+			severity: "info",
+			code: "image",
+			message: "Read image file [image/png]. Resized from 4000x2 to 2000x1. Multiply coordinates by 2.00 to map them to the original.",
+		},
+	]);
+	const image = result.message.content.find((block) => block.type === "image");
+	if (image?.type !== "image") throw new Error("The resized image is missing");
+	const decoded = PhotonImage.new_from_byteslice(Buffer.from(image.data, "base64"));
+	try {
+		expect([decoded.get_width(), decoded.get_height()]).toEqual([2000, 1]);
+	} finally {
+		decoded.free();
+	}
+});
+
+test("read reports an image decoder refusal without ending the conversation", async () => {
+	const images = await createNodePhotonImages({ idleMs: 0 });
+	await using files = await fixture(createReadTool({ images }));
+	await writeFile(join(files.cwd, "broken.gif"), "GIF89a");
+	const result = await files.invoke("read", { path: "broken.gif" });
+	expect(result.message.isError).toBe(true);
+	expect(result.diagnostics).toEqual([
+		{ severity: "error", code: "unsupported_image", message: expect.stringContaining("cannot be prepared") },
+	]);
+	await writeFile(join(files.cwd, "note"), "Still available");
+	expect((await files.invoke("read", { path: "note" })).structuredOutput).toBe("Still available");
 });
 
 test("read reports the remaining lines consistently for fractional selections", async () => {
