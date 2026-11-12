@@ -30,7 +30,7 @@ function load(platform: string, suffix = ""): Helper | undefined {
 		try {
 			const helper: unknown = require(candidate);
 			if (
-				typeof helper === "object" &&
+				(typeof helper === "object" || typeof helper === "function") &&
 				helper !== null &&
 				"getText" in helper &&
 				typeof helper.getText === "function" &&

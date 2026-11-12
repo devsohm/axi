@@ -67,6 +67,28 @@ test.each(["darwin", "win32"])("%s accepts a valid helper after an unusable cand
 	expect(native.load.mock.calls[0][0]).toContain(`${os}-arm64`);
 });
 
+test.each(["darwin", "win32"])("%s accepts clipboard methods on a callable module export", async (os) => {
+	machine(os);
+	const helper = Object.assign(() => {}, { getText: async () => "clipboard", getImage: async () => null });
+	native.load.mockReturnValue(helper);
+	const { getNativeClipboard } = await import("../src/native-platform.ts");
+	await expect(getNativeClipboard()?.getText()).resolves.toBe("clipboard");
+	await expect(getNativeClipboard()?.getImage()).resolves.toBeNull();
+	expect(native.load).toHaveBeenCalledOnce();
+});
+
+test("incomplete native exports leave clipboard access unavailable", async () => {
+	machine("darwin");
+	for (const value of [null, undefined, 0, "invalid", {}, () => {}, { getText() {} }]) {
+		vi.resetModules();
+		native.load.mockReturnValue(value);
+		const attempts = native.load.mock.calls.length;
+		const { getNativeClipboard } = await import("../src/native-platform.ts");
+		expect(getNativeClipboard()).toBeUndefined();
+		expect(native.load.mock.calls.length).toBeGreaterThan(attempts);
+	}
+});
+
 test("unavailable native modules are cached without failing clipboard access", async () => {
 	machine("darwin");
 	native.load.mockImplementation(() => {
