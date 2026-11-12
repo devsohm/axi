@@ -29,14 +29,18 @@ export class LoadedFacets {
 		entries: readonly SetEntry[],
 		context: Context,
 	): Promise<{ readonly loaded: LoadedFacets; readonly report: LoadReport }> {
+		// The host validates duplicate names before the cache merges them.
 		const ready = new Map<string, Ready>(),
-			failed: PluginFailure[] = [];
+			failed: PluginFailure[] = [],
+			facets: PluginFacet<P>[] = [];
 		for (const entry of entries) {
 			const prepared = entry.prepare();
 			if (prepared.kind === "failed") failed.push({ plugin: entry.name, error: prepared.error });
-			else ready.set(entry.name, prepared);
+			else {
+				ready.set(entry.name, prepared);
+				facets.push({ name: entry.name, facet: prepared.facet as unknown as Facet<P> });
+			}
 		}
-		const facets = Array.from(ready, ([name, value]) => ({ name, facet: value.facet as unknown as Facet<P> }));
 		const report = await host.load([...core, ...facets], context);
 		for (const failure of report.failed) ready.delete(failure.plugin);
 		return {

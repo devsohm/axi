@@ -13,6 +13,7 @@ import {
 	keepConnected,
 	LocaleChoice,
 	localeChoiceFacet,
+	LoadedFacets,
 	memoryLinkPair,
 	openStore,
 	sqliteBackend,
@@ -104,6 +105,20 @@ it("keeps page state scoped to a host and unsubscribes its readers", async () =>
 		state.set({ line: 3 });
 		expect(changed).toHaveBeenCalledTimes(1);
 		expect(pageState(host, "selection", null).read()).toEqual({ line: 3 });
+	} finally {
+		await host.close(context);
+	}
+});
+
+it("reports duplicate plugin names before the loaded-set cache can merge them", async () => {
+	const host = createHost({ onError() {} });
+	const entries = ["first", "second"].map((digest) => ({
+		name: "repeated", digest,
+		prepare: () => ({ kind: "facet" as const, digest, facet: defineFacet(() => {}) }),
+	}));
+	try {
+		const { report } = await LoadedFacets.load(host, [], entries, context);
+		expect(report.failed).toEqual([{ plugin: "repeated", error: expect.objectContaining({ message: 'plugin "repeated" is loaded twice' }) }]);
 	} finally {
 		await host.close(context);
 	}
