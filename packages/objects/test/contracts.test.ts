@@ -11,6 +11,39 @@ import { nodeCompression } from "../src/node/compression.ts";
 import { DeflatedPart, inflateAsync, openPart, originPart, oversized } from "../src/link/part.ts";
 import { compareText, prefixUpperBound, storedText } from "../src/store/text.ts";
 
+it.each(["local", "remote"] as const)("captures a %s contract's version before validating and retaining it", (kind) => {
+	let reads = 0;
+	const Place = hostKind("captured.place");
+	const contract = kind === "local"
+		? local("captured.version", { get version() { return ++reads }, params: {}, members: {} })
+		: remote("captured.version", { get version() { return ++reads }, params: {}, hostAddress: () => Place(), variants: { user: {} } });
+	expect(contract.version).toBe(2);
+	expect(reads).toBe(2);
+});
+
+it("captures a remote contract's host-address callback before validating it", () => {
+	let reads = 0;
+	const Place = hostKind("captured.address");
+	remote("captured.route", {
+		version: 1,
+		params: {},
+		get hostAddress() {
+			if (++reads > 2) throw new Error("Host address was read again");
+			return () => Place();
+		},
+		variants: { user: {} },
+	});
+	expect(reads).toBe(2);
+});
+
+it("checks reserved event names before reserved method names", () => {
+	const Place = hostKind("reserved.place");
+	expect(() => remote("reserved.members", {
+		version: 1, params: {}, hostAddress: () => Place(),
+		variants: { user: { methods: { then: method(int()) }, events: { retry: int() } } },
+	})).toThrow('reserved.members.user.events.retry: "retry" is reserved: a reference has it');
+});
+
 it("treats formats as annotations through references while retaining data constraints and schema metadata", () => {
 	const schema = Object.assign(obj({
 		addresses: { type: "array", items: { $ref: "#/$defs/address" } },

@@ -96,7 +96,8 @@ export function remote<
 	checkKeys(declaration, ["version", "params", "hostAddress", "variants"], name);
 	const variants = entriesOf(declaration.variants, `${name}.variants`);
 	if (!variants.length) throw new Error(`${name}.variants: at least one variant is required`);
-	if (typeof declaration.hostAddress !== "function")
+	const address = declaration.hostAddress;
+	if (typeof address !== "function")
 		throw new Error(`${name}.hostAddress: expected a function of the params`);
 	const read = new Map(
 		variants.map(([variant, value]) => {
@@ -131,7 +132,7 @@ export function remote<
 			];
 		}),
 	);
-	return declare("remote", name, declaration, read, declaration.hostAddress as HostAddress);
+	return declare("remote", name, declaration, read, address as HostAddress);
 }
 export function local<
 	const N extends string,
@@ -160,11 +161,12 @@ export function local<
 	return declare("local", name, declaration, new Map([[LOCAL, variant]]));
 }
 function declare<C extends Contract>(kind: Kind, name: string, declaration: { readonly version: number; readonly params: unknown }, variants: ReadonlyMap<string, VariantData>, hostAddress?: HostAddress): C {
-	if (!Number.isSafeInteger(declaration.version) || declaration.version < 1) throw new Error(`${name}.version: expected a positive integer`);
+	const selectedVersion = declaration.version;
+	if (!Number.isSafeInteger(selectedVersion) || selectedVersion < 1) throw new Error(`${name}.version: expected a positive integer`);
 	const kinds = new Map<string, MemberKind>();
 	checkMembers(variants, kinds, (variant, member, type) => memberPath(name, kind, variant, member, type));
 	const params = readParams(entriesOf(declaration.params, `${name}.params`), `${name}.params`);
-	return createContract({ kind, name, params, hostAddress, kinds, versions: [materialize(kind, params, declaration.version, variants, [])] });
+	return createContract({ kind, name, params, hostAddress, kinds, versions: [materialize(kind, params, selectedVersion, variants, [])] });
 }
 export function keyedSnapshot(schema: unknown, key: KindShape | undefined, path: string): KeyedSnapshot {
 	const snapshot = snapshotSchema(schema, path);
@@ -187,7 +189,7 @@ export function checkMembers(
 ): void {
 	const signatures = new Map<string, string>();
 	for (const [variant, data] of variants) {
-		for (const type of ["state", "keyed", "method", "event"] as const) {
+		for (const type of ["state", "keyed", "event", "method"] as const) {
 			for (const member of (type === "method" ? data.methods : type === "event" ? data.events : data[type]).keys()) {
 				const label = path(variant, member, type);
 				if (["then", "release", "variant", "state", "retry"].includes(member))
