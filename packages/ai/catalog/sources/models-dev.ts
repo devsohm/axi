@@ -152,13 +152,14 @@ function cacheWrite(cache: Static<typeof cachePrices> | undefined): number | und
 function normalizeCost(cost: ModelsDevV2Model["cost"]): SourceModel["cost"] {
 	const input = cost?.text?.input,
 		output = cost?.text?.output;
-	if (!input || !output || [input, output].some((rate) => rate.unit && rate.unit !== "token")) return {};
+	if (!input || !output || [input, output].some((rate) => rate.unit !== undefined && rate.unit !== "token")) return {};
 	const tiers = new Map<number, NonNullable<NonNullable<SourceModel["cost"]>["tiers"]>[number]>();
 	for (const [kind, prices] of [
 		["input", input],
 		["output", output],
 	] as const) {
 		for (const row of prices.overrides ?? []) {
+			if (kind === "output" && row.price === undefined) continue;
 			if (Object.keys(row.when).length !== 1) continue;
 			const condition = row.when.context;
 			if (!condition || typeof condition !== "object") continue;

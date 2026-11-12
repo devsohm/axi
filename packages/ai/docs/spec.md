@@ -157,6 +157,8 @@ OAuth resolution refreshes tokens with at most five minutes remaining, or a larg
 
 A custom provider's `refreshModels()` receives the stored snapshot, resolved credential, network permission, cancellation signal, and `publish()` callback. Publish persistent and in-memory changes together. Superseded refreshes cannot publish into the current provider generation.
 
+The build-time catalog generator accepts token prices with an omitted unit or the unit `token`. Other units are ignored. An output-price override creates a context tier only when it supplies a price; input cache overrides can create a tier without replacing the token price.
+
 ## Provider composition
 
 `createProvider()` accepts a provider identity, authentication methods, model definitions, and operation adapters. Supply a shared chat adapter or an API-keyed adapter map. Image and classifier adapters use separate maps. At least one operation adapter is required.
