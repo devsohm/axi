@@ -1,4 +1,4 @@
-import type { SpanAttributes } from "@axi/telemetry";
+import type { SpanAttributes, StoredSpan } from "@axi/telemetry";
 import type { Principal } from "../data/index.ts";
 import { defineFacet, type Facet } from "../host/index.ts";
 import { PageTelemetry, WorkerTelemetry } from "./batch.ts";
@@ -29,16 +29,19 @@ export function telemetryIngestFacet<P extends Principal>(options: TelemetryInge
 					minutes.set(ctx.incarnation, budget);
 				}
 				const prefix = `browser:${ctx.incarnation}:`;
-				const own = spans.filter((span) => {
-					if (budget.used >= PAGE_SPANS_PER_MINUTE || span.endedMs < span.startedMs) return false;
-					if (![span.id, span.traceId, span.parentId ?? prefix].every((id) => id.startsWith(prefix))) return false;
+				const own: StoredSpan[] = [];
+				for (const span of spans) {
+					if (budget.used >= PAGE_SPANS_PER_MINUTE) break;
+					if (span.endedMs < span.startedMs) continue;
+					if (![span.id, span.traceId, span.parentId ?? prefix].every((id) => id.startsWith(prefix))) continue;
+					// Stamp this span before charging the next; the callback can fail.
 					budget.used++;
-					return true;
-				}).map((span) => ({ ...span, attributes: {
-					"objects.host": "browser",
-					...Object.fromEntries(Object.entries(span.attributes).filter(([name]) => !name.startsWith("objects."))),
-					...options.principalAttributes(principal),
-				} }));
+					own.push({ ...span, attributes: {
+						"objects.host": "browser",
+						...Object.fromEntries(Object.entries(span.attributes).filter(([name]) => !name.startsWith("objects."))),
+						...options.principalAttributes(principal),
+					} });
+				}
 				const written = options.target.ingest({ spans: own, metrics: [] });
 				return { written, dropped: spans.length - written };
 			} } };

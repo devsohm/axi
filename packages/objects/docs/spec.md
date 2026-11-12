@@ -170,6 +170,8 @@ A host records activation, resource, method, routine, job, route, remote-call an
 
 Link byte counters use the host's telemetry recorder even when the link starts with a different request context.
 
+Browser ingestion charges and stamps one accepted span at a time. If the principal callback fails, later spans in that batch do not consume its rate limit.
+
 ## Limits
 
 Facets and plugins run with host-process authority. Reload does not isolate untrusted code. In-memory documents disappear with the process. Persistence requires an attached Store. Links provide reconnection of references, not replay of arbitrary side effects. Synchronous publication means a slow listener delays other listeners in that batch.

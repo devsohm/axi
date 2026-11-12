@@ -1,7 +1,7 @@
 import { expect, it } from "vitest";
 import { BACKGROUND_CONTEXT as context } from "../src/context/index.ts";
 import { createHost, hostKind, memoryLinkPair } from "../src/index.ts";
-import { sendPageTelemetry, TelemetryRecorder, telemetryIngestFacet, type TelemetryBatch } from "../src/telemetry-ingest/index.ts";
+import { PAGE_BATCH_SPANS, PAGE_SPANS_PER_MINUTE, PageTelemetry, sendPageTelemetry, TelemetryRecorder, telemetryIngestFacet, type TelemetryBatch } from "../src/telemetry-ingest/index.ts";
 
 it("ignores measurements and their attributes after recording stops", () => {
 	let reads = 0;
@@ -60,4 +60,40 @@ it("retains disconnected page spans, stamps the authenticated sender and never s
 		expect(principalReads).toBe(2);
 		expect(recorder.queuedSpans).toBe(0);
 	} finally { sender.stop(); await client.close(context); await server.close(context); }
+});
+
+it("charges only visited spans when the principal callback fails partway through a batch", async () => {
+	let fail = true;
+	const server = createHost({ address: hostKind("server")(), principal: { kind: "server" }, onError: () => {} });
+	const client = createHost({ onError: () => {} });
+	await server.load([{ name: "telemetry", facet: telemetryIngestFacet({
+		target: { ingest: (batch) => batch.spans.length },
+		workerHost: () => undefined,
+		principalAttributes: () => {
+			if (fail) { fail = false; throw new Error("identity unavailable"); }
+			return {};
+		},
+	}) }], context);
+	await client.load([], context);
+	const [a, b] = memoryLinkPair();
+	server.accept(a, { principal: { kind: "visitor" } }, context);
+	client.connect(b, { principal: { kind: "server" } }, context);
+	try {
+		const page = await client.get(PageTelemetry, {}, context);
+		const spans = Array.from({ length: PAGE_BATCH_SPANS }, (_, index) => ({
+			id: `browser:${client.incarnation}:${index}`,
+			traceId: `browser:${client.incarnation}:trace`,
+			name: "click", startedMs: 1, endedMs: 2,
+			attributes: {}, events: [], links: [], status: { status: "ok" as const },
+		}));
+		await expect(page.ingest({ spans }, context)).rejects.toThrow();
+		let written = 0;
+		for (let count = 0; count < PAGE_SPANS_PER_MINUTE; count += PAGE_BATCH_SPANS) {
+			written += (await page.ingest({ spans }, context)).written;
+		}
+		expect(written).toBe(PAGE_SPANS_PER_MINUTE - 1);
+	} finally {
+		await client.close(context);
+		await server.close(context);
+	}
 });
