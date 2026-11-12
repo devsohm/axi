@@ -1,4 +1,10 @@
 import type { Component, Terminal } from "../src/index.ts";
+import type { TUI_KEYBINDINGS } from "../src/keybindings.ts";
+
+export function checkBuiltInBindingTypes(bindings: typeof TUI_KEYBINDINGS): void {
+	// @ts-expect-error Built-in defaults are read-only; applications supply overrides.
+	bindings["tui.input.submit"].defaultKeys = "enter";
+}
 
 export function configureViewportInput(component: Component): void {
 	component.capturesViewportInput = true;
