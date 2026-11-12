@@ -134,6 +134,9 @@ retaining queued writes and inputs outside the selected scope. Compaction checks
 cover retry limits, unavailable models, custom summaries and request cancellation.
 Document tests check deferred deadlines, migration, unloading, observer
 cancellation, retirement and historical entry boundaries.
+Live-state migration tests open version 1 and 2 documents on SQLite and JSONL.
+They check read-only migration, the saved version after a transaction, and the
+value after closing and reopening storage.
 
 Fullscreen tests cover captured mouse drags, nested wheel scrolling, search
 controls, selection auto-scroll and terminal mode restoration. Scrollback tests

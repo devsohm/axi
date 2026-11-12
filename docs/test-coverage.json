@@ -411,6 +411,7 @@
 						"packages/durable/test/testing.test.ts",
 						"packages/durable/test/process-recovery.test.ts",
 						"packages/durable/test/document-checkpoints.test.ts",
+						"packages/durable/test/live-state-migration.test.ts",
 						"packages/durable/test/jsonl.test.ts",
 						"packages/durable/test/sqlite-session.test.ts",
 						"packages/durable/test/interrupted-generation.test.ts",
