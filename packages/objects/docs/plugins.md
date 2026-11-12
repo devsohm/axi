@@ -14,7 +14,7 @@ The manifest's `dependencies` are bundled. Its `objects.external` list names pac
 
 `buildFacet(plugin, kind, options, context)` returns a script or a failed result. It writes no output files. A successful build contains the source, digest, hashed inputs, copied files, and optional browser styles and assets. The digest is stable across checkout paths.
 
-A facet can import its own files, declared dependencies, host packages, and permitted shared files of other discovered plugins. Import another plugin's files by its package name, such as `@app/notes/contracts`. A relative path into another plugin is refused. A copied file can import only host packages and files within its own plugin. A path outside these directories is refused. Node builtins and external packages are refused in browser builds. CSS and assets are available only in browser builds.
+A facet can import its own files, declared dependencies, host packages, and permitted shared files of other discovered plugins. A relative import such as `../notes/contract.ts` can copy a shared file from another directory plugin in the same root. A declared package dependency can also expose shared files through its package exports. A copied file can import only host packages and files within its own plugin. A path outside these directories is refused. Node builtins and external packages are refused in browser builds. CSS and assets are available only in browser builds.
 
 Plugin scripts have no `import.meta`, `__dirname`, `__filename`, literal dynamic imports, or top-level `await`. `pluginFile(path)` resolves a file inside the evaluated plugin's directory and refuses a path outside that directory.
 
@@ -28,7 +28,7 @@ Plugin scripts have no `import.meta`, `__dirname`, `__filename`, literal dynamic
 
 `load(host, { kind, core, modules }, context)` loads core facets and the current scripts for that host kind. `modules` supplies this process's actual module instances for the external host specifiers. Build and evaluation failures are omitted and returned beside the host's failures.
 
-`build(names, context)` builds every facet of the named plugins and newly discovered plugins. It returns plain data containing facets, plugin metadata, and removed names. A structured clone can be sent to another host for reload.
+`build(names, context)` builds every facet of the named plugins and newly discovered plugins. It discovers again when the watcher marks a discovery change, a named plugin is unknown, or a named plugin's recorded facet or manifest file is missing. A build can therefore add or remove a named plugin before its file events arrive. It returns plain data containing facets, plugin metadata, and removed names. A structured clone can be sent to another host for reload.
 
 `scripts(kind, context)` returns that kind's complete current script set, building it on first use. `current(kind)` reads an initialized set synchronously. A build alone does not change the set. A reload or rollout ships the build into the kinds it reaches.
 

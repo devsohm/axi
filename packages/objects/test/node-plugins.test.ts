@@ -2,6 +2,7 @@ import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { expect, it, vi } from "vitest";
 import { BACKGROUND_CONTEXT as context } from "../src/context/index.ts";
@@ -61,6 +62,40 @@ async function fixture(root: string, files: Readonly<Record<string, string>>): P
 	for (const [name, contents] of Object.entries(files)) await writeFile(join(dir, name), contents);
 	return dir;
 }
+
+it.each(["directory", "manifest", "facet"] as const)(
+	"reloads a removed %s and a new plugin before file events arrive",
+	async (removed) => {
+		const root = await mkdtemp(join(tmpdir(), "axi-plugin-discovery-"));
+		const dir = await fixture(root, { "worker.ts": source(1) });
+		const plugins = createPlugins(
+			{ roots: [root], kinds: { worker: { platform: "node", hostPackages: Object.keys(packages) } }, onError() {} },
+			context,
+		);
+		const host = api.createHost({ onError() {} });
+		try {
+			await plugins.load(host, { kind: "worker", core: [], modules: packages }, context);
+			expect((await host.get(Metric, {}, context)).reading.value).toBe(1);
+			const target = removed === "directory" ? dir : join(dir, removed === "manifest" ? "package.json" : "worker.ts");
+			rmSync(target, { recursive: true });
+			const built = await plugins.build(["meter"], context);
+			expect(built.facets).toEqual([]);
+			expect((await plugins.reload(host, built, context)).plugins.removed).toEqual(["meter"]);
+			const added = join(root, "fresh");
+			mkdirSync(added);
+			writeFileSync(join(added, "package.json"), JSON.stringify({ name: "fresh", type: "module" }));
+			writeFileSync(join(added, "worker.ts"), source(9));
+			const next = await plugins.build(["fresh"], context);
+			expect(Object.keys(next.plugins)).toContain("fresh");
+			expect((await plugins.reload(host, next, context)).plugins.added).toEqual(["fresh"]);
+			expect((await host.get(Metric, {}, context)).reading.value).toBe(9);
+		} finally {
+			await host.close(context);
+			plugins.close();
+			await rm(root, { recursive: true, force: true });
+		}
+	},
+);
 
 it("updates a loaded plugin, keeps its last working code after a broken edit, and applies a later repair", async () => {
 	const root = await mkdtemp(join(tmpdir(), "axi-plugins-"));

@@ -1,3 +1,5 @@
+import { access } from "node:fs/promises";
+import { join } from "node:path";
 import type { Context } from "../../context/index.ts";
 import type { BaseInputs } from "./base-inputs.ts";
 import type { Principal } from "../../data/index.ts";
@@ -121,7 +123,8 @@ class PluginComponent implements Plugins {
 	}
 	async build(names: readonly string[], context: Context): Promise<Built> {
 		const previous = new Map(this.#known.plugins.map((plugin) => [plugin.name, plugin]));
-		if (!this.#discovered || this.#watcher.needsDiscovery) await this.#discover(context);
+		if (!this.#discovered || this.#watcher.needsDiscovery || (await this.#missingEntries(names, previous)))
+			await this.#discover(context);
 		const present = new Set(this.#known.plugins.map(({ name }) => name));
 		const removed = [...previous.keys()].filter((name) => !present.has(name));
 		const selected = this.#known.plugins.filter(
@@ -139,6 +142,23 @@ class PluginComponent implements Plugins {
 		};
 		this.#snapshots.set(built, seen);
 		return built;
+	}
+	async #missingEntries(names: readonly string[], known: ReadonlyMap<string, Plugin>): Promise<boolean> {
+		for (const name of names) {
+			const plugin = known.get(name);
+			if (plugin === undefined) return true;
+			const files = Object.values(plugin.facets);
+			if (plugin.layout === "directory") files.push(join(plugin.dir, "package.json"));
+			// Files can change before the watcher delivers their events.
+			for (const file of files) {
+				try {
+					await access(file);
+				} catch {
+					return true;
+				}
+			}
+		}
+		return false;
 	}
 	async #set(kind: string, context: Context): Promise<Map<string, PluginScript>> {
 		const existing = this.#sets.get(kind);
