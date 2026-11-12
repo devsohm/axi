@@ -153,6 +153,13 @@ the test resumes the pending safe tool and verifies submission deduplication.
 Completed tool effects and nested Code Mode calls are not repeated. The resumed
 script saves its final values. The fixture uses synthetic model responses.
 
+`packages/durable/test/process-restart-limit.test.ts` kills the waiting process
+twice on both storage backends. It verifies that the restart limit ends the
+interrupted tool, retains the completed sibling effect, and lets the model answer.
+Parked-tool checks remove an extension before wake or cancellation and verify the
+saved outcome and error report. A failing cancellation callback must still let
+the task settle.
+
 Offline provider tests inspect request encoding, device-login polling, token refresh, cancellation and malformed replies using synthetic credentials. Env tests run the generated Unix upload script in a temporary local directory. Windows command tests inspect the protocol and upload framing; native Windows execution still requires a Windows runner. Browser adapter tests use DOM event fixtures; real browser and terminal acceptance remain separate checks.
 
 Native discovery tests check packaging paths, unavailable modules, optional

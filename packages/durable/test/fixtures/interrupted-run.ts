@@ -8,7 +8,7 @@ import { createCodemodeExtension } from "../../src/codemode/index.ts";
 import { openNodeJsonlStorage } from "../../src/storage/jsonl/node.ts";
 import { openNodeSqliteStorage } from "../../src/storage/sqlite/node.ts";
 
-const [directory, backend, mode] = process.argv.slice(2);
+const [directory, backend, mode, restartLimit] = process.argv.slice(2);
 if (!directory) throw new Error("Session directory is required");
 const models = createModels(),
 	provider = fauxProvider(),
@@ -77,9 +77,17 @@ try {
 			: await openNodeSqliteStorage(join(directory, "session.sqlite"));
 	const harness = await Harness.open(
 		storage,
-		{ models, registry, settings: { compaction: { enabled: false } } },
+		{
+			models,
+			registry,
+			settings: {
+				compaction: { enabled: false },
+				...(restartLimit === undefined ? {} : { restartLimit: Number(restartLimit) }),
+			},
+		},
 		context,
 	);
+	harness.resume();
 	const conversation = await harness.root(context, {
 		agent: { model: { provider: provider.provider.id, modelId: provider.getModel().id } },
 	});
