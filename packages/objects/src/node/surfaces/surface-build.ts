@@ -4,7 +4,7 @@ import type { Host } from "../../host/index.ts";
 import type { ScriptSet } from "../../surfaces/index.ts";
 import type { HttpResponse } from "../http/index.ts";
 import type { BaseInputs, Plugins, RolloutStep } from "../plugins/index.ts";
-import { buildBase, type BaseBundle, type BasePlatform } from "./bundle.ts";
+import { buildBase, type BaseBundle, type BasePlatform, type BaseResolution } from "./bundle.ts";
 import { publishTo, type SurfaceName } from "./current.ts";
 import { PublishedScripts } from "./published.ts";
 import { served } from "./served.ts";
@@ -15,7 +15,7 @@ export type SurfaceBuilt =
 export type SurfaceBuildOptions = {
 	readonly kind: string;
 	readonly entry: string;
-	readonly conditions: readonly string[] | undefined;
+	readonly resolution: BaseResolution;
 	readonly plugins: Plugins;
 };
 type Parts<P extends Principal> = { readonly base: BaseBundle; readonly published: PublishedScripts<P> };
@@ -87,7 +87,7 @@ export class SurfaceBuild<P extends Principal> {
 	async #compile(): Promise<Result<P>> {
 		try {
 			const { options, platform, prefix, surface, server } = this.#source;
-			const base = await buildBase(options.entry, platform, prefix, options.conditions);
+			const base = await buildBase(options.entry, platform, prefix, options.resolution);
 			const published = new PublishedScripts(surface, options.kind, prefix, base.hash, options.plugins, server);
 			await published.start(BACKGROUND_CONTEXT);
 			this.#scripts = published;

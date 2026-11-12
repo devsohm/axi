@@ -6,7 +6,7 @@ import { scriptsFacet } from "./current.ts";
 import { SurfaceBuild, type SurfaceBuilt } from "./surface-build.ts";
 export const TUI_PREFIX = "/_objects/tui/";
 export type TuiStart = { readonly base: string; readonly script: string; readonly combined: string };
-export type TuiSurfaceOptions = { readonly kind?: string; readonly plugins: Plugins; readonly entry: string; readonly conditions?: readonly string[] };
+export type TuiSurfaceOptions = { readonly kind?: string; readonly plugins: Plugins; readonly entry: string; readonly conditions?: readonly string[]; readonly tsconfig?: string };
 export type TuiSurface<P extends Principal> = {
 	readonly facet: Facet<P>;
 	step(name: string): RolloutStep;
@@ -24,7 +24,7 @@ export function tuiSurface<P extends Principal>(
 		{
 			kind: options.kind ?? "tui",
 			entry: options.entry,
-			conditions: options.conditions,
+			resolution: { conditions: options.conditions, tsconfig: options.tsconfig },
 			plugins: options.plugins,
 		},
 		server,

@@ -4,6 +4,7 @@ import { build } from "esbuild";
 import { recordedSources, type BaseInputs } from "../plugins/base-inputs.ts";
 import { ASSET_EXTENSIONS, mimeOf, type ServedFile } from "./served.ts";
 export type BasePlatform = "browser" | "sandbox";
+export type BaseResolution = { readonly conditions?: readonly string[]; readonly tsconfig?: string };
 export type BaseBundle = {
 	readonly hash: string;
 	readonly script: string;
@@ -11,10 +12,10 @@ export type BaseBundle = {
 	readonly files: ReadonlyMap<string, ServedFile>;
 	readonly inputs: BaseInputs;
 };
-export async function buildBase(entry: string, platform: BasePlatform, prefix: string, conditions: readonly string[] | undefined): Promise<BaseBundle> {
+export async function buildBase(entry: string, platform: BasePlatform, prefix: string, resolution: BaseResolution): Promise<BaseBundle> {
 	const browser = platform === "browser";
 	const inputs = new Map<string, string>();
-	const selected = conditions ?? processConditions(process.execArgv, process.env.NODE_OPTIONS);
+	const selected = resolution.conditions ?? processConditions(process.execArgv, process.env.NODE_OPTIONS);
 	const { outputFiles } = await build({
 		entryPoints: [entry],
 		bundle: true,
@@ -28,7 +29,7 @@ export async function buildBase(entry: string, platform: BasePlatform, prefix: s
 		target: browser ? "es2022" : "node22",
 		minify: true,
 		legalComments: "none",
-		tsconfigRaw: "{}",
+		...(resolution.tsconfig === undefined ? { tsconfigRaw: "{}" } : { tsconfig: resolution.tsconfig }),
 		jsx: "automatic",
 		define: { "process.env.NODE_ENV": '"production"' },
 		conditions: browser ? [...selected, "module"] : [...selected],

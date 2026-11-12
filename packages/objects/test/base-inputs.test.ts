@@ -5,6 +5,9 @@ import { join } from "node:path";
 import { setImmediate as nextTurn } from "node:timers/promises";
 import { afterEach, expect, it, vi } from "vitest";
 import { BACKGROUND_CONTEXT as context } from "../src/context/index.ts";
+import { createHost, hostKind } from "../src/index.ts";
+import { createPlugins } from "../src/node/plugins/index.ts";
+import { tuiSurface, webSurface } from "../src/node/surfaces/index.ts";
 import { contentHash } from "../src/node/plugins/base-inputs.ts";
 import { PluginWatcher } from "../src/node/plugins/watcher.ts";
 import { buildBase, processConditions } from "../src/node/surfaces/bundle.ts";
@@ -55,7 +58,7 @@ it("records the exact source and CSS bytes selected by explicit bundle condition
 	});
 	await mkdir(join(root, "node_modules"));
 	await symlink(join(root, "workspace/sample"), join(root, "node_modules/sample"));
-	const base = await buildBase(join(root, "main.ts"), "browser", "/assets/", ["source"]);
+	const base = await buildBase(join(root, "main.ts"), "browser", "/assets/", { conditions: ["source"] });
 	expect([...base.inputs.keys()].sort()).toEqual(
 		["main.ts", "a.module.css", "workspace/sample/source.ts"].map((name) => join(root, name)).sort(),
 	);
@@ -70,6 +73,33 @@ it("records the exact source and CSS bytes selected by explicit bundle condition
 	expect(
 		processConditions(["-C", "source", "--conditions=edge"], '--conditions="development mode" -C "a\\"b"'),
 	).toEqual(["development mode", 'a"b', "source", "edge"]);
+});
+
+it.each(["browser", "sandbox"] as const)("uses configured paths for a %s base and its surface", async (platform) => {
+	const root = await project({
+		"main.ts": 'import { label } from "@app/runtime/label"; console.log(label);',
+		"runtime/label.ts": 'export const label = "source-alias";',
+		"tsconfig.json": JSON.stringify({ compilerOptions: { paths: { "@app/runtime/*": ["./runtime/*.ts"] } } }),
+	});
+	const entry = join(root, "main.ts"), tsconfig = join(root, "tsconfig.json");
+	const base = await buildBase(entry, platform, "/base/", { tsconfig });
+	expect([...base.inputs.keys()].sort()).toEqual([entry, join(root, "runtime/label.ts")].sort());
+	expect(new TextDecoder().decode(base.files.get(base.script)!.bytes)).toContain('"source-alias"');
+	await expect(buildBase(entry, platform, "/base/", {})).rejects.toThrow('Could not resolve "@app/runtime/label"');
+	const host = createHost({ address: hostKind("server")(), principal: { kind: "server" }, onError() {} });
+	const plugins = createPlugins({ roots: [], kinds: {
+		web: { platform: "browser", hostPackages: [] }, tui: { platform: "node", hostPackages: [] },
+	}, onError() {} }, context);
+	try {
+		const surface = platform === "browser"
+			? webSurface(host, { plugins, entry, tsconfig, routes: false })
+			: tuiSurface(host, { plugins, entry, tsconfig });
+		expect((await host.load([{ name: "view", facet: surface.facet }], context)).failed).toEqual([]);
+		expect(await surface.build()).toMatchObject({ kind: "built", inputs: base.inputs });
+	} finally {
+		await host.close(context);
+		plugins.close();
+	}
 });
 
 it("scans static Node imports without executing code or requiring absent optional imports", async () => {

@@ -24,7 +24,7 @@ it("collects base assets and exposes a surface without installing HTTP routes", 
 	const plugins = createPlugins({ roots: [root], kinds: { web: { platform: "browser", hostPackages: [] } }, onError() {} }, context);
 	const http = createHttp(host, { onError() {} }, context);
 	try {
-		const base = await buildBase(entry, "browser", WEB_PREFIX, []);
+		const base = await buildBase(entry, "browser", WEB_PREFIX, { conditions: [] });
 		const emitted = [...base.files].filter(([path]) => path.startsWith(`${WEB_PREFIX}assets/`));
 		expect(emitted).toHaveLength(assets.length);
 		for (const asset of assets) {

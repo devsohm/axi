@@ -18,6 +18,7 @@ export type WebSurfaceOptions = {
 	readonly plugins: Plugins;
 	readonly entry: string;
 	readonly conditions?: readonly string[];
+	readonly tsconfig?: string;
 } & (WebRoutesOptions | { readonly routes: false });
 export type WebRoutesOptions = {
 	readonly routes?: true;
@@ -45,7 +46,7 @@ export function webSurface<P extends Principal>(
 		{
 			kind: options.kind ?? "web",
 			entry: options.entry,
-			conditions: options.conditions,
+			resolution: { conditions: options.conditions, tsconfig: options.tsconfig },
 			plugins: options.plugins,
 		},
 		server,

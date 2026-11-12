@@ -1,4 +1,4 @@
-export { type BaseBundle, type BasePlatform, buildBase, processConditions } from "./bundle.ts";
+export { type BaseBundle, type BasePlatform, type BaseResolution, buildBase, processConditions } from "./bundle.ts";
 export type { ServedFile } from "./served.ts";
 export type { SurfaceBuilt } from "./surface-build.ts";
 export {
