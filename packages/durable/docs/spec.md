@@ -227,6 +227,8 @@ The run document records the initial script configuration and outcome. A journal
 
 Tool search and descriptions use the script's captured tool declarations. Optional model operations expose catalogs, classification, and image generation. Paid model operations use internal nested tool tasks with their own usage and cancellation.
 
+Classification and image generation share a limit of four concurrent calls per script. Later calls wait for a slot and do not start after the script ends. Their internal tools stay absent from ordinary tool discovery. A model error resolves to its structured result and marks its nested call as failed. Generated images must be displayed with `image(block)`; the result reports images that the script did not display.
+
 `Extension.namespace` declares `{ name, description, instructions? }`. A tool
 belongs to the first selected extension that supplies it, including an extension
 without a namespace. Namespace names are sorted; the first declaration of a

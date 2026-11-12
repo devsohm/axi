@@ -152,6 +152,9 @@ Controlled worker failures check startup fallback, rejection of pending images
 after worker loss, and isolation of individual image errors.
 File-tool scenarios check image size refusal, BMP conversion, resize diagnostics
 and continued use of the conversation after a decoder refusal.
+Durable's Code Mode scenarios run real scripts to check the four-call model
+limit, queued calls after script completion, usage totals, classifier failures
+and displayed or unused generated images.
 
 Fullscreen tests cover captured mouse drags, nested wheel scrolling, search
 controls, selection auto-scroll and terminal mode restoration. Scrollback tests
