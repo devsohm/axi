@@ -240,8 +240,9 @@ export const stream: StreamFunction<"openai-codex-responses", OpenAICodexRespons
 			const replacement = await options.onPayload?.(body, model);
 			if (replacement !== undefined) body = replacement as CodexRequest;
 			const wsRequestId = requestId || uuidv7();
+			const identityHeaders = { originator: "axi", ...getIdentityHeaders(model, options.identity) };
 			const sseHeaders = codexHeaders(
-				{ originator: "axi", ...getIdentityHeaders(model, options.identity) },
+				identityHeaders,
 				model.headers,
 				options.headers,
 				account,
@@ -250,7 +251,7 @@ export const stream: StreamFunction<"openai-codex-responses", OpenAICodexRespons
 				requestId,
 			);
 			const wsHeaders = codexHeaders(
-				{ originator: "axi", ...getIdentityHeaders(model, options.identity) },
+				identityHeaders,
 				model.headers,
 				options.headers,
 				account,

@@ -286,6 +286,34 @@ describe("legacy Codex requests", () => {
 			stop: result.stopReason,
 		}).toEqual({ agent: "caller-agent", origin: "model-origin", removed: null, stop: "stop" });
 	});
+	it("uses one client identity for a socket attempt and its HTTP fallback", async () => {
+		await serverTest(async (url, server) => {
+			let identityReads = 0;
+			const agents: (string | undefined)[] = [];
+			server.on("connection", (socket, request) => {
+				agents.push(request.headers["user-agent"]);
+				socket.on("message", () => socket.close(1009));
+			});
+			const result = await stream({ ...model, baseUrl: url }, context, {
+				apiKey: token(),
+				transport: "auto",
+				identity: {
+					get userAgent() {
+						return { custom: `client-${++identityReads}` };
+					},
+				},
+				fetch: async (_url, init) => {
+					agents.push(new Headers(init?.headers).get("user-agent") ?? undefined);
+					return sse();
+				},
+			}).result();
+			expect({ identityReads, agents, stop: result.stopReason }).toEqual({
+				identityReads: 1,
+				agents: ["client-1", "client-1"],
+				stop: "stop",
+			});
+		});
+	});
 	it("returns a terminal response without waiting for the SSE body to close", async () => {
 		let cancelled = false;
 		const body = new ReadableStream<Uint8Array>({
