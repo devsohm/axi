@@ -8,7 +8,7 @@ type ScalarSchema = TString | TInteger | TNumber | TBoolean;
 export type ColumnSchema =
 	| ScalarSchema
 	| JsonColumnSchema<unknown>
-	| HostColumnSchema<KindShape>
+	| (HostColumnSchema<KindShape> & { readonly "~optional"?: never })
 	| TOptional<ScalarSchema | JsonColumnSchema<unknown>>;
 export type Columns = { readonly [name: string]: ColumnSchema };
 export type ColumnType = "str" | "int" | "num" | "bool" | "json";

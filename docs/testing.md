@@ -129,6 +129,7 @@ and retain successful state when saving long output fails.
 
 Compiler checks verify tool argument inference for structural and generated
 schemas, nested containers, property modifiers, cancellation and preparation.
+They also verify typed host addresses and reject optional host columns.
 
 Scheduler tests cover abandoned work after restart, incompatible task
 definitions, phase handover, abort failures and background cancellation.
