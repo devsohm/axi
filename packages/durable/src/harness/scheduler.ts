@@ -534,7 +534,7 @@ export class TaskScheduler {
 		for (const task of this.#tree.live.values()) {
 			if (task.state.status === "completing") continue;
 			if (task.state.status === "waiting" && !task.abortRequested && this.#waiting(task, true).length) continue;
-			if (task.state.status === "sleeping" && !task.abortRequested && !sleepDue(task.state, task.memos, now)) continue;
+			if (this.#notDue(task, now)) continue;
 			if (task.abortRequested && this.#waiting(task, true).length) continue;
 			if (!task.abortRequested || task.abortReason !== undefined) {
 				if (snapshot === undefined && !snapshotFailed)

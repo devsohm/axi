@@ -203,9 +203,10 @@ test.each(["signal", "uninstall"] as const)("a gate is re-evaluated after %s bef
 	);
 	try {
 		const task = await sleeping(f, "call");
+		await vi.waitFor(() => expect(f.harness.wake().active).toBe(false));
 		expect(ran).toBe(0);
 		if (action === "signal") await f.harness.signal(task.id, Result, "approved", "yes", context);
-		else
+		else {
 			f.registry.install(
 				defineExtension({
 					name: "jobs",
@@ -222,6 +223,8 @@ test.each(["signal", "uninstall"] as const)("a gate is re-evaluated after %s bef
 					],
 				}),
 			);
+			expect(f.harness.wake()).toEqual({ active: true });
+		}
 		await f.input.wait(context);
 		expect(ran).toBe(1);
 		expect(gates).toBe(action === "signal" ? 2 : 1);
