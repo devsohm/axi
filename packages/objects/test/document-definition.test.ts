@@ -4,6 +4,17 @@ import { defineState, int, obj, str } from "../src/index.ts";
 import { Line } from "../src/documents/line.ts";
 import { SealToken } from "../src/documents/fence.ts";
 
+it("retains the keyed option selected when declaring a document", () => {
+	let reads = 0;
+	const Progress = defineState("selected.keyed", {
+		schema: obj({ count: int() }), version: 1, initial: () => ({ count: 0 }),
+		get keyed() { return ++reads !== 1 },
+	});
+	expect(Progress.keyed).toBe(false);
+	expect(reads).toBe(1);
+	expect(Progress.initial(context)).toEqual({ count: 0 });
+});
+
 it("creates independent values, upgrades old state, and applies the configured checkpoint rule", () => {
 	const Progress = defineState("progress", {
 		schema: obj({ count: int(), text: str() }),

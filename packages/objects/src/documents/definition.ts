@@ -53,16 +53,17 @@ export function defineState<S extends TSchema, K extends KeyedBy>(
 	},
 ): StateDefinition<DocumentOf<S>, K, boolean> {
 	checkName(name, "A state name");
-	if (options.keyed !== undefined && typeof options.keyed !== "boolean") kindParams(options.keyed);
+	const { schema, version, initial, migrate, keyed, persist, checkpointWhen } = options;
+	if (keyed !== undefined && typeof keyed !== "boolean") kindParams(keyed);
 	return new StateDefinition(
 		name,
-		options.schema,
-		options.version,
-		options.initial,
-		options.migrate,
-		options.keyed ?? false,
-		options.persist ?? false,
-		options.checkpointWhen,
+		schema,
+		version,
+		initial,
+		migrate,
+		keyed ?? false,
+		persist ?? false,
+		checkpointWhen,
 	);
 }
 
