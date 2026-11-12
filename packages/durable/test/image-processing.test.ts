@@ -49,11 +49,11 @@ function oriented(jpeg: Uint8Array, orientation: number, little: boolean): Uint8
 	view.setUint32(20, 1, little);
 	view.setUint16(24, orientation, little);
 	const header = Buffer.from([255, 225, 0, payload.length + 2]);
-	return Buffer.concat([jpeg.subarray(0, 2), header, payload, jpeg.subarray(2)]);
+	return Uint8Array.from(Buffer.concat([jpeg.subarray(0, 2), header, payload, jpeg.subarray(2)]));
 }
 
-test("JPEG orientation is applied to both dimensions and pixel positions in either EXIF byte order", async () => {
-	const processor = await createNodePhotonImages({ worker: false });
+test.each([false, true])("JPEG orientation preserves pixel positions and EXIF byte order (worker=%s)", async (worker) => {
+	const processor = await createNodePhotonImages({ worker, idleMs: 0 });
 	const source = fixture();
 	try {
 		const bytes = source.get_bytes_jpeg(95);
@@ -88,8 +88,8 @@ test("JPEG orientation is applied to both dimensions and pixel positions in eith
 	}
 });
 
-test("image preparation preserves fitting bytes, resizes oversized images and reports impossible byte limits", async () => {
-	const processor = await createNodePhotonImages({ worker: false });
+test.each([false, true])("image preparation respects dimensions and byte limits (worker=%s)", async (worker) => {
+	const processor = await createNodePhotonImages({ worker, idleMs: 0 });
 	const source = fixture();
 	try {
 		const bytes = source.get_bytes();
@@ -109,6 +109,36 @@ test("image preparation preserves fitting bytes, resizes oversized images and re
 		expect(
 			await processor.prepare(new Uint8Array(), "image/png", { maxWidth: 24, maxHeight: 16, maxBytes: 100_000 }),
 		).toBeUndefined();
+	} finally {
+		source.free();
+	}
+});
+
+test("concurrent worker requests retain their own image limits and leave input bytes intact", async () => {
+	const processor = await createNodePhotonImages({ idleMs: 0 });
+	const source = fixture();
+	try {
+		const bytes = source.get_bytes();
+		const original = bytes.slice();
+		const sizes = [24, 12, 6];
+		const results = await Promise.all([
+			...sizes.map((width) =>
+				processor.prepare(bytes, "image/png", { maxWidth: width, maxHeight: 100, maxBytes: 100_000 }),
+			),
+			processor.prepare(new Uint8Array(), "image/png", { maxWidth: 100, maxHeight: 100, maxBytes: 100_000 }),
+		]);
+		for (const [index, width] of sizes.entries()) {
+			const prepared = results[index];
+			if (!prepared) throw new Error(`No image for width ${width}`);
+			const image = PhotonImage.new_from_byteslice(Buffer.from(prepared.data, "base64"));
+			try {
+				expect([image.get_width(), image.get_height()]).toEqual([width, Math.round(width * 2 / 3)]);
+			} finally {
+				image.free();
+			}
+		}
+		expect(results[3]).toBeUndefined();
+		expect(bytes).toEqual(original);
 	} finally {
 		source.free();
 	}

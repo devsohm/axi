@@ -145,6 +145,9 @@ Tool-result boundary checks reject non-finite numeric details, clear the tool's
 live progress, and let the next generation run.
 Shell output checks run a real command with an overlong final line and compare
 its retained tail and complete spill file, with and without a final newline.
+Image checks run both direct processing and real worker requests. They compare
+pixel positions, orientation, dimensions and byte limits. Concurrent requests
+use separate limits and preserve their caller's input bytes.
 
 Fullscreen tests cover captured mouse drags, nested wheel scrolling, search
 controls, selection auto-scroll and terminal mode restoration. Scrollback tests

@@ -60,7 +60,7 @@ Invocation contexts carry cancellation and explicit telemetry spans. `HarnessOpt
 
 `@axi/durable/tools` provides optional `read`, `write`, `edit` and `bash` factories. The read tool returns file text or an image block as structured output, so other tools and Code Mode can use its result directly. Reads bound their memory use and report continuation separately from file content. Edits and writes serialize mutations of the same canonical file. Shell output streams with bounded retention and a file containing complete output when it exceeds the limits.
 
-`@axi/durable/images` prepares images with Photon. The Node adapter uses an idle worker thread by default. The Cloudflare adapter accepts its compiled WebAssembly module.
+`@axi/durable/images` prepares images with Photon. The Node adapter uses an idle worker thread by default. Pass ordinary `Uint8Array` bytes to the worker. Convert a Node Buffer with `Uint8Array.from(buffer)` first because pooled Buffers can fail transfer. The Cloudflare adapter accepts its compiled WebAssembly module.
 
 `@axi/durable/codemode` provides a script tool and its prompt section. Scripts call nested tools through recorded task keys. A delivery journal restores result order after restart and rejects changed execution paths. Successful scripts commit their conversation store with their result. Model catalog, classifier and image calls are optional. Code Mode does not install MCP.
 

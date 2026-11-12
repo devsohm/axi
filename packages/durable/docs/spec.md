@@ -217,7 +217,7 @@ Deferred tool discovery follows local schema references when collecting paramete
 
 `NodeExecutionEnv.cwd` is the base for relative paths. A shell call keeps that directory when its `cwd` option is absent or empty. A non-empty override resolves against the base. A failed working-directory check returns an execution error with its filesystem cause.
 
-`@axi/durable/images` prepares image input. The Node adapter uses a worker thread. The Cloudflare adapter accepts compiled Photon WebAssembly.
+`@axi/durable/images` prepares image input. The Node adapter uses a worker thread. Its input should be an ordinary `Uint8Array`; pooled Node Buffers can fail transfer. The Cloudflare adapter accepts compiled Photon WebAssembly.
 
 ## Code Mode
 
