@@ -13,12 +13,12 @@
 		"packages/tui"
 	],
 	"scripts": {
-		"build": "npm run build --workspaces --if-present",
+		"build": "node scripts/build.mjs",
 		"check": "tsc -p tsconfig.json",
 		"format": "biome format --write .",
 		"format:check": "biome format .",
 		"test": "vitest run",
-		"test:tooling": "node --test test/coverage-map.test.mjs",
+		"test:tooling": "node --test test/coverage-map.test.mjs test/build.test.mjs",
 		"pack": "node scripts/pack.mjs",
 		"verify:packages": "node scripts/verify-packages.mjs",
 		"test:workers": "node test/workers/run.mjs && node test/workers/codemode-example.mjs",
