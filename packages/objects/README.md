@@ -22,7 +22,7 @@ Persistent documents, tables and jobs use a shared SQLite Store. The Store commi
 | `@axi/objects/sqlite/node` | Node SQLite connections |
 | `@axi/objects/sqlite/cloudflare` | Cloudflare SQLite connections |
 | `@axi/objects/telemetry-sqlite` | Queued telemetry recorder and stored trace queries |
-| `@axi/objects/telemetry-sqlite/node` | Node recorder setup |
+| `@axi/objects/telemetry-sqlite/node` | Read-only queries over a Node telemetry database |
 | `@axi/objects/http` | Node HTTP routes, authentication and WebSockets |
 | `@axi/objects/workers` | Node worker hosts and process locks |
 | `@axi/objects/workers/child` | Worker entry point without the parent build helpers |
