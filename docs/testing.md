@@ -81,6 +81,13 @@ They check bootstrap validation, rendering after initialization, theme and langu
 setup, telemetry delivery, and the server identity check before reconnecting.
 These checks do not establish visual browser correctness.
 
+Mounted React hook checks run in Chromium. Install `/usr/bin/chromium` or
+`/usr/bin/chromium-browser`, or set `CHROMIUM_BIN` to its executable path. The test
+uses an isolated temporary browser profile and skips when Chromium is absent.
+It checks live values, page-state retention, language changes, event listeners
+and reference release on unmount. Its browser execution is separate from Node's
+V8 coverage totals.
+
 Client startup checks cover an unavailable server, the initial script-watch
 snapshot and static clients that reconnect without replacing bundled scripts.
 Page checks also disable built-in themes and script following independently.
