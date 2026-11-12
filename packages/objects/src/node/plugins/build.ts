@@ -118,7 +118,9 @@ export async function buildFacet(
 	const shown = (file: string) => relative(plugin.dir, file).split(sep).join("/");
 	const kindOf = (file: string, top?: string): string | undefined => {
 		const parts = basename(file).split(".");
-		const label = parts.length > 2 ? parts.at(-2) : dirname(file) === top || [plugin, ...peers].some((item) => item.layout === "directory" && item.dir === dirname(file)) ? parts[0] : undefined;
+		const label = parts.length > 2 ? parts.at(-2)
+			: parts.length === 2 && (dirname(file) === top || [plugin, ...peers].some((item) => item.layout === "directory" && item.dir === dirname(file)))
+				? parts[0] : undefined;
 		return options.kinds?.find((item) => item.toLowerCase() === label?.toLowerCase());
 	};
 	const wrongKind = (file: string, specifier: string, top?: string): string | undefined => {

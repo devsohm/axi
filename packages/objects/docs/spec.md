@@ -136,6 +136,8 @@ Resuming a blocked run increases the host's active-job count in the same committ
 
 Plugin roots may be required or optional. Discovery reports collisions and invalid entries. Builds restrict imports to permitted plugin, shared and host-package paths. Plugin scripts execute as trusted code. File watching marks changes without applying them. Rollouts ship built generations through ordered host steps. Workers evaluate prebuilt scripts without rebuilding them.
 
+A kind name before a file's extension restricts its imports to that facet kind. An extensionless shared file does not acquire a kind from its basename.
+
 Package installation accepts both npm's array pack result and its package-name-keyed result. Plugin stack maps are decoded only when an error frame needs them. Worker bundles store source maps beside their modules. Worker processes use the caller's `execArgv`; add `--enable-source-maps` explicitly for mapped worker stacks, with its parsing and memory cost.
 
 HTTP routes deny anonymous callers unless explicitly public. Cross-site routes are public and anonymous. Authentication, host, origin, header and response-body checks run at the request boundary. Resource and root scopes last through response completion or cancellation.
