@@ -5,7 +5,10 @@ import { once } from "node:events";
 import { test } from "node:test";
 import { spawn, spawnSync, execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 const require = createRequire(import.meta.url);
 const supported = process.platform === "linux" && ["x64", "arm64"].includes(process.arch);
 
@@ -57,8 +60,92 @@ test(
 	},
 );
 
-const x11Available =
-	supported && ["Xvfb", "xclip"].every((command) => !spawnSync(command, ["-help"], { stdio: "ignore" }).error);
+const displayAvailable = supported && !spawnSync("Xvfb", ["-help"], { stdio: "ignore" }).error;
+const x11Available = displayAvailable && !spawnSync("xclip", ["-help"], { stdio: "ignore" }).error;
+const ownerAvailable = displayAvailable && spawnSync("pkg-config", ["--exists", "xcb"]).status === 0;
+test(
+	"X11 falls back after refused targets and rejects interrupted incremental transfers",
+	{ skip: !ownerAvailable, timeout: 20000 },
+	async (t) => {
+		const directory = mkdtempSync(join(tmpdir(), "axi-x11-owner-"));
+		t.after(() => rmSync(directory, { recursive: true, force: true }));
+		const ownerPath = join(directory, "owner");
+		execFileSync(process.env.CC ?? "cc", [
+			"-std=c11",
+			"-Wall",
+			"-Wextra",
+			"-Werror",
+			fileURLToPath(new URL("./test/x11-owner.c", import.meta.url)),
+			"-lxcb",
+			"-o",
+			ownerPath,
+		]);
+		async function start(command, args, env) {
+			const child = spawn(command, args, { env, stdio: ["ignore", "pipe", "pipe"] });
+			t.after(async () => {
+				if (child.exitCode === null && child.signalCode === null) {
+					const exited = once(child, "exit");
+					child.kill("SIGKILL");
+					await exited;
+				}
+			});
+			let errors = "";
+			child.stderr.on("data", (data) => (errors += data));
+			const ready = await Promise.race([
+				once(child.stdout, "data").then(([data]) => data.toString().trim()),
+				once(child, "exit").then(([code]) => {
+					throw new Error(`${command} ${code}: ${errors}`);
+				}),
+			]);
+			return { child, ready };
+		}
+		const display = await start(
+			"Xvfb",
+			["-displayfd", "1", "-screen", "0", "640x480x24", "-nolisten", "tcp"],
+			process.env,
+		);
+		const env = { ...process.env, DISPLAY: `:${display.ready}` };
+		const modulePath = fileURLToPath(
+			new URL(`./linux/prebuilds/linux-${process.arch}/linux-platform-x11.node`, import.meta.url),
+		);
+		const reader = `
+			const assert = require('node:assert/strict');
+			const native = require(process.argv[1]);
+			(async () => {
+				if (process.argv[2] === 'fallback') assert.equal(await native.getText(), 'fallback 文字');
+				else {
+					let ticks = 0;
+					const timer = setInterval(() => ticks++, 5);
+					try { await assert.rejects(native[process.argv[3]](), /X11 clipboard/); }
+					finally { clearInterval(timer); }
+					if (process.argv[2] === 'stall') assert.ok(ticks > 0, 'transfer must not block JS');
+				}
+			})().catch(error => { console.error(error); process.exitCode = 1; });
+		`;
+		for (const [mode, method] of [
+			["fallback", "getText"],
+			["mismatch", "getText"],
+			["mismatch", "getImage"],
+			["stall", "getText"],
+			["stall", "getImage"],
+		]) {
+			const { child } = await start(ownerPath, [mode], env);
+			try {
+				const result = spawnSync(process.execPath, ["-e", reader, modulePath, mode, method], {
+					env,
+					encoding: "utf8",
+					timeout: 5000,
+				});
+				assert.ifError(result.error);
+				assert.equal(result.status, 0, `${mode}/${method}: ${result.stderr}`);
+			} finally {
+				const exited = once(child, "exit");
+				child.kill("SIGKILL");
+				await exited;
+			}
+		}
+	},
+);
 test(
 	"X11 reads empty, Unicode, Latin-1 and incremental image selections",
 	{ skip: !x11Available, timeout: 15000 },

@@ -17,7 +17,7 @@ npm run test:native -w @axi/tui
 
 Set `NODE_INCLUDE_DIR` if `node_api.h` is outside the standard include directories. Set `CC` to select the compiler. Builds target the current architecture. Linux ARM64 builds request 64 KiB ELF segment alignment.
 
-The first test creates a private stalled TCP server. It checks responsiveness, bounded concurrency, timeout behavior and cleanup after a late connection failure. If `Xvfb` and `xclip` are on `PATH`, a second test checks empty, Unicode, Latin-1 and large incremental selections in a private virtual display. Neither test reads or replaces the desktop clipboard.
+The tests create private servers and virtual displays. They check responsiveness, bounded concurrency, timeout behavior and cleanup after a late connection failure. With `Xvfb`, a C compiler and `pkg-config` for XCB, a test owner checks fallback after refused format queries, malformed incremental text/image transfers and stalled transfers while JavaScript stays responsive. With `xclip`, another test checks empty, Unicode, Latin-1 and large incremental selections. These tests do not read or replace the desktop clipboard.
 
 The macOS helper uses the system pasteboard for text, images and file paths. It also reports modifier state. The Windows helper supports Unicode text, PNG and bitmap clipboard images, modifier state and virtual terminal input.
 
