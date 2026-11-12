@@ -88,6 +88,8 @@ Constraint errors explain bounds and allowed values. A failing union reports the
 
 Constrained sampling accepts JSON-schema preferences or grammar variants. JSON-schema strictness is `prefer` or `require`. Grammar formats are `openai_lark` and `openai_regex`. Support depends on the transport and model metadata.
 
+A strict schema needs a type, a supported `anyOf`, or an `enum` at every node. An empty schema, an untyped value, or `const` alone makes `prefer` use ordinary tool sampling. With `require`, conversion fails before the request is sent. An enum without a type can still use strict sampling.
+
 Google's optional legacy `parameters` conversion removes schema meta-declarations recursively. It copies fields by ordinary JavaScript assignment, so `__proto__` changes the copied object's prototype instead of becoming an own property. Mistral's schema copy uses the same assignment rule. Google's default `parametersJsonSchema` conversion preserves the original schema.
 
 ## Request options

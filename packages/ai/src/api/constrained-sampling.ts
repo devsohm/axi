@@ -49,6 +49,9 @@ function strict(schema: unknown, unsupported?: UnsupportedStrictSchemaKeywordChe
 	if (unsupported)
 		for (const [key, value] of Object.entries(schema))
 			if (unsupported(key, value)) reject(`${key}: ${JSON.stringify(value)} is unsupported`);
+	// Strict providers accept enum-only nodes, but const alone does not supply a type.
+	if (schema.type === undefined && schema.anyOf === undefined && schema.enum === undefined)
+		reject("schemas without a type are unsupported");
 	if (schema.anyOf !== undefined) {
 		if (!Array.isArray(schema.anyOf) || !schema.anyOf.length) reject("anyOf must contain at least one schema");
 		for (const branch of schema.anyOf as unknown[]) {

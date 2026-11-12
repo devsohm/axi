@@ -63,7 +63,7 @@ test("strict schema conversion rejects unsupported compositions and malformed sc
 test("strict conversion preserves existing nullable declarations and normalizes nested optional object fields", () => {
 	const properties = {
 		union: { type: ["string", "null"] },
-		constant: { const: null },
+		constant: { type: "null", const: null },
 		enumeration: { enum: ["yes", null] },
 		explicit: { anyOf: [{ type: "string" }, { type: "null" }] },
 		recursive: { anyOf: [{ anyOf: [{ enum: [null, "value"] }] }, { type: "string" }] },
@@ -135,6 +135,48 @@ test("required and preferred constraints select strict encoding or a declared fa
 	expect(convertResponsesTools([constrained])).toMatchObject([
 		{ type: "function", name: "source", strict: true, parameters: { additionalProperties: false } },
 	]);
+});
+
+test.each([
+	{
+		label: "unconstrained array members",
+		parameters: { type: "object", properties: { arguments: { type: "array", items: {} } } },
+	},
+	{
+		label: "untyped annotated values",
+		parameters: { type: "object", properties: { metadata: { description: "Any JSON payload" } } },
+	},
+	{
+		label: "const-only properties",
+		parameters: { type: "object", properties: { mode: { const: "basic" } }, required: ["mode"] },
+	},
+])("strict preferences fall back for $label and requirements reject before sending", ({ parameters }) => {
+	const before = structuredClone(parameters);
+	const preferred: Tool = {
+		...tool,
+		parameters,
+		constrainedSampling: { type: "json_schema", strict: "prefer" },
+	};
+	expect(resolveJsonSchemaStrictSampling(preferred, true)).toBeUndefined();
+	expect(convertResponsesTools([preferred], { supportsStrictMode: true })).toMatchObject([
+		{ strict: false, parameters },
+	]);
+	const required: Tool = { ...preferred, constrainedSampling: { type: "json_schema", strict: "require" } };
+	expect(() => convertResponsesTools([required], { supportsStrictMode: true })).toThrow(/without a type/);
+	expect(parameters).toEqual(before);
+});
+
+test("an enum without a type retains strict encoding for both preferences and requirements", () => {
+	for (const strict of ["prefer", "require"] as const) {
+		const constrained: Tool = {
+			...tool,
+			parameters: { type: "object", properties: { level: { enum: ["low", "high"] } }, required: ["level"] },
+			constrainedSampling: { type: "json_schema", strict },
+		};
+		expect(convertResponsesTools([constrained], { supportsStrictMode: true })).toMatchObject([
+			{ strict: true, parameters: { properties: { level: { enum: ["low", "high"] } } } },
+		]);
+	}
 });
 
 test("grammar variants prefer a nonempty Lark definition and validate their single string input", () => {
