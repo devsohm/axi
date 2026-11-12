@@ -1,5 +1,5 @@
 import { expect, test, vi } from "vitest";
-import { BACKGROUND_CONTEXT as context, withCancel } from "../src/context/index.ts";
+import { BACKGROUND_CONTEXT as context, withCancel, type Context } from "../src/context/index.ts";
 import {
 	createHost,
 	defineFacet,
@@ -13,6 +13,54 @@ import {
 	type EventSource,
 } from "../src/index.ts";
 import { TuiScope } from "../src/tui/scope.ts";
+
+test("an already cancelled event subscription retains its selected cancellation reason", async () => {
+	const Feed = local("cancelled-event-feed", { version: 1, params: {}, members: { next: event(str()) } });
+	const host = createHost({ onError() {} });
+	const sources: EventSource<string>[] = [];
+	const reason = new Error("subscription cancelled"),
+		controller = new AbortController();
+	controller.abort(reason);
+	let reads = 0;
+	const invocation: Context = {
+		get abortSignal() {
+			return ++reads === 1 ? controller.signal : undefined;
+		},
+		telemetry: context.telemetry,
+		value: (key) => context.value(key),
+		toString: () => "cancelled subscription",
+	};
+	try {
+		await host.load(
+			[
+				{
+					name: "feed",
+					facet: defineFacet((h) =>
+						h.serve(Feed, (_, self) => {
+							const next = self.events<string>();
+							sources.push(next);
+							return { next };
+						}),
+					),
+				},
+			],
+			context,
+		);
+		const ref = await host.get(Feed, {}, context);
+		try {
+			const listener = vi.fn();
+			await expect((async () => sources[0]!.on(listener, invocation))()).rejects.toBe(reason);
+			expect(reads).toBe(1);
+			sources[0]!.emit("after cancellation");
+			await new Promise<void>((resolve) => setImmediate(resolve));
+			expect(listener).not.toHaveBeenCalled();
+		} finally {
+			ref.release();
+		}
+	} finally {
+		await host.close(context);
+	}
+});
 
 test("queued events honor stopped listeners and isolate a failed subscriber", async () => {
 	const Feed = local("ordered-feed", { version: 1, params: { name: str() }, members: { next: event(str()) } });

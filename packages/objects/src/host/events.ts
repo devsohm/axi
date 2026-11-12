@@ -124,7 +124,8 @@ export function subscribe(
 	install: (subscription: Subscription) => void,
 	remove: (subscription: Subscription) => void,
 ): Promise<EventSubscription> {
-	if (context.abortSignal?.aborted) return Promise.reject(context.abortSignal.reason);
+	const signal = context.abortSignal;
+	if (signal?.aborted) return Promise.reject(signal.reason);
 	const subscription = new Subscription(events.nextSubscription(), listener, context, remove);
 	install(subscription);
 	return Promise.resolve(subscription);
