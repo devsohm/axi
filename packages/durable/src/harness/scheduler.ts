@@ -763,6 +763,7 @@ export class TaskScheduler {
 			if (task.state.status === "terminal") {
 				this.#migrationFailures.delete(task.id);
 				this.#failFast.delete(task.id);
+				// Publication can settle a waiter before its handler returns; #end owns invocation cleanup.
 				this.#taskWaiters.resolve(task.id, task as SettledTask<JsonValue>);
 				this.#reconcileSoon();
 			} else {

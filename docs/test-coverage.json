@@ -433,6 +433,7 @@
 						"packages/durable/test/timers.test.ts",
 						"packages/durable/test/tool-task.test.ts",
 						"packages/durable/test/tool-fault-cleanup.test.ts",
+						"packages/durable/test/bash-long-line.test.ts",
 						"packages/durable/test/tool-parking.test.ts",
 						"packages/durable/test/tool-hook-boundaries.test.ts",
 						"packages/durable/test/join-policies.test.ts",

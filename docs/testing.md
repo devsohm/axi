@@ -139,6 +139,8 @@ They check read-only migration, the saved version after a transaction, and the
 value after closing and reopening storage.
 Tool-result boundary checks reject non-finite numeric details, clear the tool's
 live progress, and let the next generation run.
+Shell output checks run a real command with an overlong final line and compare
+its retained tail and complete spill file, with and without a final newline.
 
 Fullscreen tests cover captured mouse drags, nested wheel scrolling, search
 controls, selection auto-scroll and terminal mode restoration. Scrollback tests

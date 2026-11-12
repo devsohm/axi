@@ -1211,6 +1211,7 @@ class Transaction<T extends object> implements Change<T> {
 class RevisionTracker<T extends object> implements Tracker<T> {
 	readonly #owner = {};
 	readonly #active = new Set<WeakRef<Scope>>();
+	// The tracker retains one unfinished draft; WeakRefs let abandoned older drafts be collected.
 	#latest: Scope | undefined;
 	readonly #self: WeakRef<RevisionTracker<object>>;
 	#value: T;
