@@ -54,6 +54,7 @@ test("cancellation during working-directory resolution starts no process", async
 	await using app = await fixture();
 	const controller = new AbortController();
 	const host: Parameters<typeof runCommand>[0] = {
+		cwd: () => app.cwd,
 		processes: new Set(),
 		resolve() {
 			controller.abort();
@@ -65,7 +66,7 @@ test("cancellation during working-directory resolution starts no process", async
 		await runCommand(
 			host,
 			[process.execPath, "-e", 'throw new Error("must not start")'],
-			undefined,
+			{ cwd: "." },
 			withAbortSignal(controller.signal, context),
 		),
 	).toMatchObject({ ok: false, error: { code: "aborted" } });

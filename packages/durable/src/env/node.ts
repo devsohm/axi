@@ -259,6 +259,7 @@ export class NodeExecutionEnv implements ExecutionEnv {
 	): Promise<Result<ShellExecResult, ExecutionError>> {
 		return runCommand(
 			{
+				cwd: () => this.cwd,
 				shellPath: this.shellPath,
 				shellEnv: this.shellEnv,
 				resolve: (path) => this.resolvePath(path),

@@ -1,6 +1,6 @@
 import { spawn, type ChildProcess, type ChildProcessByStdio } from "node:child_process";
 import { createWriteStream, type WriteStream } from "node:fs";
-import { access, stat } from "node:fs/promises";
+import { access } from "node:fs/promises";
 import { constants } from "node:os";
 import { join, win32 } from "node:path";
 import type { Readable, Writable } from "node:stream";
@@ -18,6 +18,7 @@ import {
 } from "./index.ts";
 
 interface CommandHost {
+	cwd(): string;
 	shellPath?: string;
 	shellEnv?: NodeJS.ProcessEnv;
 	resolve(path: string): string;
@@ -131,6 +132,7 @@ export async function runCommand(
 		return err(new ExecutionError("timeout", "Invalid timeout: must be a finite number of seconds"));
 	if (timeout !== undefined && timeout * 1000 > 2147483647)
 		return err(new ExecutionError("timeout", "Invalid timeout: maximum is 2147483.647 seconds"));
+	const cwd = options?.cwd ? host.resolve(options.cwd) : host.cwd();
 	let executable: string;
 	let args: string[];
 	let stdinCommand: string | undefined;
@@ -147,9 +149,8 @@ export async function runCommand(
 		executable = command[0];
 		args = command.slice(1);
 	}
-	const cwd = host.resolve(options?.cwd ?? ".");
 	try {
-		await stat(cwd);
+		await access(cwd);
 	} catch (error) {
 		return err(
 			new ExecutionError(

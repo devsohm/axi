@@ -2,7 +2,7 @@ import { mkdtemp, open, readFile, rm, symlink, writeFile } from "node:fs/promise
 import { Dir, type Dirent } from "node:fs";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, relative } from "node:path";
 import { BACKGROUND_CONTEXT, type Context, withAbortSignal } from "@axi/objects/context";
 import { afterEach, expect, it, vi } from "vitest";
 import { type FileError, getOrThrow, ok, type Result } from "../src/env/index.ts";
@@ -26,6 +26,26 @@ async function fixture(): Promise<string> {
 	directories.push(path);
 	return path;
 }
+
+it.each(["default", "empty", "dynamic"] as const)("preserves a relative base working directory with a %s override", async (mode) => {
+	const cwd = relative(process.cwd(), join(await fixture(), "missing"));
+	const env = new NodeExecutionEnv({ cwd: mode === "dynamic" ? process.cwd() : cwd });
+	const options = mode === "dynamic"
+		? { get timeout() { env.cwd = cwd; return undefined; } }
+		: mode === "empty" ? { cwd: "" } : undefined;
+	try {
+		expect(await env.exec([process.execPath, "-e", ""], options, BACKGROUND_CONTEXT)).toMatchObject({
+			ok: false,
+			error: {
+				code: "spawn_error",
+				message: `Working directory does not exist: ${cwd}\nCannot execute bash commands.`,
+				cause: { code: "ENOENT", syscall: "access", path: cwd },
+			},
+		});
+	} finally {
+		await env.cleanup(BACKGROUND_CONTEXT);
+	}
+});
 
 it("completes an empty directory page when cancellation arrives with its final read", async () => {
 	const cwd = await fixture();

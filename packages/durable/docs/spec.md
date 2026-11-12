@@ -209,6 +209,8 @@ Deferred tool discovery follows local schema references when collecting paramete
 
 `@axi/durable/env` defines filesystem and shell capabilities. Its Node adapter provides local files, directory pages, watches, and processes. `@axi/env` supplies separate local-daemon and SSH-backed environments through the same execution contract.
 
+`NodeExecutionEnv.cwd` is the base for relative paths. A shell call keeps that directory when its `cwd` option is absent or empty. A non-empty override resolves against the base. A failed working-directory check returns an execution error with its filesystem cause.
+
 `@axi/durable/images` prepares image input. The Node adapter uses a worker thread. The Cloudflare adapter accepts compiled Photon WebAssembly.
 
 ## Code Mode
@@ -218,6 +220,8 @@ Deferred tool discovery follows local schema references when collecting paramete
 The run document records the initial script configuration and outcome. A journal records delivered answers. Successful conversation store changes commit with the script result. The sandbox fingerprint identifies the implementation and prelude used for replay.
 
 Tool search and descriptions use the script's captured tool declarations. Optional model operations expose catalogs, classification, and image generation. Paid model operations use internal nested tool tasks with their own usage and cancellation.
+
+Model catalog results contain public metadata and omit credential headers. Listing models does not evaluate hidden credential accessors.
 
 ## Storage contract
 
