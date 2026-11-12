@@ -1,4 +1,4 @@
-import { expect, it } from "vitest";
+import { expect, expectTypeOf, it } from "vitest";
 import {
 	bytes,
 	defineJob,
@@ -6,7 +6,18 @@ import {
 	int,
 	obj,
 	str,
+	type Ctx,
+	type JobCtx,
+	type RunState,
 } from "../src/index.ts";
+
+it("keeps the handler trace contract in a job context", () => {
+	type Principal = { readonly kind: "worker" };
+	type State = { output: string };
+	expectTypeOf<JobCtx<Principal, State>["trace"]>().toEqualTypeOf<Ctx<Principal>["trace"]>();
+	expectTypeOf<JobCtx<Principal, State>["state"]>().toEqualTypeOf<RunState<State>>();
+	expectTypeOf<JobCtx<Principal, undefined>>().not.toHaveProperty("state");
+});
 
 it("snapshots job schemas and enforces the persistence requirements at declaration", () => {
 	const Progress = defineState("progress", {

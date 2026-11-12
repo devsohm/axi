@@ -7,7 +7,7 @@ import { ObjectsError, isObjectsError, PluginError, type Principal } from "../da
 import type { CommitPersistence, JsonObject, Tx } from "../documents/index.ts";
 import type { Documents, SealToken, Transaction } from "../documents/internal.ts";
 import { CallContext, SpanCtx, type Acquirer, type Caller, type Ctx } from "../host/ctx.ts";
-import type { TelemetryContext, TelemetrySpan, SpanAttributes } from "@axi/telemetry";
+import type { TelemetryContext, TelemetrySpan } from "@axi/telemetry";
 import { OpenSpan, parentOf, ended, spanFailed, untraced } from "../telemetry.ts";
 import { nextDelay } from "../host/backoff.ts";
 import { sleep } from "../host/sleep.ts";
@@ -35,9 +35,8 @@ export type JobImplementation<A, R, S, P extends Principal = Principal> = {
 	readonly run: (args: A, context: JobCtx<P, S>) => Promise<R>;
 	readonly finish?: (outcome: Outcome<A, R, S>, tx: Tx) => void | Promise<void>;
 };
-export type JobCtx<P extends Principal, S> = Omit<Ctx<P>, "trace"> & {
+export type JobCtx<P extends Principal, S> = Ctx<P> & {
 	readonly jobId: string;
-	trace<T>(name: string, attributes: SpanAttributes, fn: (context: JobCtx<P, S>) => Promise<T>): Promise<T>;
 } & ([S] extends [undefined] ? unknown : { readonly state: RunState<S> });
 export type AnyJobImplementation = {
 	readonly run: (args: JsonValue, ctx: JobContext) => Promise<unknown>;
