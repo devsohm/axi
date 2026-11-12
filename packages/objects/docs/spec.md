@@ -32,6 +32,8 @@ Changing an event schema requires an explicit older-version mapping, including a
 
 References report `loading`, `live`, `failed` or `ended`. Their released ownership cannot be reused. Object-owned dependencies remain through an attempt. Call-owned references end with their call context. Root contexts use the host principal by default. An explicit undefined principal creates an anonymous scope.
 
+`RegistryValue.observe(observer, context)` takes the current value and attaches synchronously. It selects the context's cancellation signal once. That signal ends the attachment with `aborted`; a closed source ends it with `ended`. Calling `detach()` removes the observer without an end callback.
+
 Dependencies can park activation without consuming its readiness deadline. Transient activation failures retry with backoff. Broken failures wait for an explicit retry or replacement. Native resources close in reverse order. A late opener is closed if its attempt already ended.
 
 Host close stops new work, closes links, seals scopes and objects, drains admitted calls and closes resources. Cleanup continues after individual close failures. The application closes the Store separately.

@@ -1,5 +1,5 @@
 import { expect, test, vi } from "vitest";
-import { BACKGROUND_CONTEXT as context } from "../src/context/index.ts";
+import { BACKGROUND_CONTEXT as context, type Context } from "../src/context/index.ts";
 import {
 	bool,
 	constant,
@@ -12,7 +12,67 @@ import {
 	method,
 	orderedEntries,
 	type RegistryTable,
+	type RegistryValue,
 } from "../src/index.ts";
+
+test("registry declaration retains the version selected from its options", () => {
+	let reads = 0;
+	const registry = defineRegistry<number, number>("observed.version", {
+		get version() { return ++reads; },
+	});
+	expect(registry.version).toBe(1);
+	expect(reads).toBe(1);
+});
+
+test("registry observation retains the cancellation signal selected at attachment", async () => {
+	const Total = defineRegistry<number, number>("observed.total", { version: 1 });
+	const Consumer = local("observed.consumer", { version: 1, params: {}, members: {} });
+	let observed: RegistryValue<number> | undefined;
+	const host = createHost({ onError() {} });
+	const facet = defineFacet((facet) => {
+		facet.serve(Total, { compose: () => 1 });
+		facet.serve(Consumer, (_params, self) => {
+			observed = self.registry(Total);
+			return {};
+		});
+	});
+	await host.load([{ name: "observed", facet }], context);
+	try {
+		const held = await host.get(Consumer, {}, context);
+		try {
+			if (!observed) throw new Error("Registry was not attached");
+			const first = new AbortController(),
+				second = new AbortController();
+			second.abort();
+			let reads = 0;
+			const invocation: Context = {
+				get abortSignal() {
+					return ++reads === 1 ? first.signal : second.signal;
+				},
+				telemetry: context.telemetry,
+				value: (key) => context.value(key),
+				toString: () => "observation",
+			};
+			const ends: unknown[] = [];
+			const observation = observed.observe({
+				advance() {},
+				end(end) { ends.push(end); },
+			}, invocation);
+			try {
+				expect(observation.value).toBe(1);
+				first.abort();
+				expect(ends).toEqual([{ kind: "aborted" }]);
+				expect(reads).toBe(1);
+			} finally {
+				observation.detach();
+			}
+		} finally {
+			held.release();
+		}
+	} finally {
+		await host.close(context);
+	}
+});
 
 test("an activation can retry on registry changes without restarting healthy objects", async () => {
 	const Enabled = defineRegistry<boolean, boolean>("enabled", { version: 1 });

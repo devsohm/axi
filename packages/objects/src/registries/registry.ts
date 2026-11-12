@@ -19,6 +19,7 @@ export interface RegistryValue<V> extends NativeWatchable<V> {
 }
 export function defineRegistry<C, V>(name: string, options: { readonly version: number }): Registry<C, V> {
 	checkName(name, "registry");
-	if (!Number.isSafeInteger(options.version) || options.version < 1) throw new Error(`${name}.version: expected a positive integer`);
-	return { kind: "registry", name, version: options.version };
+	const version = options.version;
+	if (!Number.isSafeInteger(version) || version < 1) throw new Error(`${name}.version: expected a positive integer`);
+	return { kind: "registry", name, version };
 }

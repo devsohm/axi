@@ -57,11 +57,15 @@ export abstract class FollowedSource<T = unknown> extends NativeSource<T> {
 		this.batch?.assertOutside("observe");
 		const initial = this.start();
 		const value = this.#valueOf(initial);
-		if (!this.batch || context.abortSignal?.aborted) {
-			observer.end(this.batch ? abortedEnd : ended);
+		if (!this.batch) {
+			observer.end(ended);
 			return { value, detach: nothing };
 		}
 		const signal = context.abortSignal;
+		if (signal?.aborted) {
+			observer.end(abortedEnd);
+			return { value, detach: nothing };
+		}
 		const aborted = () => {
 			if (!this.#observers.has(observer)) return;
 			this.unsubscribe(observer);
