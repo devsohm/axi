@@ -21,6 +21,7 @@ import type {
 	UserMessage,
 } from "@axi/ai";
 import type { TelemetryContext } from "@axi/telemetry";
+import type { TIntegerKey, TNumberKey, TObject, TStringKey, TTuple, TUnknown } from "typebox";
 import type { ExecutionEnv, ShellOutputSkip, ShellOutputWindow } from "../env/index.ts";
 import type {
 	CommitOptions,
@@ -208,6 +209,54 @@ export interface ToolExecutionApi<D extends JsonValue = JsonValue, C extends Jso
 		options: { readonly key?: string; readonly progress?: boolean; readonly wait: false },
 	): Promise<NestedToolCall>;
 }
+// Older TypeBox object declarations widen `required`; recover it from property modifiers before static inference.
+type ToolParameterSchema<P extends TSchema> = unknown extends P
+	? P
+	: P extends { readonly "~kind": "Object"; readonly properties: infer Fields extends Record<string, TSchema> }
+		? Omit<P, "properties" | "required"> & TObject<{ [K in keyof Fields]: ToolParameterSchema<Fields[K]> }>
+		: P extends { readonly "~kind": "Array"; readonly items: infer Item extends TSchema }
+			? Omit<P, "items" | "~immutable"> & { items: ToolParameterSchema<Item> }
+			: P extends { readonly "~kind": "Union"; readonly anyOf: infer Members extends readonly TSchema[] }
+				? Omit<P, "anyOf"> & { anyOf: { -readonly [K in keyof Members]: ToolParameterSchema<Members[K]> } }
+				: P extends { readonly "~kind": "Tuple"; readonly items: infer Items extends readonly TSchema[] }
+					? Omit<P, "items" | "minItems" | "~immutable"> &
+							TTuple<{ -readonly [K in keyof Items]: ToolParameterSchema<Omit<Items[K], "~optional" | "~readonly">> }>
+					: P extends {
+								readonly "~kind": "Record";
+								readonly patternProperties: infer Fields extends Record<string, TSchema>;
+							}
+						? Omit<P, "patternProperties"> & {
+								patternProperties: {
+									[K in keyof Fields as K extends TIntegerKey | TNumberKey ? K : TStringKey]: ToolParameterSchema<
+										Fields[K]
+									>;
+								};
+							}
+						: P extends {
+									readonly "~kind":
+										| "String"
+										| "Number"
+										| "Integer"
+										| "Boolean"
+										| "Null"
+										| "BigInt"
+										| "Undefined"
+										| "Unknown"
+										| "Any"
+										| "Literal"
+										| "Enum";
+								}
+							? P
+							: P extends { readonly "~kind": unknown }
+								? TUnknown
+								: P extends { readonly "~unsafe": unknown }
+									? P
+									: TUnknown;
+
+export type ToolArgs<P extends TSchema> = boolean extends (P extends never ? true : false)
+	? P
+	: Static<ToolParameterSchema<P>>;
+
 export type ToolRegistration<
 	P extends TSchema = TSchema,
 	D extends JsonValue = JsonValue,
@@ -215,17 +264,17 @@ export type ToolRegistration<
 > = Tool<P> & {
 	readonly replay?: "safe" | "unsafe";
 	readonly executionMode?: ToolExecutionMode;
-	prepareArguments?(args: unknown): Static<P>;
+	prepareArguments?(args: unknown): ToolArgs<P>;
 	readonly structuredOutputSchema?: TSchema;
 	readonly callers?: readonly ("model" | "tools")[];
 	readonly deferred?: true;
 	readonly outputLimits?: { readonly maxBytes?: number; readonly maxLines?: number; readonly retain?: "head" | "tail" };
 	execute(
-		args: Static<P>,
+		args: ToolArgs<P>,
 		api: ToolExecutionApi<D, C>,
 		context: Context,
 	): Promise<ToolExecutionResult<D> | ToolPark<C>>;
-	cancel?(args: Static<P>, api: ToolExecutionApi<D, C>, context: Context): Promise<void>;
+	cancel?(args: ToolArgs<P>, api: ToolExecutionApi<D, C>, context: Context): Promise<void>;
 };
 export type PromptInput<T extends ToolRegistration = ToolRegistration> = {
 	readonly conversationId: ConversationId;

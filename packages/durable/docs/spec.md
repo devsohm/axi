@@ -165,6 +165,8 @@ The conversation's general `enabled: false` also overrides the harness's model-s
 
 Tool declarations include a name, description, TypeBox argument schema, and asynchronous `execute` function. Optional fields select replay policy, execution mode, argument preparation, structured output validation, allowed callers, deferred discovery, and output limits.
 
+Tool arguments use the common TypeBox kinds and `~unsafe` type annotations. Structural object schemas can declare `required` as `string[]`; property annotations still determine required, optional and readonly fields. This also applies inside arrays, unions, records and tuples. Tuple entries keep their positions even when an entry carries an optional or rest annotation. Other schema kinds and plain JSON schemas give handlers `unknown` arguments. An explicit `ToolRegistration<any>` retains `any` arguments. These rules apply to execution, cancellation and argument preparation; they do not change runtime validation.
+
 Tools return model-visible output and can also return structured output, details, diagnostics, usage, and control requests. An error result remains a result with `isError`; an exception follows the task's failure path.
 
 The tool API exposes its conversation and task identities, model collection, resolved environment, document reads, transactions, named memos, progress output, child tasks, and nested tool calls. Stable nested-call keys allow recovery to find an already recorded call.

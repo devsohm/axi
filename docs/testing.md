@@ -127,6 +127,9 @@ restore interrupted requests and deferred polls under both retry policies. Code
 Mode tests reject expired or incompatible saved runs, reuse committed results,
 and retain successful state when saving long output fails.
 
+Compiler checks verify tool argument inference for structural and generated
+schemas, nested containers, property modifiers, cancellation and preparation.
+
 Scheduler tests cover abandoned work after restart, incompatible task
 definitions, phase handover, abort failures and background cancellation.
 Queued-input checks verify cancellation across task-owned conversations while
