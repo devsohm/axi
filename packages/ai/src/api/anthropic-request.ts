@@ -308,7 +308,7 @@ export function anthropicRequest(
 					? undefined
 					: resolveJsonSchemaStrictSampling(tool, compat.supportsStrictTools, rejectsStrict);
 			if (strict && config && config.type === "json_schema" && config.strict === "prefer") preferred = true;
-			const schema = getJsonSchemaToolParameters(tool, strict) as { properties?: unknown; required?: string[]; $defs?: unknown; definitions?: unknown };
+			const schema = getJsonSchemaToolParameters(tool, strict) as { properties?: unknown; required?: string[]; additionalProperties?: unknown; $defs?: unknown; definitions?: unknown };
 			return {
 				name: oauth ? anthropicToolName(tool.name) : tool.name,
 				description: tool.description,
@@ -317,6 +317,7 @@ export function anthropicRequest(
 					type: "object",
 					properties: schema.properties ?? {},
 					required: schema.required ?? [],
+					...(schema.additionalProperties === undefined ? {} : { additionalProperties: schema.additionalProperties }),
 					...(schema.$defs === undefined ? {} : { $defs: schema.$defs }),
 					...(schema.definitions === undefined ? {} : { definitions: schema.definitions }),
 				} as BetaTool["input_schema"],

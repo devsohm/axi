@@ -72,6 +72,8 @@ Responses transports that support system updates and `additional_tools` use `"ch
 
 A `Tool` contains `name`, `description`, and a TypeBox `parameters` schema. Parameter schemas must be objects. The AI package describes calls. The application executes tools and appends their results. `validateToolArguments()` checks and coerces arguments against the declaration.
 
+Non-strict Anthropic tools preserve an explicit `additionalProperties` policy, including a schema for extra arguments. Local definitions remain available to property references. Unsupported root schema combinators are omitted.
+
 Validation copies the arguments, removes optional null properties, converts structural values, and then coerces explicitly declared primitive types. Serialized JSON schemas retain these conversions, including tuple prefixes, pattern properties and local references within their schema resource. Matching union values remain unchanged. Invalid converted values raise a validation error.
 
 Numeric, boolean and string values can convert to `bigint`. A JSON `null` can convert to `undefined` when the schema requires it. These conversions leave the original transcript values intact. Validation reads an object's own fields; inherited methods do not count as arguments.

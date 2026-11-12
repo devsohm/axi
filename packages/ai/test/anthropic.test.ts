@@ -187,6 +187,20 @@ it("retains local definitions referenced by non-strict tools", async () => {
 		],
 	});
 });
+it.each([false, true, Type.Number(), undefined])("retains the non-strict extra-argument policy %j", async (policy) => {
+	let payload: unknown;
+	const parameters = Type.Object({ value: Type.String() }, policy === undefined ? {} : { additionalProperties: policy });
+	const result = await stream(model, normalizeContext({
+		messages: [{ role: "user", content: "check the tool", timestamp: 1 }],
+		tools: [{ name: "check", description: "Check the value", parameters }],
+	}), {
+		apiKey: "test", onPayload(body) { payload = body; }, fetch: async () => answer(),
+	}).result();
+	expect(result.stopReason).toBe("stop");
+	expect(payload).toMatchObject({ tools: [{ input_schema: { type: "object", properties: { value: { type: "string" } }, required: ["value"] } }] });
+	if (policy === undefined) expect(payload).not.toHaveProperty("tools.0.input_schema.additionalProperties");
+	else expect(payload).toHaveProperty("tools.0.input_schema.additionalProperties", policy);
+});
 function assistant(content: AssistantMessage["content"]): AssistantMessage {
 	return {
 		role: "assistant",
