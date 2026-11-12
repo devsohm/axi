@@ -1,8 +1,9 @@
 import { mkdtemp, open, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { Dir, type Dirent } from "node:fs";
 import { createServer } from "node:net";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { join, relative } from "node:path";
+import { pathToFileURL } from "node:url";
 import { BACKGROUND_CONTEXT, type Context, withAbortSignal } from "@axi/objects/context";
 import { afterEach, expect, it, vi } from "vitest";
 import { type FileError, getOrThrow, ok, type Result } from "../src/env/index.ts";
@@ -467,4 +468,65 @@ it("uses raw byte limits even when invalid UTF-8 expands in displayed text", asy
 		directories.push(join(spilled.spillPath, ".."));
 		expect([...(await readFile(spilled.spillPath))]).toEqual([128, 129]);
 	}
+});
+
+it("reads bounded text lines through file URLs and resolves home paths independently of cwd", async () => {
+	const cwd = await fixture();
+	const env = new NodeExecutionEnv({ cwd });
+	const path = join(cwd, "space 界.txt");
+	await writeFile(path, "first\r\n界🙂\nlast");
+	const url = pathToFileURL(path).href;
+	expect(getOrThrow(await env.absolutePath("~", BACKGROUND_CONTEXT))).toBe(homedir());
+	expect(getOrThrow(await env.absolutePath("~/notes", BACKGROUND_CONTEXT))).toBe(join(homedir(), "notes"));
+	expect(getOrThrow(await env.absolutePath(url, BACKGROUND_CONTEXT))).toBe(path);
+	expect(getOrThrow(await env.readTextLines(url, { maxLines: 1 }, BACKGROUND_CONTEXT))).toEqual(["first\r"]);
+	expect(getOrThrow(await env.readTextLines(url, undefined, BACKGROUND_CONTEXT))).toEqual([
+		"first\r", "界🙂", "last",
+	]);
+	expect(getOrThrow(await env.readTextLines("absent", { maxLines: 0 }, BACKGROUND_CONTEXT))).toEqual([]);
+	expect(await env.readTextLines("absent", undefined, BACKGROUND_CONTEXT)).toMatchObject({
+		ok: false, error: { code: "not_found", path: join(cwd, "absent") },
+	});
+	const cancelled = withAbortSignal(AbortSignal.abort(), BACKGROUND_CONTEXT);
+	expect(await env.readTextLines(url, undefined, cancelled)).toMatchObject({
+		ok: false, error: { code: "aborted", path },
+	});
+	if (process.platform !== "win32") {
+		expect(await env.readTextLines(".", undefined, BACKGROUND_CONTEXT)).toMatchObject({
+			ok: false, error: { code: "is_directory" },
+		});
+	}
+});
+
+it("truncates by bytes, zero fills growth and leaves missing paths absent", async () => {
+	const cwd = await fixture();
+	const env = new NodeExecutionEnv({ cwd });
+	const path = join(cwd, "bytes");
+	await writeFile(path, new Uint8Array([65, 0xc3, 0xa9, 66, 67]));
+	getOrThrow(await env.truncateFile("bytes", 2, BACKGROUND_CONTEXT));
+	expect([...(await readFile(path))]).toEqual([65, 0xc3]);
+	getOrThrow(await env.truncateFile("bytes", 5, BACKGROUND_CONTEXT));
+	expect([...(await readFile(path))]).toEqual([65, 0xc3, 0, 0, 0]);
+	getOrThrow(await env.truncateFile("bytes", 0, BACKGROUND_CONTEXT));
+	expect((await readFile(path)).byteLength).toBe(0);
+	expect(await env.truncateFile("absent", 0, BACKGROUND_CONTEXT)).toMatchObject({
+		ok: false, error: { code: "not_found", path: join(cwd, "absent") },
+	});
+	expect(getOrThrow(await env.exists("absent", BACKGROUND_CONTEXT))).toBe(false);
+});
+
+it("rejects a watcher when cancellation arrives during target capture", async () => {
+	const cwd = await fixture();
+	const env = new NodeExecutionEnv({ cwd, watch: { mode: "polling", pollIntervalMs: 10 } });
+	const controller = new AbortController();
+	const changes: unknown[] = [];
+	expect(await env.watch([{
+		get path() {
+			controller.abort();
+			return ".";
+		},
+	}], (change) => changes.push(change), withAbortSignal(controller.signal, BACKGROUND_CONTEXT))).toMatchObject({
+		ok: false, error: { code: "aborted", path: undefined },
+	});
+	expect(changes).toEqual([]);
 });
