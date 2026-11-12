@@ -74,20 +74,21 @@ export class TableDefinition<
 		evolution?: Evolution,
 	) {
 		checkName(name, "table");
+		const { version, columns, key, indexes: declaredIndexes = {} } = options;
 		this.name = name;
 		this.evolution = evolution;
-		if (!Number.isSafeInteger(options.version) || options.version < 1)
+		if (!Number.isSafeInteger(version) || version < 1)
 			throw new Error(
-				`${name}: version ${options.version} is not a positive integer`,
+				`${name}: version ${version} is not a positive integer`,
 			);
-		this.version = options.version;
-		this.schemas = options.columns;
-		this.columns = describeColumns(options.columns, name);
+		this.version = version;
+		this.schemas = columns;
+		this.columns = describeColumns(columns, name);
 		this.byName = new Map(this.columns.map((column) => [column.name, column]));
-		this.key = orderColumns(this.byName, options.key, `${name}: the key`);
+		this.key = orderColumns(this.byName, key, `${name}: the key`);
 		if (!this.key.length) throw new Error(`${name}: the key has no column`);
 		const indexes = new Map<string, readonly string[]>();
-		for (const [index, names] of Object.entries(options.indexes ?? {})) {
+		for (const [index, names] of Object.entries(declaredIndexes)) {
 			if (!INDEX_NAME.test(index))
 				throw new Error(`${name}: index "${index}": expected [a-z0-9_]+`);
 			indexes.set(

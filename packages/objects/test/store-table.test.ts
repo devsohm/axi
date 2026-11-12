@@ -32,6 +32,39 @@ it("normalizes a row and keeps table fingerprints independent of declaration ord
 		}),
 	).toThrow("twice");
 });
+it("retains the table version that passed declaration validation", () => {
+	let reads = 0;
+	const table = defineTable("captured-version", {
+		get version() {
+			return ++reads === 1 ? 1 : Number.NaN;
+		},
+		columns: { id: str() },
+		key: ["id"],
+	});
+	expect(table.version).toBe(1);
+	expect(table.rows.put({ id: "first" }, table.version).params).toEqual([
+		"first", 1,
+	]);
+});
+it("uses one column declaration for its schemas, row codec and fingerprint", () => {
+	const columns = { id: str(), count: int({ default: 7 }) };
+	let reads = 0;
+	const table = defineTable("captured-columns", {
+		version: 1,
+		get columns() {
+			if (++reads > 1) throw new Error("Column declarations changed during setup");
+			return columns;
+		},
+		key: ["id"],
+	});
+	expect(table.schemas).toBe(columns);
+	expect(table.rows.put({ id: "first" }, table.version).params).toEqual([
+		"first", 7, 1,
+	]);
+	expect(table.fingerprint).toBe(
+		defineTable("captured-columns", { version: 1, columns, key: ["id"] }).fingerprint,
+	);
+});
 it("compiles nullable arithmetic only after a fallback and protects primary keys", () => {
 	const table = defineTable("counters", {
 		version: 1,
