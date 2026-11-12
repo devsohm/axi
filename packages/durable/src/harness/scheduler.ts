@@ -1644,11 +1644,8 @@ export class TaskScheduler {
 							},
 							args[1] as Context,
 						)) as Runtime["memo"],
-			readSignal: (token, key, context) =>
-				this.#read(run, async () => {
-					context.abortSignal?.throwIfAborted();
-					return this.#region(() => readSignal(this.#liveRecord(run.taskId)?.memos, token, key));
-				}),
+			readSignal: (token, key, _context) =>
+				this.#read(run, async () => readSignal(this.#tree.live.get(run.taskId)?.memos, token, key)),
 			sleepUntil: (until, checkpoint, context) =>
 				this.#gated(
 					run,

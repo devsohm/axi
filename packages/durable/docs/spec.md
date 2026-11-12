@@ -110,6 +110,8 @@ A task can commit `{ status: "sleeping", checkpoint, signals: [token.key(key)], 
 
 `harness.wake()` reports work ready now and the earliest deadline still waiting. A delivered signal removes that task's old deadline from the report; other sleeping tasks keep their deadlines. Reading the report does not resume a paused scheduler.
 
+Signal reads use the live invocation's committed in-memory task record. They do not wait for pending writes or reject because the lookup context was cancelled. An ended invocation rejects the read.
+
 `state.wake` identifies the signal, deadline, expiry, or ended tasks that resumed the task. It survives commits of the same checkpoint and restart recovery, then clears when the checkpoint changes. `any` waits resume after at least one listed task ends; the usual ownership join still applies before the waiting task becomes terminal.
 
 `SubmissionDraft.notify: { taskId, key }` delivers `SubmissionSettled` in the commit that settles the submission. The value is the same settled record returned by `Submission.wait()`. A closed or missing recipient does not prevent settlement.

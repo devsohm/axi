@@ -1,12 +1,13 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { BACKGROUND_CONTEXT as context } from "@axi/objects/context";
+import { BACKGROUND_CONTEXT as context, withAbortSignal } from "@axi/objects/context";
 import { Type } from "typebox";
 import { afterEach, expect, test, vi } from "vitest";
 import { createModels } from "@axi/ai";
 import {
 	createRegistry,
+	defineExtension,
 	defineSignal,
 	defineTask,
 	Harness,
@@ -246,6 +247,39 @@ test("a self-signal in the sleeping checkpoint's commit is retained", async () =
 	);
 	scheduler.resume();
 	expect((await scheduler.waitForTask(id, context)).state.outcome).toEqual({ status: "completed", result: true });
+});
+
+test("reading committed signal state does not wait on the lookup context", async () => {
+	const task = defineTask<null, { phase: "read" }, boolean>({
+		name: "signal-lookup",
+		version: 1,
+		initial: () => ({ phase: "read" }),
+		phases: {
+			async read(_task, runtime, frame) {
+				await runtime.commit(async (tx) => {
+					expect(await tx.signal(runtime.taskId, Reply, "ready", { answer: "stored" })).toBe("delivered");
+				}, frame);
+				const controller = new AbortController();
+				controller.abort(new Error("Lookup context ended"));
+				const lookup = withAbortSignal(controller.signal, frame);
+				expect(await runtime.readSignal(Reply, "ready", lookup)).toEqual({ value: { answer: "stored" } });
+				expect(await runtime.readSignal(Reply, "missing", lookup)).toBeUndefined();
+				expect(runtime.signal.aborted).toBe(false);
+				await runtime.commit(() => ({ status: "terminal", outcome: { status: "completed", result: true } }), frame);
+			},
+		},
+		async abort() {},
+	});
+	const registry = createRegistry();
+	registry.install(defineExtension({ name: "signal-lookup", tasks: [task] }));
+	const harness = await Harness.open(new MemoryStorage(), { models: createModels(), registry }, context);
+	try {
+		const conversation = await harness.root(context);
+		const id = await conversation.commit((tx) => tx.createTask(task, null, { ownership: { kind: "conversation" } }), context);
+		expect((await harness.waitForTask(id, context)).state.outcome).toEqual({ status: "completed", result: true });
+	} finally {
+		await harness.close(context);
+	}
 });
 
 test("an any-policy wait resumes after one dependency ends and reports that dependency", async () => {
