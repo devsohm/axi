@@ -92,6 +92,8 @@ An outgoing attempt remains open for calls already running and calls they cause.
 
 Trusted links propagate outgoing-call ancestry through `call.old`. Untrusted links cannot claim it. Readiness waits through remote version skew until the other host updates or the deadline expires. Local dependency failures report `parked` with their cause. The replacement factory runs after the old attempt closes. Non-native contributions remain until the replacement publishes; native contributions leave at the seal.
 
+An outgoing call captures its ancestry before waiting for a send slot. A reload during that wait does not reclassify the queued call.
+
 ## Links and authority
 
 Links handshake before queued work. Untrusted envelopes are validated. Malformed messages, duplicate identifiers and control traffic from an unauthorized role close the channel. Asynchronous handling holds later messages until it completes.

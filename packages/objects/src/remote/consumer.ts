@@ -64,6 +64,8 @@ export class ConsumerSide {
 			: this.#link.role === "parent"
 				? payload.json
 				: this.#link.part(payload.json, context);
+		// A reload while waiting for a send slot must not change this call's ancestry.
+		const old = this.#link.host.oldWork.of(context);
 		const result = Promise.withResolvers<unknown>();
 		const cancel = (): void => {
 			this.#cancel(request);
@@ -89,7 +91,7 @@ export class ConsumerSide {
 					call,
 					hold,
 					method,
-					...(this.#link.host.oldWork.of(context) ? { old: true } : {}),
+					...(old ? { old: true } : {}),
 					...(trace === undefined ? {} : { trace }),
 					...(part === undefined ? {} : { args: part }),
 					...(payload?.segments === undefined ? {} : { segments: payload.segments }),
