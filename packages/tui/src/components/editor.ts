@@ -305,7 +305,6 @@ export class Editor implements Component, Focusable {
 	}
 	private insert(text: string): void {
 		if (!text) return;
-		text = normalized(text);
 		const lines = text.split("\n"),
 			before = this.line().slice(0, this.state.cursorCol),
 			after = this.line().slice(this.state.cursorCol);
@@ -327,7 +326,7 @@ export class Editor implements Component, Focusable {
 		this.remember();
 		this.#action = null;
 		this.exitHistory();
-		this.insert(text);
+		this.insert(normalized(text));
 	}
 	private visual(width = this.#width): Visual[] {
 		return this.state.lines.flatMap((line, logicalLine) =>
@@ -813,18 +812,13 @@ export class Editor implements Component, Focusable {
 			["tui.editor.deleteCharForward", 1, "char"],
 		] as const;
 		for (const [key, direction, unit] of deletion)
-			if (keys.matches(data, key)) {
+			if (
+				keys.matches(data, key) ||
+				(unit === "char" && matchesKey(data, direction < 0 ? "shift+backspace" : "shift+delete"))
+			) {
 				this.delete(direction, unit);
 				return;
 			}
-		if (matchesKey(data, "shift+backspace")) {
-			this.delete(-1, "char");
-			return;
-		}
-		if (matchesKey(data, "shift+delete")) {
-			this.delete(1, "char");
-			return;
-		}
 		if (keys.matches(data, "tui.editor.yank")) {
 			this.yank();
 			return;
@@ -893,12 +887,12 @@ export class Editor implements Component, Focusable {
 			this.moveVertical(1);
 			return;
 		}
-		if (keys.matches(data, "tui.editor.cursorLeft")) {
-			this.horizontal(-1);
-			return;
-		}
 		if (keys.matches(data, "tui.editor.cursorRight")) {
 			this.horizontal(1);
+			return;
+		}
+		if (keys.matches(data, "tui.editor.cursorLeft")) {
+			this.horizontal(-1);
 			return;
 		}
 		if (keys.matches(data, "tui.editor.pageUp")) {

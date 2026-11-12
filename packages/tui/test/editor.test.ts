@@ -201,6 +201,40 @@ test("shifted character deletion removes one grapheme and undo restores it", () 
 	expect(input.getText()).toBe("A🙂界B");
 });
 
+test("shifted backspace takes precedence over a forward-delete binding", () => {
+	setKeybindings(new KeybindingsManager(TUI_KEYBINDINGS, { "tui.editor.deleteCharForward": "shift+backspace" }));
+	const input = editor();
+	input.setText("abc");
+	input.handleInput("\x1b[D");
+	input.handleInput("\x1b[127;2u");
+	expect(input.getText()).toBe("ac");
+	expect(input.getCursor()).toEqual({ line: 0, col: 1 });
+});
+
+test("right movement wins when both horizontal actions share a binding", () => {
+	setKeybindings(
+		new KeybindingsManager(TUI_KEYBINDINGS, {
+			"tui.editor.cursorLeft": "ctrl+x",
+			"tui.editor.cursorRight": "ctrl+x",
+		}),
+	);
+	const input = editor();
+	input.setText("abc");
+	input.handleInput("\x01");
+	input.handleInput("\x18");
+	expect(input.getCursor()).toEqual({ line: 0, col: 1 });
+});
+
+test.each(["left\tright", "left\rright"])("kill and yank preserve existing input bytes: %j", (text) => {
+	const input = editor();
+	input.handleInput(text);
+	expect(input.getText()).toBe(text);
+	input.handleInput("\x15");
+	expect(input.getText()).toBe("");
+	input.handleInput("\x19");
+	expect(input.getText()).toBe(text);
+});
+
 test("enter-as-newline bindings allow a trailing backslash to submit without retaining it", () => {
 	setKeybindings(
 		new KeybindingsManager(TUI_KEYBINDINGS, { "tui.input.newLine": "enter", "tui.input.submit": "shift+enter" }),
