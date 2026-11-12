@@ -180,6 +180,8 @@ Link byte counters use the host's telemetry recorder even when the link starts w
 
 Browser ingestion charges and stamps one accepted span at a time. If the principal callback fails, later spans in that batch do not consume its rate limit.
 
+The exported telemetry schema lists each operation's allowed outcomes and lifecycle values. Start attributes declare whether callers must supply them. End attributes describe optional results without a start-time requirement.
+
 ## Limits
 
 Facets and plugins run with host-process authority. Reload does not isolate untrusted code. In-memory documents disappear with the process. Persistence requires an attached Store. Links provide reconnection of references, not replay of arbitrary side effects. Synchronous publication means a slow listener delays other listeners in that batch.

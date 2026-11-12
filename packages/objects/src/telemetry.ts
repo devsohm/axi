@@ -8,7 +8,8 @@ const host = { ...text, cardinality: "high", description: "Host address, or clie
 const object = { ...text, cardinality: "high", description: "Object type and parameters." } as const;
 const caller = { ...text, required: false, cardinality: "high" } as const;
 const common = { "objects.host": host, type: text, object };
-const outcome = { type: "string", description: "Operation outcome." } as const;
+const outcome = { type: "string", description: "Operation outcome.", values: ["ok", "error", "aborted"] } as const;
+const resultNumber = { type: "number", description: "A numeric result." } as const;
 const status = { default: "ok", errorWhen: "Failed operations record a bounded error category and message; cancellation remains ok." } as const;
 const commit = { description: "An adopted transaction.", attributes: { documents: number, ops: number, rows: number, duration: number } } as const;
 const retry = { description: "Delay before retry.", attributes: { backoff: number } } as const;
@@ -26,16 +27,16 @@ export const OBJECTS_TELEMETRY_SCHEMA = defineTelemetrySchema({
 		"objects.call": span("Remote method invocation by a consumer.", any, { ...common, member: text, "address.kind": text, "objects.principal": caller }, { outcome }),
 		"objects.method": { ...span("Method execution by a provider.", any, { ...common, member: text, "principal.kind": text, "objects.principal": caller }, { outcome }), events: { "objects.commit": commit } },
 		"objects.relay": span("Forwarded hold or method invocation.", root, { "objects.host": host, type: text, member: text, "upstream.kind": text }, { outcome }),
-		"objects.hold": span("Hold acquisition until a first answer.", any, { ...common, "address.kind": text }, { outcome }),
-		"objects.activate": { ...span("One activation or resumed activation.", root, { ...common, attempt: number }, { outcome }), events: { "objects.park": { description: "Activation waiting on a dependency.", attributes: { cause: text } }, "objects.retry": retry } },
+		"objects.hold": span("Hold acquisition until a first answer.", any, { ...common, "address.kind": text }, { outcome: { ...outcome, values: ["bound", "failed", "ended"] } }),
+		"objects.activate": { ...span("One activation or resumed activation.", root, { ...common, attempt: number }, { outcome: { ...outcome, values: ["live", "failed", "parked", "ended"] } }), events: { "objects.park": { description: "Activation waiting on a dependency.", attributes: { cause: text } }, "objects.retry": retry } },
 		"objects.open": span("Opening an object's native resource.", { kind: "spans", spans: ["objects.activate"] }, { "objects.host": host, type: text, native: number }, {}),
-		"objects.close": span("Closing an object's native resource.", root, { "objects.host": host, type: text, native: number, reason: text }, {}),
+		"objects.close": span("Closing an object's native resource.", root, { "objects.host": host, type: text, native: number, reason: { ...text, values: ["end", "close", "reload"] } }, {}),
 		"objects.load": span("Initial facet publication.", any, { "objects.host": host, plugins: number }, { failed: { type: "number", description: "Rejected facets." } }),
-		"objects.reload": { ...span("Facet replacement and affected objects.", any, { "objects.host": host, plugins: number }, { added: number, changed: number, removed: number, failed: number, fates: number }), events: { "objects.reload.fate": { description: "An affected object's result.", attributes: { object, fate: text } } } },
-		"objects.resolve": span("Resolving a routed host address.", root, { "objects.host": host, kind: text, address: object }, { outcome }),
-		"objects.revoke": span("Revoking principals and their work.", any, { "objects.host": host }, { count: number }),
-		"objects.routine": { ...span("A source-triggered routine invocation.", root, { ...common, routine: text, position: number }, { outcome }), events: { "objects.commit": commit, "objects.retry": retry } },
-		"objects.job": { ...span("One job intent, execution or finish phase.", any, { "objects.host": host, object, job: text, phase: text, "job.id": { ...caller } }, { outcome, "job.id": { type: "string", cardinality: "high", description: "Persisted run identifier." } }), events: { "objects.commit": commit, "objects.retry": retry } },
+		"objects.reload": { ...span("Facet replacement and affected objects.", any, { "objects.host": host, plugins: number }, { added: resultNumber, changed: resultNumber, removed: resultNumber, failed: resultNumber, fates: resultNumber }), events: { "objects.reload.fate": { description: "An affected object's result.", attributes: { object, fate: { ...text, values: ["restarted", "ended", "parked", "retried"] } } } } },
+		"objects.resolve": span("Resolving a routed host address.", root, { "objects.host": host, kind: text, address: object }, { outcome: { ...outcome, values: ["linked", "failed"] } }),
+		"objects.revoke": span("Revoking principals and their work.", any, { "objects.host": host }, { count: resultNumber }),
+		"objects.routine": { ...span("A source-triggered routine invocation.", root, { ...common, routine: { ...text, values: ["on", "onLive"] }, position: number }, { outcome }), events: { "objects.commit": commit, "objects.retry": retry } },
+		"objects.job": { ...span("One job intent, execution or finish phase.", any, { "objects.host": host, object, job: text, phase: { ...text, values: ["intent", "run", "finish"] }, "job.id": { ...caller } }, { outcome, "job.id": { type: "string", cardinality: "high", description: "Persisted run identifier." } }), events: { "objects.commit": commit, "objects.retry": retry } },
 		"objects.http": { ...span("A routed HTTP request.", root, { "objects.host": host, method: text, route: text }, { status: { type: "number", description: "Response status." } }), events: { "objects.commit": commit } },
 	},
 	metrics: {
