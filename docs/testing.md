@@ -133,6 +133,7 @@ They also verify typed host addresses and reject optional host columns.
 
 Scheduler tests cover abandoned work after restart, incompatible task
 definitions, phase handover, abort failures and background cancellation.
+Rejected sleep deadlines roll back document changes and leave the task usable.
 Queued-input checks verify cancellation across task-owned conversations while
 retaining queued writes and inputs outside the selected scope. Compaction checks
 cover retry limits, unavailable models, custom summaries and request cancellation.
@@ -182,6 +183,10 @@ saved outcome and error report. A failing cancellation callback must still let
 the task settle.
 
 Offline provider tests inspect request encoding, device-login polling, token refresh, cancellation and malformed replies using synthetic credentials. Env tests run the generated Unix upload script in a temporary local directory. Windows command tests inspect the protocol and upload framing; native Windows execution still requires a Windows runner. Browser adapter tests use DOM event fixtures; real browser and terminal acceptance remain separate checks.
+
+MCP checks bound pagination, isolate failing progress and close listeners, and
+reject unsupported HTTP response types without disabling later requests. An
+invalid SSE event must still allow a later valid notification through.
 
 Native discovery tests check packaging paths, unavailable modules, optional
 modifier support and a Linux display becoming available after startup. They mock

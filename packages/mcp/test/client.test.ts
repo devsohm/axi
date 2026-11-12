@@ -22,6 +22,25 @@ describe("MCP client", () => {
 			expect(dispose()).toBe(false);
 		}
 	});
+	it("reports a failed close listener, runs the remaining listeners and closes only once", async () => {
+		const client = new McpClient({ name: "client", version: "1" });
+		const failure = new Error("Close listener failed"),
+			errors: Error[] = [],
+			calls: string[] = [];
+		client.onError((error) => errors.push(error));
+		client.onClose(() => {
+			calls.push("failed");
+			throw failure;
+		});
+		client.onClose(() => {
+			calls.push("continued");
+		});
+		await client.close();
+		await client.close();
+		expect(calls).toEqual(["failed", "continued"]);
+		expect(errors).toEqual([failure]);
+		expect(client.connectionState).toBe("closed");
+	});
 	it("ignores progress that the request did not advertise", async () => {
 		const pair = createInMemoryTransportPair();
 		const callbacks: number[] = [];
@@ -64,11 +83,14 @@ describe("MCP client", () => {
 			await client.close();
 		}
 	});
-	it("keeps the request receiver of a progress callback through settlement", async () => {
+	it("keeps the request receiver and settles successfully when its progress callback throws", async () => {
 		const pair = createInMemoryTransportPair();
 		const receivers: unknown[] = [];
+		const failure = new Error("Progress listener failed"),
+			errors: Error[] = [];
 		function progress(this: unknown): void {
 			receivers.push(this);
+			throw failure;
 		}
 		pair.server.onMessage((message) => {
 			if (!("id" in message) || !("method" in message)) return;
@@ -93,9 +115,11 @@ describe("MCP client", () => {
 		});
 		await pair.server.start();
 		const client = new McpClient({ name: "client", version: "1" });
+		client.onError((error) => errors.push(error));
 		try {
 			await client.connect(pair.client);
 			expect(await client.request("progress", {}, { onProgress: progress, timeoutMs: 0 })).toBe("complete");
+			expect(errors).toEqual([failure]);
 			expect(receivers).toHaveLength(1);
 			expect(receivers[0]).toMatchObject({ onProgress: progress, timeoutMs: 0, timer: undefined });
 			const controller: unknown = Reflect.get(Object(receivers[0]), "sendController");
@@ -105,7 +129,7 @@ describe("MCP client", () => {
 			await client.close();
 		}
 	});
-	it("rejects repeated pagination cursors through the transport", async () => {
+	it.each(["repeated", "endless"])("bounds %s pagination through the transport", async (mode) => {
 		const pair = createInMemoryTransportPair();
 		let pages = 0;
 		pair.server.onMessage((message) => {
@@ -117,15 +141,17 @@ describe("MCP client", () => {
 							capabilities: {},
 							serverInfo: { name: "own-server", version: "1" },
 						}
-					: (++pages, { tools: [], nextCursor: "again" });
+					: (++pages, { tools: [], nextCursor: mode === "repeated" ? "again" : String(pages) });
 			void pair.server.send({ jsonrpc: "2.0", id: message.id, result });
 		});
 		await pair.server.start();
 		const client = new McpClient({ name: "own-client", version: "1" });
 		try {
 			await client.connect(pair.client);
-			await expect(client.listTools()).rejects.toThrow("MCP tools/list returned duplicate cursor: again");
-			expect(pages).toBe(2);
+			await expect(client.listTools()).rejects.toThrow(
+				mode === "repeated" ? "MCP tools/list returned duplicate cursor: again" : "MCP tools/list exceeded 1000 pages",
+			);
+			expect(pages).toBe(mode === "repeated" ? 2 : 1000);
 		} finally {
 			await client.close();
 		}

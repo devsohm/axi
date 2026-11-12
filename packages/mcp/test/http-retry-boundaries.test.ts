@@ -6,6 +6,126 @@ afterEach(() => vi.useRealTimers());
 const initialized = { jsonrpc: "2.0", method: "notifications/initialized" } as const;
 const request = { jsonrpc: "2.0", id: 1, method: "ping" } as const;
 
+test("a request requires a supported response body and a later request still works", async () => {
+	for (const status of [202, 204, 200]) {
+		let requests = 0,
+			cancellations = 0;
+		const messages: unknown[] = [];
+		const transport = new StreamableHttpTransport({
+			url: "https://peer.invalid/mcp",
+			fetch: async () => {
+				if (++requests > 1) return Response.json({ jsonrpc: "2.0", id: 1, result: 7 });
+				return new Response(
+					status === 200
+						? new ReadableStream({
+								cancel() {
+									cancellations++;
+								},
+							})
+						: null,
+					{
+						status,
+						headers: status === 200 ? { "content-type": "text/plain" } : {},
+					},
+				);
+			},
+		});
+		transport.onMessage((message) => messages.push(message));
+		try {
+			await transport.start();
+			await expect(transport.send(request)).rejects.toMatchObject({
+				status,
+				message: expect.stringContaining(
+					status === 200 ? "Unsupported MCP response content type" : "without a response",
+				),
+			});
+			expect(cancellations).toBe(status === 200 ? 1 : 0);
+			await transport.send(request);
+			expect(messages).toEqual([{ jsonrpc: "2.0", id: 1, result: 7 }]);
+		} finally {
+			await transport.close();
+		}
+	}
+});
+
+test("unsupported notification stream types are cancelled once without disabling POST requests", async () => {
+	for (const type of [undefined, "application/json"]) {
+		let gets = 0,
+			cancellations = 0;
+		const errors: Error[] = [],
+			messages: unknown[] = [];
+		const transport = new StreamableHttpTransport({
+			url: "https://peer.invalid/mcp",
+			fetch: async (_url, init) => {
+				if (init?.method !== "GET") {
+					const message = JSON.parse(String(init?.body));
+					return "id" in message
+						? Response.json({ jsonrpc: "2.0", id: message.id, result: 7 })
+						: new Response(null, { status: 202 });
+				}
+				gets++;
+				return new Response(
+					new ReadableStream({
+						cancel() {
+							cancellations++;
+						},
+					}),
+					{
+						headers: type === undefined ? {} : { "content-type": type },
+					},
+				);
+			},
+		});
+		transport.onError((error) => errors.push(error));
+		transport.onMessage((message) => messages.push(message));
+		try {
+			await transport.start();
+			await transport.send(initialized);
+			await vi.waitFor(() => expect(errors).toHaveLength(1));
+			expect(errors[0]).toMatchObject({
+				status: 200,
+				message: `Unsupported MCP GET response content type: ${type ?? "missing"}`,
+			});
+			expect([gets, cancellations]).toEqual([1, 1]);
+			await transport.send(request);
+			expect(messages).toEqual([{ jsonrpc: "2.0", id: 1, result: 7 }]);
+		} finally {
+			await transport.close();
+		}
+	}
+});
+
+test("a malformed SSE message is reported while a later valid notification is delivered", async () => {
+	const message = { jsonrpc: "2.0", method: "server.ready", params: { ready: true } };
+	const errors: Error[] = [],
+		messages: unknown[] = [];
+	const transport = new StreamableHttpTransport({
+		url: "https://peer.invalid/mcp",
+		fetch: async (_url, init) =>
+			init?.method === "GET"
+				? new Response(
+						new ReadableStream({
+							start(controller) {
+								controller.enqueue(new TextEncoder().encode(`data: {broken\n\ndata: ${JSON.stringify(message)}\n\n`));
+							},
+						}),
+						{ headers: { "content-type": "text/event-stream" } },
+					)
+				: new Response(null, { status: 202 }),
+	});
+	transport.onError((error) => errors.push(error));
+	transport.onMessage((message) => messages.push(message));
+	try {
+		await transport.start();
+		await transport.send(initialized);
+		await vi.waitFor(() => expect(messages).toEqual([message]));
+		expect(errors).toHaveLength(1);
+		expect(errors[0]).toBeInstanceOf(SyntaxError);
+	} finally {
+		await transport.close();
+	}
+});
+
 test("discarding an accepted notification body contains cancellation failure and preserves later requests", async () => {
 	let cancellations = 0;
 	const transport = new StreamableHttpTransport({

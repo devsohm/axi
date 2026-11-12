@@ -26,7 +26,7 @@ An aborted signal rejects with `McpAbortError`; a deadline rejects with `McpTime
 
 The client answers server `ping` requests. Configured roots, supplied as a list or callback, enable `roots/list`. `setRequestHandler()` receives parameters and an abort signal; server cancellation aborts that signal. Removing a replaced handler does not remove its replacement. An absent handler produces a method-not-found response. Nullish handler results become an empty object.
 
-Notification, error and close registration returns removal callbacks. Notification and progress callback failures are reported to error listeners. Applications own error-listener behavior.
+Notification, error and close registration returns removal callbacks. Notification, progress and close callback failures are reported to error listeners. Applications own error-listener behavior.
 
 ## Tools and resources
 
@@ -45,6 +45,8 @@ Options configure command, arguments, directory, environment inheritance, stderr
 ## Streamable HTTP transport
 
 POST sends JSON and accepts JSON or SSE. Notifications and responses discard their acknowledgement body. A request acknowledged with 202 or 204 without a result fails. HTTP errors retain status and a bounded body snippet. A 401 becomes `McpAuthRequiredError`; a 404 after session establishment becomes `McpSessionExpiredError`.
+
+Unsupported POST and GET response types cancel the response body and fail. A malformed JSON event in an SSE stream reports an error while later valid events remain readable.
 
 The transport retains session IDs and negotiated protocol headers. By default it opens a server-to-client GET stream after initialization; `openGetStream: false` disables it. A 405 means no GET stream is offered. Injected `fetch` is called without a receiver.
 
