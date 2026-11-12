@@ -27,6 +27,47 @@ const State = defineDoc({
 	initial: () => ({ count: 0, items: [] as string[] }),
 });
 describe("SQLite-backed Session", () => {
+	it.each(["scanConversations", "scanTasks", "scanSubmissions"] as const)(
+		"%s checks lifecycle and cursor state before reading filters",
+		async (method) => {
+			const storage = await openNodeSqliteStorage(":memory:");
+			const reads: string[] = [];
+			const failure = new Error("query filter failed");
+			const readFilter = (): ConversationId | undefined => {
+				reads.push("filter");
+				throw failure;
+			};
+			const query = {
+				get order(): "ascending" {
+					reads.push("order");
+					return "ascending";
+				},
+				get ownerConversationId() {
+					return readFilter();
+				},
+				get conversationId() {
+					return readFilter();
+				},
+			};
+			try {
+				const pending = storage[method](query, 1, undefined, context);
+				expect(pending).toBeInstanceOf(Promise);
+				await expect(pending).rejects.toBe(failure);
+				expect(reads).toEqual(["order", "filter"]);
+				reads.length = 0;
+				await expect(storage[method](query, 1, { after: "invalid" }, context)).rejects.toMatchObject({
+					name: "StorageRequestError",
+				});
+				expect(reads).toEqual(["order"]);
+				reads.length = 0;
+				await storage.close(context);
+				await expect(storage[method](query, 1, undefined, context)).rejects.toThrow("SqliteStorage is closed");
+				expect(reads).toEqual([]);
+			} finally {
+				await storage.close(context);
+			}
+		},
+	);
 	it("keeps grouped entry writes bounded and stops receipts at the first refusal", async () => {
 		const database = await openNodeSqliteDatabase(":memory:");
 		const storage = await SqliteStorage.open(database);

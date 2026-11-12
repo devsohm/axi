@@ -164,13 +164,10 @@ export class SqliteStorage implements T.Storage {
 	}
 	async #scan<Value extends { readonly id: number }>(
 		table: string,
-		requested: T.ScanOrder | undefined,
+		{ order, after }: ReturnType<typeof scanPosition>,
 		limit: number,
-		cursor: T.Cursor | undefined,
 		filters: readonly (readonly [string, SqliteValue])[],
 	): Promise<T.Page<Value, T.Cursor>> {
-		this.#open();
-		const { order, after } = scanPosition(requested, cursor, "ascending");
 		const conditions = [`id ${order === "ascending" ? ">" : "<"} ?`, ...filters.map(([column]) => `${column} = ?`)];
 		const values: SqliteValue[] = [
 			after ?? (order === "ascending" ? -1 : Number.MAX_SAFE_INTEGER),
@@ -187,41 +184,47 @@ export class SqliteStorage implements T.Storage {
 			order,
 		);
 	}
-	scanConversations(
+	async scanConversations(
 		query: T.ConversationQuery,
 		limit: number,
 		cursor: T.Cursor | undefined,
 		_context: Context,
 	): Promise<T.Page<T.ConversationRecord, T.Cursor>> {
+		this.#open();
+		const position = scanPosition(query.order, cursor, "ascending");
 		const filters: [string, SqliteValue][] = [];
 		if (query.ownerConversationId !== undefined) filters.push(["owner_conversation_id", query.ownerConversationId]);
 		if (query.ownerTaskId !== undefined) filters.push(["owner_task_id", query.ownerTaskId]);
-		return this.#scan(this.#schema.tables.conversations, query.order, limit, cursor, filters);
+		return this.#scan(this.#schema.tables.conversations, position, limit, filters);
 	}
-	scanTasks(
+	async scanTasks(
 		query: T.TaskQuery,
 		limit: number,
 		cursor: T.Cursor | undefined,
 		_context: Context,
 	): Promise<T.Page<StoredTask, T.Cursor>> {
+		this.#open();
+		const position = scanPosition(query.order, cursor, "ascending");
 		const filters: [string, SqliteValue][] = [];
 		if (query.conversationId !== undefined) filters.push(["conversation_id", query.conversationId]);
 		if (query.kind !== undefined) filters.push(["kind", encode(query.kind)]);
 		if (query.status !== undefined) filters.push(["status", query.status]);
 		if (query.abortRequested !== undefined) filters.push(["abort_requested", Number(query.abortRequested)]);
 		if (query.background !== undefined) filters.push(["background", Number(query.background)]);
-		return this.#scan(this.#schema.tables.tasks, query.order, limit, cursor, filters);
+		return this.#scan(this.#schema.tables.tasks, position, limit, filters);
 	}
-	scanSubmissions(
+	async scanSubmissions(
 		query: T.SubmissionQuery,
 		limit: number,
 		cursor: T.Cursor | undefined,
 		_context: Context,
 	): Promise<T.Page<T.SubmissionRecord, T.Cursor>> {
+		this.#open();
+		const position = scanPosition(query.order, cursor, "ascending");
 		const filters: [string, SqliteValue][] = [];
 		if (query.conversationId !== undefined) filters.push(["conversation_id", query.conversationId]);
 		if (query.status !== undefined) filters.push(["status", query.status]);
-		return this.#scan(this.#schema.tables.submissions, query.order, limit, cursor, filters);
+		return this.#scan(this.#schema.tables.submissions, position, limit, filters);
 	}
 	async submissionByRequest(
 		conversationId: T.ConversationId,
