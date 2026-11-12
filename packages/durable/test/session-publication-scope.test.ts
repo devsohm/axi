@@ -1,5 +1,5 @@
 import { BACKGROUND_CONTEXT as context } from "@axi/objects/context";
-import { expect, test } from "vitest";
+import { expect, test, vi } from "vitest";
 import { defineEntry, MemoryStorage, type CommitPublication, type EntryId, type ReportInfo } from "../src/index.ts";
 import { SessionImpl } from "../src/session/session.ts";
 
@@ -176,6 +176,59 @@ test("deferred persistence does not postpone a record write", async () => {
 		expect((await storage.entry(entry.id, context))?.entry).toEqual(entry);
 		expect(published).toMatchObject([{ changes: [{ type: "entry", value: { id: entry.id } }] }]);
 	} finally {
+		await session.close(context);
+	}
+});
+
+test("batched publications yield between commits when setImmediate is unavailable", async () => {
+	const storage = new ScopedStorage(),
+		session = new ReportingSession(storage);
+	const entered = Promise.withResolvers<() => void>(),
+		prepared = Promise.withResolvers<void>();
+	const published: EntryId[] = [];
+	let release: (() => void) | undefined;
+	try {
+		const conversations = await session.commit(async (tx) => {
+			const ids = [];
+			for (let index = 0; index < 3; index++)
+				ids.push((await tx.createConversation({ ownership: { kind: "ownerless" } })).id);
+			return ids;
+		}, context);
+		session.observeCommits({
+			advance(frame) {
+				for (const change of frame.changes) if (change.type === "entry") published.push(change.value.id);
+			},
+			end() {},
+		});
+		storage.scope = (publish) => entered.resolve(publish);
+		const first = session.commit((tx) => tx.appendEntry(conversations[0], { kind: Receipt.kind }), context);
+		release = await entered.promise;
+		let preparedCount = 0;
+		const later = conversations.slice(1).map((id) =>
+			session.commit(async (tx) => {
+				const entry = await tx.appendEntry(id, { kind: Receipt.kind });
+				if (++preparedCount === 2) prepared.resolve();
+				return entry;
+			}, context),
+		);
+		await prepared.promise;
+		await new Promise<void>((resolve) => setImmediate(resolve));
+		let seenAtSecond: number | undefined;
+		const second = later[0].then((entry) => {
+			seenAtSecond = published.length;
+			return entry;
+		});
+		storage.scope = (publish) => publish();
+		vi.stubGlobal("setImmediate", undefined);
+		release();
+		const entries = await Promise.all([first, second, later[1]]);
+		expect(published).toEqual(entries.map((entry) => entry.id));
+		expect(seenAtSecond).toBe(2);
+		expect(session.reports).toEqual([]);
+	} finally {
+		vi.unstubAllGlobals();
+		storage.scope = (publish) => publish();
+		release?.();
 		await session.close(context);
 	}
 });
