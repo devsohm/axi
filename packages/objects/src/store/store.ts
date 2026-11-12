@@ -60,9 +60,9 @@ export async function openStore(backend: Backend, context: Context, options: Sto
 	try {
 		context.abortSignal?.throwIfAborted();
 		let meta = await applyStoreSchema(backend.db);
-		if (options.outbox !== undefined && options.outbox !== (meta.outbox === 1)) {
-			const enabled = options.outbox,
-				floor = enabled ? meta.last_seq : 0;
+		const outbox = options.outbox;
+		if (outbox !== undefined && outbox !== (meta.outbox === 1)) {
+			const enabled = outbox, floor = enabled ? meta.last_seq : 0;
 			await backend.db.transaction(async (tx) => {
 				await tx.run(
 					`UPDATE ${TABLES.meta} SET outbox = ?, outbox_floor = ? WHERE singleton = 1`,
@@ -491,12 +491,13 @@ export class ObjectsStore implements Store {
 		try {
 			value = await work();
 		} catch (error) {
-			if (!context?.abortSignal?.aborted) this.#failure ??= { error };
+			const signal = context?.abortSignal;
+			if (!signal?.aborted) this.#failure ??= { error };
 			this.assertUsable();
-			if (context?.abortSignal?.aborted)
+			if (signal?.aborted)
 				throw new ObjectsError(
 					{ code: "aborted", message: "store: read aborted" },
-					{ cause: context.abortSignal.reason },
+					{ cause: signal.reason },
 				);
 			throw this.#fail(error);
 		} finally {

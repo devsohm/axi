@@ -6,6 +6,7 @@ import { expect, it } from "vitest";
 import {
 	BACKGROUND_CONTEXT as context,
 	withCancel,
+	type Context,
 } from "../src/context/index.ts";
 import { sqliteBackend } from "../src/store/backend.ts";
 import { createDocument, loadContent } from "../src/store/engine.ts";
@@ -22,6 +23,46 @@ import { and } from "../src/store/expression.ts";
 import type { StoreWrite } from "../src/store/writes.ts";
 
 const fence = { admit: () => true, adopt: () => {} };
+
+it("opens the store with the selected outbox setting", async () => {
+	let reads = 0;
+	const store = await openStore(sqliteBackend(await openNodeSqliteDatabase(":memory:")), context, {
+		get outbox() {
+			return ++reads === 1;
+		},
+	});
+	try {
+		expect(store.outbox).toBeDefined();
+		expect(await store.outbox?.read(0, 10, context)).toEqual([]);
+	} finally {
+		await store.close(context);
+	}
+});
+
+it("uses the selected cancellation signal to classify a failed read", async () => {
+	const store = (await openStore(sqliteBackend(await openNodeSqliteDatabase(":memory:")), context)) as ObjectsStore;
+	const cancelled = AbortSignal.abort(new Error("Caller stopped waiting"));
+	let reads = 0;
+	const caller: Context = {
+		get abortSignal() {
+			return ++reads === 1 ? cancelled : undefined;
+		},
+		telemetry: context.telemetry,
+		value: key => context.value(key),
+		toString: () => "cancelled store read",
+	};
+	try {
+		await expect(store.read(async () => {
+			throw new Error("Read interrupted");
+		}, caller)).rejects.toMatchObject({
+			code: "aborted",
+			cause: cancelled.reason,
+		});
+		expect(await store.read(async () => "available", context)).toBe("available");
+	} finally {
+		await store.close(context);
+	}
+});
 
 it("counts rows during composite writes and adopts the total once", async () => {
 	const store = (await openStore(sqliteBackend(await openNodeSqliteDatabase(":memory:")), context)) as ObjectsStore;
