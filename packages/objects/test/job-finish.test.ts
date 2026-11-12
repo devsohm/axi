@@ -63,10 +63,11 @@ it("adapts an older result before migrating the state passed to its new finish",
 	vi.useFakeTimers({ toFake: ["Date", "setTimeout", "clearTimeout"] });
 	const order: string[] = [];
 	const outcomes: unknown[] = [];
+	const resumedCounts: number[] = [];
 	const ready = Promise.withResolvers<JobHandle<{}, string, { n: number }>>();
 	const errors: string[] = [];
 	const host = createHost({ onError(error) { errors.push(error.kind); } });
-	const Runner = local("migration.runner", { version: 1, params: {}, members: { running: json() } });
+	const Runner = local("migration.runner", { version: 1, params: {}, members: { running: json(), count: int() } });
 	const State = defineState("migration.state", { version: 1, schema: obj({ n: int() }), initial: () => ({ n: 0 }) });
 	const NextState = defineState("migration.state", {
 		version: 2,
@@ -91,10 +92,13 @@ it("adapts an older result before migrating the state passed to its new finish",
 					finish() { throw new Error("old finish unavailable"); },
 				});
 				ready.resolve(job);
-				return { running: job.running };
+				return { running: job.running, count: self.derive([job.running], () => host.activity.value.jobs) };
 			})),
 		}], context);
 		const job = await ready.promise;
+		const ref = await host.get(Runner, {}, context);
+		const counts = await ref.count.watch(context);
+		counts.start(async () => {});
 		const run = await job.start({}, context);
 		for (const delay of [1000, 2000, 4000, 8000]) await vi.advanceTimersByTimeAsync(delay);
 		expect(job.running.value).toMatchObject([{ phase: "blocked", reason: "finish_failed" }]);
@@ -102,13 +106,20 @@ it("adapts an older result before migrating the state passed to its new finish",
 			name: "runner",
 			facet: defineFacet((h) => h.serve(Runner, (_params, self) => {
 				const next = self.job(NextWork, { run: async () => "next", finish(outcome) { outcomes.push(outcome); } });
-				return { running: next.running };
+				const count = self.derive([next.running], ([runs]) => {
+					if (runs.some((run) => run.phase === "finishing")) resumedCounts.push(host.activity.value.jobs);
+					return host.activity.value.jobs;
+				});
+				return { running: next.running, count };
 			})),
 		}], context);
 		expect(await run.outcome(context)).toMatchObject({ kind: "done", result: "done" });
 		expect(outcomes).toMatchObject([{ kind: "done", result: "done", state: { n: 0 } }]);
 		expect(order).toEqual(["result", "state"]);
+		expect(resumedCounts).toEqual([1]);
 		expect(errors.filter((kind) => kind === "job_finish_failed")).toHaveLength(5);
+		await counts.stop();
+		ref.release();
 	} finally {
 		await host.close(context);
 		vi.useRealTimers();

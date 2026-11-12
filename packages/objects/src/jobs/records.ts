@@ -689,6 +689,8 @@ export class JobRecords {
 			run.blockedPhase = undefined;
 			run.finishFailures = 0;
 			this.#active++;
+			// Publication can release the object's last external reference.
+			this.#owner.countRuns(1);
 		} else if (change.kind === "update") Object.assign(run, change.fields);
 		else if (change.kind === "outcome") {
 			run.phase = "finishing";
@@ -705,7 +707,6 @@ export class JobRecords {
 	#committed(change: Adoption): void {
 		const run = change.run;
 		if (change.kind === "unblock") {
-			this.#owner.countRuns(1);
 			queueMicrotask(() => this.#schedule(run));
 		} else if (change.kind === "create") queueMicrotask(() => this.#schedule(run));
 		else if (change.kind === "delete") {
