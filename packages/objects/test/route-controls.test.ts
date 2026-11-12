@@ -11,7 +11,42 @@ import {
 	memoryLinkPair,
 	remote,
 	str,
+	type HostError,
 } from "../src/index.ts";
+
+it("reports a rejected route without evaluating the plugin error's stack", async () => {
+	const Worker = hostKind("error.worker"),
+		failure = new Error("worker unavailable");
+	let stackReads = 0;
+	Object.defineProperty(failure, "stack", {
+		get() {
+			stackReads++;
+			throw new Error("stack not available");
+		},
+	});
+	const Value = remote("error.value", {
+		version: 1,
+		params: {},
+		hostAddress: () => Worker(),
+		variants: { value: { state: { value: int() } } },
+	});
+	const reports: HostError[] = [],
+		host = createHost({ principal: { kind: "service" }, onError: (error) => reports.push(error) });
+	host.route(Worker, { authorize: () => true, resolve: () => Promise.reject(failure) }, context);
+	try {
+		await host.load([], context);
+		const ref = host.hold(Value, {}, context);
+		await vi.waitFor(() => expect(ref.state.value.kind).toBe("failed"));
+		expect(reports).toHaveLength(1);
+		const reported = reports[0]!;
+		expect(reported.kind).toBe("resolve_failed");
+		if (reported.kind === "resolve_failed") expect(reported.error).toBe(failure);
+		expect(stackReads).toBe(0);
+		ref.release();
+	} finally {
+		await host.close(context);
+	}
+});
 
 it("calls an address callback without an internal receiver", async () => {
 	const Server = hostKind("callback.server");

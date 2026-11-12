@@ -31,7 +31,7 @@ import { HostLink, type LinkRole } from "../remote/host-link.ts";
 import { Path, type Upstream } from "../remote/path.ts";
 import type { ProviderSide } from "../remote/provider.ts";
 import { RemoteObject } from "../remote/remote-object.ts";
-import { Batch, handedOut } from "../state/internal.ts";
+import { Batch } from "../state/internal.ts";
 import type { ArchivePart } from "../store/archive.ts";
 import { exportHostData, type HostDataCounts, type HostImportOptions } from "../store/host-data.ts";
 import type { ObjectsStore, Store } from "../store/store.ts";
@@ -528,8 +528,6 @@ export class ObjectsHost<P extends Principal = Principal, R extends JsonValue = 
 	}
 	report(error: HostError): void {
 		try {
-			if ("error" in error) handedOut(error.error);
-			else if ("failure" in error) handedOut(error.failure.error);
 			this.#onError(error);
 		} catch {}
 	}
