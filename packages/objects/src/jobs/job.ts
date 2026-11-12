@@ -246,11 +246,13 @@ export class Job implements JobHandle<JsonValue, unknown, JsonValue | undefined>
 					if (finishFailures >= 5) {
 						outcome = "error";
 						if (span) spanFailed(span.span, "job_failed", error);
-						return this.#records.record(run, {
+						// Await inside try so the phase span includes the blocked-state commit.
+						await this.#records.record(run, {
 							kind: "block",
 							run,
 							reason: "finish_failed",
 						});
+						return;
 					}
 					await this.#records.record(run, {
 						kind: "update",
