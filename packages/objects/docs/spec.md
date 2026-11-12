@@ -154,6 +154,8 @@ Recorded timing uses milliseconds with microsecond precision. Telemetry queues a
 
 A host records activation, resource, method, routine, job, route, remote-call and HTTP lifetimes. Trace carriers cross supported transports. Cancellation keeps an ok status. Errors use bounded messages. Browser ingestion enforces the browser incarnation prefix and accepts at most 1,200 spans per minute. Browser batches hold at most 100 spans. Worker batches hold at most 1,000 spans and 1,000 metric rows.
 
+Link byte counters use the host's telemetry recorder even when the link starts with a different request context.
+
 ## Limits
 
 Facets and plugins run with host-process authority. Reload does not isolate untrusted code. In-memory documents disappear with the process. Persistence requires an attached Store. Links provide reconnection of references, not replay of arbitrary side effects. Synchronous publication means a slow listener delays other listeners in that batch.

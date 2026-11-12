@@ -56,6 +56,7 @@ export class HostLink implements ChannelHandler {
 				incarnation: host.incarnation,
 				calls: this.#calls,
 				report: (error) => host.report({ kind: "protocol_error", error }),
+				metrics: objectsMetrics(host.telemetry.metrics),
 			},
 			context,
 		);

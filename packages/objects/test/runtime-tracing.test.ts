@@ -268,3 +268,38 @@ it("links a remote activation to its incoming hold and to the dependency it wait
 		await host.close(context);
 	}
 });
+
+it("link byte counters use the host recorder when a link has a different request context", async () => {
+	const hostTelemetry = new InMemoryTelemetryContext(),
+		requestTelemetry = new InMemoryTelemetryContext();
+	const reports: unknown[] = [];
+	const host = createHost({ telemetry: hostTelemetry, onError: (error) => reports.push(error) });
+	const [server, peer] = memoryLinkPair();
+	const hello = Promise.withResolvers<Uint8Array>();
+	peer.onMessage(hello.resolve);
+	try {
+		await host.load([], context);
+		await requestTelemetry.startSpan({ name: "link-request" }, async (span) => {
+			host.accept(server, { principal: { kind: "guest" } }, withTelemetry(span, context));
+			const sent = await hello.promise;
+			const received = binaryCodec.encode({
+				kind: "hello",
+				protocol: 1,
+				incarnation: "01234567-89ab-cdef-0123-456789abcdef",
+				calls: 4,
+			});
+			peer.send(received);
+			await new Promise<void>((resolve) => setImmediate(resolve));
+			const bytes = hostTelemetry.getMetrics().filter((metric) => metric.name === "objects.link.bytes");
+			expect(bytes.map((metric) => [metric.attributes.direction, metric.value])).toEqual([
+				["sent", sent.byteLength],
+				["received", received.byteLength],
+			]);
+			expect(requestTelemetry.getMetrics().filter((metric) => metric.name === "objects.link.bytes")).toEqual([]);
+			expect(reports).toEqual([]);
+		});
+	} finally {
+		peer.close();
+		await host.close(context);
+	}
+});
