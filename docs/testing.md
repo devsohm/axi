@@ -148,6 +148,8 @@ its retained tail and complete spill file, with and without a final newline.
 Image checks run both direct processing and real worker requests. They compare
 pixel positions, orientation, dimensions and byte limits. Concurrent requests
 use separate limits and preserve their caller's input bytes.
+Controlled worker failures check startup fallback, rejection of pending images
+after worker loss, and isolation of individual image errors.
 
 Fullscreen tests cover captured mouse drags, nested wheel scrolling, search
 controls, selection auto-scroll and terminal mode restoration. Scrollback tests
