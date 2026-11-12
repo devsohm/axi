@@ -135,6 +135,7 @@
 						"packages/objects/test/job-records.test.ts",
 						"packages/objects/test/job-record-lifecycle.test.ts",
 						"packages/objects/test/host-job-persistence.test.ts",
+						"packages/objects/test/job-process-recovery.test.ts",
 						"packages/objects/test/job-execution.test.ts",
 						"packages/objects/test/runtime-tracing.test.ts"
 					]

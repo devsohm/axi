@@ -192,6 +192,11 @@ Recovery checks also kill a process after its answer and a review task checkpoin
 are stored. Reopening SQLite and JSONL must finish that task without repeating
 the answer, the hook or the saved checkpoint.
 
+Objects job checks kill a child after its state commits to SQLite. Reopening must
+retain the job ID and saved state. The `rerun` policy invokes the job again; the
+`abandon` policy finishes it with a restart failure without invoking it. Both
+checks await the finish transaction and verify that no active run remains.
+
 `packages/durable/test/process-restart-limit.test.ts` kills the waiting process
 twice on both storage backends. It verifies that the restart limit ends the
 interrupted tool, retains the completed sibling effect, and lets the model answer.
