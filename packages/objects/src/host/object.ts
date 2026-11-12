@@ -658,6 +658,8 @@ export class ObjectsObject implements LocalTarget {
 		if (woken) this.retry();
 	}
 	#setFailed(cause: FailureCause): void {
+		// Materialize the retained runtime error so its lazy stack cannot keep the failed attempt alive.
+		void cause.error.stack;
 		if (cause.kind === "transient") this.host.backoff.failed(this.identity);
 		else this.host.backoff.delete(this.identity);
 		this.#status = {
@@ -717,6 +719,8 @@ export class ObjectsObject implements LocalTarget {
 		this.#dropKept();
 		if (removal) for (const holder of this.#holders) holder.freeze?.();
 		this.#status = { kind: "ended", state: { kind: "ended", error } };
+		this.#changed?.resolve();
+		this.#changed = undefined;
 		for (const records of this.#jobs.values()) records.end(error);
 		clearTimeout(this.#flush?.timer);
 		this.#flush = undefined;

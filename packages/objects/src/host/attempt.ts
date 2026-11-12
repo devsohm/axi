@@ -198,6 +198,7 @@ export class Attempt implements StoreSelf, KeyDeclarer, RegistryWaiter {
 	readonly #token = new SealToken();
 	readonly #routineToken = new SealToken();
 	readonly #routineAbort = new AbortController();
+	// Reload reports describe the first dependency check, separately from the activation outcome.
 	readonly #checked = Promise.withResolvers<FailureCause | undefined>();
 	readonly #runs = new Map<Promise<unknown>, (() => void) | undefined>();
 	#reloadStarted = false;
@@ -594,7 +595,6 @@ export class Attempt implements StoreSelf, KeyDeclarer, RegistryWaiter {
 	abandon(outcome: NotLive): void {
 		if (!this.#abandoned) {
 			this.#abandoned = outcome;
-			this.#checked.resolve(outcome.kind === "failed" ? outcome.cause : undefined);
 			const reason = outcome.kind === "ended" ? outcome.error : outcome.cause.error;
 			this.#abort.abort(reason);
 			this.#routineAbort.abort(reason);
@@ -804,26 +804,21 @@ export class Attempt implements StoreSelf, KeyDeclarer, RegistryWaiter {
 				this.#moved = false;
 				const check = checkDependencies(dependencies);
 				if (check.kind === "parked") this.#checked.resolve(parkedCause(check));
+				else this.#checked.resolve(undefined);
 				if (check.kind === "broken") return this.#broken(check.error);
 				if (check.kind === "live") {
-					this.#checked.resolve(undefined);
-					const pending = this.#references.find(({ binding }) => binding.pinsKeys);
-					if (pending) long.blockedBy({ label: pending.binding.label, state: "loading" });
-					const failed = await this.#pinKeys();
+					const failed = await this.#pinKeys(long);
 					if (this.#abandoned) return this.#abandoned;
 					if (!failed && !this.#moved) {
-						this.#checked.resolve(undefined);
 						this.#object.unparked(this);
 						this.#leavePark();
 						if (this.#activation?.ended) this.#startSpan(this.#activation.span);
 						return;
 					}
 					if (failed) {
-						this.#checked.resolve(failed.cause);
 						this.#object.parked(this, failed, true);
 						this.#parkSpan(failed);
 					}
-					long.stop();
 				} else {
 					this.#object.parked(this, check.shown, check.firstPass);
 					this.#parkSpan(check.shown);
@@ -852,12 +847,16 @@ export class Attempt implements StoreSelf, KeyDeclarer, RegistryWaiter {
 			this.#change = undefined;
 		}
 	}
-	async #pinKeys(): Promise<Failed | undefined> {
+	async #pinKeys(long: ParkedLong): Promise<Failed | undefined> {
 		for (const { binding } of this.#references) {
 			try {
 				const pin = binding.pinKeys(this.#opening);
-				if (pin) await pin;
+				if (pin) {
+					long.blockedBy({ label: binding.label, state: "loading" });
+					await pin;
+				}
 			} catch (error) {
+				long.blockedBy({ label: binding.label, state: "failed" });
 				return waitingOn(binding.label, asObjectsError(error, binding.label));
 			}
 		}
@@ -963,10 +962,7 @@ export class Attempt implements StoreSelf, KeyDeclarer, RegistryWaiter {
 	}
 	#broken(error: unknown): NotLive {
 		const cause: FailureCause = { kind: "broken", error: asObjectsError(error, this.#object.label) };
-		this.#checked.resolve(cause);
-		return (
-			this.#abandoned ?? { kind: "failed", cause: { kind: "broken", error: asObjectsError(error, this.#object.label) } }
-		);
+		return this.#abandoned ?? { kind: "failed", cause };
 	}
 	#declarations(): RegistryDeclarations {
 		return (this.#registry ??= {

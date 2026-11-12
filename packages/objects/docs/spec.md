@@ -34,6 +34,8 @@ Changing an event schema requires an explicit older-version mapping, including a
 
 References report `loading`, `live`, `failed` or `ended`. Their released ownership cannot be reused. Object-owned dependencies remain through an attempt. Call-owned references end with their call context. Root contexts use the host principal by default. An explicit undefined principal creates an anonymous scope.
 
+A removed provider leaves existing keyed-document watches open at their last value and sends one failure notification. They follow the provider again when it returns. Releasing a reference publishes failures to any derives that still follow its members.
+
 `RegistryValue.observe(observer, context)` takes the current value and attaches synchronously. It selects the context's cancellation signal once. That signal ends the attachment with `aborted`; a closed source ends it with `ended`. Calling `detach()` removes the observer without an end callback.
 
 Dependencies can park activation without consuming its readiness deadline. Transient activation failures retry with backoff. Broken failures wait for an explicit retry or replacement. Native resources close in reverse order. A late opener is closed if its attempt already ended.
@@ -62,6 +64,8 @@ Store schema version 3 adds an optional, indexed host field to document records.
 
 Host data operations run in call order. Their exclusive phase waits for activation loads, blocks later loads and takes affected owners' document lines in identity order. It reads the new documents and query results inside the storage transaction, then publishes them together after commit. An unreadable document fails its owner after that batch; other owners still adopt. Cancellation before admission writes nothing. Once admitted, an operation completes and publishes even if its caller cancels.
 
+An import selects its collision policy after parsing the archive and before entering the operation queue. Changing the caller's options while it waits cannot turn a refused collision into a replacement.
+
 An uncertain database outcome is terminal for the Store. Export holds its queue until the iterator ends or is cancelled. Import validates and applies the complete archive to an empty database. Optional outbox replay accepts consecutive commits and checks row counts.
 
 ## Store sync
@@ -79,6 +83,8 @@ Reload applies a complete facet set. Identical facet objects remain installed. S
 Publication replaces accepted providers and contributions in one batch. Every affected live object restarts while retaining its documents and tables. Removed types leave held references waiting. Reports retain declaration order. Failed, waiting and activating objects retry on the new code.
 
 Reloads serialize. Cancellation before publication leaves the prior set intact. Cancellation after publication does not undo the accepted update. Error details identify committed plugin changes.
+
+A reload report describes the first dependency check. An initializer failure is an activation failure, not a parked dependency. A blocked key load keeps its long-wait diagnostic active until the wait ends. Removing an object wakes calls waiting behind its outgoing work immediately.
 
 An outgoing attempt remains open for calls already running and calls they cause. New calls wait for the successor. Compatible references can read outgoing state until its attempt seals. A restart waits for its recorded dependencies and for outgoing calls to finish. Readiness references do not appear in presence lists and remain held until the successor checks its own dependencies.
 
