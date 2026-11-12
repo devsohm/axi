@@ -107,7 +107,7 @@ component, including authentication, single-use links and expiration.
 Daemon protocol checks use a real child process. They send corrupt frames,
 exercise cancellation and reconnects, and advance handshake and heartbeat
 deadlines with a controlled clock. MCP checks cover split UTF-8 streams, message
-limits, peer loss and pipe shutdown. Durable checks include both join policies,
+limits, peer loss and pipe shutdown. Durable checks include all three join policies,
 automatic compaction, overflow recovery and composed request hooks. Fullscreen
 search tests inspect the terminal emulator after navigation, updates and resize.
 
