@@ -1,11 +1,13 @@
-export { type BaseBundle, processConditions } from "./bundle.ts";
+export { type BaseBundle, type BasePlatform, buildBase, processConditions } from "./bundle.ts";
 export type { ServedFile } from "./served.ts";
 export type { SurfaceBuilt } from "./surface-build.ts";
 export {
 	WEB_PREFIX,
 	webSurface,
 	pageScripts,
+	pageBootstrap,
 	type PageAssets,
+	type WebRoutesOptions,
 	type WebSurface,
 	type WebSurfaceOptions,
 } from "./web.ts";

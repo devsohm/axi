@@ -3,6 +3,7 @@ import type { HttpResponse } from "../http/index.ts";
 export type ServedFile = { readonly mime: string; readonly bytes: Uint8Array };
 export const JAVASCRIPT = "text/javascript; charset=utf-8",
 	CSS = "text/css; charset=utf-8";
+export const ASSET_EXTENSIONS = ["svg", "png", "jpg", "jpeg", "gif", "webp", "woff", "woff2", "ttf", "wasm"] as const;
 const types: Record<string, string> = {
 	js: JAVASCRIPT,
 	css: CSS,

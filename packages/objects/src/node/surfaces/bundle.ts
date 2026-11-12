@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { basename, extname } from "node:path";
 import { build } from "esbuild";
 import { recordedSources, type BaseInputs } from "../plugins/base-inputs.ts";
-import { mimeOf, type ServedFile } from "./served.ts";
+import { ASSET_EXTENSIONS, mimeOf, type ServedFile } from "./served.ts";
 export type BasePlatform = "browser" | "sandbox";
 export type BaseBundle = {
 	readonly hash: string;
@@ -32,6 +32,7 @@ export async function buildBase(entry: string, platform: BasePlatform, prefix: s
 		jsx: "automatic",
 		define: { "process.env.NODE_ENV": '"production"' },
 		conditions: browser ? [...selected, "module"] : [...selected],
+		loader: Object.fromEntries(ASSET_EXTENSIONS.map((extension) => [`.${extension}`, "file" as const])),
 		plugins: [recordedSources(inputs)],
 		logLevel: "silent",
 	});

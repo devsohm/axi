@@ -30,6 +30,7 @@ export type ClientOptions<P extends Principal> = {
 	readonly styles?: ClientStyles;
 	readonly environment: LoopEnvironment;
 	readonly telemetry?: (incarnation: () => string) => TelemetryContext;
+	readonly follow?: boolean;
 	readonly onError: (error: ClientError) => void;
 };
 export type Client<P extends Principal> = { readonly host: Host<P>; stop(context: Context): Promise<void> };
@@ -86,6 +87,8 @@ export async function startClient<P extends Principal>(options: ClientOptions<P>
 	const left = new Set(report.failed.map(({ plugin }) => plugin));
 	let scripts = new Map(options.initial.filter(script => !left.has(script.plugin)).map(script => [script.plugin, script]));
 	const abort = new AbortController();
+	const following = options.follow !== false;
+	const serverBase = following ? options.serverBase : undefined;
 	let latest: ScriptSet | undefined, cancelRetry: (() => void) | undefined;
 	let applying = Promise.resolve(), pause = 0;
 	const runs = (set: ScriptSet) => set.plugins.length === scripts.size && set.plugins.every(item => scripts.get(item.name)?.digest === item.digest);
@@ -93,7 +96,7 @@ export async function startClient<P extends Principal>(options: ClientOptions<P>
 		environment: options.environment,
 		onState: (state) => {
 			options.onConnection?.(state);
-			if (state === "connected" && latest !== undefined && !runs(latest)) void queue(latest, context);
+			if (following && state === "connected" && latest !== undefined && !runs(latest)) void queue(latest, context);
 		},
 		open(events) {
 			const link = shareClose(options.open(events));
@@ -101,7 +104,7 @@ export async function startClient<P extends Principal>(options: ClientOptions<P>
 			return link;
 		},
 		async canRetry() {
-			const latest = await options.serverBase();
+			const latest = await serverBase?.();
 			if (latest !== undefined && latest !== options.base) {
 				options.outdated();
 				return false;
@@ -109,7 +112,7 @@ export async function startClient<P extends Principal>(options: ClientOptions<P>
 			return (await options.canRetry?.()) ?? true;
 		},
 	});
-	const held = host.hold(options.scripts, {}, context);
+	const held = following ? host.hold(options.scripts, {}, context) : undefined;
 	function queue(set: ScriptSet, ctx: Context): Promise<void> {
 		applying = applying.then(async () => {
 			if (set !== latest || abort.signal.aborted) return;
@@ -153,15 +156,23 @@ export async function startClient<P extends Principal>(options: ClientOptions<P>
 			return false;
 		}
 	}
-	const watch = await held.set.watch(withAbortSignal(abort.signal, context));
-	watch.start(async (frame, ctx) => {
-		if (frame.kind !== "value") return;
-		latest = frame.value;
+	function take(set: ScriptSet, ctx: Context): Promise<void> {
+		latest = set;
 		cancelRetry?.();
 		cancelRetry = undefined;
 		pause = 0;
-		await queue(frame.value, ctx);
-	});
+		return queue(set, ctx);
+	}
+	async function follow(): Promise<void> {
+		if (held === undefined) return;
+		const watch = await held.set.watch(withAbortSignal(abort.signal, context));
+		void take(watch.value, context);
+		watch.start(async (frame, ctx) => {
+			if (frame.kind === "value") await take(frame.value, ctx);
+		});
+	}
+	// Bundled plugins can start before the server admits the script watch.
+	if (following) void follow().catch((error) => options.onError({ kind: "update_failed", error }));
 	return {
 		host,
 		async stop(ctx) {
@@ -169,7 +180,7 @@ export async function startClient<P extends Principal>(options: ClientOptions<P>
 			abort.abort();
 			cancelRetry?.();
 			cancelRetry = undefined;
-			held.release();
+			held?.release();
 			await host.close(ctx);
 		},
 	};

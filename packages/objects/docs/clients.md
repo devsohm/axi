@@ -12,6 +12,14 @@ The template receives a nonce and `PageAssets`. Call `pageScripts(assets, nonce)
 
 Call `startPage` from `@axi/objects/web` in the browser entry. Supply the server's WebSocket connection, the modules plugins can import and a render callback. A new plugin script reloads its facet in place. A changed base bundle reloads the page.
 
+The client starts from its bundled plugins while the server is unavailable. Once the script watch connects, it applies the current snapshot before following later updates. `stop()` cancels a pending watch as well as retries.
+
+Set `themes: false` on `startPage` when the application owns its CSS variables. This skips the built-in theme facet and theme subscription. Translations, language selection and rendering still run. Set `follow: false` on `startPage` or `startClient` for a static client. It keeps its bundled plugins and reconnects normally, without following script sets or checking the server's base hash. These two options are independent.
+
+Use `webSurface(host, { plugins, entry, routes: false })` when the application supplies its own HTTP routes. Load its facet as usual to publish `WebScripts`. The surface then contributes no HTTP routes or content security policy. Call `file(path)`, `pageAssets()` and `base()` from application routes to read its generated files, page metadata and base hash. A failed build returns HTTP 503 from `file()` and undefined from the other two methods. Normal route mode requires a `page` template.
+
+For a page built separately from its server, `@axi/objects/surfaces` exports `buildBase(entry, platform, prefix, conditions)` and `pageBootstrap(base, scriptSet)`. The base builder collects referenced images, fonts and WebAssembly files under content-named asset URLs. Its input map records their hashes along with source files. Serve every generated file and put the bootstrap before plugin scripts and the base script. A separately deployed page can use `follow: false` to retain that build.
+
 An update fetches new plugin stylesheets with `media="not all"` before reloading code. It waits for each load, error or ten-second timeout. Styles remain in plugin order. Accepted code activates its prepared stylesheet. A plugin that keeps its old code also keeps its old stylesheet. Replaced styles leave after the page draws a frame.
 
 `stylesheet_failed` reports a failed or timed-out stylesheet without preventing the code update. A later load can still apply after a timeout. A failed load is retried with the next update, even at the same URL. Stopping the client cancels waits and removes prepared styles. A reconnect retries scripts that previously failed to load or evaluate.

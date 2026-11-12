@@ -29,7 +29,7 @@ import {
 } from "../plugins/index.ts";
 import {
 	processConditions, tuiSurface, webSurface, WEB_PREFIX,
-	type TuiSurface, type TuiSurfaceOptions, type WebSurface, type WebSurfaceOptions,
+	type TuiSurface, type TuiSurfaceOptions, type WebSurface, type WebSurfaceOptions, type WebRoutesOptions,
 } from "../surfaces/index.ts";
 import { createWorkers, nodeBaseInputs, processLock, type ProcessLock, type Workers, type WorkersError } from "../workers/index.ts";
 import { ARCHIVE_FORMAT, exists, packData, unpackStaging, type ArchiveManifest } from "./archive.ts";
@@ -71,7 +71,7 @@ export type AppLimits = {
 	readonly importEntries?: number;
 };
 export type AppTimeouts = { readonly closeTimeout?: number; readonly readyTimeout?: number; readonly reloadDrainTimeout?: number };
-export type AppWeb = Pick<WebSurfaceOptions, "entry" | "page" | "paths" | "public" | "conditions">;
+export type AppWeb = Pick<WebSurfaceOptions, "entry" | "conditions"> & Omit<WebRoutesOptions, "routes">;
 export type AppOptions<P extends Principal> = {
 	readonly name: string;
 	readonly dataDir?: string;

@@ -204,6 +204,7 @@
 					"behavior": "client reloads, localized messages, persistent preferences, React bindings, terminal scopes, bridge messages and browser bundles",
 					"tests": [
 						"packages/objects/test/client-surfaces.test.ts",
+						"packages/objects/test/client-startup.test.ts",
 						"packages/objects/test/active-preferences.test.ts",
 						"packages/objects/test/client-bindings.test.ts",
 						"packages/objects/test/browser-adapters.test.ts",

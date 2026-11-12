@@ -81,9 +81,15 @@ They check bootstrap validation, rendering after initialization, theme and langu
 setup, telemetry delivery, and the server identity check before reconnecting.
 These checks do not establish visual browser correctness.
 
+Client startup checks cover an unavailable server, the initial script-watch
+snapshot and static clients that reconnect without replacing bundled scripts.
+Page checks also disable built-in themes and script following independently.
+
 Surface publication checks build real plugin files and read their scripts, styles
 and assets through HTTP routing. They check additions, edits, removals, old-file
 expiry and retention of the last working assets after a failed replacement.
+They also check asset bytes and MIME types from base builds, direct surface
+accessors and the absence of automatic HTTP routes when routes are disabled.
 
 The verification workflow runs the owned suite on its native platform matrix. Its Linux x64 job also enforces the coverage minimums, validates the behavior report, and uploads the `test-coverage` artifact.
 

@@ -28,6 +28,8 @@ export type PageOptions<P extends Principal> = {
 	readonly onConnection?: (state: ConnectionState) => void;
 	readonly render: (host: Client<P>["host"]) => void;
 	readonly telemetry?: boolean;
+	readonly themes?: boolean;
+	readonly follow?: boolean;
 	readonly onError?: (error: ClientError) => void;
 };
 const prefix = "/_objects/web/";
@@ -38,6 +40,7 @@ export async function startPage<P extends Principal>(options: PageOptions<P>): P
 		onError = options.onError ?? ((error: ClientError) => console.error("objects page:", error));
 	document.removeEventListener("load", bootstrap.watching, true);
 	document.removeEventListener("error", bootstrap.watching, true);
+	const themes = options.themes !== false;
 	let recorder: TelemetryRecorder | undefined;
 	const client = await startClient<P>({
 		scripts: WebScripts,
@@ -45,7 +48,7 @@ export async function startPage<P extends Principal>(options: PageOptions<P>): P
 		initial: scripts.initial,
 		modules: options.modules,
 		core: [
-			{ name: "objects.themes", facet: themesFacet<P>() },
+			...(themes ? [{ name: "objects.themes", facet: themesFacet<P>() }] : []),
 			{ name: "objects.translations", facet: translationsFacet<P>() },
 			...(options.core ?? []),
 		],
@@ -66,6 +69,7 @@ export async function startPage<P extends Principal>(options: PageOptions<P>): P
 		},
 		outdated: () => location.reload(),
 		canRetry: options.canRetry,
+		follow: options.follow,
 		onConnection: options.onConnection,
 		styles: new PageStyles(bootstrap.styles, bootstrap.links, onError),
 		environment: pageEnvironment(),
@@ -81,7 +85,7 @@ export async function startPage<P extends Principal>(options: PageOptions<P>): P
 			if (document.visibilityState === "hidden") void sender.send(true);
 		});
 	}
-	await followThemes(client.host, BACKGROUND_CONTEXT);
+	if (themes) await followThemes(client.host, BACKGROUND_CONTEXT);
 	await followLanguage(client.host, (report) => onError({ kind: "messages", report }), BACKGROUND_CONTEXT);
 	options.render(client.host);
 	return client;

@@ -23,9 +23,14 @@ it("refuses a page without its server bootstrap before connecting or rendering",
 	expect(render).not.toHaveBeenCalled();
 });
 
-it.each([false, true])(
-	"boots a page over WebSocket and checks server identity before reconnecting, telemetry=%s",
-	async (telemetry) => {
+it.each([
+	{ telemetry: false, themes: undefined, follow: undefined },
+	{ telemetry: true, themes: undefined, follow: undefined },
+	{ telemetry: false, themes: false, follow: undefined },
+	{ telemetry: false, themes: false, follow: false },
+])(
+	"boots and reconnects a page with telemetry=$telemetry, themes=$themes, follow=$follow",
+	async ({ telemetry, themes, follow }) => {
 		const browser = new EventTarget();
 		const element = { lang: "", dir: "", style: { colorScheme: "", setProperty() {}, removeProperty() {} } };
 		const document = Object.assign(new EventTarget(), {
@@ -89,10 +94,13 @@ it.each([false, true])(
 			errors: unknown[] = [],
 			render = vi.fn(),
 			canRetry = vi.fn(async () => false);
+		let themeReads = 0;
 		const client = await startPage({
 			connect: () => new WebSocket(`ws://127.0.0.1:${address.port}`),
 			modules: {},
 			telemetry,
+			get themes() { themeReads++; return themes; },
+			follow,
 			render,
 			canRetry,
 			core: [
@@ -115,7 +123,8 @@ it.each([false, true])(
 		try {
 			await vi.waitFor(() => expect(states).toContain("connected"));
 			expect(render).toHaveBeenCalledExactlyOnceWith(client.host);
-			expect([element.lang, element.dir, element.style.colorScheme]).toEqual(["en", "ltr", "dark"]);
+			expect(themeReads).toBe(1);
+			expect([element.lang, element.dir, element.style.colorScheme]).toEqual(["en", "ltr", themes === false ? "" : "dark"]);
 			expect(removed).toHaveBeenCalledWith("load", watching, true);
 			expect(removed).toHaveBeenCalledWith("error", watching, true);
 			expect(intervals).toHaveLength(telemetry ? 1 : 0);
@@ -131,8 +140,9 @@ it.each([false, true])(
 				expect(batches).toHaveLength(0);
 			}
 			for (const socket of sockets.clients) socket.close();
-			await vi.waitFor(() => expect(fetchBase).toHaveBeenCalledOnce());
-			expect(fetchBase).toHaveBeenCalledWith("/_objects/web/base", { cache: "no-store", credentials: "same-origin" });
+			await vi.waitFor(() => expect(follow === false ? canRetry : fetchBase).toHaveBeenCalledOnce());
+			if (follow === false) expect(fetchBase).not.toHaveBeenCalled();
+			else expect(fetchBase).toHaveBeenCalledWith("/_objects/web/base", { cache: "no-store", credentials: "same-origin" });
 			expect(states).toEqual(["connecting", "connected", "waiting"]);
 			if (telemetry) {
 				expect(reload).toHaveBeenCalledOnce();
