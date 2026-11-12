@@ -25,6 +25,10 @@ test("remote filesystem resolves file URLs, preserves empty files and reports in
 		getOrThrow(await env.truncateFile("with space", 3, context));
 		getOrThrow(await env.flushFile("with space", context));
 		getOrThrow(await env.renameFile("with space", "renamed", context));
+		expect(await env.renameFile("missing", "other", context)).toMatchObject({
+			ok: false,
+			error: { code: "not_found", path: join(cwd, "missing") },
+		});
 		expect(getOrThrow(await env.readTextFile("renamed", context))).toBe("one");
 		expect(getOrThrow(await env.exists("with space", context))).toBe(false);
 		expect(getOrThrow(await env.exists("renamed", context))).toBe(true);

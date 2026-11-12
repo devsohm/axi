@@ -187,6 +187,8 @@ Offline provider tests inspect request encoding, device-login polling, token ref
 MCP checks bound pagination, isolate failing progress and close listeners, and
 reject unsupported HTTP response types without disabling later requests. An
 invalid SSE event must still allow a later valid notification through.
+Env checks close a real daemon connection with readers still open. Later reader,
+file, watch and command operations must return errors without starting a new daemon.
 
 Native discovery tests check packaging paths, unavailable modules, optional
 modifier support and a Linux display becoming available after startup. They mock

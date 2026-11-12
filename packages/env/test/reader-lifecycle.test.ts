@@ -7,6 +7,51 @@ import { expect, test } from "vitest";
 import { Connection, localDaemon, RemoteExecutionEnv } from "../src/index.ts";
 import { RemoteError } from "../src/connection.ts";
 
+test("closing a real daemon connection makes readers and environment operations return errors without restarting", async () => {
+	const directory = await mkdtemp(join(tmpdir(), "axi-closed-readers-"));
+	let launches = 0;
+	const connection = new Connection({
+		command: async () => {
+			launches++;
+			return [localDaemon()];
+		},
+	});
+	const env = new RemoteExecutionEnv({ connection, id: "closed-readers", cwd: directory });
+	try {
+		await writeFile(join(directory, "data"), "one\ntwo\n");
+		const binary = getOrThrow(await env.openBinaryReader("data", undefined, context));
+		const text = getOrThrow(await env.openTextLineReader("data", context));
+		const entries = getOrThrow(await env.openDirReader(".", context));
+		connection.close();
+		try {
+			for (const operation of [
+				() => binary.info(context),
+				() => binary.read(0, 3, context),
+				() => binary.scanLines({ startLine: 0, endLine: 1 }, context),
+				() => text.readLine(context),
+				() => entries.next(1, context),
+				() => env.joinPath(["a", "b"], context),
+				() => env.createTempDir("axi-closed-", context),
+				() => env.createTempFile(undefined, context),
+				() => env.watch([{ path: "." }], () => {}, context),
+				() => env.exec([process.execPath, "-e", "process.exit(99)"], undefined, context),
+				() => env.exec([process.execPath, "-e", "process.exit(99)"], { cwd: "." }, context),
+			]) {
+				expect(await operation()).toMatchObject({
+					ok: false,
+					error: { code: "unknown", message: expect.stringMatching(/connection/i) },
+				});
+			}
+			expect(launches).toBe(1);
+		} finally {
+			await Promise.all([binary.close(context), text.close(context), entries.close(context)]);
+		}
+	} finally {
+		connection.close();
+		await rm(directory, { recursive: true, force: true });
+	}
+});
+
 test("cancellation after remote open closes every newly acquired reader handle", async () => {
 	const directory = await mkdtemp(join(tmpdir(), "axi-reader-admission-"));
 	const connection = new Connection({ command: [localDaemon()] });
