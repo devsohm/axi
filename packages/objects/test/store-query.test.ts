@@ -1,6 +1,9 @@
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
 import { BACKGROUND_CONTEXT } from "../src/context/index.ts";
-import { int, opt, str } from "../src/contracts/index.ts";
+import { arr, int, local, method, obj, opt, str } from "../src/contracts/index.ts";
+import { createHost, defineFacet, type HostError } from "../src/host/index.ts";
+import { json, openStore, sqliteBackend } from "../src/store/index.ts";
+import type { WatchCall } from "../src/watch.ts";
 import { applySet, matches } from "../src/store/evaluate.ts";
 import {
 	ColumnRef,
@@ -82,4 +85,70 @@ it("keeps queries immutable and binds page cursors to their table and ordering",
 	expect(() =>
 		decodeCursor(table, "other:entries", sorted.order, cursor),
 	).toThrow("not one of this table's order");
+});
+
+it("keeps live-query failures local, retains the last rows and publishes recovery", async () => {
+	const database = await openNodeSqliteDatabase(":memory:");
+	const store = await openStore(sqliteBackend(database), BACKGROUND_CONTEXT);
+	const errors: HostError[] = [];
+	const host = createHost({ store, onError: error => errors.push(error) });
+	const row = obj({ id: str(), data: obj({ count: int() }) });
+	const board = local("query.recovery", {
+		version: 1, params: {}, members: { rows: arr(row), put: method(row) },
+	});
+	const table = defineTable("entries", {
+		version: 1,
+		columns: { id: str(), data: json(obj({ count: int() }), { version: 1 }) },
+		key: ["id"],
+	});
+	try {
+		await host.load([{
+			name: "queries",
+			facet: defineFacet(facet => facet.serve(board, (_, self) => {
+				const handle = self.table(table);
+				return {
+					rows: self.query(handle, query(table), 10),
+					put: async (value, context) => {
+						await self.tx(tx => tx.put(handle, value), context);
+						return null;
+					},
+				};
+			})),
+		}], BACKGROUND_CONTEXT);
+		const reference = await host.get(board, {}, BACKGROUND_CONTEXT);
+		await reference.put({ id: "first", data: { count: 1 } }, BACKGROUND_CONTEXT);
+		const last = reference.rows.value;
+		const watch = await reference.rows.watch(BACKGROUND_CONTEXT);
+		const calls: WatchCall<unknown>[] = [];
+		watch.start(async call => { calls.push(call); });
+		try {
+			await database.run('UPDATE "query.recovery:entries" SET "data$v" = 9 WHERE id = ?', "first");
+			await reference.put({ id: "second", data: { count: 2 } }, BACKGROUND_CONTEXT);
+			await reference.put({ id: "third", data: { count: 3 } }, BACKGROUND_CONTEXT);
+			expect(() => reference.rows.value).toThrow("stored at version 9");
+			expect(reference.state.value).toEqual({ kind: "live" });
+			expect(errors.map(error => error.kind)).toEqual(["query_failed"]);
+			await vi.waitFor(() => expect(calls.map(call => call.kind)).toEqual(["failed"]));
+			const late = await reference.rows.watch(BACKGROUND_CONTEXT);
+			try {
+				expect(late.value).toEqual(last);
+				await reference.put({ id: "first", data: { count: 4 } }, BACKGROUND_CONTEXT);
+				await vi.waitFor(() => expect(calls.map(call => call.kind)).toEqual(["failed", "value"]));
+				const recovered = reference.rows.value;
+				expect(recovered.map(item => item.data.count)).toEqual([4, 2, 3]);
+				expect(calls[1]).toMatchObject({ kind: "value", ops: [["r", recovered]] });
+				await database.run('UPDATE "query.recovery:entries" SET "data$v" = 9 WHERE id = ?', "first");
+				await reference.put({ id: "fourth", data: { count: 5 } }, BACKGROUND_CONTEXT);
+				expect(errors.map(error => error.kind)).toEqual(["query_failed", "query_failed"]);
+			} finally {
+				await late.stop();
+			}
+		} finally {
+			await watch.stop();
+			reference.release();
+		}
+	} finally {
+		await host.close(BACKGROUND_CONTEXT);
+		await store.close(BACKGROUND_CONTEXT);
+	}
 });
