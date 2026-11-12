@@ -14,7 +14,7 @@ Version validation and retained metadata use the same selected value. A remote c
 
 Constraint failures explain the limit or allowed values. A union uses its distinct constant tag when available; otherwise it selects the branch declaring most of the supplied fields, then the branch with the deepest first failure. Fragment references resolve within their schema resource. Compiling a missing fragment target fails.
 
-A local contract has one member set. A remote contract has named variants and a host-address function. Placement cannot be overridden by a request. Method arguments and results are checked at dispatch, including local calls. Factories declare synchronously and return an implementation rather than a promise.
+A local contract has one member set. A remote contract has named variants and a host-address function. Placement cannot be overridden by a request. Method arguments are checked at dispatch, including local calls. Method results are not validated. Factories declare synchronously and return an implementation rather than a promise.
 
 Host address keys encode the kind and parameter values in declaration order. Separators and backslashes in values are escaped. Key conversion checks field types and enum choices and computes the key from parameters, rather than trusting a supplied key. Routing checks the remaining parameter constraints. Stored keys decode numeric and boolean fields to their declared types.
 
@@ -41,6 +41,8 @@ A removed provider leaves existing keyed-document watches open at their last val
 Dependencies can park activation without consuming its readiness deadline. Transient activation failures retry with backoff. Broken failures wait for an explicit retry or replacement. Native resources close in reverse order. A late opener is closed if its attempt already ended.
 
 Host close stops new work, closes links, seals scopes and objects, drains admitted calls and closes resources. Cleanup continues after individual close failures. The application closes the Store separately.
+
+Keeping a factory's `self` after its attempt ends can retain old object and connection state. Release application references to ended attempts when that work ends.
 
 ## Publication and storage
 
