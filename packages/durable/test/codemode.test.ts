@@ -4,7 +4,24 @@ import { CodemodeSandbox } from "@axi/codemode";
 import { expect, it } from "vitest";
 import { Type } from "typebox";
 import { CodemodeStoreDoc, createCodemodeExtension } from "../src/codemode/index.ts";
+import { catalogCall } from "../src/codemode/models.ts";
 import { createRegistry, defineTool, Harness, MemoryStorage, ToolResultEntry } from "../src/index.ts";
+
+it("lists model metadata without evaluating non-enumerable credential headers", async () => {
+	const models = createModels(), provider = fauxProvider();
+	const model = provider.getModel();
+	let reads = 0;
+	Object.defineProperty(model, "headers", { get() { reads++; return { Authorization: "private" }; } });
+	models.setProvider(provider.provider);
+	for (const name of ["models.getModelsOfType", "models.getAvailableOfType", "models.getModelOfType"]) {
+		const value = await catalogCall(name, ["chat", model.provider, model.id], models, context);
+		const items = Array.isArray(value) ? value : [value];
+		expect(items).toHaveLength(1);
+		expect(items[0]).toMatchObject({ id: model.id });
+		expect(items[0]).not.toHaveProperty("headers");
+	}
+	expect(reads).toBe(0);
+});
 
 it("commits successful script state and discards writes from a failed script", async () => {
 	const sandbox = new CodemodeSandbox();

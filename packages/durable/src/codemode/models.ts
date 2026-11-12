@@ -50,7 +50,9 @@ function providerOf(value: unknown): string | undefined {
 	throw new Error("provider must be a string");
 }
 function publicModel(model: AnyModel): JsonValue {
-	const { headers: _headers, ...info } = model;
+	// Copy public metadata without evaluating hidden credential accessors.
+	const info = { ...model };
+	delete info.headers;
 	return JSON.parse(JSON.stringify(info));
 }
 export async function catalogCall(
