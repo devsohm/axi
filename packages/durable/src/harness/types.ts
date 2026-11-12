@@ -243,8 +243,14 @@ export type HookRegistration = { readonly task: string; readonly handlers: objec
 export type Wrap<T extends ToolRegistration = ToolRegistration> =
 	| { readonly tool: string; wrap(tool: T): T }
 	| { readonly section: string; wrap(section: PromptSection<T>): PromptSection<T> };
+export type ToolNamespace = {
+	readonly name: string;
+	readonly description: string;
+	readonly instructions?: string;
+};
 export interface Extension<T extends ToolRegistration = ToolRegistration> {
 	readonly name: string;
+	readonly namespace?: ToolNamespace;
 	readonly tools?: readonly T[];
 	readonly sections?: readonly PromptSection<T>[];
 	readonly hooks?: readonly HookRegistration[];

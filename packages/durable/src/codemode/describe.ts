@@ -1,14 +1,8 @@
 import type { CodemodeJsonSchema } from "@axi/codemode";
 import { renderToolSample, toCodemodeIdentifier } from "@axi/codemode/declarations";
-import type { ToolRegistration } from "../harness/types.ts";
+import type { Extension, ToolNamespace, ToolRegistration } from "../harness/types.ts";
 import { MODELS_DESCRIPTION } from "./models.ts";
 
-export type CodemodeNamespace = {
-	readonly name: string;
-	readonly prefix: string;
-	readonly description?: string;
-	readonly instructions?: string;
-};
 export const DEFAULT_CODEMODE_INLINE_BUDGET = 3000;
 
 export function codemodeDescription(models: boolean): string {
@@ -33,33 +27,47 @@ export function declarationOf(tool: ToolRegistration): {
 	};
 }
 export const sampleOf = (tool: ToolRegistration): string => renderToolSample(declarationOf(tool));
-export function namespaceOf(name: string, namespaces: readonly CodemodeNamespace[]): CodemodeNamespace | undefined {
-	return namespaces
-		.filter((namespace) => name.startsWith(namespace.prefix))
-		.sort((a, b) => b.prefix.length - a.prefix.length)[0];
+export function namespacesOf(extensions: readonly Extension[]): ReadonlyMap<string, ToolNamespace> {
+	const claimed = new Set<string>();
+	const byTool = new Map<string, ToolNamespace>();
+	for (const extension of extensions) {
+		for (const tool of extension.tools ?? []) {
+			if (claimed.has(tool.name)) continue;
+			// An owner without namespace metadata still claims the tool.
+			claimed.add(tool.name);
+			if (extension.namespace !== undefined) byTool.set(tool.name, extension.namespace);
+		}
+	}
+	return byTool;
+}
+export function declaredNamespaces(extensions: readonly Extension[]): readonly ToolNamespace[] {
+	const declared = new Map<string, ToolNamespace>();
+	for (const { namespace } of extensions) {
+		if (namespace !== undefined && !declared.has(namespace.name)) declared.set(namespace.name, namespace);
+	}
+	return [...declared.values()].sort((a, b) => a.name.localeCompare(b.name));
 }
 
 export function codemodeSection(
 	tools: readonly ToolRegistration[],
-	namespaces: readonly CodemodeNamespace[],
+	extensions: readonly Extension[],
 	budget: number,
 ): string | undefined {
-	if (!tools.length) return undefined;
+	const namespaces = declaredNamespaces(extensions);
+	if (!tools.length && !namespaces.length) return undefined;
+	const byTool = namespacesOf(extensions);
 	type Entry = { name: string; text: string; cost: number };
-	type Group = { namespace: CodemodeNamespace | undefined; entries: Entry[] };
-	const groups = new Map<string, Group>([["", { namespace: undefined, entries: [] }]]);
+	type Group = { namespace: ToolNamespace | undefined; entries: Entry[] };
+	const ungrouped: Group = { namespace: undefined, entries: [] };
+	const groups = new Map<string, Group>(namespaces.map((namespace) => [namespace.name, { namespace, entries: [] }]));
 	for (const tool of tools) {
-		const namespace = namespaceOf(tool.name, namespaces);
-		const key = namespace === undefined ? "" : `ns:${namespace.name}`;
-		const group = groups.get(key) ?? { namespace, entries: [] };
-		groups.set(key, group);
+		const namespace = byTool.get(tool.name);
+		const group = namespace === undefined ? ungrouped : groups.get(namespace.name)!;
 		const id = toCodemodeIdentifier(tool.name);
 		const text = `### \`${id}\`${id === tool.name ? "" : ` (\`${tool.name}\`)`}\n${sampleOf(tool).trim()}`;
 		group.entries.push({ name: tool.name, text, cost: Math.ceil(text.length / 4) });
 	}
-	const ordered = [...groups.values()].sort((a, b) =>
-		a.namespace === undefined ? -1 : b.namespace === undefined ? 1 : a.namespace.name.localeCompare(b.namespace.name),
-	);
+	const ordered = [ungrouped, ...groups.values()];
 	const selected = new Set<string>();
 	let queues = ordered
 		.map((group) => [...group.entries].sort((a, b) => a.cost - b.cost))
@@ -74,17 +82,10 @@ export function codemodeSection(
 			return queue.length > 0;
 		});
 	const parts = ["Tools scripts can call (`await tools.<name>(args)`):"];
+	if (selected.size < tools.length) parts.push("Some tools are not listed: find them with `searchTools()`.");
 	for (const { namespace, entries } of ordered) {
-		if (!entries.length) continue;
 		const visible = entries.filter((entry) => selected.has(entry.name));
-		if (namespace) {
-			const omitted =
-				visible.length === entries.length ? "" : visible.length ? " (some tools not listed)" : " (tools not listed)";
-			parts.push(
-				`## ${namespace.name}${omitted}${namespace.description?.trim() ? `\n${namespace.description.trim()}` : ""}`,
-			);
-		} else if (visible.length < entries.length)
-			parts.push("Some tools are not listed: find them with `searchTools()`.");
+		if (namespace !== undefined) parts.push(`## ${namespace.name}\n${namespace.description.trim()}`);
 		parts.push(...visible.map((entry) => entry.text));
 	}
 	return parts.join("\n\n");

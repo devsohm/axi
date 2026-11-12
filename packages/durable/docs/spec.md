@@ -225,6 +225,20 @@ The run document records the initial script configuration and outcome. A journal
 
 Tool search and descriptions use the script's captured tool declarations. Optional model operations expose catalogs, classification, and image generation. Paid model operations use internal nested tool tasks with their own usage and cancellation.
 
+`Extension.namespace` declares `{ name, description, instructions? }`. A tool
+belongs to the first selected extension that supplies it, including an extension
+without a namespace. Namespace names are sorted; the first declaration of a
+duplicate name supplies its metadata. Selected namespaces without tools stay
+visible in the prompt. Deferred tools are absent from inline declarations, so
+their arrival does not change that section.
+
+The inline budget defaults to 3,000 estimated tokens. Ungrouped tools go first.
+Each group can select its cheapest remaining declaration in each round. Headings
+contain the namespace name and trimmed description, without counts. Instructions
+appear in `describeNamespace()` and tool search, rather than the prompt section.
+Scripts retain this resolved membership in their saved start data after reload
+or restart. `namespacesOf()` is exported from `@axi/durable/codemode`.
+
 Model catalog results contain public metadata and omit credential headers. Listing models does not evaluate hidden credential accessors.
 
 ## Storage contract

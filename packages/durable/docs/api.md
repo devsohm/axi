@@ -226,6 +226,7 @@ Exports from the package root. The linked declarations contain exact signatures.
 | `ToolPark` | typealias | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
 | `ToolHookCall` | typealias | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
 | `ToolHooks` | interface | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
+| `ToolNamespace` | typealias | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
 | `ToolRegistration` | typealias | [`harness/types.d.ts`](../dist/harness/types.d.ts) |
 | `ToolResultEntry` | const | [`entries.d.ts`](../dist/entries.d.ts) |
 | `ToolSlot` | typealias | [`harness/live.d.ts`](../dist/harness/live.d.ts) |

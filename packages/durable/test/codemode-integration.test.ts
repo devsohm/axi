@@ -11,11 +11,13 @@ import {
 	MemoryStorage,
 	ToolResultEntry,
 	type ToolRegistration,
+	type Extension,
 } from "../src/index.ts";
 
 async function fixture(
 	tools: readonly ToolRegistration[],
-	options: Pick<CodemodeToolOptions, "namespaces" | "globals"> = {},
+	options: Pick<CodemodeToolOptions, "globals"> = {},
+	extensions: readonly Extension[] = [],
 ) {
 	const models = createModels(),
 		provider = fauxProvider(),
@@ -23,6 +25,7 @@ async function fixture(
 	models.setProvider(provider.provider);
 	const sandbox = new InlineCodemodeSandbox({ wasm: loadQuickJSWasm() });
 	registry.install(createCodemodeExtension({ sandbox, models: false, ...options }));
+	for (const extension of extensions) registry.install(extension);
 	registry.install({ name: "fixtures", tools });
 	const harness = await Harness.open(new MemoryStorage(), { models, registry }, context);
 	const conversation = await harness.root(context, { agent: { model: { provider: "faux", modelId: "faux-1" } } });
@@ -57,18 +60,21 @@ async function fixture(
 }
 const parameters = Type.Object({});
 
-test("code discovery groups tools by their longest namespace and hides internal model tools", async () => {
+test("code discovery uses extension namespaces, including one waiting for its tools", async () => {
 	const tools = ["repo.read", "repo.write", "repo.deep.read", "plain"].map((name) =>
 		defineTool({ name, description: "Repository operation", parameters, execute: async () => ({ output: [] }) }),
 	);
-	await using app = await fixture(tools, {
-		namespaces: [
-			{ name: "Repo-tools", prefix: "repo.", description: "Repository utilities", instructions: "Use relative paths" },
-			{ name: "Deep", prefix: "repo.deep." },
-		],
-	});
+	await using app = await fixture(tools, {}, [
+		{
+			name: "repo",
+			tools: tools.slice(0, 2),
+			namespace: { name: "Repo-tools", description: "Repository utilities", instructions: "Use relative paths" },
+		},
+		{ name: "nested", tools: tools.slice(2, 3), namespace: { name: "Deep", description: "Nested repository tools" } },
+		{ name: "queued", namespace: { name: "Queued", description: "Waiting for connection" } },
+	]);
 	const result = await app.run(
-		`return { parent: await describeNamespace("Repo_tools"), deep: await describeNamespace("Deep"), missing: (await describeNamespace("absent")) ?? null, tools: (await searchTools("Repository", { namespace: "Repo-tools", limit: 8 })).map(tool=>tool.name).sort(), plain: (await searchTools("Repository", { namespace: "absent" })).length, description: await describeTool("repo_read") };`,
+		`return { parent: await describeNamespace("Repo_tools"), deep: await describeNamespace("Deep"), empty: await describeNamespace("Queued"), missing: (await describeNamespace("absent")) ?? null, tools: (await searchTools("Repository", { namespace: "Repo-tools", limit: 8 })).map(tool=>tool.name).sort(), instructions: (await searchTools("relative paths")).map(tool=>tool.name).sort(), plain: (await searchTools("Repository", { namespace: "absent" })).length, description: await describeTool("repo_read") };`,
 	);
 	expect(result.value).toMatchObject({
 		parent: {
@@ -78,8 +84,10 @@ test("code discovery groups tools by their longest namespace and hides internal 
 			tools: ["repo_read", "repo_write"],
 		},
 		deep: { name: "Deep", tools: ["repo_deep_read"] },
+		empty: { name: "Queued", description: "Waiting for connection", tools: [] },
 		missing: null,
 		tools: ["repo_read", "repo_write"],
+		instructions: ["repo_read", "repo_write"],
 		plain: 0,
 		description: expect.stringContaining("Repository operation"),
 	});

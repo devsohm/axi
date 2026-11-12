@@ -95,7 +95,6 @@ async function scripts(paused = false) {
 	registry.install(
 		createCodemodeExtension({
 			sandbox,
-			namespaces: [{ name: "weather", prefix: "weather_", description: "Local forecasts", instructions: "季節の予報" }],
 			globals: [
 				{
 					name: "lookup",
@@ -110,6 +109,7 @@ async function scripts(paused = false) {
 	);
 	registry.install({
 		name: "forecast",
+		namespace: { name: "weather", description: "Local forecasts", instructions: "季節の予報" },
 		tools: [
 			defineTool({
 				name: "weather_daily",
@@ -120,6 +120,11 @@ async function scripts(paused = false) {
 					return { output: [{ type: "text", text: "sunny" }] };
 				},
 			}),
+		],
+	});
+	registry.install({
+		name: "failures",
+		tools: [
 			defineTool({
 				name: "failed_text",
 				description: "Failed plain result",

@@ -101,6 +101,7 @@ export type {
 	ToolExecutionResult,
 	ToolHookCall,
 	ToolHooks,
+	ToolNamespace,
 	ToolPark,
 	ToolRegistration,
 	UserInput,

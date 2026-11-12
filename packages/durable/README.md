@@ -64,6 +64,12 @@ Invocation contexts carry cancellation and explicit telemetry spans. `HarnessOpt
 
 `@axi/durable/codemode` provides a script tool and its prompt section. Scripts call nested tools through recorded task keys. A delivery journal restores result order after restart and rejects changed execution paths. Successful scripts commit their conversation store with their result. Model catalog, classifier and image calls are optional. Code Mode does not install MCP.
 
+An extension groups its tools with `namespace: { name, description, instructions? }`.
+The prompt lists selected namespaces even before their tools arrive. Scripts read
+the longer instructions with `describeNamespace()` and find deferred tools with
+`searchTools()`. `namespacesOf(extensions)` maps tool names to their first owning
+extension's namespace. Prefix-based namespace options are no longer supported.
+
 `@axi/durable/testing` provides runner-independent storage and environment checks, a Vitest/Jest assertion adapter, registration helpers and deterministic storage benchmark datasets. Custom storage and environment implementations can run the same checks through their public interfaces.
 
 ## Browser storage

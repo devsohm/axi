@@ -20,11 +20,11 @@ import type { Extension, NestedToolExecutionResult, ToolExecutionApi, ToolExecut
 import { rankDocuments } from "../search.ts";
 import type { JsonObject } from "../types.ts";
 import {
-	type CodemodeNamespace,
 	codemodeDescription,
 	codemodeSection,
 	DEFAULT_CODEMODE_INLINE_BUDGET,
-	namespaceOf,
+	declaredNamespaces,
+	namespacesOf,
 	sampleOf,
 } from "./describe.ts";
 import {
@@ -102,14 +102,14 @@ const parameters = Type.Object({ code: Type.String({ description: "Raw JavaScrip
 export type CodemodeToolInput = Static<typeof parameters>;
 export type CodemodeToolOptions = {
 	readonly sandbox: CodemodeSandboxBase;
-	readonly namespaces?: readonly CodemodeNamespace[];
 	readonly inlineBudget?: number;
 	readonly models?: boolean;
 	readonly globals?: readonly CodemodeGlobal[];
 };
 const limits = { maxBytes: 4 * 1024 * 1024, maxLines: 100_000 };
 const discoveryNames = ["searchTools", "describeTool", "describeNamespace"];
-const cut = (text: string, count: number): string => (text.length <= count ? text : `${ownedSlice(text, 0, count - 3)}...`);
+const cut = (text: string, count: number): string =>
+	text.length <= count ? text : `${ownedSlice(text, 0, count - 3)}...`;
 const clone = <T>(value: T): T => copyJson(value, { omitUndefinedProperties: true }) as T;
 const failed = (message: string): ToolExecutionResult => ({ output: [{ type: "text", text: message }], isError: true });
 const describeCall = (call: CodemodeHostCall): string =>
@@ -135,7 +135,7 @@ export function createCodemodeExtension(options: CodemodeToolOptions): Extension
 			section("codemode", (input) =>
 				codemodeSection(
 					input.agent.callable.filter((tool) => !tool.name.startsWith(CODEMODE_INTERNAL_PREFIX) && !tool.deferred),
-					options.namespaces ?? [],
+					input.agent.extensions,
 					options.inlineBudget ?? DEFAULT_CODEMODE_INLINE_BUDGET,
 				),
 			),
@@ -226,22 +226,7 @@ class ScriptCall {
 			...(tool.structuredOutputSchema === undefined ? {} : { structured: true }),
 			...(tool.name.startsWith(CODEMODE_INTERNAL_PREFIX) ? { hidden: true } : {}),
 		}));
-		const namespaces: Start["namespaces"] = [];
-		for (const tool of agent.callable.filter((tool) => !tool.name.startsWith(CODEMODE_INTERNAL_PREFIX))) {
-			const namespace = namespaceOf(tool.name, options.namespaces ?? []);
-			if (!namespace) continue;
-			let found = namespaces.find((item) => item.name === namespace.name);
-			if (!found) {
-				found = {
-					name: namespace.name,
-					...(namespace.description === undefined ? {} : { description: namespace.description }),
-					...(namespace.instructions === undefined ? {} : { instructions: namespace.instructions }),
-					tools: [],
-				};
-				namespaces.push(found);
-			}
-			found.tools.push(tool.name);
-		}
+		const callable = agent.callable.filter((tool) => !tool.name.startsWith(CODEMODE_INTERNAL_PREFIX));
 		const globals = [
 			...discoveryNames.map((name) => ({ name, spread: true })),
 			...(options.models === false
@@ -249,6 +234,13 @@ class ScriptCall {
 				: [...CATALOG_GLOBALS, ...Object.keys(MODEL_CALLS)].map((name) => ({ name, spread: true }))),
 			...(options.globals ?? []).map((global) => ({ name: global.name, spread: global.spread === true })),
 		];
+		const toolNamespaces = namespacesOf(agent.extensions);
+		const namespaces: Start["namespaces"] = declaredNamespaces(agent.extensions).map((namespace) => ({
+			name: namespace.name,
+			description: namespace.description,
+			...(namespace.instructions === undefined ? {} : { instructions: namespace.instructions }),
+			tools: callable.filter((tool) => toolNamespaces.get(tool.name)?.name === namespace.name).map((tool) => tool.name),
+		}));
 		const now = api.now();
 		const seed = crypto.getRandomValues(new Uint32Array(1))[0]!;
 		type Found =
