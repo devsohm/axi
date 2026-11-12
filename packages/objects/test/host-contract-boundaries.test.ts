@@ -137,6 +137,47 @@ test("reference presence includes existing holders, filters contract types and r
 	}
 });
 
+test("releasing an external reference publishes the failure of a derive that follows it", async () => {
+	const Value = local("boundary.external", { version: 1, params: {}, members: { n: int() } });
+	const Reader = local("boundary.reader", { version: 1, params: {}, members: { doubled: int() } });
+	const values = { name: "values", facet: defineFacet((h) => h.serve(Value, () => ({ n: constant(3) }))) };
+	const host = createHost({ onError() {} });
+	try {
+		await host.load([values], context);
+		const source = await host.get(Value, {}, context);
+		await host.reload(
+			[
+				values,
+				{
+					name: "reader",
+					facet: defineFacet((h) =>
+						h.serve(Reader, (_, self) => ({ doubled: self.derive([source.n], ([n]) => n * 2) })),
+					),
+				},
+			],
+			context,
+		);
+		const reader = await host.get(Reader, {}, context);
+		const watch = await reader.doubled.watch(context),
+			frames: unknown[] = [];
+		watch.start(async (frame) => {
+			frames.push(frame);
+		});
+		expect(watch.value).toBe(6);
+		source.release();
+		await new Promise<void>((resolve) => setImmediate(resolve));
+		expect(frames).toEqual([
+			expect.objectContaining({ kind: "failed", error: expect.objectContaining({ code: "released" }) }),
+		]);
+		expect(reader.state.value.kind).toBe("live");
+		expect(() => reader.doubled.value).toThrow(expect.objectContaining({ code: "released" }));
+		await watch.stop();
+		reader.release();
+	} finally {
+		await host.close(context);
+	}
+});
+
 test.each(["success", "failure", "abort"])("root and nested traces preserve caller context on %s", async (outcome) => {
 	const telemetry = new InMemoryTelemetryContext(),
 		key = createContextKey<string>("request"),

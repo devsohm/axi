@@ -506,10 +506,20 @@ export class Binding {
 		this.#events = undefined;
 		eventTaps?.end();
 		this.#place = undefined;
-		this.#heldKeys?.end(error);
+		const keys = this.#heldKeys,
+			sources = [...this.#remoteMembers.values()];
 		this.#heldKeys = undefined;
-		for (const source of this.#remoteMembers.values()) source.objectEnded(error);
 		this.#remoteMembers.clear();
+		if (keys || sources.length) {
+			const detach = () => {
+				keys?.end(error);
+				for (const source of sources) source.objectEnded(error);
+			};
+			// Ending a source invalidates derives; publish their failures in the same batch.
+			if (owner && (keys || sources.some((source) => source.watched || source.dependents.size)))
+				owner.batch.within(detach, BACKGROUND_CONTEXT);
+			else detach();
+		}
 		if (previous.kind === "waiting") previous.leave();
 		for (const pin of this.#pins) pin.release();
 		this.#calls?.abort(error);
