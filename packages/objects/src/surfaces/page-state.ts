@@ -1,10 +1,11 @@
 import type { Principal } from "../data/index.ts";
 import type { Host } from "../host/index.ts";
 
+// Function properties prevent a narrow writable state from widening.
 export type PageState<T> = {
-	read(): T;
-	set(value: T): void;
-	subscribe(listener: () => void): () => void;
+	readonly read: () => T;
+	readonly set: (value: T) => void;
+	readonly subscribe: (listener: () => void) => () => void;
 };
 const states = new WeakMap<object, Map<string, PageState<unknown>>>();
 

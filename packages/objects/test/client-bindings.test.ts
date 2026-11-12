@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { expect, it, vi } from "vitest";
+import { expect, expectTypeOf, it, vi } from "vitest";
 import { BACKGROUND_CONTEXT as context } from "../src/context/index.ts";
 import { constant, createHost, createLanguage, defineMessages, FALLBACK_THEMES, hostLanguage, hostKind,
 } from "../src/index.ts";
@@ -12,6 +12,7 @@ import { NO_TRANSLATIONS } from "../src/surfaces/translations.ts";
 import { SandboxChannel } from "../src/tui/channel.ts";
 import { BridgeTerminal } from "../src/tui/terminal.ts";
 import { TuiScope } from "../src/tui/scope.ts";
+import type { PageState } from "../src/tui/index.ts";
 import { TerminalTheme } from "../src/tui/theme.ts";
 import { FRAME_UNITS, splitFrames } from "../src/tui/frames.ts";
 import type { Bridge, LauncherMessage, SandboxMessage } from "../src/tui/bridge.ts";
@@ -46,6 +47,7 @@ it("renders React bindings with the host's language and retained page state", as
 });
 
 it("disposes terminal scopes without losing host state or retaining redraw subscriptions", async () => {
+	expectTypeOf<PageState<"draft">>().not.toExtend<PageState<string>>();
 	const host = createHost({ onError() {} });
 	await host.load([], context);
 	try {
