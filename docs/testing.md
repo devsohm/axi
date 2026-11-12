@@ -76,6 +76,11 @@ archives, server-owned records, failed replacements and exclusive data-directory
 locks. Host-data checks compare stored row and JSON-cell versions after migration
 and reject malformed archives before they can change existing data.
 
+Browser-page checks use a real local WebSocket server with controlled DOM events.
+They check bootstrap validation, rendering after initialization, theme and language
+setup, telemetry delivery, and the server identity check before reconnecting.
+These checks do not establish visual browser correctness.
+
 The verification workflow runs the owned suite on its native platform matrix. Its Linux x64 job also enforces the coverage minimums, validates the behavior report, and uploads the `test-coverage` artifact.
 
 ## Package responsibilities
