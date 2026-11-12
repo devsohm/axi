@@ -1,6 +1,5 @@
 import type { ClientIdentity } from "./utils/identity.ts";
 import type { TelemetrySpan } from "@axi/telemetry";
-import type { TSchema } from "typebox";
 import type {
 	AnthropicOptions,
 	AzureOpenAIResponsesOptions,
@@ -478,7 +477,7 @@ export type GrammarVariants = Partial<Record<GrammarFormat, string>>;
 export type ConstrainedSamplingConfig =
 	| { type: "json_schema"; strict: "prefer" | "require" }
 	| { type: "grammar"; variants: GrammarVariants };
-export interface Tool<P extends TSchema = TSchema> {
+export interface Tool<P extends object = object> {
 	name: string;
 	description: string;
 	parameters: P;

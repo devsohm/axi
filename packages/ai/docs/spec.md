@@ -70,7 +70,7 @@ Final chat reasons are `stop`, `length`, `toolUse`, `error`, `aborted`, and `def
 
 Responses transports that support system updates and `additional_tools` use `"changes"`. Later declarations replace earlier definitions. Removal notices tell the model which tools it must stop calling, because the wire format cannot remove declarations. Later updates repeat the names still unavailable. Restoring a tool removes its name from that notice. Synthetic tool search and supported Chat Completions tool messages use `"additions"`, so later loads preserve the cached prefix after a removal.
 
-A `Tool` contains `name`, `description`, and a TypeBox `parameters` schema. The AI package describes calls. The application executes tools and appends their results. `validateToolArguments()` checks and coerces arguments against the declaration.
+A `Tool` contains `name`, `description`, and a TypeBox `parameters` schema. Parameter schemas must be objects. The AI package describes calls. The application executes tools and appends their results. `validateToolArguments()` checks and coerces arguments against the declaration.
 
 Validation copies the arguments, removes optional null properties, converts structural values, and then coerces explicitly declared primitive types. Serialized JSON schemas retain these conversions, including tuple prefixes, pattern properties and local references within their schema resource. Matching union values remain unchanged. Invalid converted values raise a validation error.
 

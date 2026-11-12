@@ -1,5 +1,6 @@
 import { Type } from "typebox";
 import { expectTypeOf } from "vitest";
+import type { Tool } from "@axi/ai";
 import { defineTool, type ToolRegistration } from "../src/index.ts";
 
 type Fields = {
@@ -78,4 +79,10 @@ export function checkToolArguments(parameters: ParametersSchema): void {
 	expectTypeOf<Args<typeof patterned>>().toEqualTypeOf<Record<string, boolean>>();
 	const numeric = Type.Record(Type.Integer(), Type.Number());
 	expectTypeOf<Args<typeof numeric>>().toEqualTypeOf<Record<number, number>>();
+	// @ts-expect-error Tool parameter schemas must be objects.
+	expectTypeOf<ToolRegistration<number>>();
+	// @ts-expect-error AI tool schemas also require objects.
+	expectTypeOf<Tool<boolean>>();
+	// @ts-expect-error The inferred definition must reject primitive schemas.
+	defineTool({ name: "invalid", description: "Invalid schema", parameters: 42, execute: async () => ({}) });
 }

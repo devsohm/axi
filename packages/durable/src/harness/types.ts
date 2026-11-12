@@ -258,7 +258,7 @@ export type ToolArgs<P extends TSchema> = boolean extends (P extends never ? tru
 	: Static<ToolParameterSchema<P>>;
 
 export type ToolRegistration<
-	P extends TSchema = TSchema,
+	P extends object = object,
 	D extends JsonValue = JsonValue,
 	C extends JsonValue = JsonValue,
 > = Tool<P> & {

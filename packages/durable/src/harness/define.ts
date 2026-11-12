@@ -1,6 +1,5 @@
 import type { JsonValue } from "@axi/objects/json";
 import type { Task } from "../types.ts";
-import type { TSchema } from "@axi/ai";
 import type {
 	AnyTask,
 	Extension,
@@ -15,7 +14,7 @@ import type {
 export function defineExtension<T extends ToolRegistration = ToolRegistration>(extension: Extension<T>): Extension<T> {
 	return extension;
 }
-export function defineTool<P extends TSchema, D extends JsonValue = JsonValue, C extends JsonValue = JsonValue>(
+export function defineTool<P extends object, D extends JsonValue = JsonValue, C extends JsonValue = JsonValue>(
 	tool: ToolRegistration<P, D, C>,
 ): ToolRegistration<P, D, C> {
 	return tool;
