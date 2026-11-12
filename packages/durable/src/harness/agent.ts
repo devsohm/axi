@@ -120,15 +120,12 @@ export async function configure(tx: Tx, id: ConversationId, change: AgentChange)
 	if (compaction === null) delete state.compaction;
 	else if (compaction !== undefined) {
 		const { modelOverrides, ...policy } = compaction;
+		const overrides = modelOverrides === undefined
+			? undefined
+			: Object.fromEntries(Object.entries(modelOverrides).map(([key, value]) => [key, compactionFields(value)]));
 		state.compaction = {
 			...compactionFields(policy),
-			...(modelOverrides === undefined
-				? {}
-				: {
-						modelOverrides: Object.fromEntries(
-							Object.entries(modelOverrides).map(([key, value]) => [key, compactionFields(value)]),
-						),
-					}),
+			...(overrides === undefined ? {} : { modelOverrides: overrides }),
 		};
 	}
 }

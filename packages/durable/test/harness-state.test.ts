@@ -31,6 +31,23 @@ import { SessionImpl } from "../src/session/session.ts";
 import { openNodeJsonlStorage } from "../src/storage/jsonl/node.ts";
 
 describe("conversation state", () => {
+	it.each([
+		{ policy: { reserveTokens: -1 }, override: { keepRecentTokens: -2 }, field: "keepRecentTokens", value: -2 },
+		{ policy: { keepRecentTokens: 0.5 }, override: { backgroundTokens: -3 }, field: "backgroundTokens", value: -3 },
+	])("checks model compaction overrides before the base policy ($field)", async ({ policy, override, field, value }) => {
+		const harness = await Harness.open(new MemoryStorage(), { models: createModels(), registry: createRegistry() }, context);
+		try {
+			const conversation = await harness.root(context);
+			await expect(
+				conversation.configure({ compaction: { ...policy, modelOverrides: { "local/model": override } } }, context),
+			).rejects.toThrow(`compaction.${field} must be an integer 0 or more, got ${value}`);
+			expect((await conversation.agent(context)).compaction).toBeUndefined();
+			await conversation.configure({ compaction: { reserveTokens: 64 } }, context);
+			expect((await conversation.agent(context)).compaction).toEqual({ reserveTokens: 64 });
+		} finally {
+			await harness.close(context);
+		}
+	});
 	it("supplies the scheduler as the wake callback receiver", async () => {
 		const receivers: unknown[] = [];
 		const harness = await Harness.open(
