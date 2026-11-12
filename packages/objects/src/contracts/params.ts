@@ -3,7 +3,9 @@ import type { JsonValue } from "../json.ts";
 import type { TSchema } from "./schema.ts";
 import { snapshotSchema } from "./snapshot.ts";
 
-export type Params = Readonly<Record<string, TString | TInteger | TBoolean | TUnion<TLiteral<string>[]>>>;
+export type Params = Readonly<Record<string,
+	(TString | TInteger | TBoolean | TUnion<TLiteral<string>[]>) & { readonly default?: never }
+>>;
 export type RequiredFields<P extends Params> = { [K in keyof P]: P[K] extends { readonly "~optional": true } ? never : P[K] };
 export type ParamsData = { readonly fields: readonly string[]; readonly schema: TSchema; readonly normal: JsonValue };
 function allowed(value: JsonValue): boolean {

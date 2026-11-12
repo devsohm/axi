@@ -1,6 +1,6 @@
 import { expect, expectTypeOf, it } from "vitest";
 import { BACKGROUND_CONTEXT as context } from "../src/context/index.ts";
-import { local, remote, hostKind, method, obj, str, opt, int, bytes, map, evolve, keyed, type Implementation } from "../src/contracts/index.ts";
+import { local, remote, hostKind, method, obj, str, opt, int, bool, bytes, map, evolve, keyed, type Implementation } from "../src/contracts/index.ts";
 import { contractData, checkAccepts, snapshotArguments } from "../src/contracts/internal.ts";
 import type { Increment } from "../src/contracts/history.ts";
 import { bindProvider, binds, checkArgs, checkParams, principalKey, canonicalJson, check, validatorFor, objectsErrorFromJson, waitingFor } from "../src/data/internal.ts";
@@ -68,6 +68,16 @@ it("identifies optional parameters as an unsupported parameter declaration", () 
 	expect(() => hostKind("group", { id: opt(str()) })).toThrow(message);
 	// @ts-expect-error Parameters are required.
 	expect(() => local("group", { version: 1, params: { id: opt(str()) }, members: {} })).toThrow(message);
+});
+
+it("refuses defaulted identity fields in declarations and their types", () => {
+	const Place = hostKind("default.place");
+	// @ts-expect-error Identity parameters cannot declare defaults.
+	expect(() => hostKind("default.string", { id: str({ default: "root" }) })).toThrow("a param is a required");
+	// @ts-expect-error Identity parameters cannot declare defaults.
+	expect(() => local("default.integer", { version: 1, params: { id: int({ default: 1 }) }, members: {} })).toThrow("a param is a required");
+	// @ts-expect-error Identity parameters cannot declare defaults.
+	expect(() => remote("default.boolean", { version: 1, params: { id: bool({ default: true }) }, hostAddress: () => Place(), variants: { user: {} } })).toThrow("a param is a required");
 });
 
 it("accepts frozen state schemas without treating format annotations as constraints", () => {
