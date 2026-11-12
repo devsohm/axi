@@ -26,7 +26,8 @@ export type LoopOptions = {
 	readonly environment: LoopEnvironment;
 };
 
-export function keepConnected({ open, onState, canRetry, environment: clock }: LoopOptions): { stop(): void } {
+export function keepConnected(options: LoopOptions): { stop(): void } {
+	const clock = options.environment;
 	type Socket = { link?: LoopLink; opened?: number; frame: number; timeout(): void };
 	let current: Socket | undefined,
 		retries = 0,
@@ -38,13 +39,13 @@ export function keepConnected({ open, onState, canRetry, environment: clock }: L
 		retry = undefined;
 		const socket: Socket = { frame: clock.now(), timeout() {} };
 		current = socket;
-		onState("connecting");
-		socket.link = open({
+		options.onState("connecting");
+		socket.link = options.open({
 			opened() {
 				if (current === socket) {
 					socket.opened = socket.frame = clock.now();
 					socket.timeout();
-					onState("connected");
+					options.onState("connected");
 				}
 			},
 			received() {
@@ -61,7 +62,7 @@ export function keepConnected({ open, onState, canRetry, environment: clock }: L
 			stale?.();
 			stale = undefined;
 			if (stopped) return;
-			onState("waiting");
+			options.onState("waiting");
 			if (socket.opened !== undefined && clock.now() - socket.opened >= STABLE_MS) retries = 0;
 			deciding = true;
 			urgent = false;
@@ -71,7 +72,7 @@ export function keepConnected({ open, onState, canRetry, environment: clock }: L
 				const backoff = Math.min(RETRY_MAX_MS, RETRY_INITIAL_MS * 2 ** retries++);
 				retry = clock.after(urgent ? 0 : clock.online() ? backoff : RETRY_MAX_MS, connect);
 			};
-			void canRetry().then(decided, () => decided(true));
+			void options.canRetry().then(decided, () => decided(true));
 		});
 	}
 	const removeWake = clock.onWake(() => {

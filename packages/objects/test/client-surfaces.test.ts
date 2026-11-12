@@ -29,6 +29,7 @@ import { composeTranslations } from "../src/surfaces/translations.ts";
 import { inLanguage } from "../src/surfaces/language.ts";
 import { pageState } from "../src/surfaces/page-state.ts";
 import { publishTo, scriptsFacet } from "../src/node/surfaces/current.ts";
+import type { LoopOptions } from "../src/surfaces/connection.ts";
 
 it("renders contributed catalogs, fallbacks and linked message data in a scoped locale", () => {
 	const messages = defineMessages("tasks", {
@@ -187,6 +188,35 @@ it("reconnects with backoff and cancels its timeout when stopped", async () => {
 	} finally {
 		handle.stop();
 		vi.useRealTimers();
+	}
+});
+
+it("keeps connection hook receivers and reads the current retry callback after a disconnect", async () => {
+	const receivers: unknown[] = [];
+	let closed: (() => void) | undefined;
+	let originalRetries = 0;
+	const link = { onClose(fn: () => void) { closed = fn; }, close() { closed?.(); } };
+	const options = {
+		open: function (this: unknown) { receivers.push(this); return link; },
+		onState: function (this: unknown) { receivers.push(this); },
+		canRetry: async () => { originalRetries++; return false; },
+		environment: {
+			now: Date.now, online: () => true, onWake: () => () => {},
+			after(ms, fn) { const timer = setTimeout(fn, ms); return () => clearTimeout(timer); },
+		},
+	} satisfies LoopOptions;
+	const handle = keepConnected(options);
+	try {
+		options.canRetry = async function (this: unknown) {
+			receivers.push(this);
+			return false;
+		};
+		link.close();
+		await Promise.resolve();
+		expect(originalRetries).toBe(0);
+		expect(receivers).toEqual([options, options, options, options]);
+	} finally {
+		handle.stop();
 	}
 });
 
