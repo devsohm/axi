@@ -159,6 +159,8 @@ The conversation's general `enabled: false` also overrides the harness's model-s
 
 `createRegistry()` holds extensions by name. An extension can register tools, prompt sections, task definitions, task hooks, and wrappers. A snapshot captures registrations for an invocation. The registry loads definitions; an application owns importing modules and supplying them.
 
+Replacing an extension keeps its position. Invalid registrations leave the previous snapshot unchanged. Subscribers run synchronously after publication. A subscriber error propagates to the caller without undoing the published snapshot.
+
 `registryReader(value, context)` adapts an observed registry value into the same Harness interface. Its listeners run synchronously for new values; a failed composition retains the last snapshot. The source owns cancellation and observation cleanup. This adapter does not load modules or implement a second extension registry.
 
 `defineExtension()`, `defineTool()`, `section()`, `hook()`, `wrapTool()`, and `wrapSection()` provide typed definitions. Agent configuration chooses active extensions, executable tools, and tools shown to the model separately.
