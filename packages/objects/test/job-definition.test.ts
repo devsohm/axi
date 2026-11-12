@@ -54,3 +54,27 @@ it("snapshots job schemas and enforces the persistence requirements at declarati
 		}),
 	).toThrow("a persisted job's result is JSON");
 });
+
+it("reads the persistence resume option once after checking its keys", () => {
+	let reads = 0;
+	const persist = {
+		get resume(): "abandon" {
+			reads++;
+			return "abandon";
+		},
+	};
+	expect(defineJob("work", { version: 1, args: obj({}), result: int(), persist }).persist).toBe(persist);
+	expect(reads).toBe(2);
+});
+
+it.each(["args", "result"] as const)("accepts a non-enumerable %s version adapter", (field) => {
+	const adapter = { args: (old: { n: number }) => old, result: (old: number) => old };
+	Object.defineProperty(adapter, field, { enumerable: false });
+	const job = defineJob("work", {
+		version: 2,
+		args: obj({ n: int() }),
+		result: int(),
+		accepts: { 1: adapter },
+	});
+	expect(job.accepts[1]).toBe(adapter);
+});

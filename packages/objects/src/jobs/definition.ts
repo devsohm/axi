@@ -79,7 +79,8 @@ export function defineJob<
 		throw new Error(`${name}.state: expected a singleton document definition`);
 	if (persist !== undefined) {
 		checkKeys(persist, ["resume"], `${name}.persist`);
-		if (persist.resume !== "rerun" && persist.resume !== "abandon")
+		const { resume } = persist;
+		if (resume !== "rerun" && resume !== "abandon")
 			throw new Error(`${name}.persist.resume: expected "rerun" or "abandon"`);
 		if (state && !state.persist)
 			throw new Error(
@@ -106,10 +107,9 @@ export function defineJob<
 			)
 				throw new Error(`${path}: not an older version`);
 			checkKeys(adapter, ["args", "result"], path);
-			const fields = new Map(entriesOf(adapter, path));
-			for (const field of ["args", "result"])
-				if (typeof fields.get(field) !== "function")
-					throw new Error(`${path}.${field}: expected a function`);
+			const { args, result } = adapter as { readonly args?: unknown; readonly result?: unknown };
+			if (typeof args !== "function") throw new Error(`${path}.args: expected a function`);
+			if (typeof result !== "function") throw new Error(`${path}.result: expected a function`);
 		}
 	}
 	const fingerprint = hash64(

@@ -120,6 +120,8 @@ A routine serializes its calls and coalesces source changes during a call. It wa
 
 A job runs outside its finish transaction. Its successful finish commits cleanup and application changes together. Five finish failures block further tries. A reload can retry a blocked finish. Persisted runs recover their saved arguments, progress and supported trace carrier. Deferred state may be lost before its persistence deadline. Applications own external-effect idempotency.
 
+Job declaration checks read the resume policy once after checking its keys. Version-adapter functions can be non-enumerable properties; their values must still be functions.
+
 ## Node helpers
 
 Plugin roots may be required or optional. Discovery reports collisions and invalid entries. Builds restrict imports to permitted plugin, shared and host-package paths. Plugin scripts execute as trusted code. File watching marks changes without applying them. Rollouts ship built generations through ordered host steps. Workers evaluate prebuilt scripts without rebuilding them.
