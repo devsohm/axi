@@ -5,6 +5,8 @@ import {
 	createHost,
 	defineFacet,
 	defineJob,
+	defineState,
+	int,
 	local,
 	obj,
 	str,
@@ -51,6 +53,62 @@ it("keeps the finish span open while publishing its final blocked state", async 
 		} finally {
 			await watch.stop();
 		}
+	} finally {
+		await host.close(context);
+		vi.useRealTimers();
+	}
+});
+
+it("adapts an older result before migrating the state passed to its new finish", async () => {
+	vi.useFakeTimers({ toFake: ["Date", "setTimeout", "clearTimeout"] });
+	const order: string[] = [];
+	const outcomes: unknown[] = [];
+	const ready = Promise.withResolvers<JobHandle<{}, string, { n: number }>>();
+	const errors: string[] = [];
+	const host = createHost({ onError(error) { errors.push(error.kind); } });
+	const Runner = local("migration.runner", { version: 1, params: {}, members: { running: json() } });
+	const State = defineState("migration.state", { version: 1, schema: obj({ n: int() }), initial: () => ({ n: 0 }) });
+	const NextState = defineState("migration.state", {
+		version: 2,
+		schema: obj({ n: int() }),
+		initial: () => ({ n: 0 }),
+		migrate(old) { order.push("state"); return { n: Number(old.n) }; },
+	});
+	const Work = defineJob("migration.work", { version: 1, args: obj({}), result: str(), state: State });
+	const NextWork = defineJob("migration.work", {
+		version: 2,
+		args: obj({}),
+		result: str(),
+		state: NextState,
+		accepts: { 1: { args: (old: {}) => old, result: (old: string) => { order.push("result"); return old; } } },
+	});
+	try {
+		await host.load([{
+			name: "runner",
+			facet: defineFacet((h) => h.serve(Runner, (_params, self) => {
+				const job = self.job(Work, {
+					run: async () => "done",
+					finish() { throw new Error("old finish unavailable"); },
+				});
+				ready.resolve(job);
+				return { running: job.running };
+			})),
+		}], context);
+		const job = await ready.promise;
+		const run = await job.start({}, context);
+		for (const delay of [1000, 2000, 4000, 8000]) await vi.advanceTimersByTimeAsync(delay);
+		expect(job.running.value).toMatchObject([{ phase: "blocked", reason: "finish_failed" }]);
+		await host.reload([{
+			name: "runner",
+			facet: defineFacet((h) => h.serve(Runner, (_params, self) => {
+				const next = self.job(NextWork, { run: async () => "next", finish(outcome) { outcomes.push(outcome); } });
+				return { running: next.running };
+			})),
+		}], context);
+		expect(await run.outcome(context)).toMatchObject({ kind: "done", result: "done" });
+		expect(outcomes).toMatchObject([{ kind: "done", result: "done", state: { n: 0 } }]);
+		expect(order).toEqual(["result", "state"]);
+		expect(errors.filter((kind) => kind === "job_finish_failed")).toHaveLength(5);
 	} finally {
 		await host.close(context);
 		vi.useRealTimers();

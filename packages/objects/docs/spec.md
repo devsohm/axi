@@ -126,6 +126,8 @@ Job start setup failures reject the returned promise. A traced start keeps its s
 
 The finish span stays open until the final blocked state is committed and published.
 
+Finishing an older completed run maps its arguments and result before migrating the state passed to the new finish callback.
+
 ## Node helpers
 
 Plugin roots may be required or optional. Discovery reports collisions and invalid entries. Builds restrict imports to permitted plugin, shared and host-package paths. Plugin scripts execute as trusted code. File watching marks changes without applying them. Rollouts ship built generations through ordered host steps. Workers evaluate prebuilt scripts without rebuilding them.
