@@ -335,7 +335,12 @@ export class Binding {
 					for (const source of this.#remoteMembers.values()) source.fail(state.cause.error, BACKGROUND_CONTEXT);
 				}, BACKGROUND_CONTEXT);
 		}
-		if (this.#heldKeys) this.#owner!.batch.within(() => this.#heldKeys?.follow(BACKGROUND_CONTEXT), BACKGROUND_CONTEXT);
+		if (this.#heldKeys)
+			this.#owner!.batch.within(() => {
+				if (state.kind === "failed" && this.target === undefined)
+					this.#heldKeys?.fail(state.cause.error, BACKGROUND_CONTEXT);
+				else this.#heldKeys?.follow(BACKGROUND_CONTEXT);
+			}, BACKGROUND_CONTEXT);
 	}
 	moved(): void {
 		const state = this.refState;

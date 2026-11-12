@@ -72,6 +72,13 @@ export class HeldKeys {
 				}
 			}
 	}
+	fail(error: ObjectsError, context: Context): void {
+		for (const keys of this.#entries.values())
+			for (const entry of keys.values()) {
+				entry.source?.fail(error, context);
+				this.#unpin(entry);
+			}
+	}
 	end(error: ObjectsError): void {
 		for (const keys of this.#entries.values())
 			for (const entry of keys.values()) {

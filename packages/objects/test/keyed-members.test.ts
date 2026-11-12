@@ -10,25 +10,24 @@ async function notes() {
 	const type = local("test.notes", { version: 1, params: {}, members: { notes: keyed(shape) } });
 	const host = createHost({ onError: () => {} });
 	let writable!: KeyedHandle<{ n: number }>;
-	await host.load(
-		[
-			{
-				name: "notes",
-				facet: defineFacet((h) =>
-					h.serve(type, (_, self) => {
-						writable = self.state(document);
-						return { notes: writable };
-					}),
-				),
-			},
-		],
-		context,
-	);
+	const plugins = [
+		{
+			name: "notes",
+			facet: defineFacet((h) =>
+				h.serve(type, (_, self) => {
+					writable = self.state(document);
+					return { notes: writable };
+				}),
+			),
+		},
+	];
+	await host.load(plugins, context);
 	const first = await host.get(type, {}, context);
 	return {
 		host,
 		first,
 		second: () => host.get(type, {}, context),
+		reload: () => host.reload(plugins, context),
 		write: (n: number) =>
 			writable.change(
 				"a",
@@ -40,6 +39,35 @@ async function notes() {
 	};
 }
 const flushed = () => new Promise<void>((resolve) => setImmediate(resolve));
+
+it("reports a removed provider to an open key watch and recovers when the provider returns", async () => {
+	const app = await notes();
+	try {
+		await app.write(3);
+		const watch = (await app.first.notes.watch("a", context))!;
+		const frames: unknown[] = [];
+		watch.start(async (frame) => {
+			frames.push(frame);
+		});
+		await app.host.reload([], context);
+		await flushed();
+		expect(app.first.state.value.kind).toBe("failed");
+		expect(watch.value).toEqual({ n: 3 });
+		expect(frames).toEqual([
+			expect.objectContaining({ kind: "failed", error: expect.objectContaining({ code: "unavailable" }) }),
+		]);
+		await app.reload();
+		await vi.waitFor(() => expect(app.first.state.value.kind).toBe("live"));
+		await app.write(9);
+		await flushed();
+		expect(watch.value).toEqual({ n: 9 });
+		expect(frames.at(-1)).toMatchObject({ kind: "value", value: { n: 9 } });
+		await watch.stop();
+		app.first.release();
+	} finally {
+		await app.host.close(context);
+	}
+});
 
 it("keeps a pending key watch open through a failed first startup and retry", async () => {
 	const shape = obj({ n: int() });
