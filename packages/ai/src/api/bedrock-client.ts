@@ -27,14 +27,16 @@ function configuration(model: Model<"bedrock-converse-stream">, options: Bedrock
 	const ambientProfile = Boolean(getProviderEnvValue("AWS_PROFILE"));
 	const fromEndpoint = endpointRegion(model.baseUrl),
 		explicitEndpoint = !fromEndpoint || (!configuredRegion && !ambientProfile);
+	const identity = options.identity,
+		agentMode = identity?.userAgent ?? "detailed";
 	const config: BedrockRuntimeClientConfig = {
 		profile: explicitProfile || env("AWS_PROFILE"),
 		customUserAgent:
-			typeof options.identity?.userAgent === "object"
-				? options.identity.userAgent.custom
-				: options.identity?.userAgent === "short"
+			typeof agentMode === "object"
+				? agentMode.custom
+				: agentMode === "short"
 					? [["axi"]]
-					: [["axi", getClientVersion(options.identity)]],
+					: [["axi", getClientVersion(identity)]],
 		...(explicitEndpoint ? { endpoint: model.baseUrl } : {}),
 	};
 	const skipAuth = env("AWS_BEDROCK_SKIP_AUTH") === "1",

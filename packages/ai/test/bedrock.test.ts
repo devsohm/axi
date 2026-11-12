@@ -207,6 +207,21 @@ describe("Bedrock adapter", () => {
 			region: "us-gov-west-1",
 		});
 	});
+	it("resolves the client user-agent mode once during client setup", async () => {
+		let reads = 0;
+		const result = await stream(model, context, {
+			identity: {
+				get userAgent() {
+					return { custom: `bedrock-client-${++reads}` };
+				},
+			},
+		}).result();
+		expect({ reads, agent: sdk.configs[0].customUserAgent, stop: result.stopReason }).toEqual({
+			reads: 1,
+			agent: "bedrock-client-1",
+			stop: "stop",
+		});
+	});
 	it("selects adaptive and budget reasoning while respecting GovCloud restrictions", async () => {
 		expect((await payload(model, { reasoning: "xhigh" })).additionalModelRequestFields).toEqual({
 			thinking: { type: "adaptive", display: "summarized", block_binding: { prefix_mismatch_behavior: "drop_block" } },

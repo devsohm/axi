@@ -113,6 +113,7 @@ Simple requests also accept `reasoning`, `toolChoice`, `thinkingBudgets`, and `d
 `withClientIdentity(models, identity)` supplies identity defaults while forwarding the model registry's operations. Request identity fields override those defaults. The wrapper preserves a mutable registry's registration methods and reads each mutation method when it is called. A read-only registry stays read-only.
 
 Codex resolves client identity once per request. A WebSocket attempt and its HTTP fallback use the same identity headers.
+Bedrock resolves the user-agent mode once during client setup.
 
 Simple requests merge model sampling defaults, thinking-level defaults, and request sampling parameters in that order. They clamp the requested output allowance to the estimated remaining context. `getSupportedThinkingLevels()` reads model capabilities. `clampThinkingLevel()` selects a supported level.
 
