@@ -124,6 +124,7 @@ test("sandbox model requests share four slots and charge each result once", asyn
 		expect(active).toBe(4);
 	} finally {
 		gate.resolve();
+		await pending;
 	}
 	const result = await pending;
 	const body = result.message.content[1];

@@ -3,6 +3,7 @@ import { BACKGROUND_CONTEXT as context } from "@axi/objects/context";
 import { expect, test, vi } from "vitest";
 import {
 	createRegistry,
+	defineDoc,
 	defineExtension,
 	defineSignal,
 	defineTask,
@@ -15,6 +16,60 @@ import {
 	type TaskId,
 } from "../src/index.ts";
 import { commitWrites } from "../src/testing/commit-writes.ts";
+
+test("refused sleep deadlines roll back the whole commit and leave the task able to sleep", async () => {
+	const Attempt = defineDoc<{ committed: boolean }>({
+		kind: "sleep-attempt",
+		version: 1,
+		scope: "conversation",
+		history: "latest",
+		fork: "initial",
+		initial: () => ({ committed: false }),
+		checkpointWhen: () => false,
+	});
+	let resumed = 0;
+	const task = defineTask<null, { phase: "start" } | { phase: "finish" }, number>({
+		name: "validated-sleep",
+		version: 1,
+		initial: () => ({ phase: "start" }),
+		phases: {
+			async start(record, runtime, ctx) {
+				for (const until of [Number.NaN, -0.5, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY]) {
+					await expect(
+						runtime.commit(async (tx) => {
+							(await tx.doc(Attempt, record.conversationId)).committed = true;
+							return { status: "sleeping", checkpoint: { phase: "finish" }, until };
+						}, ctx),
+					).rejects.toThrow("not a time in milliseconds");
+					expect(await runtime.snapshot(Attempt, record.conversationId, ctx)).toBeUndefined();
+				}
+				await runtime.sleepUntil(0, { phase: "finish" }, ctx);
+			},
+			async finish(_record, runtime, ctx) {
+				resumed++;
+				await runtime.commit(() => ({ status: "terminal", outcome: { status: "completed", result: 42 } }), ctx);
+			},
+		},
+		async abort() {},
+	});
+	const registry = createRegistry();
+	registry.install({ name: "validated-sleep", tasks: [task] });
+	const harness = await Harness.open(
+		new MemoryStorage(),
+		{ registry, models: createModels(), now: () => 1000 },
+		context,
+	);
+	try {
+		const root = await harness.root(context);
+		const id = await root.commit((tx) => tx.createTask(task, null, { ownership: { kind: "conversation" } }), context);
+		harness.resume();
+		expect((await harness.waitForTask(id, context)).state.outcome).toEqual({ status: "completed", result: 42 });
+		expect(resumed).toBe(1);
+		expect(await harness.snapshot(Attempt, root.id, context)).toBeUndefined();
+	} finally {
+		await harness.close(context);
+	}
+});
 
 test.each([false, true])("a delivered signal clears its old wake deadline, keeping another sleep: %s", async (otherSleep) => {
 	let executions = 0;
