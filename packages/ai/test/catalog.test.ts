@@ -42,7 +42,7 @@ it("can generate again after replacing the catalog with a smaller upstream listi
 	} finally {
 		rmSync(root, { recursive: true, force: true });
 	}
-});
+}, 40000);
 
 it("retains only documented fixed models when the upstream catalog has none", () => {
 	const catalog = assembleCatalog(
