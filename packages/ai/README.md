@@ -40,6 +40,8 @@ gpt-4o-mini
 
 The built-in catalog contains 42 providers. Chat, image and classifier entries share provider authentication but use separate operations. Catalog reads are synchronous. `models.refresh()` updates dynamic providers and can restore their persisted catalogs without network access.
 
+Qwen Token Plan has separate Team and Individual providers for international and China accounts. Provider IDs stay unchanged. Each plan has its own key variable, with the older regional variable as a fallback. See [authentication](docs/spec.md#authentication-and-storage) for the variables.
+
 A provider can set `refreshModelsAuth: "configured"` when its catalog source needs no request credential. The network refresh still requires configured authentication, but does not refresh OAuth or pass credentials to the catalog source. The default, `"credential"`, resolves a usable credential first.
 
 Transcripts carry system messages and tool changes. The helpers replay the current prompt and tools, or retain updates in place for transports that support them. Event streams expose text, thinking and tool-call updates and return the completed assistant message.
@@ -75,6 +77,8 @@ The generic serialized message transport supports remote assistant events and di
 Google and Vertex use the Google SDK, with thinking controls, signature replay, image tool results and custom fetch. Token-limit continuation responses return partial output with `stopReason: "length"`; the SDK does not send another request automatically. Vertex supports API keys and scoped application credentials. Bedrock uses the AWS SDK, with profile and bearer authentication, proxy routing, signed headers, encrypted reasoning and cache accounting. Mistral uses native HTTP and SSE, with thinking, tool arguments and prompt affinity. The Workers AI binding adapter forwards requests without changing their bodies or headers.
 
 Maintainers can run `npm run generate:models --workspace @axi/ai` to fetch catalog sources and regenerate data and typed indexes. `--strict` rejects failed sources. `--data-only` updates existing data without rewriting types. `--json-only --json-output <directory>` exports catalogs without modifying package source. The build validates catalog structure and content hashes.
+
+Keep catalog updates compatible with the adapter versions that consume them. Removing an explicit compatibility setting can change requests from an older client even when the catalog still passes schema checks.
 
 The generator lives in `catalog/generate.ts`. It reads models.dev v2, OpenRouter, NVIDIA and Vercel AI Gateway metadata. Protocol-specific endpoints determine routing where a provider lists several APIs. Provider corrections set verified limits, thinking controls and cache behavior. `scripts/hydrate-model-catalog.ts` imports an exported catalog; `catalog/check.ts` validates the generated files.
 

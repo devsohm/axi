@@ -4,11 +4,14 @@ import { createProvider, type Provider } from "../models.ts";
 import { QWEN_TOKEN_PLAN_INDIVIDUAL_MODELS } from "./qwen-token-plan-individual.models.ts";
 
 export function qwenTokenPlanIndividualProvider(): Provider<"openai-completions"> {
-	const auth = envApiKeyAuth("Qwen Token Plan Individual API key", ["QWEN_TOKEN_PLAN_API_KEY"]);
+	const auth = envApiKeyAuth("Qwen Token Plan Individual API key", [
+		"QWEN_TOKEN_PLAN_INDIVIDUAL_API_KEY",
+		"QWEN_TOKEN_PLAN_API_KEY",
+	]);
 	return createProvider({
 		id: "qwen-token-plan-individual",
 		name: "Qwen Token Plan Individual",
-		baseUrl: "https://token-plan.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1",
+		baseUrl: "https://token-plan.maas.qwencloudapi.com/compatible-mode/v1",
 		models: Object.values(QWEN_TOKEN_PLAN_INDIVIDUAL_MODELS),
 		api: openAICompletionsApi(),
 		auth: { apiKey: auth },

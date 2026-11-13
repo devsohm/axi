@@ -2,6 +2,7 @@ import { execFileSync } from "node:child_process";
 import { homedir } from "node:os";
 import { isAbsolute } from "node:path";
 import { pathToFileURL } from "node:url";
+import { visibleWidth } from "./utils.ts";
 
 export type ImageProtocol = "kitty" | "iterm2" | null;
 export interface TerminalCapabilities {
@@ -139,6 +140,40 @@ export function setCapabilityOverrides(value: Partial<TerminalCapabilities>): vo
 }
 export function isImageLine(text: string): boolean {
 	return text.includes("\x1b_G") || text.includes("\x1b]1337;File=");
+}
+export interface ImageLineExtent {
+	firstRow: number;
+	lastRow: number;
+	startCol: number;
+	endCol: number;
+}
+export function getImageLineExtent(line: string): ImageLineExtent | undefined {
+	const kitty = line.indexOf("\x1b_G"),
+		offset = kitty < 0 ? line.indexOf("\x1b]1337;File=") : kitty;
+	if (offset < 0) return undefined;
+	let prefix = line.slice(0, offset),
+		firstRow = 0,
+		lastRow = 0,
+		columns = Infinity;
+	if (kitty >= 0) {
+		const controls = /\x1b_G([^;]*);/.exec(line)?.[1] ?? "",
+			width = /(?:^|,)c=(\d+)(?:,|$)/.exec(controls);
+		columns = width ? Number(width[1]) : (metadataFor(controls)?.columns ?? Infinity);
+		lastRow = (getKittyImagePlacementRows(line) ?? 1) - 1;
+	} else {
+		const up = /\x1b\[(\d+)A$/.exec(prefix),
+			width = /[;=]width=(\d+)[;:]/.exec(line.slice(offset));
+		if (up) {
+			prefix = prefix.slice(0, up.index);
+			firstRow = -Number(up[1]);
+		}
+		if (width) columns = Number(width[1]);
+	}
+	const startCol = visibleWidth(prefix);
+	return { firstRow, lastRow, startCol, endCol: startCol + columns };
+}
+export function stripImageSequences(line: string): string {
+	return line.replace(/\x1b_G[^\x1b]*\x1b\\/g, "").replace(/(?:\x1b\[\d+A)?\x1b\]1337;File=[^\x07]*\x07/g, "");
 }
 export function allocateImageId(): number {
 	return 1 + Math.floor(Math.random() * 0xfffffffe);

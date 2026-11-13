@@ -68,6 +68,8 @@ Fullscreen mode supports transcript search, configurable navigation, mouse selec
 
 Fullscreen redraws retain uploaded Kitty image data for placement reuse, including after a resize.
 
+Overlays hide Kitty and iTerm2 images whose terminal cells intersect the overlay, including images starting above or below its text row. Closing the overlay restores the image. Images beside the overlay remain visible. An image with an unknown width is treated as extending to the right edge. Higher overlays also hide images drawn by lower overlays.
+
 ## Multiline editor and completion
 
 The editor stores cursor positions as UTF-16 offsets and moves across grapheme boundaries. It wraps text to terminal width, preserves the preferred column during vertical movement, and scrolls the visible editor window. It supports undo, history, kill and yank, mouse positioning, bracketed paste and large-paste markers. Applications supply submission callbacks, themes and completion providers.

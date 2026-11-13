@@ -4,6 +4,8 @@ export const individualModels = new Set([
 	"deepseek-v4-flash-0731",
 	"deepseek-v4-pro",
 	"deepseek-v4-pro-0813",
+	"deepseek-v4.1-flash",
+	"deepseek-v4.1-flash-1017",
 	"glm-5.2",
 	"glm-5.3",
 	"qwen3.6-flash",

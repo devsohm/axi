@@ -147,6 +147,17 @@ A persistent `CredentialStore` implements `read`, `list`, `modify`, and `delete`
 
 `AuthContext` supplies asynchronous `env(name)` and `fileExists(path)` methods. The default context reads process environment values and checks local files. A browser or remote host can supply another context.
 
+Qwen Token Plan resolves a nonempty plan key before the regional fallback:
+
+| Provider | Plan key | Regional fallback |
+| --- | --- | --- |
+| `qwen-token-plan` | `QWEN_TOKEN_PLAN_TEAM_API_KEY` | `QWEN_TOKEN_PLAN_API_KEY` |
+| `qwen-token-plan-cn` | `QWEN_TOKEN_PLAN_TEAM_CN_API_KEY` | `QWEN_TOKEN_PLAN_CN_API_KEY` |
+| `qwen-token-plan-individual` | `QWEN_TOKEN_PLAN_INDIVIDUAL_API_KEY` | `QWEN_TOKEN_PLAN_API_KEY` |
+| `qwen-token-plan-individual-cn` | `QWEN_TOKEN_PLAN_INDIVIDUAL_CN_API_KEY` | `QWEN_TOKEN_PLAN_CN_API_KEY` |
+
+The international gateway is `https://token-plan.maas.qwencloudapi.com/compatible-mode/v1`; China uses `https://token-plan.maas.qianwenaiapi.com/compatible-mode/v1`. Team and Individual credentials remain isolated. Catalog generation removes deprecated entries and limits Individual catalogs to the documented model set.
+
 `AuthInteraction` supplies `prompt` and `notify`, plus an optional cancellation signal. Prompts distinguish text, secrets, manual codes, and selections. Notifications distinguish information, authorization URLs, device codes, and progress. The host owns display and input. Device-code events can set `openBrowserOnConfirm` and `copyCodeOnConfirm`. Both default to true: a host can offer to open the browser or copy the code after confirmation. These are UI hints; the host may ignore them. Copying replaces the current clipboard contents.
 
 `models.login()` uses the registered provider's login method. Expired OAuth credentials refresh through the credential store. Logout deletes the stored record. Login availability and model availability are separate checks.

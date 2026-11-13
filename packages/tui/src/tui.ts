@@ -1,6 +1,13 @@
 import { isKeyRelease, matchesKey } from "./keys.ts";
 import type { Terminal } from "./terminal.ts";
-import { getCapabilities, isImageLine, setCellDimensions } from "./terminal-image.ts";
+import {
+	getCapabilities,
+	getImageLineExtent,
+	getMaxKittyImageRows,
+	isImageLine,
+	setCellDimensions,
+	stripImageSequences,
+} from "./terminal-image.ts";
 import {
 	parseOscColorResponse,
 	parseTerminalColorSchemeReport,
@@ -826,7 +833,20 @@ export abstract class TuiBase extends Container implements TUI {
 		const working = Math.max(result.length, termHeight, required);
 		while (result.length < working) result.push("");
 		const viewport = Math.max(0, working - termHeight);
-		for (const { bounds, lines: content } of rendered)
+		for (const { bounds, lines: content } of rendered) {
+			// Terminal images paint above text, so remove covered placements before painting the overlay.
+			if (bounds.height > 0)
+				for (let index = Math.max(0, viewport - getMaxKittyImageRows()); index < result.length; index++) {
+					const extent = getImageLineExtent(result[index]);
+					if (
+						extent &&
+						index + extent.firstRow - viewport < bounds.row + bounds.height &&
+						index + extent.lastRow - viewport >= bounds.row &&
+						extent.startCol < bounds.col + bounds.width &&
+						extent.endCol > bounds.col
+					)
+						result[index] = stripImageSequences(result[index]);
+				}
 			for (let index = 0; index < content.length; index++) {
 				const row = viewport + bounds.row + index;
 				if (row < 0 || row >= result.length) continue;
@@ -836,6 +856,7 @@ export abstract class TuiBase extends Container implements TUI {
 						: content[index];
 				result[row] = compositeTuiLine(result[row], line, bounds.col, bounds.width, termWidth);
 			}
+		}
 		return result;
 	}
 	protected applyLineResets(lines: string[]): string[] {
