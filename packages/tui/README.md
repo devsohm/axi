@@ -4,7 +4,7 @@ Independent terminal UI library for scrollback and fullscreen applications.
 
 The package provides terminal adapters, input framing, configurable keybindings, Unicode text measurement, editing, completion, layout and reusable components. Scrollback and fullscreen renderers support scrolling, transcript search, overlays, mouse selection and image placement.
 
-The multiline editor supports history, undo, paste markers and mouse positioning. Markdown includes tables, syntax-highlighting callbacks and mathematical notation. Color utilities provide ANSI styles and perceptual color conversion. Native clipboard and modifier helpers support Linux, macOS and Windows; see [native helpers](native/README.md). The verification workflow runs on both architectures of these operating systems. Applications supply their chat interface. See the [testing guide](../../docs/testing.md) for terminal scenarios and verification limits.
+The multiline editor supports history, undo, paste markers and mouse positioning. Markdown includes tables, syntax-highlighting callbacks and mathematical notation. Color utilities provide ANSI styles and perceptual color conversion. Native clipboard and modifier helpers support Linux, macOS and Windows; see [native helpers](native/README.md). The verification workflow runs on both architectures of these operating systems. Applications supply their chat interface. Native checks do not establish visual appearance in every terminal application.
 
 The terminal library owns input, layout, rendering and reusable components. It has no dependency on the agent runtime.
 
