@@ -235,9 +235,11 @@ jobs:
             sleep 2
           done
           "$adb" push packages/env/bin/axi-env-android-x64/axi-env /data/local/tmp/axi-env
-          "$adb" shell chmod 700 /data/local/tmp/axi-env
-          command=$(node -e 'console.log(JSON.stringify([process.argv[1], "shell", "-T", "-e", "none", "env", "TMPDIR=/data/local/tmp", "HOME=/data/local/tmp", "/data/local/tmp/axi-env"]))' "$adb")
-          node packages/env/test/remote-acceptance.ts "$command" /system/bin/sh | tee android-acceptance.json
+          "$ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/x86_64-linux-android24-clang" packages/env/test/fixtures/terminal-size.c -o "$RUNNER_TEMP/axi-terminal-size"
+          "$adb" push "$RUNNER_TEMP/axi-terminal-size" /data/local/tmp/axi-terminal-size
+          "$adb" shell chmod 700 /data/local/tmp/axi-env /data/local/tmp/axi-terminal-size
+          daemon_command=$(node -e 'console.log(JSON.stringify([process.argv[1], "shell", "-T", "-e", "none", "env", "TMPDIR=/data/local/tmp", "/data/local/tmp/axi-env"]))' "$adb")
+          node packages/env/test/remote-acceptance.ts "$daemon_command" /system/bin/sh /data/local/tmp/axi-terminal-size | tee android-acceptance.json
           node --input-type=module - <<'NODE'
           import assert from 'node:assert/strict';
           import { readFileSync } from 'node:fs';

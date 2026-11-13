@@ -7,7 +7,11 @@ import { BACKGROUND_CONTEXT as context } from "@axi/objects/context";
 import { Connection, openProcess, openTerminal, RemoteExecutionEnv } from "../src/index.ts";
 
 /** Run explicitly against a disposable remote machine. The caller owns its transport and credentials. */
-export async function verifyRemoteEnvironment(connect: () => Promise<Connection>, shell: string) {
+export async function verifyRemoteEnvironment(
+	connect: () => Promise<Connection>,
+	shell: string,
+	sizeCommand = "stty size",
+) {
 	let connection = await connect();
 	let cwd: string | undefined;
 	const passed: string[] = [];
@@ -83,7 +87,7 @@ export async function verifyRemoteEnvironment(connect: () => Promise<Connection>
 		let terminalText = "";
 		const terminal = await openTerminal(connection, {
 			cwd,
-			argv: [shell, "-c", "stty size; read line; printf 'ack:%s' \"$line\""],
+			argv: [shell, "-c", `${sizeCommand}; read line; printf 'ack:%s' "$line"`],
 			cols: 50,
 			rows: 12,
 			onData: (bytes) => {
@@ -126,6 +130,10 @@ if (
 	const command: unknown = JSON.parse(process.argv[2] ?? "null");
 	const shell = process.argv[3];
 	if (!Array.isArray(command) || command.length === 0 || !command.every((item) => typeof item === "string") || !shell)
-		throw new Error("Usage: node remote-acceptance.ts '<JSON command array>' <remote shell path>");
-	console.log(JSON.stringify(await verifyRemoteEnvironment(async () => new Connection({ command }), shell)));
+		throw new Error(
+			"Usage: node remote-acceptance.ts '<JSON command array>' <remote shell path> [terminal size command]",
+		);
+	console.log(
+		JSON.stringify(await verifyRemoteEnvironment(async () => new Connection({ command }), shell, process.argv[4])),
+	);
 }

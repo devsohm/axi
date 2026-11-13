@@ -287,6 +287,11 @@ an unmodified byte stream, followed by the remote shell path:
 node packages/env/test/remote-acceptance.ts '["ssh","-T","test-machine","/path/to/axi-env"]' /bin/sh
 ```
 
+The driver uses `stty size` to check PTY dimensions. On machines without `stty`,
+pass a terminal-size command as its final argument. Android CI compiles
+`packages/env/test/fixtures/terminal-size.c` with the NDK and deploys that small
+probe beside the daemon. The probe reads the actual PTY dimensions with `ioctl`.
+
 For deployment checks, import `verifyRemoteEnvironment` and pass a factory that
 returns the connection from `connectSsh`. Check the deployment path separately
 with `deployDaemon`. Keep test host keys and credentials outside the repository.
