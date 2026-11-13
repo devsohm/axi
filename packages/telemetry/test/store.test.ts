@@ -21,7 +21,7 @@ test("carrier getter failures propagate and trace cursors keep their JSON compar
 });
 
 test("trace and metric queries preserve filtering, pagination and detached snapshots", async () => {
-	vi.useFakeTimers({ toFake: ["Date"] });
+	vi.useFakeTimers({ toFake: ["Date", "performance"] });
 	vi.setSystemTime(1000);
 	const recorder = new InMemoryTelemetryContext();
 	await recorder.startSpan({ name: "request", attributes: { flag: true } }, async (parent) => {

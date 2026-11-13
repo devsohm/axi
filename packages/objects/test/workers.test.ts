@@ -26,7 +26,8 @@ async function setup(onOutput: () => void = () => {}) {
 	const host = createHost({ principal: { kind: "server" }, onError() {} });
 	const errors: WorkersError[] = [];
 	let starts = 0,
-		fail = false;
+		fail = false,
+		idleMs = 60000;
 	const addresses: WeakRef<object>[] = [];
 	const workers = await createWorkers(
 		host,
@@ -44,7 +45,7 @@ async function setup(onOutput: () => void = () => {}) {
 				return "started";
 			},
 			lock: (address) => `${directory}:${address.key}`,
-			idleMs: () => 0,
+			idleMs: () => idleMs,
 			plugins,
 			onOutput,
 			onError: (error) => errors.push(error),
@@ -62,6 +63,9 @@ async function setup(onOutput: () => void = () => {}) {
 		starts: () => starts,
 		fail(value: boolean) {
 			fail = value;
+		},
+		idleAfter(value: number) {
+			idleMs = value;
 		},
 		async [Symbol.asyncDispose]() {
 			await workers.close(context);
@@ -135,7 +139,10 @@ it("starts a process on demand, carries start data and stops it after its last r
 	expect(ref.label.value).toBe("started");
 	expect(await ref.echo("hello", context)).toBe("hello");
 	expect(f.starts()).toBe(1);
+	f.idleAfter(0);
+	await new Promise((resolve) => setTimeout(resolve, 1100));
 	expect(f.workers.state.value["runner|first"]).toMatchObject({ status: "running", pid: expect.any(Number) });
+	expect(await ref.echo("still held", context)).toBe("still held");
 	ref.release();
 	await vi.waitFor(() => expect(f.workers.state.value).toEqual({}), { timeout: 5000 });
 	expect(f.errors).toEqual([]);
