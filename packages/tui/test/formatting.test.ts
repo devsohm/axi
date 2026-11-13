@@ -27,6 +27,7 @@ import {
 	wrapTextWithAnsi,
 } from "../src/utils.ts";
 const plain = (text: string) => text;
+const png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+j4c8AAAAASUVORK5CYII=";
 const theme: MarkdownTheme = {
 	heading: plain,
 	link: plain,
@@ -242,7 +243,6 @@ test("styled Unicode text stays within cell boundaries and closes hyperlinks bef
 });
 
 test("image components select text, Kitty and iTerm rendering without losing dimensions", () => {
-	const png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+j4c8AAAAASUVORK5CYII=";
 	expect(getImageDimensions(png, "image/png")).toEqual({ widthPx: 1, heightPx: 1 });
 	setCapabilities({ images: null, trueColor: true, hyperlinks: false });
 	const image = new Image(png, "image/png", { fallbackColor: plain });
@@ -254,6 +254,27 @@ test("image components select text, Kitty and iTerm rendering without losing dim
 	setCapabilities({ images: "iterm2", trueColor: true, hyperlinks: false });
 	image.invalidate();
 	expect(image.render(30).join("")).toContain("\x1b]1337;File=");
+});
+
+test("Kitty conversion caches successful and rejected images and evicts older entries", () => {
+	setCapabilities({ images: "kitty", trueColor: true, hyperlinks: false });
+	const transcode = vi.fn((data: string) => (data === "rejected" ? null : png));
+	const draw = (data: string) =>
+		new Image(data, "image/jpeg", { fallbackColor: plain }, {}, { widthPx: 2, heightPx: 2 }).render(40).join("");
+	setImageTranscoder(transcode);
+	expect(draw("first")).toContain("\x1b_G");
+	expect(draw("first")).toContain("\x1b_G");
+	expect(transcode.mock.calls).toEqual([["first", "image/jpeg"]]);
+	expect(draw("rejected")).toContain("[image/jpeg] 2x2");
+	expect(draw("rejected")).toContain("[image/jpeg] 2x2");
+	expect(transcode).toHaveBeenCalledTimes(2);
+	for (let index = 0; index < 33; index++) draw("image-" + index);
+	expect(transcode).toHaveBeenCalledTimes(35);
+	draw("first");
+	expect(transcode).toHaveBeenCalledTimes(36);
+	setImageTranscoder(undefined);
+	expect(draw("without-transcoder")).toContain("[image/jpeg] 2x2");
+	expect(transcode).toHaveBeenCalledTimes(36);
 });
 
 test("truncation preserves the complete styled ellipsis when it fits", () => {

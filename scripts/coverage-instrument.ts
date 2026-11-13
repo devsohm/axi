@@ -1,11 +1,9 @@
 import { randomUUID } from "node:crypto";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
-import { stripTypeScriptTypes } from "node:module";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createInstrumenter } from "@vitest/istanbul-lib-instrument";
-import type { Plugin } from "esbuild";
-import MagicString from "magic-string";
+import { transformSync, type Plugin } from "esbuild";
 
 export const createSourceInstrumenter = () =>
 	createInstrumenter({
@@ -22,9 +20,15 @@ export const createSourceInstrumenter = () =>
 	});
 
 export function transformSource(code: string, file: string) {
+	const source = transformSync(code, {
+		loader: "ts",
+		target: "node22",
+		sourcefile: file.replaceAll("\\", "/"),
+		sourcemap: "external",
+	});
 	return {
-		code: stripTypeScriptTypes(code, { mode: "strip" }),
-		map: new MagicString(code).generateMap({ source: file, includeContent: true, hires: true }),
+		code: source.code,
+		map: JSON.parse(source.map),
 	};
 }
 

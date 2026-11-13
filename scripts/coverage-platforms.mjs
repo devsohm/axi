@@ -69,6 +69,7 @@ function capture() {
 			provider: read(join(root, "node_modules/@vitest/coverage-istanbul/package.json")).version,
 			instrumenterVersion: read(join(root, "node_modules/@vitest/istanbul-lib-instrument/package.json")).version,
 			sourceMaps: read(join(root, "node_modules/@vitest/istanbul-lib-source-maps/package.json")).version,
+			transformer: read(join(root, "node_modules/esbuild/package.json")).version,
 			configuration: hash(join(root, "vitest.config.ts")),
 			collector: hash(join(root, "scripts/coverage-provider.mjs")),
 			processCollector: hash(join(root, "scripts/coverage-node.mjs")),

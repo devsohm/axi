@@ -245,4 +245,4 @@ it("releases failed object instances even when an application retains their repo
 	const result = spawnSync(process.execPath, ["--expose-gc", fixture], { encoding: "utf8", timeout: 10000 });
 	assert.equal(result.error, undefined);
 	assert.equal(result.status, 0, result.stderr);
-});
+}, 15000);

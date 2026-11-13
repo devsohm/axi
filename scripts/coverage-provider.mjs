@@ -2,8 +2,14 @@ import { createSourceMapStore } from "@vitest/istanbul-lib-source-maps";
 import istanbul from "@vitest/coverage-istanbul";
 import { globSync, mkdirSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
-import { stripTypeScriptTypes } from "node:module";
 import { createSourceInstrumenter, transformSource } from "./coverage-instrument.ts";
+
+export function normalizeCoveragePaths(input, output) {
+	for (const file of input.files()) {
+		output.addFileCoverage({ ...input.fileCoverageFor(file).toJSON(), path: file.replaceAll("\\", "/") });
+	}
+	return output;
+}
 
 export const typescriptSources = {
 	name: "coverage-source-typescript",
@@ -41,11 +47,11 @@ export default {
 		};
 		const generate = provider.generateCoverage.bind(provider);
 		provider.generateCoverage = async (options) => {
-			const map = await generate(options);
+			const map = normalizeCoveragePaths(await generate(options), provider.createCoverageMap());
 			for (const name of readdirSync(directory)) {
 				const raw = provider.createCoverageMap();
 				raw.merge(JSON.parse(readFileSync(join(directory, name), "utf8")));
-				const report = (await createSourceMapStore().transformCoverage(raw)).toJSON();
+				const report = normalizeCoveragePaths(await createSourceMapStore().transformCoverage(raw), provider.createCoverageMap()).toJSON();
 				for (const file of Object.keys(report)) {
 					if (!provider.isIncluded(file)) throw new Error(`Unexpected child coverage: ${file}`);
 					if (map.files().includes(file)) {
@@ -70,10 +76,10 @@ export default {
 					{ cwd: root },
 				)) {
 					if (file.endsWith(".d.ts")) continue;
-					const absolute = join(root, file);
+					const absolute = join(root, file).replaceAll("\\", "/");
 					if (map.files().includes(absolute)) continue;
 					instrumenter.instrumentSync(
-						stripTypeScriptTypes(readFileSync(absolute, "utf8"), { mode: "strip" }),
+						transformSource(readFileSync(absolute, "utf8"), absolute).code,
 						absolute,
 					);
 					const empty = instrumenter.lastFileCoverage();

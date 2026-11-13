@@ -1,4 +1,4 @@
-import { registerHooks, stripTypeScriptTypes } from "node:module";
+import { registerHooks } from "node:module";
 import { writeFileSync } from "node:fs";
 import { relative, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -9,21 +9,6 @@ import { createSourceInstrumenter, transformSource } from "./coverage-instrument
 const root = process.env.AXI_COVERAGE_ROOT,
 	directory = process.env.AXI_COVERAGE_DIRECTORY;
 if (root && directory && process.env.AXI_COVERAGE_ATTACH !== "0") {
-	// Instrumentation must not add its own experimental-API warning to the program's stderr.
-	const emitWarning = process.emitWarning;
-	process.emitWarning = function (warning, type, ...args) {
-		if (
-			type === "ExperimentalWarning" &&
-			warning === "stripTypeScriptTypes is an experimental feature and might change at any time"
-		)
-			return;
-		return emitWarning.call(this, warning, type, ...args);
-	};
-	try {
-		stripTypeScriptTypes("");
-	} finally {
-		process.emitWarning = emitWarning;
-	}
 	const files = new Map();
 	const instrumenter = createSourceInstrumenter();
 	registerHooks({

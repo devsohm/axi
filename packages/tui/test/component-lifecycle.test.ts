@@ -2,6 +2,14 @@ import { expect, test, vi } from "vitest";
 import { Box } from "../src/components/box.ts";
 import { MouseRegion } from "../src/components/mouse-region.ts";
 import { SettingsList, type SettingItem } from "../src/components/settings-list.ts";
+import { AltScreenFlashContainer } from "../src/components/alt-screen-flash.ts";
+import { HStack } from "../src/components/h-stack.ts";
+import { VStack } from "../src/components/v-stack.ts";
+import { Spacer } from "../src/components/spacer.ts";
+import { TruncatedText } from "../src/components/truncated-text.ts";
+import { SelectList } from "../src/components/select-list.ts";
+import { Text } from "../src/components/text.ts";
+import { stripTerminalSequences } from "../src/utils.ts";
 import { dispatchMouseEvent, type Component, type TuiMouseEvent } from "../src/tui.ts";
 
 function mouse(x = 1, y = 1, type: TuiMouseEvent["type"] = "press"): TuiMouseEvent {
@@ -19,6 +27,83 @@ function mouse(x = 1, y = 1, type: TuiMouseEvent["type"] = "press"): TuiMouseEve
 		ctrl: false,
 	};
 }
+
+test("text repainting follows explicit background changes and preserves its content", () => {
+	const text = new Text("value", 0, 0);
+	expect(text.render(7)).toEqual(["value  "]);
+	text.setCustomBgFn((line) => "\x1b[44m" + line + "\x1b[49m");
+	expect(text.render(7)).toEqual(["\x1b[44mvalue  \x1b[49m"]);
+	text.setText("value");
+	expect(text.render(7)).toEqual(["\x1b[44mvalue  \x1b[49m"]);
+	text.setCustomBgFn();
+	expect(text.render(7)).toEqual(["value  "]);
+	text.setText(" ");
+	expect(text.render(7)).toEqual([]);
+});
+
+test("stack edits and invalidation preserve selection while flash messages expire and dispose", () => {
+	vi.useFakeTimers();
+	const redraw = vi.fn();
+	const flash = new AltScreenFlashContainer(redraw);
+	try {
+		const label = new Text("left", 0, 0);
+		const badge = new TruncatedText("wide\nhidden");
+		const row = new HStack([
+			{ component: label, basis: 4, shrink: 0 },
+			{ component: badge, basis: 4, shrink: 0 },
+		]);
+		const plain = (value: string) => value;
+		const menu = new SelectList(
+			[
+				{ label: "first", value: "first" },
+				{ label: "second", value: "second" },
+			],
+			2,
+			{
+				selectedPrefix: plain,
+				selectedText: plain,
+				description: plain,
+				scrollInfo: plain,
+				noMatch: plain,
+			},
+		);
+		menu.setSelectedIndex(1);
+		const body = new VStack([row, new Spacer(), flash, menu]);
+		flash.flash("saved", 10);
+		body.invalidate();
+		expect(
+			body
+				.render(8)
+				.map(stripTerminalSequences)
+				.map((line) => line.trimEnd())
+				.slice(0, 3),
+		).toEqual(["leftwide", "", " saved"]);
+		expect(menu.getSelectedItem()?.value).toBe("second");
+		row.removeChild(new Text("unrelated"));
+		expect(row.children).toEqual([label, badge]);
+		row.removeChild(badge);
+		expect(
+			row
+				.render(8)
+				.map(stripTerminalSequences)
+				.map((line) => line.trimEnd()),
+		).toEqual(["left"]);
+		row.clear();
+		expect(row.render(8)).toEqual([]);
+		vi.advanceTimersByTime(10);
+		expect(flash.render(8)).toEqual([]);
+		expect(redraw).toHaveBeenCalledTimes(2);
+		flash.flash("later", 10);
+		flash.dispose();
+		vi.advanceTimersByTime(1000);
+		expect(redraw).toHaveBeenCalledTimes(3);
+		body.clear();
+		expect(body.render(8)).toEqual([]);
+	} finally {
+		flash.dispose();
+		vi.useRealTimers();
+	}
+});
 
 test("mouse regions delegate to handled children and fall back without swallowing unused events", () => {
 	const render = vi.fn(() => ["content"]),

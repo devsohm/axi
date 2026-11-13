@@ -8,10 +8,47 @@ import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { runInNewContext } from "node:vm";
 import { build } from "esbuild";
-import { bundleCoverage } from "../scripts/coverage-instrument.ts";
+import { bundleCoverage, transformSource } from "../scripts/coverage-instrument.ts";
+import { normalizeCoveragePaths } from "../scripts/coverage-provider.mjs";
+import istanbul from "istanbul-lib-coverage";
 
 const run = promisify(execFile);
 const root = fileURLToPath(new URL("..", import.meta.url));
+
+test("coverage source transformation supports private overloads and awaited resource disposal on the minimum runtime", async () => {
+	const source = `class Reader {
+  #read(path: string, binary: true): Uint8Array;
+  #read(path: string, binary: false): string;
+  #read(path: string, binary: boolean): Uint8Array | string { return binary ? new Uint8Array([path.length]) : path; }
+  read(path: string) { return this.#read(path, false); }
+}
+const closed: string[] = [];
+async function consume() {
+  await using resource = { [Symbol.asyncDispose]: async () => { closed.push("closed"); } };
+  return new Reader().read("done");
+}
+const value = await consume();
+console.log(JSON.stringify({value, closed}));`;
+	const transformed = transformSource(source, "/packages/sample/src/resources.ts");
+	const { stdout } = await run(process.execPath, ["--input-type=module", "--eval", transformed.code]);
+	assert.deepEqual(JSON.parse(stdout), { value: "done", closed: ["closed"] });
+	assert.deepEqual(transformed.map.sourcesContent, [source]);
+});
+
+test("coverage treats Windows path separators as one file without dropping executed counters", () => {
+	const windows = "D:\\repo\\packages\\sample\\src\\main.ts";
+	const portable = "D:/repo/packages/sample/src/main.ts";
+	const record = (path, count) => ({
+		path,
+		statementMap: { 0: { start: { line: 1, column: 0 }, end: { line: 1, column: 8 } } },
+		s: { 0: count },
+		fnMap: {}, f: {}, branchMap: {}, b: {},
+	});
+	const source = istanbul.createCoverageMap({ [windows]: record(windows, 2), [portable]: record(portable, 3) });
+	const result = normalizeCoveragePaths(source, istanbul.createCoverageMap({}));
+	assert.deepEqual(result.files(), [portable]);
+	assert.deepEqual(result.fileCoverageFor(portable).s, { 0: 5 });
+});
 
 test("bundle coverage records executed source and rejects unrelated report paths", async () => {
 	const directory = await mkdtemp(join(tmpdir(), "axi-bundle-coverage-"));
@@ -120,7 +157,7 @@ test("real child and worker execute", async () => {
 			});
 			const report = JSON.parse(await readFile(join(directory, "coverage/coverage-final.json"), "utf8"));
 			for (const name of ["child", "worker"]) {
-				const file = report[join(directory, "src", name + ".ts")];
+				const file = report[join(directory, "src", name + ".ts").replaceAll("\\", "/")];
 				assert.ok(file, `Missing ${name} source module`);
 				const map = { statements: file.statementMap, functions: file.fnMap, branches: file.branchMap };
 				if (enabled) assert.deepEqual(map, maps.get(name), `${name}: each source counter is counted once`);
@@ -151,11 +188,11 @@ test("real child and worker execute", async () => {
 				`
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import MagicString from "magic-string";
+import { transformSource } from ${JSON.stringify(new URL("../scripts/coverage-instrument.ts", import.meta.url).href)};
 const filename = ${JSON.stringify(join(directory, "src/child.ts"))};
 const report = structuredClone(globalThis.__VITEST_COVERAGE__[filename]);
-report.statementMap[0].start.column++;
-report.inputSourceMap = new MagicString(readFileSync(filename, "utf8")).generateMap({ source: filename, includeContent: true, hires: true });
+report.fnMap[0].name += "-incompatible";
+report.inputSourceMap = transformSource(readFileSync(filename, "utf8"), filename).map;
 writeFileSync(join(process.env.AXI_COVERAGE_DIRECTORY, process.pid + "-incompatible.json"), JSON.stringify({[filename]:report}));`,
 		);
 		await assert.rejects(

@@ -66,6 +66,11 @@ Collection rejects incompatible source maps. Type-only source modules stay in
 the inventory after the instrumenter confirms that they have no executable
 counters.
 
+The collector compiles measured sources with the same esbuild version and Node 22
+target in every runtime. This supports private overloads and resource disposal
+syntax on the minimum Node version and keeps counter maps consistent. Windows
+paths are normalized before reports are combined.
+
 The workerd case in the JavaScript suite runs workspace source. It skips on
 Windows or when the isolated worker dependencies are absent. Linux CI installs
 those dependencies. `npm run test:workers` separately checks the built packages
