@@ -32,6 +32,8 @@ const transient = new RegExp(
 		"fetch failed",
 		"request to \\S+ failed, reason:",
 		"getaddrinfo",
+		"(?:^|[^a-z0-9_])(?:ECONN(?:RESET|ABORTED|REFUSED)|ETIMEDOUT|EPIPE)(?:$|[^a-z0-9_])",
+		"connection reset by peer",
 		"ENOTFOUND",
 		"EAI_AGAIN",
 		"upstream.?connect",

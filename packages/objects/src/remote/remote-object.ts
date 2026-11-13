@@ -184,7 +184,7 @@ export class RemoteObject implements Target {
 		if (this.#status.kind !== "ended")
 			this.#move({ kind: "failed", cause: { kind: "waiting", error }, retryAt: undefined });
 	}
-	async call(name: string, args: unknown, context: Context, binding: Binding): Promise<unknown> {
+	async call(name: string, args: unknown, binding: Binding, context: Context): Promise<unknown> {
 		const snapshot = this.#snapshot!,
 			method = snapshot.methods.get(name);
 		if (!method) throw invalid("member", `${this.label} (variant ${snapshot.variant}) has no method "${name}"`);

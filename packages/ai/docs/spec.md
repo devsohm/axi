@@ -96,7 +96,7 @@ Google's optional legacy `parameters` conversion removes schema meta-declaration
 
 ## Request options
 
-The retry classifier treats a closed provider or proxy connection as a transient error. Account, quota and billing limits take precedence, even when the same message also mentions a closed connection. Callers still apply their retry policy and attempt limit.
+The retry classifier treats a closed provider or proxy connection as a transient error. It also recognizes complete socket error codes such as `ECONNRESET`, `ECONNABORTED`, `ECONNREFUSED`, `ETIMEDOUT` and `EPIPE`, and a connection reset by the peer. A code embedded in a longer identifier does not match. Account, quota and billing limits take precedence, even when the same message also mentions a closed connection. Callers still apply their retry policy and attempt limit.
 
 | Option | Purpose |
 |---|---|

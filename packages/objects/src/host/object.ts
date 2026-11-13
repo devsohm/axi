@@ -235,7 +235,7 @@ export class ObjectsObject implements LocalTarget {
 		this.#wakes ??= new RetryWakes();
 		this.#wakes.replace(sources, () => this.#wake());
 	}
-	call(method: string, args: unknown, context: Context, binding: Binding): Promise<unknown> {
+	call(method: string, args: unknown, binding: Binding, context: Context): Promise<unknown> {
 		return this.callAs(method, args, context, binding.caller, binding.version);
 	}
 	generationOf(): undefined { return undefined; }

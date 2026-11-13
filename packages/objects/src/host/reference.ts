@@ -84,7 +84,7 @@ export interface Target {
 	waitFor?<T>(waiting: Promise<T>, context: Context): Promise<T>;
 	hold(binding: Binding): void;
 	unhold(binding: Binding): void;
-	call(method: string, args: unknown, context: Context, binding: Binding): Promise<unknown>;
+	call(method: string, args: unknown, binding: Binding, context: Context): Promise<unknown>;
 	generationOf?(member: string): number | undefined;
 	member(member: string, version?: number): DeriveSource;
 	keyedMapping?(member: string, version: number): ((value: JsonValue) => JsonValue) | undefined;
@@ -579,7 +579,7 @@ export class Binding {
 		const target = this.#requireTarget();
 		this.#calls ??= new AbortController();
 		const linked = withLinkedAbortSignal(this.#calls.signal, context);
-		return target.call(method, args, linked.context, this).finally(linked.release);
+		return target.call(method, args, this, linked.context).finally(linked.release);
 	}
 	#until(decide: (state: RefState) => Decision, context: Context): Promise<void> {
 		if (this.#status.kind === "released") return Promise.reject(this.#status.state.error);

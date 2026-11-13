@@ -117,8 +117,11 @@ that hold is live. Values received by both references have the same object
 identity. Each reference retains its own calls, watches, subscriptions and
 release. Releasing one first removes its queued calls, then aborts its sent
 calls in reverse send order. Other references continue. The final release ends
-the hold; a later reference creates a new hold. Presence counts transport holds,
-not the number of client components sharing them.
+the hold; a later reference creates a new hold. Presence lists bound same-host
+bindings and incoming transport holds. `host.activity.references` counts incoming
+served transport holds from arrival until they end, including holds waiting to
+bind. Same-host bindings do not contribute to this activity count. References
+sharing one transport hold contribute one provider entry and one activity count.
 
 A join does not repeat provider or relay admission, obtain a new snapshot or
 check a new snapshot against part limits. Events arriving after the join can

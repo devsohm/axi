@@ -96,6 +96,8 @@ test.each([binaryCodec, textCodec])(
 	async (codec) => {
 		const app = await fixture(codec);
 		try {
+			const local = await app.server.get(Counter, { id: "one" }, context);
+			expect(app.server.activity.value.references).toBe(0);
 			const first = await app.client.get(Counter, { id: "one" }, context);
 			const second = app.client.hold(Counter, { id: "one" }, context);
 			expect(second.state.value.kind).toBe("live");
@@ -109,6 +111,8 @@ test.each([binaryCodec, textCodec])(
 			await vi.waitFor(() => expect(second.data.value).toEqual({ total: 2 }));
 			second.release();
 			await vi.waitFor(() => expect(app.server.activity.value.references).toBe(0));
+			expect(local.state.value.kind).toBe("live");
+			local.release();
 			const next = await app.client.get(Counter, { id: "one" }, context);
 			expect(next.state.value.kind).toBe("live");
 			next.release();
@@ -117,6 +121,27 @@ test.each([binaryCodec, textCodec])(
 		}
 	},
 );
+
+test("shared member watchers receive a commit in subscription order", async () => {
+	const app = await fixture();
+	try {
+		const first = await app.client.get(Counter, { id: "one" }, context);
+		const second = await app.client.get(Counter, { id: "one" }, context);
+		const order: string[] = [];
+		const secondWatch = await second.data.watch(context);
+		const firstWatch = await first.data.watch(context);
+		secondWatch.start(async () => { order.push("second"); });
+		firstWatch.start(async () => { order.push("first"); });
+		await first.add(1, context);
+		await vi.waitFor(() => expect(order).toEqual(["second", "first"]));
+		await secondWatch.stop();
+		await firstWatch.stop();
+		first.release();
+		second.release();
+	} finally {
+		await app.close();
+	}
+});
 
 test("releasing one owner cancels its queued calls before freeing capacity for its sibling", async () => {
 	const app = await fixture();

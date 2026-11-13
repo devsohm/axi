@@ -60,7 +60,7 @@ function provider() {
 		pathTo() {
 			return undefined;
 		},
-		async call(name, args, _context, caller) {
+		async call(name, args, caller, _context) {
 			calls.push([name, args, caller.principal]);
 			return args;
 		},

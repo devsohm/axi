@@ -116,7 +116,7 @@ function environment(factory: (self: Self) => unknown) {
 			return undefined;
 		},
 		retry() {},
-		call(method, args, context, binding) {
+		call(method, args, binding, context) {
 			return attempt.call(method, args, context, binding.caller);
 		},
 		claimDocuments() {},
