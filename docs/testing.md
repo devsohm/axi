@@ -85,7 +85,8 @@ Mounted React hook checks run in Chromium. Install `/usr/bin/chromium` or
 `/usr/bin/chromium-browser`, or set `CHROMIUM_BIN` to its executable path. The test
 uses an isolated temporary browser profile and skips when Chromium is absent.
 It checks live values, page-state retention, language changes, event listeners
-and reference release on unmount. Its browser execution is separate from Node's
+and reference release on unmount. The page reports completion to a local HTTP
+test server. Its browser execution is separate from Node's
 V8 coverage totals.
 
 Client startup checks cover an unavailable server, the initial script-watch
@@ -235,6 +236,9 @@ Windows file-conformance tests request native symlinks from Git Bash, since its
 default `ln -s` behavior can copy the file instead. Discovery fixtures resolve
 temporary directories before comparing canonical paths, including Windows' short
 directory aliases.
+
+The macOS file-watcher scenario separates fixture setup and successive edits
+across FSEvents batches. Each transition still requires the expected change mark.
 
 MCP write-error checks inject a failing writable pipe on every platform and
 assert both the rejected send and the error notification. A separate Unix test

@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { mkdir, mkdtemp, readFile, rename, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { setImmediate as nextTurn } from "node:timers/promises";
+import { setImmediate as nextTurn, setTimeout as delay } from "node:timers/promises";
 import { afterEach, expect, it, vi } from "vitest";
 import { BACKGROUND_CONTEXT as context } from "../src/context/index.ts";
 import { createHost, hostKind } from "../src/index.ts";
@@ -116,24 +116,33 @@ it("clears restart marks after edits revert, source files disappear and a moved 
 	const root = await project({ "app/core.ts": "original" }),
 		app = join(root, "app"),
 		file = join(app, "core.ts");
+	const separateBatches = async () => {
+		if (process.platform === "darwin") await delay(300);
+	};
+	// macOS can combine fixture writes and watch registration in one FSEvents batch.
+	await separateBatches();
 	const watcher = watch([app]);
-	const marked = (base: boolean) => vi.waitFor(() => expect(watcher.value).toMatchObject({ base }), { timeout: 5000 });
+	await separateBatches();
+	const marked = async (base: boolean, action: string) => {
+		await vi.waitFor(() => expect(watcher.value, action).toMatchObject({ base }), { timeout: 5000 });
+		await separateBatches();
+	};
 	await writeFile(file, "edited");
-	await marked(true);
+	await marked(true, "first edit");
 	await writeFile(file, "original");
-	await marked(false);
+	await marked(false, "first revert");
 	await writeFile(join(app, "extra.ts"), "new source");
-	await marked(true);
+	await marked(true, "added source file");
 	await rm(join(app, "extra.ts"));
-	await marked(false);
+	await marked(false, "removed source file");
 	await rename(app, join(root, "away"));
-	await marked(true);
+	await marked(true, "moved directory");
 	await rename(join(root, "away"), app);
-	await marked(false);
+	await marked(false, "restored directory");
 	await writeFile(file, "edited again");
-	await marked(true);
+	await marked(true, "edit after restoring directory");
 	await writeFile(file, "original");
-	await marked(false);
+	await marked(false, "final revert");
 }, 15000);
 
 it("detects edits before attaching and preserves conflicting records of running bundles", async () => {

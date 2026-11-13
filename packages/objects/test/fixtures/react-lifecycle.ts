@@ -165,4 +165,5 @@ void run()
 		document.getElementById("result")!.textContent = btoa(
 			String.fromCharCode(...new TextEncoder().encode(JSON.stringify(result))),
 		);
+		return fetch("/result", { method: "POST", body: JSON.stringify(result) });
 	});
