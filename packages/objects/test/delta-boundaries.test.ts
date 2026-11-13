@@ -1,5 +1,6 @@
 import { expect, test } from "vitest";
 import { appendText, applyImmutable, diffRevisions, track } from "../src/delta/index.ts";
+import type { JsonValue } from "../src/json.ts";
 
 test("array range mutators agree with native arrays for empty, negative, fractional and unbounded ranges", () => {
 	const ranges = [undefined, -Infinity, -20, -2.5, -0, 0, NaN, 2.5, 20, Infinity];
@@ -126,4 +127,48 @@ test("large duplicate sequences and shared-object reorders produce a replayable 
 		expect(applyImmutable(previous, diffRevisions(previous, next))).toEqual(next);
 		expect(JSON.stringify(previous)).toBe(unchanged);
 	}
+});
+
+test("overwriting containers and deleting new properties retains numeric key order and the original root", () => {
+	const initial: Record<string, JsonValue> = { keep: 1, container: { label: "old" }, constructor: 7, prototype: 8 };
+	const tracker = track(initial),
+		change = tracker.beginChange();
+	change.state["2"] = 2;
+	change.state["1"] = 1;
+	change.state.container = { label: "first" };
+	change.state.container = { label: "second" };
+	change.state.container = 4;
+	change.state.temporary = { count: 1 };
+	Reflect.set(change.state, "temporary", undefined);
+	Reflect.deleteProperty(change.state, "constructor");
+	Reflect.deleteProperty(change.state, "prototype");
+	const prepared = change.prepare();
+	const expected = { "1": 1, "2": 2, keep: 1, container: 4 };
+	expect(prepared.value).toEqual(expected);
+	expect(Object.keys(prepared.value)).toEqual(["1", "2", "keep", "container"]);
+	expect(applyImmutable(initial, prepared.ops)).toEqual(expected);
+	tracker.adopt(prepared);
+	expect(initial).toEqual({ keep: 1, container: { label: "old" }, constructor: 7, prototype: 8 });
+});
+
+test("a preparation can only be published by its owner and the ended draft cannot be prepared again", () => {
+	const owner = track({ count: 0 }),
+		foreign = track({ count: 0 }),
+		change = owner.beginChange();
+	change.state.count = 2;
+	const prepared = change.prepare();
+	expect(() => foreign.adopt(prepared)).toThrow(/different tracker/);
+	expect(() => change.prepare()).toThrow(/settled/);
+	expect(owner.value).toEqual({ count: 0 });
+	expect(foreign.value).toEqual({ count: 0 });
+	owner.adopt(prepared);
+	expect(owner.value).toEqual({ count: 2 });
+});
+
+test("a long duplicate-heavy diff and a trimmed-and-appended string replay without changing their bases", () => {
+	const previous = { rows: Array.from({ length: 1100 }, (_, index) => index % 2), text: "x".repeat(1000) + "retained" };
+	const next = { rows: [3, ...previous.rows.slice(2).reverse(), 4], text: "retained-tail" };
+	const original = JSON.stringify(previous);
+	expect(applyImmutable(previous, diffRevisions(previous, next))).toEqual(next);
+	expect(JSON.stringify(previous)).toBe(original);
 });

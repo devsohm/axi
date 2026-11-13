@@ -144,3 +144,20 @@ test("zero-argument and one-argument splice retain native removal semantics afte
 	expect(applyImmutable(initial, ready.ops)).toEqual(ready.value);
 	tracker.adopt(ready);
 });
+
+test.each(["base", "inserted"] as const)("copyWithin creates independently editable %s object placements", (origin) => {
+	const rows = [{ text: "first" }, { text: "second" }, { text: "third" }];
+	const initial = { rows: origin === "base" ? rows : [] };
+	const tracker = track(initial),
+		change = tracker.beginChange();
+	if (origin === "inserted") change.state.rows.push(...rows);
+	const retained = change.state.rows[0]!;
+	change.state.rows.copyWithin(1, 0, 1);
+	change.state.rows[1]!.text = "copy";
+	retained.text = "source";
+	const prepared = change.prepare();
+	expect(prepared.value).toEqual({ rows: [{ text: "source" }, { text: "copy" }, { text: "third" }] });
+	expect(applyImmutable(initial, prepared.ops)).toEqual(prepared.value);
+	tracker.adopt(prepared);
+	expect(rows).toEqual([{ text: "first" }, { text: "second" }, { text: "third" }]);
+});

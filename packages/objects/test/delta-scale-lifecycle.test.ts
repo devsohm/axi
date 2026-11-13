@@ -110,3 +110,19 @@ test("adopting one of hundreds of competing drafts invalidates every earlier ope
 	}
 	expect(tracker.revision).toBe(1);
 });
+
+test("a dense array revision retains every nested edit beyond a single operation batch", () => {
+	const initial = { rows: Array.from({ length: 4300 }, (_, id) => ({ id, value: 0, ready: false })) };
+	const tracker = track(initial),
+		change = tracker.beginChange();
+	for (const row of change.state.rows) {
+		row.value = row.id + 1;
+		row.ready = true;
+	}
+	const prepared = change.prepare();
+	const expected = { rows: initial.rows.map(({ id }) => ({ id, value: id + 1, ready: true })) };
+	expect(prepared.value).toEqual(expected);
+	expect(applyImmutable(initial, prepared.ops)).toEqual(expected);
+	tracker.adopt(prepared);
+	expect(initial.rows.every((row) => row.value === 0 && !row.ready)).toBe(true);
+});

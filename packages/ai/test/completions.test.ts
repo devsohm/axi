@@ -489,3 +489,219 @@ it("reads billed totals from OpenRouter streams without applying them to other p
 		expect(result.usage.cost.total).toBeCloseTo(provider === "openrouter" ? 0.42 : 0.000048);
 	}
 });
+
+it.each([
+	["local", "reasoning", "reasoning"],
+	["local", "reasoning_content", "reasoning_content"],
+	["local", "reasoning_text", "reasoning_text"],
+	["opencode-go", "reasoning", "reasoning_content"],
+])("replays %s thinking through its %s wire field", async (provider, signature, field) => {
+	let body = "";
+	const selected = { ...model, provider };
+	const history = {
+		...fauxAssistantMessage([
+			{ type: "thinking", thinking: "first", thinkingSignature: signature },
+			{ type: "thinking", thinking: "second", thinkingSignature: signature },
+			{ type: "text", text: "answer" },
+		]),
+		api: model.api,
+		provider,
+		model: model.id,
+	};
+	await stream(selected, normalizeContext({ messages: [history] }), {
+		apiKey: "offline",
+		fetch: async (_url, init) => {
+			body = String(init?.body);
+			return answer();
+		},
+	}).result();
+	expect(JSON.parse(body).messages).toEqual([{ role: "assistant", content: "answer", [field]: "first\nsecond" }]);
+});
+
+it("replays thinking as text for endpoints that require it", async () => {
+	let body = "";
+	const history = {
+		...fauxAssistantMessage([
+			{ type: "thinking", thinking: "first" },
+			{ type: "thinking", thinking: "second" },
+			{ type: "text", text: "answer" },
+		]),
+		api: model.api,
+		provider: model.provider,
+		model: model.id,
+	};
+	await stream({ ...model, compat: { requiresThinkingAsText: true } }, normalizeContext({ messages: [history] }), {
+		apiKey: "offline",
+		fetch: async (_url, init) => {
+			body = String(init?.body);
+			return answer();
+		},
+	}).result();
+	expect(JSON.parse(body).messages).toEqual([
+		{
+			role: "assistant",
+			content: [
+				{ type: "text", text: "first\n\nsecond" },
+				{ type: "text", text: "answer" },
+			],
+		},
+	]);
+});
+
+it.each([
+	"{",
+	"[null]",
+	'[{"type":"reasoning.text","text":"t","id":3}]',
+	'[{"type":"reasoning.text","text":"t","format":3}]',
+	'[{"type":"reasoning.text","text":"t","index":"0"}]',
+	'[{"type":"unknown","text":"t"}]',
+])("does not forward malformed saved reasoning metadata %s", async (signature) => {
+	let body = "";
+	const history = {
+		...fauxAssistantMessage([
+			{ type: "thinking", thinking: "private", thinkingSignature: signature },
+			{ type: "text", text: "answer" },
+		]),
+		api: model.api,
+		provider: model.provider,
+		model: model.id,
+	};
+	await stream(model, normalizeContext({ messages: [history] }), {
+		apiKey: "offline",
+		fetch: async (_url, init) => {
+			body = String(init?.body);
+			return answer();
+		},
+	}).result();
+	expect(JSON.parse(body).messages).toEqual([{ role: "assistant", content: "answer" }]);
+});
+
+it("preserves a saved summary and legacy encrypted tool reasoning when replaying a conversation", async () => {
+	const encrypted = { type: "reasoning.encrypted", id: "reason-1", data: "opaque" };
+	const summary = { type: "reasoning.summary", summary: "short summary", index: 0 };
+	for (const signature of [JSON.stringify(encrypted), "not JSON"]) {
+		let body = "";
+		const history = {
+			...fauxAssistantMessage([
+				{ type: "toolCall", id: "call", name: "lookup", arguments: {}, thoughtSignature: signature },
+			]),
+			api: model.api,
+			provider: model.provider,
+			model: model.id,
+			stopReason: "toolUse" as const,
+		};
+		await stream(model, normalizeContext({ messages: [history] }), {
+			apiKey: "offline",
+			fetch: async (_url, init) => {
+				body = String(init?.body);
+				return answer();
+			},
+		}).result();
+		expect(JSON.parse(body).messages[0].reasoning_details).toEqual(signature === "not JSON" ? undefined : [encrypted]);
+	}
+	let body = "";
+	const history = {
+		...fauxAssistantMessage([
+			{ type: "thinking", thinking: "hidden", thinkingSignature: JSON.stringify([summary]) },
+			{ type: "text", text: "answer" },
+		]),
+		api: model.api,
+		provider: model.provider,
+		model: model.id,
+	};
+	await stream(model, normalizeContext({ messages: [history] }), {
+		apiKey: "offline",
+		fetch: async (_url, init) => {
+			body = String(init?.body);
+			return answer();
+		},
+	}).result();
+	expect(JSON.parse(body).messages).toEqual([{ role: "assistant", content: "answer", reasoning_details: [summary] }]);
+});
+
+it.each([
+	["ordinary".repeat(8), "ordinary".repeat(5)],
+	["call?one|item#two", "call_one_item_two"],
+	["call?one|", "call_one"],
+])("normalizes a foreign tool ID and preserves its result association", async (id, expected) => {
+	let body = "";
+	const history = fauxAssistantMessage([{ type: "toolCall", id, name: "lookup", arguments: {} }]);
+	await stream(
+		{ ...model, provider: "openai" },
+		normalizeContext({
+			messages: [
+				history,
+				{
+					role: "toolResult",
+					toolCallId: id,
+					toolName: "lookup",
+					content: [{ type: "text", text: "found" }],
+					isError: false,
+					timestamp: 2,
+				},
+			],
+		}),
+		{
+			apiKey: "offline",
+			fetch: async (_url, init) => {
+				body = String(init?.body);
+				return answer();
+			},
+		},
+	).result();
+	expect(JSON.parse(body).messages).toMatchObject([
+		{ role: "assistant", tool_calls: [{ id: expected, function: { name: "lookup", arguments: "{}" } }] },
+		{ role: "tool", tool_call_id: expected, content: "found" },
+	]);
+});
+
+it("separates tool-result images with an assistant bridge when the endpoint requires it", async () => {
+	let body = "";
+	const history = {
+		...fauxAssistantMessage([{ type: "toolCall", id: "lookup", name: "lookup", arguments: {} }]),
+		api: model.api,
+		provider: model.provider,
+		model: model.id,
+	};
+	await stream(
+		{ ...model, compat: { requiresAssistantAfterToolResult: true } },
+		normalizeContext({
+			messages: [
+				history,
+				{
+					role: "toolResult",
+					toolCallId: "lookup",
+					toolName: "lookup",
+					content: [{ type: "image", mimeType: "image/png", data: "AA==" }],
+					isError: false,
+					timestamp: 2,
+				},
+				{ role: "user", content: "describe it", timestamp: 3 },
+			],
+		}),
+		{
+			apiKey: "offline",
+			fetch: async (_url, init) => {
+				body = String(init?.body);
+				return answer();
+			},
+		},
+	).result();
+	expect(JSON.parse(body).messages).toEqual([
+		{
+			role: "assistant",
+			content: "",
+			tool_calls: [{ type: "function", id: "lookup", function: { name: "lookup", arguments: "{}" } }],
+		},
+		{ role: "tool", tool_call_id: "lookup", content: "(see attached image)" },
+		{ role: "assistant", content: "I have processed the tool results." },
+		{
+			role: "user",
+			content: [
+				{ type: "text", text: "Attached image(s) from tool result:" },
+				{ type: "image_url", image_url: { url: "data:image/png;base64,AA==" } },
+			],
+		},
+		{ role: "user", content: "describe it" },
+	]);
+});

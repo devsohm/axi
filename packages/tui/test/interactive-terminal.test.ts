@@ -65,6 +65,13 @@ test.skipIf(process.platform === "win32").each(["regular", "fullscreen"])(
 			await vi.waitFor(async () => expect(await screen()).not.toContain("Overlay is open"));
 			terminal.write("\x1b[116;5u\x1b[116;5:3u");
 			await vi.waitFor(async () => expect(await screen()).toContain("tool row 1999"));
+			const visibleRows = (await screen()).split("\n").flatMap((line) => {
+				const match = /^tool row (\d+)$/.exec(line);
+				return match ? [Number(match[1])] : [];
+			});
+			expect(visibleRows).toEqual(
+				Array.from({ length: visibleRows.length }, (_, index) => 2000 - visibleRows.length + index),
+			);
 			terminal.write("\x1b[116;5u\x1b[116;5:3u");
 			await vi.waitFor(async () => {
 				const text = await screen();

@@ -213,8 +213,14 @@ jobs:
         run: |
           sdk="${ANDROID_SDK_ROOT:-$ANDROID_HOME}"
           image="system-images;android-$API;google_apis;x86_64"
+          export ANDROID_USER_HOME="$RUNNER_TEMP/axi-android"
+          export ANDROID_EMULATOR_HOME="$ANDROID_USER_HOME"
+          export ANDROID_AVD_HOME="$ANDROID_USER_HOME/avd"
+          mkdir -p "$ANDROID_AVD_HOME"
           "$sdk/cmdline-tools/latest/bin/sdkmanager" --install platform-tools emulator "$image"
-          echo no | "$sdk/cmdline-tools/latest/bin/avdmanager" create avd --force --name axi-test --package "$image"
+          "$sdk/cmdline-tools/latest/bin/avdmanager" create avd --force --name axi-test --device pixel_2 --package "$image" --path "$ANDROID_AVD_HOME/axi-test.avd"
+          "$sdk/emulator/emulator" -list-avds
+          test -f "$ANDROID_AVD_HOME/axi-test.ini"
           sudo chmod a+rw /dev/kvm
           "$sdk/emulator/emulator" -avd axi-test -no-window -no-audio -no-boot-anim -no-snapshot -gpu swiftshader_indirect -accel on -memory 2048 -cores 2 > android-emulator.log 2>&1 &
           emulator=$!
