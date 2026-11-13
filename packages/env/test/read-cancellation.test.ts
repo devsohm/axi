@@ -54,6 +54,70 @@ test.each(["binary", "text", "directory"] as const)(
 	},
 );
 
+test.each(["open", "pread", "listFiles"])(
+	"cancellation at the %s boundary hides file data, releases handles and leaves the connection usable",
+	async (boundary) => {
+		const cwd = await mkdtemp(join(tmpdir(), "axi-transfer-cancel-"));
+		const connection = new Connection({ command: [localDaemon()] });
+		const env = new RemoteExecutionEnv({ connection, id: "transfer-cancel", cwd });
+		const controller = new AbortController();
+		const request = connection.request.bind(connection);
+		let closed = 0;
+		try {
+			await writeFile(join(cwd, "data"), Buffer.alloc(1024 * 1024, 97));
+			connection.request = async (operation, fields, options) => {
+				const response = await request(operation, fields, options);
+				if (operation === "close") closed++;
+				if (operation === boundary) controller.abort();
+				return response;
+			};
+			const call = { ...context, abortSignal: controller.signal };
+			const result =
+				boundary === "listFiles" ? await env.listFiles(".", undefined, call) : await env.readBinaryFile("data", call);
+			expect(result).toMatchObject({ ok: false, error: { code: "aborted" } });
+			expect(closed).toBe(boundary === "listFiles" ? 0 : 1);
+			connection.request = request;
+			expect(getOrThrow(await env.readTextFile("data", context))).toBe("a".repeat(1024 * 1024));
+		} finally {
+			connection.request = request;
+			connection.close();
+			await rm(cwd, { recursive: true, force: true });
+		}
+	},
+);
+
+test("cancellation during path resolution prevents a metadata request", async () => {
+	const cwd = await mkdtemp(join(tmpdir(), "axi-resolve-cancel-"));
+	const connection = new Connection({ command: [localDaemon()] });
+	const env = new RemoteExecutionEnv({ connection, id: "resolve-cancel", cwd });
+	const controller = new AbortController();
+	const info = connection.info.bind(connection);
+	const request = connection.request.bind(connection);
+	const operations: string[] = [];
+	try {
+		await connection.info();
+		connection.info = async (signal) => {
+			const result = await info(signal);
+			controller.abort();
+			return result;
+		};
+		connection.request = (...args) => {
+			operations.push(args[0]);
+			return request(...args);
+		};
+		expect(await env.fileInfo("data", { ...context, abortSignal: controller.signal })).toMatchObject({
+			ok: false,
+			error: { code: "aborted", path: join(cwd, "data") },
+		});
+		expect(operations).toEqual([]);
+	} finally {
+		connection.info = info;
+		connection.request = request;
+		connection.close();
+		await rm(cwd, { recursive: true, force: true });
+	}
+});
+
 test.each(["ENOENT", "EACCES", "unsupported"].flatMap((code) => ["reader", "listing"].map((method) => [code, method])))(
 	"directory %s entries preserve failure semantics through %s",
 	async (code, method) => {

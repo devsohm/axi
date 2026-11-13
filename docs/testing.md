@@ -34,6 +34,8 @@ npm run test:coverage
 npm run test:coverage:full
 npm run coverage:gaps -- packages/durable/src 50
 npx vitest run packages/tui/test
+npm run coverage:capture
+npm run coverage:merge -- /path/to/downloaded/native-coverage
 npm run test:native --workspace @axi/tui
 npm run test:workers
 cargo test --locked --manifest-path packages/env/daemon/Cargo.toml
@@ -56,6 +58,24 @@ branch locations. The HTML report displays these locations beside the source.
 `npm run coverage:gaps -- <path filter> <limit>` lists uncovered statements,
 functions and branches with their source lines. Run coverage first to refresh
 the measurements.
+
+`coverage:capture` records a passing local report with its commit, runtime,
+instrumentation versions and SHA-256 hash of every measured source module. It
+also writes portable source paths. Run it after `test:coverage`; `verify` runs
+both commands in that order.
+
+`coverage:merge` combines the six native CI artifacts in the supplied directory.
+It requires one artifact per operating system and architecture. It rejects
+different commits, source bytes, instrumentation versions, missing source
+modules and incompatible counter maps. Counter IDs may differ; source positions
+identify matching counters. Results are written to `coverage/combined`.
+
+The combined report credits code executed on another native platform. It does
+not credit unexecuted code, browser bundles, child-process internals or native
+Rust and C code. An uncovered path can be reachable, platform-specific or
+unreachable under the documented contract. Investigate the path before adding
+a test. Do not fabricate an invalid internal state or remove a measured module
+to increase the percentage.
 
 Protocol boundary checks cover text-link envelopes, OAuth callback races, MCP
 reconnect limits and file-list framing. Worker and launcher checks use child
@@ -109,7 +129,11 @@ expiry and retention of the last working assets after a failed replacement.
 They also check asset bytes and MIME types from base builds, direct surface
 accessors and the absence of automatic HTTP routes when routes are disabled.
 
-The verification workflow runs the owned suite on its native platform matrix. Its Linux x64 job also enforces the coverage minimums, validates the behavior report, and uploads the `test-coverage` artifact.
+The verification workflow runs owned tests and coverage checks on all six native
+targets. Each job uploads `test-coverage-<target>`. The archive job verifies and
+merges those reports into `combined-coverage`. Linux x64 also runs the tooling
+tests. Per-platform behavior reports remain separate; the combined report
+contains execution counters, not a claim of complete behavior.
 
 ## Package responsibilities
 

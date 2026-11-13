@@ -17,6 +17,10 @@ test("schema declarations preserve empty unions, legacy tuples, unconstrained ar
 		[{ type: "unsupported" }, "unknown"],
 		[{ properties: { "file-name": { type: "string" } }, required: ["file-name"] }, '{ "file-name": string; }'],
 		[{ const: undefined }, "unknown"],
+		[
+			{ properties: { enabled: true, disabled: false }, additionalProperties: false },
+			"{ disabled?: never; enabled?: unknown; }",
+		],
 	] satisfies [CodemodeJsonSchema, string][])
 		expect(schemaToType(schema)).toBe(expected);
 	expect(toCodemodeIdentifier("")).toBe("_");

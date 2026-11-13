@@ -161,6 +161,55 @@ test("worker startup failures settle execution and release the worker", async ()
 	}
 });
 
+test("worker non-Error failures settle execution and release capacity", async () => {
+	let reserved = 0;
+	const exited: Promise<void>[] = [];
+	const sandbox = new CodemodeSandbox({
+		workerUrl: new URL("data:text/javascript,throw%2042"),
+		acquireWorker() {
+			reserved++;
+			return () => {
+				reserved--;
+			};
+		},
+		onWorkerStarted: (exit) => exited.push(exit),
+	});
+	try {
+		expect(await sandbox.execute("return 42;")).toMatchObject({ ok: false, error: { kind: "sandbox", message: "42" } });
+		await Promise.all(exited);
+		expect(reserved).toBe(0);
+	} finally {
+		await sandbox.close();
+	}
+});
+
+test("a remote rejection after caller cancellation cannot replace the cancelled outcome", async () => {
+	const entered = Promise.withResolvers<void>();
+	const remote = Promise.withResolvers<void>();
+	const controller = new AbortController();
+	const sandbox = new RemoteCodemodeSandbox({
+		remote: () => ({
+			execute() {
+				entered.resolve();
+				return remote.promise;
+			},
+		}),
+	});
+	try {
+		const pending = sandbox.execute("return 42;", { signal: controller.signal });
+		await entered.promise;
+		controller.abort(new Error("caller cancelled"));
+		const result = await pending;
+		expect(result).toMatchObject({ ok: false, error: { kind: "aborted", message: "caller cancelled" } });
+		remote.reject(new Error("late disconnect"));
+		await new Promise<void>((resolve) => setImmediate(resolve));
+		expect(await pending).toBe(result);
+	} finally {
+		remote.resolve();
+		await sandbox.close();
+	}
+});
+
 test("worker import-watch notifications cannot interrupt a valid execution result", async () => {
 	const exits: Promise<void>[] = [];
 	const source = `import { parentPort } from 'node:worker_threads';

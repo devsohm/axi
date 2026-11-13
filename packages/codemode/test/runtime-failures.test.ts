@@ -30,6 +30,19 @@ test("syntax failures release inline and worker runtimes without committing stor
 	}
 });
 
+test("script errors without a message retain their error type and discard writes", async () => {
+	const sandbox = new InlineCodemodeSandbox({ wasm: loadQuickJSWasm() });
+	try {
+		expect(await sandbox.execute('store("pending", true); throw new Error();')).toMatchObject({
+			ok: false,
+			error: { kind: "script", name: "Error", message: "" },
+		});
+		expect(await sandbox.execute('return load("pending");')).toMatchObject({ ok: true, value: undefined });
+	} finally {
+		await sandbox.close();
+	}
+});
+
 test("undefined host results and non-Error rejections remain usable inside the script", async () => {
 	const sandbox = new InlineCodemodeSandbox({
 		wasm: loadQuickJSWasm(),
@@ -211,7 +224,11 @@ test("the remote service caps computation and releases the runtime when exchange
 		type: "failure",
 		error: { kind: "timeout", message: "Execution exceeded its interrupt budget of 5" },
 	});
-	for (const memory of [undefined, 32 * 1024 * 1024]) {
+	for (const [memory, cap] of [
+		[undefined, 16 * 1024 * 1024],
+		[32 * 1024 * 1024, 16 * 1024 * 1024],
+		[16 * 1024 * 1024, undefined],
+	]) {
 		const outputs: CodemodeRemoteMessage[] = [];
 		await serveCodemodeRemote(
 			{ data: { ...request.data, code: "return 42;", memoryLimitBytes: memory } },
@@ -221,7 +238,7 @@ test("the remote service caps computation and releases the runtime when exchange
 			},
 			{
 				wasm: loadQuickJSWasm(),
-				maxMemoryLimitBytes: 16 * 1024 * 1024,
+				maxMemoryLimitBytes: cap,
 			},
 		);
 		expect(outputs).toContainEqual(expect.objectContaining({ type: "done", ok: true, value: "42" }));

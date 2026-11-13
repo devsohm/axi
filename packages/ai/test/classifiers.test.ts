@@ -49,6 +49,130 @@ function model<A extends ClassifierApi>(api: A): ClassifierModel<A> {
 }
 
 describe("Classifier protocols", () => {
+	it("maps Decisions choices, scores and predicates by name independently of answer order", async () => {
+		let payload: unknown;
+		const result = await decisions(
+			model("openai-decisions"),
+			{
+				state: { item: "ready" },
+				questions: {
+					pick: { type: "choice", instructions: "Choose", criteria: { yes: "Accepted", no: "" } },
+					rank: { type: "score", instructions: "Rank", criteria: ["low", "high"] },
+					ok: { type: "bool", instructions: "Ready?", criteria: { true: "", false: "" } },
+				},
+			},
+			{
+				apiKey: "fixture",
+				fetch: async (_url, init) => {
+					payload = JSON.parse(String(init?.body));
+					return Response.json({
+						answers: [
+							{ name: "ok", type: "predicate", probability: 0.8 },
+							{ name: "rank", type: "score", score: 1, confidence: 0.7 },
+							{
+								name: "pick",
+								type: "choice",
+								choice: "yes",
+								confidence: 0.9,
+								probabilities: [
+									{ value: "yes", probability: 0.9 },
+									{ value: "no", probability: 0.1 },
+								],
+							},
+						],
+					});
+				},
+			},
+		);
+		expect(payload).toEqual({
+			model: "test",
+			input: '{"item":"ready"}',
+			questions: [
+				{
+					name: "pick",
+					type: "choice",
+					instructions: "Choose",
+					choices: [{ value: "yes", description: "Accepted" }, { value: "no" }],
+				},
+				{ name: "rank", type: "score", instructions: "Rank", levels: [{ label: "low" }, { label: "high" }] },
+				{ name: "ok", type: "predicate", instructions: "Ready?" },
+			],
+		});
+		expect(result).toMatchObject({
+			stopReason: "stop",
+			answers: {
+				pick: { type: "choice", choice: "yes", probabilities: { yes: 0.9, no: 0.1 }, confidence: 0.9 },
+				rank: { type: "score", score: 1, confidence: 0.7 },
+				ok: { type: "bool", probability: 0.8 },
+			},
+		});
+	});
+
+	it.each([
+		[null, "unexpected response"],
+		[{}, "unexpected response"],
+		[{ answers: [null, { name: 1 }] }, "did not return an answer"],
+		[{ answers: [{ name: "ok", type: "score", score: 1 }] }, "predicate answer"],
+		[{ answers: [{ name: "ok", type: "predicate", probability: "bad" }] }, "invalid probability"],
+	])("rejects malformed Decisions responses atomically: %j", async (body, diagnostic) => {
+		const result = await decisions(model("openai-decisions"), context, {
+			apiKey: "fixture",
+			fetch: async () => Response.json(body),
+		});
+		expect(result).toMatchObject({
+			stopReason: "error",
+			answers: {},
+			errorMessage: expect.stringContaining(diagnostic),
+		});
+	});
+
+	it.each([
+		[{ type: "predicate" }, "choice answer"],
+		[{ type: "choice", choice: "yes" }, "invalid probabilities"],
+		[{ type: "choice", choice: "yes", probabilities: [null] }, "invalid probabilities"],
+		[{ type: "choice", choice: "yes", probabilities: [{ value: "yes", probability: "bad" }] }, "invalid probability"],
+		[{ type: "choice", choice: "yes", probabilities: [], confidence: "bad" }, "invalid confidence"],
+	])("rejects malformed Decisions choices without returning a partial answer: %j", async (answer, diagnostic) => {
+		const result = await decisions(
+			model("openai-decisions"),
+			{ state: {}, questions: { pick: { type: "choice", instructions: "Choose", criteria: { yes: "Yes" } } } },
+			{
+				apiKey: "fixture",
+				fetch: async () => Response.json({ answers: [{ name: "pick", ...answer }], usage: { input_tokens: 2 } }),
+			},
+		);
+		expect(result).toMatchObject({
+			stopReason: "error",
+			answers: {},
+			usage: { input: 2 },
+			errorMessage: expect.stringContaining(diagnostic),
+		});
+	});
+
+	it("refuses an oversized Decisions image batch before dispatch", async () => {
+		let requests = 0;
+		const result = await decisions(
+			model("openai-decisions"),
+			{
+				...context,
+				images: Array.from({ length: 129 }, () => ({ type: "image", mimeType: "image/png", data: "AA==" })),
+			},
+			{
+				apiKey: "fixture",
+				fetch: async () => {
+					requests++;
+					return Response.json({ answers: [] });
+				},
+			},
+		);
+		expect(result).toMatchObject({
+			stopReason: "error",
+			answers: {},
+			errorMessage: expect.stringContaining("at most 128 images"),
+		});
+		expect(requests).toBe(0);
+	});
+
 	it("reads the llama request key after selecting its fetch implementation", async () => {
 		const keys: Array<string | null> = [];
 		const fetch: typeof globalThis.fetch = async (url, init) => {

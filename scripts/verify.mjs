@@ -21,6 +21,7 @@ script("build:native", "--workspace", "@axi/tui");
 script("check");
 script("test:tooling");
 script("test:coverage");
+script("coverage:capture");
 run("cargo", ["test", "--locked", "--manifest-path", "packages/env/daemon/Cargo.toml"]);
 script("test:native", "--workspace", "@axi/tui");
 script("test:workers");

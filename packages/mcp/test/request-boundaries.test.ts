@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { expect, test, vi } from "vitest";
 import { McpClient, LATEST_PROTOCOL_VERSION, type JsonRpcMessage } from "../src/index.ts";
 import { createInMemoryTransportPair } from "../src/testing/index.ts";
 
@@ -42,6 +42,7 @@ test("resource and tool helpers validate responses at the transport boundary", a
 		expect(await client.readResource("file:///one")).toEqual({ contents: [{ uri: "file:///one", text: "hello" }] });
 		expect(await client.callTool("answer")).toEqual({ content: [], structuredContent: { answer: 42 } });
 		for (const [method, response, invoke, error] of [
+			["resources/list", null, () => client.listResources(), "Invalid MCP resources/list result"],
 			["resources/list", {}, () => client.listResources(), "Invalid MCP resources/list result"],
 			["resources/list", { resources: [{ uri: 1 }] }, () => client.listResources(), "Invalid entry"],
 			[
@@ -71,6 +72,45 @@ test("resource and tool helpers validate responses at the transport boundary", a
 		}
 	} finally {
 		await client.close();
+	}
+});
+
+test("progress replaces malformed metadata, renews the deadline and retains an empty abort reason", async () => {
+	vi.useFakeTimers();
+	const { client, server, received } = await connected(() => undefined);
+	const progress: unknown[] = [];
+	const controller = new AbortController();
+	try {
+		let settled = false;
+		const pending = client.request(
+			"work",
+			{ _meta: 17 },
+			{
+				signal: controller.signal,
+				onProgress: (value) => progress.push(value),
+			},
+		);
+		void pending.then(
+			() => {
+				settled = true;
+			},
+			() => {
+				settled = true;
+			},
+		);
+		await vi.advanceTimersByTimeAsync(900);
+		await server.send({ jsonrpc: "2.0", method: "notifications/progress", params: { progressToken: 2, progress: 1 } });
+		expect(received).toContainEqual({ jsonrpc: "2.0", id: 2, method: "work", params: { _meta: { progressToken: 2 } } });
+		expect(progress).toEqual([{ progressToken: 2, progress: 1 }]);
+		await vi.advanceTimersByTimeAsync(900);
+		expect(settled).toBe(false);
+		controller.abort("");
+		await expect(pending).rejects.toMatchObject({ name: "AbortError" });
+		await Promise.resolve();
+		expect(received).toContainEqual({ jsonrpc: "2.0", method: "notifications/cancelled", params: { requestId: 2 } });
+	} finally {
+		await client.close();
+		vi.useRealTimers();
 	}
 });
 

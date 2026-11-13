@@ -1,9 +1,19 @@
-import { createModels } from "@axi/ai";
+import { createModels, fauxProvider } from "@axi/ai";
 import { BACKGROUND_CONTEXT as context } from "@axi/objects/context";
 import { applyImmutable } from "@axi/objects/delta";
 import type { WatchCall } from "@axi/objects/watch";
 import { expect, test } from "vitest";
-import { AgentDoc, ConversationTranscript, createRegistry, defineDoc, Harness, MemoryStorage, type ConversationView, type EntryId } from "../src/index.ts";
+import {
+	AgentDoc,
+	ConversationTranscript,
+	createRegistry,
+	defineDoc,
+	Harness,
+	MemoryStorage,
+	ResetEntry,
+	type ConversationView,
+	type EntryId,
+} from "../src/index.ts";
 
 test("keeps the remaining sparse-ID gap until its bounded page is loaded", async () => {
 	const conversation: ConversationView["conversation"] = { id: 1 as ConversationView["conversation"]["id"] };
@@ -132,3 +142,42 @@ test("rejects invalid window bounds and still accepts a one-entry window", async
 		try { expect(watch.value.entries).toEqual([]); } finally { await watch.stop(); }
 	} finally { await harness.close(context); }
 });
+
+test.each([undefined, "Continue with the approved plan"])(
+	"reset changes model context without deleting inspectable history: %s",
+	async (handoff) => {
+		const models = createModels();
+		models.setProvider(fauxProvider().provider);
+		const harness = await Harness.open(
+			new MemoryStorage(),
+			{ models: () => models, registry: createRegistry() },
+			context,
+		);
+		try {
+			const conversation = await harness.root(context, { agent: { model: { provider: "faux", modelId: "faux-1" } } });
+			await conversation.commit(
+				(tx) =>
+					tx.appendEntry(conversation.id, {
+						kind: "note",
+						head: "self",
+						model: [{ role: "user", content: "Earlier conversation", timestamp: 1 }],
+					}),
+				context,
+			);
+			expect((await conversation.context(context)).messages).toContainEqual(
+				expect.objectContaining({ content: "Earlier conversation" }),
+			);
+			await conversation.reset(handoff, context);
+			const view = await conversation.context(context);
+			expect(view.messages).toEqual(
+				handoff === undefined ? [] : [expect.objectContaining({ role: "user", content: handoff })],
+			);
+			const entries = (await conversation.entries({ order: "ascending" }, 10, undefined, context)).items;
+			expect(entries).toHaveLength(2);
+			expect(entries[0]!.model).toEqual([{ role: "user", content: "Earlier conversation", timestamp: 1 }]);
+			expect(ResetEntry.is(entries[1])).toBe(true);
+		} finally {
+			await harness.close(context);
+		}
+	},
+);

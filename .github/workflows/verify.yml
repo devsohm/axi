@@ -71,10 +71,11 @@ jobs:
           dbus-run-session -- npm run test:coverage
       - name: Run Linux ARM owned tests with a private desktop bus
         if: matrix.target == 'linux-arm64'
-        run: dbus-run-session -- npm test
+        run: dbus-run-session -- npm run test:coverage
       - name: Run owned tests
         if: runner.os != 'Linux'
-        run: npm test
+        run: npm run test:coverage
+      - run: npm run coverage:capture
       - name: Inspect the failed browser environment
         if: failure() && runner.os == 'Linux'
         run: |
@@ -83,9 +84,9 @@ jobs:
           free -m
           cat /sys/fs/cgroup/memory.events /sys/fs/cgroup/pids.events || true
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
-        if: always() && matrix.target == 'linux-x64'
+        if: always()
         with:
-          name: test-coverage
+          name: test-coverage-${{ matrix.target }}
           path: coverage
           if-no-files-found: ignore
       - run: npm run pack -- release/package
@@ -222,6 +223,16 @@ jobs:
       - run: find packages/env/bin -type f -name axi-env -exec chmod +x {} +
       - run: npm ci
       - run: npm run build
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with:
+          pattern: test-coverage-*
+          path: coverage/native
+      - run: npm run coverage:merge -- coverage/native
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: combined-coverage
+          path: coverage/combined
+          if-no-files-found: error
       - name: Check native coverage
         run: |
           for target in linux-x64 linux-arm64 darwin-x64 darwin-arm64 android-x64 android-arm64; do test -x "packages/env/bin/axi-env-$target/axi-env"; done

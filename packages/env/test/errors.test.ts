@@ -58,6 +58,7 @@ it("captures the remote path before reading its code once", () => {
 
 it.each([
 	["ENOENT", "not_found"],
+	["EINVAL", "invalid"],
 	["not-a-code", "unknown"],
 	["__proto__", "unknown"],
 	["constructor", "unknown"],
@@ -69,6 +70,15 @@ it.each([
 	expect(error.path).toBe("/work/file");
 	expect(error.cause).toBe(cause);
 });
+
+it.each(["transport failed", null, 42])(
+	"normalizes non-Error failures without losing the affected path: %j",
+	(cause) => {
+		const error = toFileError(cause, "/work/file");
+		expect(error).toMatchObject({ code: "unknown", path: "/work/file", message: String(cause) });
+		expect(error.cause).toEqual(new Error(String(cause)));
+	},
+);
 
 class MetadataConnection extends Connection {
 	override async info(): Promise<RemoteInfo> {

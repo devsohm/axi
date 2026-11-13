@@ -30,3 +30,22 @@ test("queued messages are cloned before delivery and discarded if the receiving 
 	await pending;
 	expect(received).toHaveLength(1);
 });
+
+test("a connected endpoint cannot replace its peer or restart either end after closure", async () => {
+	const { client, server } = createInMemoryTransportPair();
+	const other = new InMemoryTransport();
+	let closed = 0;
+	client.onClose(() => closed++);
+	server.onClose(() => closed++);
+	try {
+		expect(() => client.connectPeer(other)).toThrow("already has a peer");
+		await Promise.all([client.start(), server.start()]);
+		await server.close();
+		await client.close();
+		expect(closed).toBe(2);
+		for (const endpoint of [client, server])
+			await expect(endpoint.start()).rejects.toMatchObject({ name: "McpConnectionClosedError" });
+	} finally {
+		await Promise.all([client.close(), server.close(), other.close()]);
+	}
+});

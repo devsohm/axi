@@ -6,6 +6,43 @@ afterEach(() => vi.useRealTimers());
 const initialized = { jsonrpc: "2.0", method: "notifications/initialized" } as const;
 const request = { jsonrpc: "2.0", id: 1, method: "ping" } as const;
 
+test.each([
+	[200, undefined, false],
+	[403, undefined, false],
+	[403, 'Bearer error="access_denied"', false],
+	[403, 'Bearer error="insufficient_scope"', true],
+])("authorization recovery for HTTP %i %s retries only a scope challenge", async (status, challenge, recover) => {
+	let requests = 0,
+		recoveries = 0;
+	const messages: unknown[] = [];
+	const transport = new StreamableHttpTransport({
+		url: "https://peer.invalid/mcp",
+		authProvider: {
+			token: async () => "fixture-token",
+			onUnauthorized: async () => {
+				recoveries++;
+			},
+		},
+		fetch: async () => {
+			requests++;
+			return status === 200 || requests > 1
+				? Response.json({ jsonrpc: "2.0", id: 1, result: 42 })
+				: new Response(null, { status, headers: challenge ? { "www-authenticate": challenge } : {} });
+		},
+	});
+	transport.onMessage((message) => messages.push(message));
+	try {
+		await transport.start();
+		if (status === 200 || recover) {
+			await transport.send(request);
+			expect(messages).toEqual([{ jsonrpc: "2.0", id: 1, result: 42 }]);
+		} else await expect(transport.send(request)).rejects.toMatchObject({ status: 403 });
+		expect([requests, recoveries]).toEqual(recover ? [2, 1] : [1, 0]);
+	} finally {
+		await transport.close();
+	}
+});
+
 test("a request requires a supported response body and a later request still works", async () => {
 	for (const status of [202, 204, 200]) {
 		let requests = 0,
