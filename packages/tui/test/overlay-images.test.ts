@@ -46,6 +46,7 @@ for (const fullscreen of [false, true]) {
 			ui.start();
 			ui.renderNow();
 			await terminal.screen();
+			expect(writes.mock.calls.map(([value]) => value).join("")).toContain(image);
 			writes.mockClear();
 			const overlay = ui.showOverlay(content(["MENU"]), { row: 2, col: 1, width: 8 });
 			ui.renderNow();
@@ -101,10 +102,12 @@ for (const fullscreen of [false, true]) {
 		const ui = fullscreen ? new TuiAltScreen(terminal) : new TuiMainScreen(terminal);
 		resources.push({ ui, terminal });
 		const image = encodeKitty("Aw==", { imageId: 91003, columns: 4, rows: 3, moveCursor: false });
+		registerKittyImageMetadata({ imageId: 91003, columns: 4, rows: 3, widthPx: 40, heightPx: 60 });
 		ui.start();
 		ui.showOverlay(content([image, "", ""]), { row: 0, col: 0, width: 8 });
 		ui.renderNow();
 		await terminal.screen();
+		expect(writes.mock.calls.map(([value]) => value).join("")).toContain(image);
 		writes.mockClear();
 		ui.showOverlay(content(["TOP"]), { row: 2, col: 0, width: 8 });
 		ui.renderNow();
