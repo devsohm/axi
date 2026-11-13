@@ -45,9 +45,10 @@
 					]
 				},
 				{
-					"behavior": "event contracts, subscription cancellation, reload rebinding and remote terminal delivery",
+					"behavior": "event contracts, subscription cancellation, reload rebinding, acknowledgement limits, relay credit and remote terminal delivery",
 					"tests": [
 						"packages/objects/test/event-contracts.test.ts",
+						"packages/objects/test/event-flow-control.test.ts",
 						"packages/objects/test/events.test.ts",
 						"packages/objects/test/event-versions.test.ts"
 					]
