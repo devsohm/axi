@@ -34,7 +34,11 @@ const structuredResult = Type.Union([
 	Type.Object({ type: Type.Literal("image"), data: Type.String(), mimeType: Type.String() }),
 ]);
 export type ReadToolInput = Static<typeof parameters>;
-export type ReadToolDetails = { truncation?: Omit<TruncationResult, "content"> };
+export type ReadToolDetails = {
+	truncation?: Omit<TruncationResult, "content">;
+	/** The model used for this read, for UI display without changing later model requests. */
+	imageUnsupportedByModel?: string;
+};
 export type ReadToolOptions = { readonly images?: ImageProcessor };
 const integer = (value: number): number => (Number.isNaN(value) ? 0 : Math.trunc(value));
 
@@ -144,7 +148,7 @@ async function readImage(
 ): Promise<ToolExecutionResult<ReadToolDetails>> {
 	const ref = (await api.agent(context)).model;
 	const model = ref === undefined ? undefined : api.models.getModel(ref.provider, ref.modelId);
-	const vision = model?.input.includes("image") ?? true;
+	const imageUnsupportedByModel = model !== undefined && !model.input.includes("image") ? model.id : undefined;
 	const resize = model?.inputLimits?.images?.resize;
 	const limits: ImageLimits = {
 		maxWidth: resize?.maxWidth ?? DEFAULT_IMAGE_LIMITS.maxWidth,
@@ -187,11 +191,11 @@ async function readImage(
 			);
 		image = { data: toBase64(bytes), mimeType };
 	}
-	if (!vision) notes.push("The current model does not support images; it sees a placeholder instead.");
 	const block = { type: "image" as const, data: image.data, mimeType: image.mimeType };
 	return {
 		output: [block],
 		structuredOutput: block,
+		...(imageUnsupportedByModel === undefined ? {} : { details: { imageUnsupportedByModel } }),
 		diagnostics: [
 			{ severity: "info", code: "image", message: [`Read image file [${image.mimeType}].`, ...notes].join(" ") },
 		],

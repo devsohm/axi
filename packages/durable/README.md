@@ -62,6 +62,8 @@ Invocation contexts carry cancellation and explicit telemetry spans. `HarnessOpt
 
 `@axi/durable/images` prepares images with Photon. The Node adapter uses an idle worker thread by default. Pass ordinary `Uint8Array` bytes to the worker. Convert a Node Buffer with `Uint8Array.from(buffer)` first because pooled Buffers can fail transfer. The Cloudflare adapter accepts its compiled WebAssembly module.
 
+Image reads retain their image block. AI substitutes a placeholder for a model that cannot accept images on each request. The read result's `details.imageUnsupportedByModel` records that model's ID for the UI. It is absent for a vision model. This metadata does not add a warning to the text replayed after a model switch.
+
 `@axi/durable/codemode` provides a script tool and its prompt section. Scripts call nested tools through recorded task keys. A delivery journal restores result order after restart and rejects changed execution paths. Successful scripts commit their conversation store with their result. Model catalog, classifier and image calls are optional. Code Mode does not install MCP.
 
 An extension groups its tools with `namespace: { name, description, instructions? }`.

@@ -215,6 +215,8 @@ Deferred tool discovery follows local schema references when collecting paramete
 
 `@axi/durable/tools` exports `read`, `write`, `edit`, and `bash` factories. The host supplies an execution environment. File mutations serialize by canonical file path. Read and shell output limits bound retained content and report truncation. Large shell output can spill to an environment file.
 
+Image reads retain the image in their output. For a model without image input, `ReadToolDetails.imageUnsupportedByModel` records the model ID selected when the read began. It is UI metadata and is absent for a model with image input. Image support does not add a persistent warning diagnostic. AI substitutes images per request, so the stored result also works after switching to a vision model.
+
 `@axi/durable/env` defines filesystem and shell capabilities. Its Node adapter provides local files, directory pages, watches, and processes. `@axi/env` supplies separate local-daemon and SSH-backed environments through the same execution contract.
 
 `NodeExecutionEnv.cwd` is the base for relative paths. A shell call keeps that directory when its `cwd` option is absent or empty. A non-empty override resolves against the base. A failed working-directory check returns an execution error with its filesystem cause.
