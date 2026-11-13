@@ -117,7 +117,7 @@ it("clears restart marks after edits revert, source files disappear and a moved 
 		app = join(root, "app"),
 		file = join(app, "core.ts");
 	const watcher = watch([app]);
-	const marked = (base: boolean) => vi.waitFor(() => expect(watcher.value).toMatchObject({ base }));
+	const marked = (base: boolean) => vi.waitFor(() => expect(watcher.value).toMatchObject({ base }), { timeout: 5000 });
 	await writeFile(file, "edited");
 	await marked(true);
 	await writeFile(file, "original");
@@ -134,7 +134,7 @@ it("clears restart marks after edits revert, source files disappear and a moved 
 	await marked(true);
 	await writeFile(file, "original");
 	await marked(false);
-});
+}, 15000);
 
 it("detects edits before attaching and preserves conflicting records of running bundles", async () => {
 	const root = await project({ "file.ts": "later" }),

@@ -28,13 +28,16 @@ async function fixture(backend: "memory" | "sqlite") {
 for (const backend of ["memory", "sqlite"] as const) {
 	test(`${backend} trace pages retain whole traces with tied timestamps and detached snapshots`, async () => {
 		const now = vi.spyOn(Date, "now").mockReturnValue(10000);
+		const clock = vi.spyOn(performance, "now").mockReturnValue(0);
 		const f = await fixture(backend);
 		try {
 			for (let i = 0; i < 7; i++) {
 				now.mockReturnValue(10000);
+				clock.mockReturnValue(0);
 				await f.context.startSpan({ name: "request", attributes: { index: i } }, async (parent) => {
 					parent.addEvent("sent", { labels: ["initial"] });
 					now.mockReturnValue(10001);
+					clock.mockReturnValue(1);
 					await parent.startSpan({ name: "parse" }, () => {});
 				});
 			}
@@ -42,6 +45,9 @@ for (const backend of ["memory", "sqlite"] as const) {
 			const all = await f.store.findTraces({ limit: 100 });
 			expect(all.traces.map((trace) => trace.spans.map((span) => span.name))).toEqual(
 				Array.from({ length: 7 }, () => ["request", "parse"]),
+			);
+			expect(all.traces.map((trace) => trace.spans.map((span) => span.startedMs))).toEqual(
+				Array.from({ length: 7 }, () => [10000, 10001]),
 			);
 			const ids: string[] = [];
 			let cursor: string | undefined;
@@ -64,6 +70,8 @@ for (const backend of ["memory", "sqlite"] as const) {
 
 	test(`${backend} store requires a complete trace and matches typed attributes on the same span`, async () => {
 		const now = vi.spyOn(Date, "now").mockReturnValue(10000);
+		let tick = 0;
+		vi.spyOn(performance, "now").mockImplementation(() => ++tick / 1000);
 		const f = await fixture(backend);
 		const gate = Promise.withResolvers<void>();
 		const active = f.context.startSpan({ name: "pending" }, () => gate.promise);

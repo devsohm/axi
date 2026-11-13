@@ -89,7 +89,7 @@ console.log('parent completed');`;
 				const pid = Number(await readFile(pidFile, "utf8"));
 				if (Number.isInteger(pid) && pid > 1) process.kill(pid, "SIGKILL");
 			} catch {}
-		await rm(directory, { recursive: true, force: true, maxRetries: 20, retryDelay: 50 });
+			await rm(directory, { recursive: true, force: true, maxRetries: 20, retryDelay: 50 });
 		}
 	},
 );
