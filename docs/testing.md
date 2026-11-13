@@ -84,12 +84,20 @@ These checks do not establish visual browser correctness.
 Mounted React hook checks run in Chromium. Install `/usr/bin/chromium` or
 `/usr/bin/chromium-browser`, or set `CHROMIUM_BIN` to its executable path. The test
 uses an isolated temporary browser profile and skips when Chromium is absent.
+The temporary profile disables background networking and uses its own password
+store instead of the operating system's keychain.
 It checks live values, page-state retention, language changes, event listeners
 and reference release on unmount. The page reports completion to a local HTTP
 test server. Chromium startup has a separate deadline from the page's checks.
 The driver waits for subscriptions before emitting transient events. A rendered
 view alone does not mean that React's passive subscription effect has finished.
 Its browser execution is separate from Node's V8 coverage totals.
+
+Linux CI starts a private D-Bus session for the JavaScript suite. For a headless
+Linux checkout, install `dbus-daemon` and run `dbus-run-session -- npm test` to use
+the same setup. The session ends with the test command, as described in the
+[dbus-run-session manual](https://dbus.freedesktop.org/doc/dbus-run-session.1.html).
+These tools are test prerequisites, not Axi runtime dependencies.
 
 Client startup checks cover an unavailable server, the initial script-watch
 snapshot and static clients that reconnect without replacing bundled scripts.
