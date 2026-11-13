@@ -623,7 +623,7 @@ it.each([
 	["ordinary".repeat(8), "ordinary".repeat(5)],
 	["call?one|item#two", "call_one_item_two"],
 	["call?one|", "call_one"],
-])("normalizes a foreign tool ID and preserves its result association", async (id, expected) => {
+])("normalizes a foreign tool ID %s and preserves its result association", async (id, expected) => {
 	let body = "";
 	const history = fauxAssistantMessage([{ type: "toolCall", id, name: "lookup", arguments: {} }]);
 	await stream(

@@ -384,7 +384,8 @@
 						"packages/mcp/test/http-retry-boundaries.test.ts",
 						"packages/mcp/test/stdio-lifecycle.test.ts",
 						"packages/mcp/test/stdio-errors.test.ts",
-						"packages/mcp/test/memory-transport-lifecycle.test.ts"
+						"packages/mcp/test/memory-transport-lifecycle.test.ts",
+						"packages/mcp/test/response-stream-lifecycle.test.ts"
 					]
 				},
 				{
@@ -536,7 +537,8 @@
 						"packages/env/test/filesystem-boundaries.test.ts",
 						"packages/env/test/operation-lifecycle.test.ts",
 						"packages/env/test/environment-lifecycle.test.ts",
-						"packages/env/test/transfer-failures.test.ts"
+						"packages/env/test/transfer-failures.test.ts",
+						"packages/env/test/remote-acceptance-cli.test.ts"
 					]
 				},
 				{
@@ -646,14 +648,18 @@
 			"command": "npm run test:workers"
 		},
 		{
+			"name": "Disposable remote environment",
+			"command": "node packages/env/test/remote-acceptance.ts '<JSON command array>' /bin/sh"
+		},
+		{
 			"name": "Installed archives",
 			"command": "npm run verify"
 		}
 	],
 	"unverified": [
 		"Live provider/model operation and interactive OAuth acceptance require credentials and explicit runs.",
-		"Android device execution is not covered by the cross-compilation jobs. Native desktop CI does not establish every deployment environment.",
-		"SSH acceptance against an external server requires a configured host.",
+		"Android x64 emulator checks cover API 24 and 36. Arm64 device execution and other Android versions require separate acceptance runs.",
+		"Remote SSH acceptance is opt-in and requires a disposable host and trusted connection configuration.",
 		"The automated Unix terminal scenarios do not establish visual appearance in every terminal application.",
 		"Public declaration checks run through npm run check; V8 does not measure type-only contracts or child-process internals."
 	]

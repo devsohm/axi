@@ -208,9 +208,11 @@ jobs:
       - run: npm ci
       - run: npm run build
       - name: Run Env on an Android emulator
+        shell: bash
         env:
           API: ${{ matrix.api }}
         run: |
+          set -euo pipefail
           sdk="${ANDROID_SDK_ROOT:-$ANDROID_HOME}"
           image="system-images;android-$API;google_apis;x86_64"
           export ANDROID_USER_HOME="$RUNNER_TEMP/axi-android"
@@ -234,8 +236,16 @@ jobs:
           done
           "$adb" push packages/env/bin/axi-env-android-x64/axi-env /data/local/tmp/axi-env
           "$adb" shell chmod 700 /data/local/tmp/axi-env
-          command=$(node -e 'console.log(JSON.stringify([process.argv[1], "exec-out", "env", "TMPDIR=/data/local/tmp", "HOME=/data/local/tmp", "/data/local/tmp/axi-env"]))' "$adb")
+          command=$(node -e 'console.log(JSON.stringify([process.argv[1], "shell", "-T", "-e", "none", "env", "TMPDIR=/data/local/tmp", "HOME=/data/local/tmp", "/data/local/tmp/axi-env"]))' "$adb")
           node packages/env/test/remote-acceptance.ts "$command" /system/bin/sh | tee android-acceptance.json
+          node --input-type=module - <<'NODE'
+          import assert from 'node:assert/strict';
+          import { readFileSync } from 'node:fs';
+          const receipt = JSON.parse(readFileSync('android-acceptance.json', 'utf8'));
+          assert.equal(receipt.remote.os, 'android');
+          assert.equal(receipt.bytes, 1700000);
+          assert.equal(receipt.passed.length, 7);
+          NODE
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         if: always()
         with:

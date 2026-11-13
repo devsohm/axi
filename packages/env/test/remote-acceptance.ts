@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
+import { existsSync, realpathSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import { getOrThrow, type FileChange } from "@axi/durable/env";
 import { BACKGROUND_CONTEXT as context } from "@axi/objects/context";
@@ -117,7 +118,11 @@ export async function verifyRemoteEnvironment(connect: () => Promise<Connection>
 	}
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+if (
+	process.argv[1] &&
+	existsSync(process.argv[1]) &&
+	import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href
+) {
 	const command: unknown = JSON.parse(process.argv[2] ?? "null");
 	const shell = process.argv[3];
 	if (!Array.isArray(command) || command.length === 0 || !command.every((item) => typeof item === "string") || !shell)
