@@ -3,6 +3,36 @@ import { once } from "node:events";
 import { createConnection } from "node:net";
 import { OAuthCallbackServer } from "../src/oauth/index.ts";
 
+test("an IPv6 redirect host is bracketed independently of the loopback bind address", async () => {
+	const server = await OAuthCallbackServer.listen({ redirectHost: "::1" });
+	try {
+		const advertised = new URL(server.redirectUrl);
+		expect(advertised.hostname).toBe("[::1]");
+		const received = server.waitForCallback("ipv6");
+		advertised.hostname = "127.0.0.1";
+		advertised.search = "state=ipv6&code=accepted";
+		const response = await fetch(advertised);
+		expect(response.status).toBe(200);
+		expect(await received).toEqual({ state: "ipv6", code: "accepted" });
+	} finally {
+		await server.close();
+	}
+});
+
+test("a browser denial without a description retains its error code and closing twice reports the closed server", async () => {
+	const server = await OAuthCallbackServer.listen();
+	try {
+		const denied = expect(server.waitForCallback("denied")).rejects.toThrow("access_denied");
+		const response = await fetch(server.redirectUrl + "?state=denied&error=access_denied");
+		expect(response.status).toBe(200);
+		expect(await response.text()).toContain("access_denied");
+		await denied;
+	} finally {
+		await server.close();
+	}
+	await expect(server.close()).rejects.toMatchObject({ code: "ERR_SERVER_NOT_RUNNING" });
+});
+
 test("closing a completed login also closes an unused browser connection", async () => {
 	const server = await OAuthCallbackServer.listen();
 	const url = new URL(server.redirectUrl);

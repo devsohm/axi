@@ -241,6 +241,52 @@ test("cancelling while waiting for a refresh lock returns before the lock is rel
 	gate.resolve();
 });
 
+test("cancellation as the refresh lock is acquired cannot read credentials or begin browser authorization", async () => {
+	const controller = new AbortController();
+	const state = store();
+	const read = vi.spyOn(state, "load");
+	state.withRefreshLock = async (fn) => {
+		controller.abort();
+		return fn();
+	};
+	const fetch = vi.fn<typeof globalThis.fetch>();
+	vi.stubGlobal("fetch", fetch);
+	await expect(
+		startMcpSignIn({
+			serverUrl: initial().serverUrl,
+			store: state,
+			clientName: "test",
+			settings: {},
+			redirectUrl: "http://localhost/login",
+			signal: controller.signal,
+		}),
+	).rejects.toBeInstanceOf(McpSignInCancelledError);
+	expect(read).not.toHaveBeenCalled();
+	expect(fetch).not.toHaveBeenCalled();
+});
+
+test("a first sign-in discovers authorization metadata and persists the browser state", async () => {
+	const state = store();
+	const fetch = vi.fn<typeof globalThis.fetch>(async () => Response.json(metadata));
+	vi.stubGlobal("fetch", fetch);
+	const result = await startMcpSignIn({
+		serverUrl: initial().serverUrl,
+		store: state,
+		clientName: "test",
+		settings: {
+			clientId: "configured",
+			authServerMetadataUrl: new URL("https://issuer.invalid/metadata"),
+		},
+		redirectUrl: "http://localhost/login",
+	});
+	if (result.kind !== "redirect") throw new Error("Missing browser step");
+	expect(new URL(result.authorizationUrl).origin).toBe(metadata.issuer);
+	expect(new URL(result.authorizationUrl).searchParams.get("client_id")).toBe("configured");
+	expect((await state.load())?.oauthState).toBe(result.state);
+	expect((await state.load())?.codeVerifier).toEqual(expect.any(String));
+	expect(fetch.mock.calls.map(([url]) => String(url))).toContain("https://issuer.invalid/metadata");
+});
+
 test("the loopback callback wins over a pending manual prompt and cancels that prompt", async () => {
 	const listening = await listenForLoopbackSignIn({ serverUrl: initial().serverUrl, store: store(), settings: {} });
 	let promptSignal: AbortSignal | undefined;

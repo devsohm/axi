@@ -59,6 +59,7 @@
 					"tests": [
 						"packages/objects/test/route-controls.test.ts",
 						"packages/objects/test/host-contract-boundaries.test.ts",
+						"packages/objects/test/host-plugin-boundaries.test.ts",
 						"packages/objects/test/factory-failures.test.ts",
 						"packages/objects/test/registry-retry.test.ts",
 						"packages/objects/test/websocket-link.test.ts",
@@ -461,6 +462,7 @@
 						"packages/durable/test/harness-state.test.ts",
 						"packages/durable/test/recovery-settings.test.ts",
 						"packages/durable/test/compaction-lifecycle.test.ts",
+						"packages/durable/test/compaction-cut-boundaries.test.ts",
 						"packages/durable/test/generation-lifecycle.test.ts",
 						"packages/durable/test/streamed-state.test.ts",
 						"packages/durable/test/tool-search.test.ts",

@@ -24,6 +24,42 @@ const render = (markdown: Markdown, width = 60) =>
 	markdown.render(width).map((line) => stripTerminalSequences(line).trimEnd());
 afterEach(resetCapabilitiesCache);
 
+test("streamed math preserves incomplete delimiters and renders only after its closing delimiter arrives", () => {
+	for (const [open, close] of [
+		["\\(", "\\)"],
+		["\\[", "\\]"],
+		["$$", "$$"],
+	]) {
+		const markdown = new Markdown(`${open}x^2`, 0, 0, theme);
+		expect(render(markdown)).toEqual([`${open}x^2`]);
+		markdown.setText(`${open}x^2${close}`);
+		expect(render(markdown)).toEqual(["x²"]);
+		markdown.setText(`${open}x^2`);
+		expect(render(markdown)).toEqual([`${open}x^2`]);
+	}
+	for (const source of ["Cost $ 20", "$NAME$variable", "$x $", "$x$7", "$", "$$"])
+		expect(render(new Markdown(source, 0, 0, theme)).join("\n")).toBe(source);
+	expect(render(new Markdown("\\(\\)", 0, 0, theme))).toEqual(["()"]);
+	expect(render(new Markdown("Equation \\(x^2\\) ends here", 0, 0, theme))).toEqual(["Equation x² ends here"]);
+});
+
+test("unequal table columns distribute spare cells and retain every row across narrow resizes", () => {
+	const markdown = new Markdown(
+		"| Key | Long name |\n| --- | --- |\n| a | several words here |\n| b | end |",
+		0,
+		0,
+		theme,
+	);
+	for (const width of [13, 14, 17, 19, 24, 40]) {
+		const lines = render(markdown, width);
+		for (const line of lines) expect(visibleWidth(line)).toBeLessThanOrEqual(width);
+		const cells = lines.filter((line) => line.startsWith("│")).map((line) => line.split("│").slice(1, -1));
+		expect(cells.map((row) => row[0].replaceAll(" ", "")).join("")).toBe("Keyab");
+		expect(cells.map((row) => row[1].replaceAll(" ", "")).join("")).toBe("Longnameseveralwordshereend");
+		expect(lines.filter((line) => line.startsWith("├"))).toHaveLength(2);
+	}
+});
+
 test("image rows keep following hard breaks, captions and list spacing outside the image escape", () => {
 	setCapabilities({ images: "kitty", trueColor: true, hyperlinks: false });
 	const image = "\x1b_Ga=T,f=100,c=2,r=2;AQ==\x1b\\";

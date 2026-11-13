@@ -1,6 +1,6 @@
 import { BACKGROUND_CONTEXT as context, withCancel } from "@axi/objects/context";
 import { createModels } from "@axi/ai";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
 	createRegistry,
 	createSession,
@@ -22,6 +22,26 @@ const Counter = defineDoc({
 const deferred = () => Promise.withResolvers<void>();
 
 describe("Session lifecycle", () => {
+	it("retiring an absent document twice is a no-op and does not prevent its later creation", async () => {
+		const storage = new MemoryStorage();
+		const writes = vi.spyOn(storage, "commit");
+		const session = createSession(storage);
+		try {
+			await session.commit(async (tx) => {
+				await tx.retireDoc(Counter);
+				await tx.retireDoc(Counter);
+			}, context);
+			expect(await session.snapshot(Counter, context)).toBeUndefined();
+			expect(writes).not.toHaveBeenCalled();
+			await session.commit(async (tx) => {
+				(await tx.doc(Counter)).count = 7;
+			}, context);
+			expect(await session.snapshot(Counter, context)).toEqual({ count: 7 });
+			expect(writes).toHaveBeenCalledOnce();
+		} finally {
+			await session.close(context);
+		}
+	});
 	it("captures persistence defaults and commit options once and rejects a null window", async () => {
 		let defaults = 0;
 		let options = 0;

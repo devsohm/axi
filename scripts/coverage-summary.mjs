@@ -65,7 +65,12 @@ if (mode === "--gaps") {
 			if (count === 0) add(`function ${entry.fnMap[id].name}`, entry.fnMap[id].decl);
 		for (const [id, counts] of Object.entries(entry.b))
 			for (const [index, count] of counts.entries())
-				if (count === 0) add("branch", entry.branchMap[id].locations[index], entry.branchMap[id].loc);
+				if (count <= 0)
+					add(
+						count < 0 ? "branch (invalid negative counter)" : "branch",
+						entry.branchMap[id].locations[index],
+						entry.branchMap[id].loc,
+					);
 	}
 	const rows = [...gaps.values()].sort(
 		(a, b) => a.file.localeCompare(b.file) || a.line - b.line || a.kind.localeCompare(b.kind),

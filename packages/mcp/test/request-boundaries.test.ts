@@ -46,6 +46,46 @@ test("a request with progress and no arguments adds only its progress metadata",
 	}
 });
 
+test("progress metadata preserves caller fields and replaces a caller-supplied progress token", async () => {
+	const { client, received } = await connected(() => "ready");
+	const metadata = { trace: "owned-trace", progressToken: "caller-token" };
+	try {
+		expect(await client.request("work", { _meta: metadata, value: 42 }, { onProgress() {} })).toBe("ready");
+		expect(received.at(-1)).toMatchObject({
+			method: "work",
+			params: { _meta: { trace: "owned-trace", progressToken: 2 }, value: 42 },
+		});
+		expect(metadata).toEqual({ trace: "owned-trace", progressToken: "caller-token" });
+	} finally {
+		await client.close();
+	}
+});
+
+test("a late transport write failure cannot cancel an already received reply", async () => {
+	const { client, transport } = await connected(() => "ready");
+	const written = Promise.withResolvers<void>();
+	const errors: Error[] = [];
+	client.onError((error) => errors.push(error));
+	const send = transport.send.bind(transport);
+	const intercepted = vi.spyOn(transport, "send").mockImplementation((message) => {
+		if ("method" in message && message.method === "raced") {
+			void send(message);
+			return written.promise;
+		}
+		return send(message);
+	});
+	try {
+		expect(await client.request("raced")).toBe("ready");
+		written.reject(new Error("Write failed after the reply"));
+		await Promise.resolve();
+		expect(await client.request("next")).toBe("ready");
+		expect(errors).toEqual([]);
+	} finally {
+		intercepted.mockRestore();
+		await client.close();
+	}
+});
+
 test("a failed cancellation notification is reported without closing the client", async () => {
 	const { client, transport } = await connected((method) => (method === "next" ? "ready" : undefined));
 	const failure = new Error("Cancellation delivery failed");

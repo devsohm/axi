@@ -59,6 +59,10 @@ branch locations. The HTML report displays these locations beside the source.
 functions and branches with their source lines. Run coverage first to refresh
 the measurements.
 
+The V8 converter can produce invalid negative branch counters. The gap command
+labels them and leaves them uncredited. Cross-check these locations with another
+coverage provider before treating them as missing tests.
+
 `coverage:capture` records a passing local report with its commit, runtime,
 instrumentation versions and SHA-256 hash of every measured source module. It
 also writes portable source paths. Run it after `test:coverage`; `verify` runs

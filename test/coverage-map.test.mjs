@@ -16,6 +16,7 @@ for (const [args, expected] of [
 	[["--gaps", "main.ts", "2"], "function submit"],
 	[["--gaps", "absent", "2"], "0 uncovered locations"],
 	[["--gaps", "main.ts", "50"], "<unmapped>"],
+	[["--gaps", "main.ts", "51"], "invalid negative counter"],
 	[["--gaps", "main.ts", "0"], "Coverage gap limit must be a positive integer"],
 ])
 	test(`coverage gap command handles ${args.join(" ")}`, async () => {
@@ -45,9 +46,10 @@ for (const [args, expected] of [
 						statementMap: { 0: location(3) },
 						f: { 0: 0 },
 						fnMap: { 0: { name: "submit", decl: location(1) } },
-						b: { 0: [0, 1], ...(args.at(-1) === "50" ? { 1: [0], 2: [0] } : {}) },
+						b: { 0: [0, 1], 3: [2, -1], ...(args.at(-1) === "50" ? { 1: [0], 2: [0] } : {}) },
 						branchMap: {
 							0: { locations: [location(2), location(3)] },
+							3: { locations: [location(2), location(3)] },
 							...(args.at(-1) === "50"
 								? { 1: { locations: [location(0)], loc: location(3) }, 2: { locations: [location(0)] } }
 								: {}),

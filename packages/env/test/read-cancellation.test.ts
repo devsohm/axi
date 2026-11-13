@@ -6,6 +6,70 @@ import { getOrThrow } from "@axi/durable/env";
 import { expect, test } from "vitest";
 import { Connection, localDaemon, RemoteExecutionEnv } from "../src/index.ts";
 
+test("a cancelled text read leaves its buffered next line available for a later read", async () => {
+	const cwd = await mkdtemp(join(tmpdir(), "axi-buffered-cancel-"));
+	const connection = new Connection({ command: [localDaemon()] });
+	const env = new RemoteExecutionEnv({ connection, id: "buffered-cancel", cwd });
+	try {
+		await writeFile(join(cwd, "data"), "one\ntwo\n");
+		const reader = getOrThrow(await env.openTextLineReader("data", context));
+		try {
+			expect(getOrThrow(await reader.readLine(context))).toEqual({ text: "one", terminated: true });
+			expect(await reader.readLine({ ...context, abortSignal: AbortSignal.abort() })).toMatchObject({
+				ok: false,
+				error: { code: "aborted" },
+			});
+			expect(getOrThrow(await reader.readLine(context))).toEqual({ text: "two", terminated: true });
+		} finally {
+			await reader.close(context);
+		}
+	} finally {
+		connection.close();
+		await rm(cwd, { recursive: true, force: true });
+	}
+});
+
+test.each(["rename-resolution", "directory-response"] as const)(
+	"cancellation at %s prevents a file mutation or a partial listing",
+	async (boundary) => {
+		const cwd = await mkdtemp(join(tmpdir(), "axi-file-boundary-cancel-"));
+		const connection = new Connection({ command: [localDaemon()] });
+		const env = new RemoteExecutionEnv({ connection, id: "file-boundary-cancel", cwd });
+		const controller = new AbortController();
+		const info = connection.info.bind(connection),
+			request = connection.request.bind(connection);
+		let resolutions = 0;
+		try {
+			await writeFile(join(cwd, "original"), "saved");
+			await connection.info();
+			connection.info = async (signal) => {
+				const value = await info(signal);
+				if (boundary === "rename-resolution" && ++resolutions === 2) controller.abort();
+				return value;
+			};
+			connection.request = async (...args) => {
+				const value = await request(...args);
+				if (boundary === "directory-response" && args[0] === "readdir") controller.abort();
+				return value;
+			};
+			const call = { ...context, abortSignal: controller.signal };
+			expect(
+				boundary === "rename-resolution"
+					? await env.renameFile("original", "renamed", call)
+					: await env.listDir(".", call),
+			).toMatchObject({ ok: false, error: { code: "aborted" } });
+			connection.info = info;
+			connection.request = request;
+			expect(getOrThrow(await env.readTextFile("original", context))).toBe("saved");
+		} finally {
+			connection.info = info;
+			connection.request = request;
+			connection.close();
+			await rm(cwd, { recursive: true, force: true });
+		}
+	},
+);
+
 test.each(["binary", "text", "directory"] as const)(
 	"cancellation after a %s response does not expose its data",
 	async (kind) => {

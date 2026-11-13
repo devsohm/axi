@@ -68,9 +68,10 @@ process.stdin.on("data", (chunk: Buffer) => {
 			process.stdout.write(payload);
 			send(2, id, { accepted: true });
 		} else if (json.op === "remote-error") send(3, id, json.error);
-		else if (json.op === "watch" && process.argv.includes("--watch-denied"))
+		else if (json.op === "watch" && process.argv.includes("--watch-denied")) {
+			if (process.argv.includes("--watch-ready")) send(4, id, { kind: "ready", mode: "native" });
 			send(3, id, { code: "EACCES", message: "watch denied" });
-		else if (json.op === "watch" && watchEventsAt >= 0) {
+		} else if (json.op === "watch" && watchEventsAt >= 0) {
 			for (const event of JSON.parse(process.argv[watchEventsAt + 1]!)) send(4, id, event);
 			send(2, id, {});
 		} else if (json.op === "watch" && process.argv.includes("--watch-hold"))

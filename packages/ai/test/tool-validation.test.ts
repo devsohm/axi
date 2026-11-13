@@ -403,6 +403,30 @@ test("optional prototype-named fields are absent unless the arguments own them",
 test("constraint diagnostics identify the field, format and required dependency", () => {
 	const cases: Array<[Tool["parameters"], ToolCall["arguments"], string]> = [
 		[
+			Type.Object({ code: Type.String({ pattern: "^[A-Z]{2}$" }) }),
+			{ code: "invalid" },
+			"code: expected to match ^[A-Z]{2}$",
+		],
+		[Type.Object({ amount: Type.Number({ multipleOf: 3 }) }), { amount: 4 }, "amount: expected a multiple of 3"],
+		[
+			Type.Object({ names: Type.Array(Type.String(), { uniqueItems: true }) }),
+			{ names: ["same", "same"] },
+			"names: expected unique items",
+		],
+		// @ts-expect-error JavaScript callers can supply non-JSON byte values.
+		[Type.Object({ count: Type.Integer() }), { count: new Uint8Array([1, 2]) }, "count: expected integer, got bytes"],
+		...([1, 2] as const).map(
+			(max) =>
+				[
+					{
+						type: "object",
+						properties: { values: { type: "array", contains: { type: "number" }, minContains: 0, maxContains: max } },
+					},
+					{ values: [1, 2, 3] },
+					`values: expected at most ${max} matching ${max === 1 ? "item" : "items"}`,
+				] satisfies [Tool["parameters"], ToolCall["arguments"], string],
+		),
+		[
 			Type.Object({ contact: Type.String({ format: "email" }) }),
 			{ contact: "invalid" },
 			"contact: expected format email",

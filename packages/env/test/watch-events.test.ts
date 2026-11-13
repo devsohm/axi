@@ -14,6 +14,7 @@ test("watcher delivers polling changes and overflow in order and isolates a fail
 			"--watch-events",
 			JSON.stringify([
 				{ kind: "ready", mode: "native" },
+				{ kind: "heartbeat" },
 				{ kind: "change", paths: ["/work/first"] },
 				{ kind: "change", mode: "polling", overflow: true },
 				{ kind: "change", paths: ["/work/last"] },
@@ -86,6 +87,28 @@ test("startup rejection reaches the caller without a change notification", async
 		).rejects.toMatchObject({ code: "EACCES", message: "watch denied" });
 		expect(changes).toEqual([]);
 	} finally {
+		connection.close();
+	}
+});
+
+test("a request failure after readiness reports one terminal file error without reconnecting", async () => {
+	let starts = 0;
+	const connection = new Connection({
+		command: async () => {
+			starts++;
+			return [...peer, "--watch-ready", "--watch-denied"];
+		},
+	});
+	const changes: FileChange[] = [];
+	const watcher = await RemoteWatcher.open(connection, [{ path: "/private" }], (change) => changes.push(change));
+	try {
+		await vi.waitFor(() => expect(changes).toHaveLength(1));
+		expect(changes[0]).toMatchObject({ kind: "failed", error: { code: "permission_denied", message: "watch denied" } });
+		await watcher.stop(context);
+		expect(starts).toBe(1);
+		expect(changes).toHaveLength(1);
+	} finally {
+		await watcher.stop(context);
 		connection.close();
 	}
 });
