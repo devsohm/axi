@@ -1,5 +1,7 @@
 import { expect, test } from "vitest";
 import { toLlmContent } from "../src/index.ts";
+import { normalizeMcpInputSchema } from "../src/input-schema.ts";
+import { OAuthError, OAuthIssuerMismatchError } from "../src/oauth/errors.ts";
 import {
 	discoverAuthorizationServerMetadata,
 	discoverOAuthServerInfo,
@@ -7,6 +9,22 @@ import {
 	parseWwwAuthenticate,
 	selectResource,
 } from "../src/oauth/discovery.ts";
+
+test("normalization retains explicitly declared input properties", () => {
+	const schema = { type: "object", properties: { name: { type: "string" } }, required: ["name"] };
+	expect(normalizeMcpInputSchema(schema)).toEqual(schema);
+	expect(schema).toEqual({ type: "object", properties: { name: { type: "string" } }, required: ["name"] });
+});
+
+test("OAuth errors retain their code when no description or expected issuer is available", () => {
+	const failure = new OAuthError("access_denied", "");
+	expect(failure.message).toBe("access_denied");
+	expect(failure.code).toBe("access_denied");
+	const mismatch = new OAuthIssuerMismatchError(undefined, "https://issuer.example");
+	expect(mismatch.message).toContain("expected none");
+	expect(mismatch.expected).toBeUndefined();
+	expect(mismatch.received).toBe("https://issuer.example");
+});
 
 test("tool content converts each supported block without forwarding private metadata", () => {
 	expect(

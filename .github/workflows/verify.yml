@@ -4,6 +4,11 @@ on:
   push:
   pull_request:
   workflow_dispatch:
+    inputs:
+      acceptance-script:
+        description: Additional Windows acceptance script, run only on disposable CI machines
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -76,6 +81,27 @@ jobs:
         if: runner.os != 'Linux'
         run: npm run test:coverage
       - run: npm run coverage:capture
+      - name: Run additional Windows acceptance checks
+        if: runner.os == 'Windows' && inputs.acceptance-script != ''
+        shell: bash
+        env:
+          AXI_ACCEPTANCE_SCRIPT: ${{ inputs.acceptance-script }}
+        run: |
+          node --input-type=module <<'NODE'
+          import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+          import { join } from 'node:path';
+          import { spawnSync } from 'node:child_process';
+          const directory = mkdtempSync(join(process.env.RUNNER_TEMP, 'axi-acceptance-'));
+          try {
+            const script = join(directory, 'run.mjs');
+            writeFileSync(script, process.env.AXI_ACCEPTANCE_SCRIPT);
+            const result = spawnSync(process.execPath, [script], { stdio: 'inherit' });
+            if (result.error) throw result.error;
+            process.exitCode = result.status ?? 1;
+          } finally {
+            rmSync(directory, { recursive: true, force: true });
+          }
+          NODE
       - name: Inspect the failed browser environment
         if: failure() && runner.os == 'Linux'
         run: |
@@ -162,6 +188,57 @@ jobs:
           path: packages/env/bin
           if-no-files-found: error
 
+  android-runtime:
+    needs: android
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        api: [24, 36]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: 26.10.0
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with:
+          name: native-android-x64
+          path: packages/env/bin
+      - run: npm ci
+      - run: npm run build
+      - name: Run Env on an Android emulator
+        env:
+          API: ${{ matrix.api }}
+        run: |
+          sdk="${ANDROID_SDK_ROOT:-$ANDROID_HOME}"
+          image="system-images;android-$API;google_apis;x86_64"
+          "$sdk/cmdline-tools/latest/bin/sdkmanager" --install platform-tools emulator "$image"
+          echo no | "$sdk/cmdline-tools/latest/bin/avdmanager" create avd --force --name axi-test --package "$image"
+          sudo chmod a+rw /dev/kvm
+          "$sdk/emulator/emulator" -avd axi-test -no-window -no-audio -no-boot-anim -no-snapshot -gpu swiftshader_indirect -accel on -memory 2048 -cores 2 > android-emulator.log 2>&1 &
+          emulator=$!
+          trap '"$sdk/platform-tools/adb" emu kill || true; kill "$emulator" 2>/dev/null || true' EXIT
+          adb="$sdk/platform-tools/adb"
+          timeout 120 "$adb" wait-for-device
+          deadline=$((SECONDS + 300))
+          until test "$("$adb" shell getprop sys.boot_completed | tr -d '\r')" = 1; do
+            if ! kill -0 "$emulator" 2>/dev/null || test "$SECONDS" -ge "$deadline"; then cat android-emulator.log; exit 1; fi
+            sleep 2
+          done
+          "$adb" push packages/env/bin/axi-env-android-x64/axi-env /data/local/tmp/axi-env
+          "$adb" shell chmod 700 /data/local/tmp/axi-env
+          command=$(node -e 'console.log(JSON.stringify([process.argv[1], "exec-out", "env", "TMPDIR=/data/local/tmp", "HOME=/data/local/tmp", "/data/local/tmp/axi-env"]))' "$adb")
+          node packages/env/test/remote-acceptance.ts "$command" /system/bin/sh | tee android-acceptance.json
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        if: always()
+        with:
+          name: android-runtime-${{ matrix.api }}
+          path: |
+            android-emulator.log
+            android-acceptance.json
+          if-no-files-found: error
+
   compatibility:
     needs: native-linux
     runs-on: ubuntu-24.04
@@ -202,7 +279,7 @@ jobs:
       - run: npm run verify:packages -- release/package
 
   archive:
-    needs: [native-linux, native, android, compatibility]
+    needs: [native-linux, native, android, android-runtime, compatibility]
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:

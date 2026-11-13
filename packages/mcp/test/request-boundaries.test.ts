@@ -1,5 +1,5 @@
 import { expect, test, vi } from "vitest";
-import { McpClient, LATEST_PROTOCOL_VERSION, type JsonRpcMessage } from "../src/index.ts";
+import { McpClient, LATEST_PROTOCOL_VERSION, toLlmContent, type JsonRpcMessage } from "../src/index.ts";
 import { createInMemoryTransportPair } from "../src/testing/index.ts";
 
 async function connected(respond: (method: string) => unknown) {
@@ -24,6 +24,49 @@ async function connected(respond: (method: string) => unknown) {
 	await client.connect(pair.client);
 	return { client, server: pair.server, transport: pair.client, received };
 }
+
+test("unrecognized content from a tool has a readable fallback without forwarding its payload", async () => {
+	const { client } = await connected(() => ({ content: [{ type: "future_block", payload: "private payload" }] }));
+	try {
+		expect(toLlmContent(await client.callTool("future"))).toEqual([
+			{ type: "text", text: "[unsupported MCP content future_block]" },
+		]);
+	} finally {
+		await client.close();
+	}
+});
+
+test("a request with progress and no arguments adds only its progress metadata", async () => {
+	const { client, received } = await connected(() => "ready");
+	try {
+		expect(await client.request("work", undefined, { onProgress() {} })).toBe("ready");
+		expect(received).toContainEqual({ jsonrpc: "2.0", id: 2, method: "work", params: { _meta: { progressToken: 2 } } });
+	} finally {
+		await client.close();
+	}
+});
+
+test("a failed cancellation notification is reported without closing the client", async () => {
+	const { client, transport } = await connected((method) => (method === "next" ? "ready" : undefined));
+	const failure = new Error("Cancellation delivery failed");
+	const errors: Error[] = [];
+	client.onError((error) => errors.push(error));
+	const send = transport.send.bind(transport);
+	vi.spyOn(transport, "send").mockImplementation((message) => {
+		if ("method" in message && message.method === "notifications/cancelled") return Promise.reject(failure);
+		return send(message);
+	});
+	try {
+		const controller = new AbortController();
+		const pending = client.request("wait", undefined, { signal: controller.signal });
+		controller.abort();
+		await expect(pending).rejects.toMatchObject({ name: "AbortError" });
+		await vi.waitFor(() => expect(errors).toEqual([failure]));
+		expect(await client.request("next")).toBe("ready");
+	} finally {
+		await client.close();
+	}
+});
 
 test("resource and tool helpers validate responses at the transport boundary", async () => {
 	const responses: Record<string, unknown> = {

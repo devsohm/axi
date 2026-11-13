@@ -267,10 +267,37 @@ memory link, including mapping failures, refusal and subscription release.
 
 The native workflow runs on Linux, macOS and Windows for x64 and arm64. Each job
 builds the Env daemon and terminal helper, checks types, runs owned tests and
-installs the package archives. Android jobs cross-compile the Env daemon; they
-do not run device tests. Node 22 and 24 compatibility jobs reuse the Linux x64
+installs the package archives. Android jobs cross-compile the Env daemon for
+x64 and arm64. Separate x64 emulator jobs run the remote environment acceptance
+driver on API 24 and 36. These jobs do not establish runtime acceptance on an
+arm64 device. Node 22 and 24 compatibility jobs reuse the Linux x64
 binaries once that target passes. Other native targets continue independently.
 The combined archive waits for every target and both compatibility jobs.
+
+`packages/env/test/remote-acceptance.ts` checks an explicitly supplied disposable
+remote machine. It verifies a 1.7 MB binary transfer, UTF-8 commands, ordered
+process pipes, timeout, filesystem watching, PTY input and dimensions, and reads
+after a fresh connection. It removes its temporary remote directory and closes
+the connection. It does not read local credentials or choose a remote host.
+
+For an already deployed daemon, supply the command that starts its binary over
+an unmodified byte stream, followed by the remote shell path:
+
+```sh
+node packages/env/test/remote-acceptance.ts '["ssh","-T","test-machine","/path/to/axi-env"]' /bin/sh
+```
+
+For deployment checks, import `verifyRemoteEnvironment` and pass a factory that
+returns the connection from `connectSsh`. Check the deployment path separately
+with `deployDaemon`. Keep test host keys and credentials outside the repository.
+
+A manual workflow dispatch can supply an additional Windows acceptance script.
+The workflow writes that script into the runner's temporary directory, executes
+it after the native components and owned suite pass, and then removes it. This
+input requires permission to dispatch repository workflows. It is not evaluated
+for push or pull-request runs. Write its receipts into `coverage/acceptance` to
+include them in the Windows coverage artifact. The script does not ship in the
+toolkit archives.
 
 The Objects terminal launcher's sandbox scenarios require Node 26.5.1 or later.
 Node 22 and 24 still run the launcher's protocol and unsupported-runtime checks.
