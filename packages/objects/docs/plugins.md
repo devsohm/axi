@@ -36,6 +36,12 @@ Plugin scripts have no `import.meta`, `__dirname`, `__filename`, literal dynamic
 
 `step(name, host)` creates a local rollout step. A step has a name, its facet kinds, and a `reload` method returning one result per host. Each result contains a reload report, a clean-stop marker, or an error. `rollout(steps, built, context)` runs steps in order and stops at a rejected step. A plugin or host failure alone does not stop it. Dirty marks clear only for plugins applied to every relevant host, with every built kind shipped and no newer edit. A cloned build carries no local mark snapshot and clears no marks.
 
+Across hosts, the application owns deployment order. An updated consumer can
+request a contract that its provider does not yet serve. Reload has no waiting
+period that makes these changes atomic across hosts. When changing a contract,
+first deploy a provider that supports both versions. Update its consumers in a
+separate deployment.
+
 `installDependencies(name, context)` runs npm in that plugin's directory with production dependencies, without lifecycle scripts. `install.npmCommand` can replace the command. A successful install clears its install mark and marks the plugin dirty. Cancellation stops the command.
 
 `close()` closes filesystem watchers. The application owns each host and closes those hosts separately.
