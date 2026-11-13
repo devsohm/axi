@@ -23,7 +23,7 @@ import {
 
 it("rejects a reader that returns a byte-order mark for an empty range", async () => {
 	const cwd = await mkdtemp(join(tmpdir(), "axi-reader-check-"));
-	const env = new NodeExecutionEnv({ cwd, shellEnv: { MSYS: "winsymlinks:nativestrict" }, watch: { pollIntervalMs: 50 } });
+	const env = new NodeExecutionEnv({ cwd });
 	const readers: BinaryReader[] = [];
 	const open = env.openBinaryReader.bind(env);
 	vi.spyOn(env, "openBinaryReader").mockImplementation(async (...args) => {
@@ -192,7 +192,7 @@ registerStorageConformance({ describe, expect, it }, "storage driver checks", as
 });
 registerEnvConformance({ describe, expect, it }, "environment driver checks", async (use) => {
 	const cwd = await mkdtemp(join(tmpdir(), "axi-driver-"));
-	const env = new NodeExecutionEnv({ cwd });
+	const env = new NodeExecutionEnv({ cwd, shellEnv: { MSYS: "winsymlinks:nativestrict" }, watch: { pollIntervalMs: 50 } });
 	try {
 		await use(env);
 	} finally {

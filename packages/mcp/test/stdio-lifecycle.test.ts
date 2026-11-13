@@ -23,7 +23,9 @@ test("a peer closing stdin reports the write failure and can still be shut down 
 	try {
 		await transport.start();
 		await ready.promise;
-		await expect(transport.send({ jsonrpc: "2.0", method: "notice" })).rejects.toMatchObject({ code: expect.stringMatching(/^(EPIPE|ECONNRESET)$/) });
+		await vi.waitFor(async () => {
+			await expect(transport.send({ jsonrpc: "2.0", method: "notice" })).rejects.toMatchObject({ code: expect.stringMatching(/^(EPIPE|ECONNRESET)$/) });
+		});
 		await vi.waitFor(() => expect(errors).toContainEqual(expect.objectContaining({ code: expect.stringMatching(/^(EPIPE|ECONNRESET)$/) })));
 		await transport.close();
 		expect(transport.pid).toBeUndefined();

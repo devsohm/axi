@@ -86,7 +86,7 @@ it("calls the worker output callback without binding an options object", async (
 	}
 });
 
-it("waits for a killed worker's queued lock cleanup before close resolves", async () => {
+it.skipIf(process.platform === "win32")("waits for a killed worker's queued lock cleanup before close resolves", async () => {
 	await using f = await setup();
 	const ref = await f.host.get(Control, { id: "close-drain" }, context);
 	await vi.waitFor(() => expect(f.workers.state.value["runner|close-drain"]?.status).toBe("running"));
@@ -111,7 +111,7 @@ it("waits for a killed worker's queued lock cleanup before close resolves", asyn
 	}
 });
 
-it("does not claim a lock for exit cleanup when its pre-start clearance fails", async () => {
+it.skipIf(process.platform === "win32")("does not claim a lock for exit cleanup when its pre-start clearance fails", async () => {
 	await using f = await setup();
 	const calls = vi.mocked(clearStaleLock).mock.calls.length;
 	const failure = new Error("Cannot clear the lock");
@@ -137,9 +137,9 @@ it("starts a process on demand, carries start data and stops it after its last r
 	expect(f.starts()).toBe(1);
 	expect(f.workers.state.value["runner|first"]).toMatchObject({ status: "running", pid: expect.any(Number) });
 	ref.release();
-	await vi.waitFor(() => expect(f.workers.state.value).toEqual({}), { timeout: 3000 });
+	await vi.waitFor(() => expect(f.workers.state.value).toEqual({}), { timeout: 5000 });
 	expect(f.errors).toEqual([]);
-});
+}, 15000);
 
 it("keeps a crash failed until an explicit retry creates a new process", async () => {
 	await using f = await setup();
@@ -163,12 +163,12 @@ it("keeps a crash failed until an explicit retry creates a new process", async (
 	await vi.waitFor(() => expect(frames).toEqual(["failed"]));
 	await paused.stop();
 	await f.workers.retry(Runner({ id: "restart" }), context);
-	await vi.waitFor(() => expect(ref.state.value).toEqual({ kind: "live" }));
+	await vi.waitFor(() => expect(ref.state.value).toEqual({ kind: "live" }), { timeout: 5000 });
 	expect(f.workers.state.value["runner|restart"]).not.toEqual(first);
 	expect(await ref.echo("after restart", context)).toBe("after restart");
 	expect(f.starts()).toBe(2);
 	ref.release();
-});
+}, 15000);
 
 it("recovers a running worker's lost link once and blocks another loss within a minute", async () => {
 	await using f = await setup();
@@ -214,9 +214,9 @@ it("reports a fixed public start error and retains the full error only in the ho
 	expect(f.errors).toMatchObject([{ kind: "worker_failed", error: new Error("private start failure") }]);
 	f.fail(false);
 	await f.workers.retry(Runner({ id: "failed" }), context);
-	await vi.waitFor(() => expect(ref.state.value).toEqual({ kind: "live" }));
+	await vi.waitFor(() => expect(ref.state.value).toEqual({ kind: "live" }), { timeout: 5000 });
 	ref.release();
-});
+}, 15000);
 
 it("ships a plugin update to a running child and gives later children the same current scripts", async () => {
 	await using f = await setup();

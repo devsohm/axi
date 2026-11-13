@@ -68,7 +68,10 @@ return {saved: 2};`;
 		expect((await readdir(dirname(path))).sort()).toEqual(truncated ? ["image-1.png", "output.txt"] : ["image-1.png"]);
 		if (truncated) {
 			const fullOutputPath = join(dirname(path), "output.txt");
-			expect(message.details).toMatchObject({ fullOutputPath });
+			const details = message.details;
+			if (!details || typeof details !== "object" || !("fullOutputPath" in details) || typeof details.fullOutputPath !== "string")
+				throw new Error("Missing full output path");
+			expect(resolve(details.fullOutputPath)).toBe(fullOutputPath);
 			expect(text).toContain("truncated output");
 			const full = await readFile(fullOutputPath, "utf8");
 			expect(full).toContain("complete payload " + "abcdef".repeat(200));

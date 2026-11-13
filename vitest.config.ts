@@ -5,6 +5,10 @@ import { defineConfig } from "vitest/config";
 import manifest from "./package.json" with { type: "json" };
 
 const temporary = realpathSync(tmpdir());
+if (process.platform === "win32") {
+	process.env.TMP = temporary;
+	process.env.TEMP = temporary;
+}
 
 export default defineConfig({
 	plugins: [

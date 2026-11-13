@@ -14,6 +14,8 @@ Key matching accepts legacy terminal sequences, Kitty keyboard reports and xterm
 
 The keybinding manager resolves application overrides against declared defaults. Rebinding one action does not remove another action with the same key. Conflicts report keys explicitly assigned to multiple actions by the user. Applications can extend the keybinding interface through declaration merging.
 
+Input listeners receive raw events before the focused component. This includes key-release reports. A listener that toggles a control must check `isKeyRelease(data)` before matching its shortcut. The renderer filters releases before delivery to a component unless that component sets `wantsKeyRelease`. `matchesKey()` identifies the key binding; it does not discard release events.
+
 ## Process terminal
 
 Starting the process terminal enables raw input and bracketed paste, installs input and resize listeners, and queries keyboard protocol support. Input is framed before delivery. The terminal consumes its negotiation replies and forwards unrelated replies to the caller. Stopping removes listeners and restores the previous raw-mode setting. Draining temporarily suppresses input callbacks and waits for late input until an idle period or deadline.
