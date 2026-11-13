@@ -71,6 +71,9 @@ class Reader {
 	constructor(source: AsyncIterable<Uint8Array>) {
 		this.#iterator = source[Symbol.asyncIterator]();
 	}
+	async close(): Promise<void> {
+		await this.#iterator.return?.();
+	}
 	async take(size: number): Promise<Uint8Array> {
 		const parts: Uint8Array[] = [];
 		let length = 0;
@@ -103,36 +106,40 @@ function field(header: Uint8Array, start: number, size: number): string {
 }
 export async function* readTar(source: AsyncIterable<Uint8Array>): AsyncGenerator<TarRead> {
 	const input = new Reader(source);
-	for (;;) {
-		const header = await input.take(blockSize);
-		if (header.length !== blockSize) throw new Error("tar: the archive ends inside a header");
-		if (header.every((byte) => !byte)) return;
-		let checksum = 0;
-		for (let i = 0; i < header.length; i++) checksum += i >= 148 && i < 156 ? 32 : header[i]!;
-		if (parseInt(field(header, 148, 8).trim(), 8) !== checksum)
-			throw new Error("tar: a header's checksum does not hold");
-		const flag = String.fromCharCode(header[156]!);
-		if (!["0", "\0", "5"].includes(flag))
-			throw new Error(`tar: an entry of type ${JSON.stringify(flag)} is refused (files only)`);
-		const prefix = field(header, 345, 155),
-			path = ((prefix ? prefix + "/" : "") + field(header, 0, 100)).replace(/\/$/, "");
-		validPath(path);
-		const size = parseInt(field(header, 124, 12).trim() || "0", 8);
-		if (!Number.isSafeInteger(size) || size < 0) throw new Error(`tar: ${path} has no valid size`);
-		if (flag === "5") {
-			yield { kind: "directory", path };
-			continue;
-		}
-		let remaining = size;
-		const data = (async function* () {
-			while (remaining) {
-				const bytes = await input.take(Math.min(remaining, 65536));
-				if (!bytes.length) throw new Error(`tar: the archive ends inside ${path}`);
-				remaining -= bytes.length;
-				yield bytes;
+	try {
+		for (;;) {
+			const header = await input.take(blockSize);
+			if (header.length !== blockSize) throw new Error("tar: the archive ends inside a header");
+			if (header.every((byte) => !byte)) return;
+			let checksum = 0;
+			for (let i = 0; i < header.length; i++) checksum += i >= 148 && i < 156 ? 32 : header[i]!;
+			if (parseInt(field(header, 148, 8).trim(), 8) !== checksum)
+				throw new Error("tar: a header's checksum does not hold");
+			const flag = String.fromCharCode(header[156]!);
+			if (!["0", "\0", "5"].includes(flag))
+				throw new Error(`tar: an entry of type ${JSON.stringify(flag)} is refused (files only)`);
+			const prefix = field(header, 345, 155),
+				path = ((prefix ? prefix + "/" : "") + field(header, 0, 100)).replace(/\/$/, "");
+			validPath(path);
+			const size = parseInt(field(header, 124, 12).trim() || "0", 8);
+			if (!Number.isSafeInteger(size) || size < 0) throw new Error(`tar: ${path} has no valid size`);
+			if (flag === "5") {
+				yield { kind: "directory", path };
+				continue;
 			}
-		})();
-		yield { kind: "file", path, size, data };
-		await input.skip(remaining + ((blockSize - (size % blockSize)) % blockSize));
+			let remaining = size;
+			const data = (async function* () {
+				while (remaining) {
+					const bytes = await input.take(Math.min(remaining, 65536));
+					if (!bytes.length) throw new Error(`tar: the archive ends inside ${path}`);
+					remaining -= bytes.length;
+					yield bytes;
+				}
+			})();
+			yield { kind: "file", path, size, data };
+			await input.skip(remaining + ((blockSize - (size % blockSize)) % blockSize));
+		}
+	} finally {
+		await input.close();
 	}
 }
