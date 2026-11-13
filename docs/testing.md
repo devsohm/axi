@@ -275,7 +275,8 @@ binaries once that target passes. Other native targets continue independently.
 The combined archive waits for every target and both compatibility jobs.
 
 `packages/env/test/remote-acceptance.ts` checks an explicitly supplied disposable
-remote machine. It verifies a 1.7 MB binary transfer, UTF-8 commands, ordered
+remote machine. Build the workspace first; the driver uses built package exports
+so it also runs on Node 22. It verifies a 1.7 MB binary transfer, UTF-8 commands, ordered
 process pipes, timeout, filesystem watching, PTY input and dimensions, and reads
 after a fresh connection. It removes its temporary remote directory and closes
 the connection. It does not read local credentials or choose a remote host.

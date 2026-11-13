@@ -4,7 +4,7 @@ import { existsSync, realpathSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import { getOrThrow, type FileChange } from "@axi/durable/env";
 import { BACKGROUND_CONTEXT as context } from "@axi/objects/context";
-import { Connection, openProcess, openTerminal, RemoteExecutionEnv } from "../src/index.ts";
+import { Connection, openProcess, openTerminal, RemoteExecutionEnv } from "@axi/env";
 
 /** Run explicitly against a disposable remote machine. The caller owns its transport and credentials. */
 export async function verifyRemoteEnvironment(
