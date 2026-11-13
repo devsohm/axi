@@ -86,8 +86,8 @@ Mounted React hook checks run in Chromium. Install `/usr/bin/chromium` or
 uses an isolated temporary browser profile and skips when Chromium is absent.
 It checks live values, page-state retention, language changes, event listeners
 and reference release on unmount. The page reports completion to a local HTTP
-test server. Its browser execution is separate from Node's
-V8 coverage totals.
+test server. Chromium startup has a separate deadline from the page's checks.
+Its browser execution is separate from Node's V8 coverage totals.
 
 Client startup checks cover an unavailable server, the initial script-watch
 snapshot and static clients that reconnect without replacing bundled scripts.
@@ -128,6 +128,10 @@ deadlines with a controlled clock. MCP checks cover split UTF-8 streams, message
 limits, peer loss and pipe shutdown. Durable checks include all three join policies,
 automatic compaction, overflow recovery and composed request hooks. Fullscreen
 search tests inspect the terminal emulator after navigation, updates and resize.
+
+Controlled pipe-error fixtures replace both process creation and termination.
+They never signal an unspawned operating-system handle. Separate stdio lifecycle
+checks start real children and verify their termination.
 
 Editor tests cover completion by keyboard and mouse, paste-marker deletion,
 history limits and Unicode wrapping. Overlay tests cover focus restoration,
@@ -228,6 +232,11 @@ builds the Env daemon and terminal helper, checks types, runs owned tests and
 installs the package archives. Android jobs cross-compile the Env daemon; they
 do not run device tests. Node 22 and 24 compatibility jobs run on Linux after the
 native jobs pass.
+
+The Objects terminal launcher's sandbox scenarios require Node 26.5.1 or later.
+Node 22 and 24 still run the launcher's protocol and unsupported-runtime checks.
+Its thirteen sandbox integration cases run in the native Node 26 jobs. The
+standalone TUI library's tests remain enabled on all supported Node versions.
 
 Tests follow each operating system's contracts. Unix permission-bit assertions
 and stale Unix socket-file cleanup do not run on Windows. A separate process-lock

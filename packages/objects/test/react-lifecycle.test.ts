@@ -20,8 +20,20 @@ it.skipIf(chromium === undefined)(
 		let browser: ChildProcess | undefined;
 		let deadline: ReturnType<typeof setTimeout> | undefined;
 		let closed: Promise<void> | undefined;
+		let pageRequested = false;
+		let stderr = "";
+		const requests: string[] = [];
 		const script = join(directory, "view.js");
 		const server = createServer((request, response) => {
+			requests.push(request.url ?? "");
+			if (!pageRequested && request.url === "/") {
+				pageRequested = true;
+				clearTimeout(deadline);
+				deadline = setTimeout(
+					() => completed.reject(new Error(`The page did not finish: ${requests.join(", ")}\n${stderr}`)),
+					30000,
+				);
+			}
 			if (request.method === "POST" && request.url === "/result") {
 				let body = "";
 				request.setEncoding("utf8");
@@ -64,12 +76,12 @@ it.skipIf(chromium === undefined)(
 			});
 			const address = server.address();
 			if (!address || typeof address === "string") throw new Error("The browser test server did not listen");
-			let stderr = "";
 			const child = spawn(
 				chromium!,
 				[
 					"--headless",
 					"--no-sandbox",
+					"--no-zygote",
 					"--disable-gpu",
 					"--disable-dev-shm-usage",
 					`--user-data-dir=${join(directory, "profile")}`,
@@ -87,10 +99,7 @@ it.skipIf(chromium === undefined)(
 			child.once("exit", (code, signal) =>
 				completed.reject(new Error(`Chromium exited before reporting: ${code ?? signal}\n${stderr}`)),
 			);
-			deadline = setTimeout(
-				() => completed.reject(new Error(`The browser did not report its result\n${stderr}`)),
-				30000,
-			);
+			deadline = setTimeout(() => completed.reject(new Error(`Chromium did not open the test page\n${stderr}`)), 60000);
 			expect(await completed.promise).toEqual({
 				value: {
 					initial: { status: "live", count: 0, total: 17, draft: "", title: "Ready" },
@@ -121,5 +130,5 @@ it.skipIf(chromium === undefined)(
 			await rm(directory, { recursive: true, force: true, maxRetries: 20, retryDelay: 50 });
 		}
 	},
-	45_000,
+	100_000,
 );

@@ -4,9 +4,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PassThrough } from "node:stream";
 import { WebSocketServer } from "ws";
-import { afterEach, expect, test, vi } from "vitest";
+import { afterEach, expect, test as baseTest, vi } from "vitest";
 import { startTerminal, type RunningTerminal } from "../src/node/tui/index.ts";
 
+const [major = 0, minor = 0, patch = 0] = process.versions.node.split(".").map(Number);
+const test = baseTest.runIf(major > 26 || (major === 26 && (minor > 5 || (minor === 5 && patch >= 1))));
 const resources: (() => Promise<void>)[] = [];
 afterEach(async () => {
 	for (const close of resources.splice(0).reverse()) await close();

@@ -11,6 +11,7 @@ function peer(input: Writable) {
 		stdin: input,
 		stdout: new PassThrough(),
 		stderr: new PassThrough(),
+		kill: vi.fn(() => false),
 	});
 	spawn.mockImplementationOnce(() => {
 		queueMicrotask(() => child.emit("spawn"));
