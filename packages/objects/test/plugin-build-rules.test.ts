@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { expect, test } from "vitest";
@@ -9,7 +9,7 @@ import { buildFacet, discoverPlugins, evaluateFacet } from "../src/node/plugins/
 import type { BuildOptions } from "../src/node/plugins/build.ts";
 
 async function fixture(files: Readonly<Record<string, string>>, manifest = {}) {
-	const root = await mkdtemp(join(tmpdir(), "axi-plugin-rules-"));
+	const root = await realpath(await mkdtemp(join(tmpdir(), "axi-plugin-rules-")));
 	const dir = join(root, "meter");
 	await mkdir(dir);
 	await writeFile(join(dir, "package.json"), JSON.stringify({ name: "meter", type: "module", ...manifest }));

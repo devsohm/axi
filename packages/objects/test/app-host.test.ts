@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, it, vi } from "vitest";
@@ -10,7 +10,7 @@ import { Http } from "../src/node/http/index.ts";
 type Principal = { readonly kind: "owner" } | { readonly kind: "server" } | { readonly kind: "worker" };
 
 it("runs authenticated app routes, applies plugin changes and restores device sessions after reopening", async () => {
-	const dir = await mkdtemp(join(tmpdir(), "axi-app-host-")),
+	const dir = await realpath(await mkdtemp(join(tmpdir(), "axi-app-host-"))),
 		root = join(dir, "plugins"),
 		plugin = join(root, "status"),
 		dataDir = join(dir, "data");

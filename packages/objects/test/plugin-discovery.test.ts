@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test } from "vitest";
@@ -6,7 +6,7 @@ import { BACKGROUND_CONTEXT as context } from "../src/context/index.ts";
 import { discoverPlugins } from "../src/node/plugins/discover.ts";
 
 test("same-root file collisions name the local directory before reporting cross-root duplicates", async () => {
-	const root = await mkdtemp(join(tmpdir(), "axi-plugin-collision-"));
+	const root = await realpath(await mkdtemp(join(tmpdir(), "axi-plugin-collision-")));
 	try {
 		const roots = [join(root, "first"), join(root, "second")];
 		for (const path of roots) {
@@ -26,7 +26,7 @@ test("same-root file collisions name the local directory before reporting cross-
 });
 
 test("plugin roots discover declared package folders and single files without executing them", async () => {
-	const root = await mkdtemp(join(tmpdir(), "axi-discovery-"));
+	const root = await realpath(await mkdtemp(join(tmpdir(), "axi-discovery-")));
 	try {
 		const packageRoot = join(root, "bundle");
 		for (const name of ["keep", "drop"]) {

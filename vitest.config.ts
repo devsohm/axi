@@ -5,10 +5,6 @@ import { defineConfig } from "vitest/config";
 import manifest from "./package.json" with { type: "json" };
 
 const temporary = realpathSync(tmpdir());
-if (process.platform === "win32") {
-	process.env.TMP = temporary;
-	process.env.TEMP = temporary;
-}
 
 export default defineConfig({
 	plugins: [
@@ -25,7 +21,7 @@ export default defineConfig({
 	],
 	test: {
 		globalSetup: ["packages/env/test/build-daemon.ts"],
-		env: { TMPDIR: temporary, ...(process.platform === "win32" ? { TMP: temporary, TEMP: temporary } : {}) },
+		env: { TMPDIR: temporary },
 		include: [...manifest.workspaces.map((directory) => `${directory}/test/**/*.test.ts`), "test/*.test.ts"],
 		coverage: {
 			provider: "v8",

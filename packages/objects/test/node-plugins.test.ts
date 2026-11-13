@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
@@ -162,7 +162,7 @@ export default {setup(){},escape(){return pluginFile("../elsewhere");},fail(){th
 });
 
 it("keeps edits newer than an applied build even after an older rollout finishes", async () => {
-	const root = await mkdtemp(join(tmpdir(), "axi-plugins-"));
+	const root = await realpath(await mkdtemp(join(tmpdir(), "axi-plugins-")));
 	const dir = await fixture(root, { "worker.ts": source(1) });
 	const watcher = new PluginWatcher(
 		{ roots: [root], base: [], kinds: ["worker"], failed: () => {} },

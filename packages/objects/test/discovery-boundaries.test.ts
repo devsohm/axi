@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test } from "vitest";
@@ -6,7 +6,7 @@ import { BACKGROUND_CONTEXT as context, withAbortSignal } from "../src/context/i
 import { discoverPlugins } from "../src/node/plugins/index.ts";
 
 test("plugin discovery reports malformed manifests and ambiguous facets without evaluating code", async () => {
-	const root = await mkdtemp(join(tmpdir(), "axi-discovery-errors-"));
+	const root = await realpath(await mkdtemp(join(tmpdir(), "axi-discovery-errors-")));
 	try {
 		for (const [name, manifest, files, message] of [
 			["missing", undefined, ["worker.ts"], "no package.json"],
