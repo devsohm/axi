@@ -1,4 +1,4 @@
-import { mkdtemp, open, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { access, mkdtemp, open, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { Dir, type Dirent } from "node:fs";
 import { createServer } from "node:net";
 import { homedir, tmpdir } from "node:os";
@@ -30,6 +30,8 @@ async function fixture(): Promise<string> {
 
 it.each(["default", "empty", "dynamic"] as const)("preserves a relative base working directory with a %s override", async (mode) => {
 	const cwd = relative(process.cwd(), join(await fixture(), "missing"));
+	const cause = await access(cwd).catch((error: unknown) => error);
+	if (!(cause instanceof Error)) throw new Error("The missing directory must fail the native access check");
 	const env = new NodeExecutionEnv({ cwd: mode === "dynamic" ? process.cwd() : cwd });
 	const options = mode === "dynamic"
 		? { get timeout() { env.cwd = cwd; return undefined; } }
@@ -40,7 +42,7 @@ it.each(["default", "empty", "dynamic"] as const)("preserves a relative base wor
 			error: {
 				code: "spawn_error",
 				message: `Working directory does not exist: ${cwd}\nCannot execute bash commands.`,
-				cause: { code: "ENOENT", syscall: "access", path: cwd },
+				cause: { ...cause, message: cause.message },
 			},
 		});
 	} finally {
