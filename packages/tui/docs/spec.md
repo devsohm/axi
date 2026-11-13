@@ -1,6 +1,6 @@
 # Terminal UI specification
 
-This document describes the terminal library contracts. Native clipboard backends are implemented for Linux, macOS and Windows. Cross-platform runtime verification remains outstanding.
+This document describes the terminal library contracts. Native clipboard backends are implemented for Linux, macOS and Windows. The verification workflow builds and tests each desktop target. The [testing guide](../../../docs/testing.md) distinguishes native checks, terminal interaction checks and visual acceptance.
 
 ## Input framing
 

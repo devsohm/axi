@@ -41,7 +41,8 @@
 						"packages/objects/test/schema-boundaries.test.ts",
 						"packages/objects/test/delta-boundaries.test.ts",
 						"packages/objects/test/delta-array-lifecycle.test.ts",
-						"packages/objects/test/delta-scale-lifecycle.test.ts"
+						"packages/objects/test/delta-scale-lifecycle.test.ts",
+						"packages/objects/test/delta-protocol-validation.test.ts"
 					]
 				},
 				{
@@ -225,7 +226,8 @@
 						"packages/objects/test/app-archive.test.ts",
 						"packages/objects/test/app-data-transaction.test.ts",
 						"packages/objects/test/app-owner.test.ts",
-						"packages/objects/test/app-auth-routes.test.ts"
+						"packages/objects/test/app-auth-routes.test.ts",
+						"packages/objects/test/archive-stream-lifecycle.test.ts"
 					]
 				},
 				{
@@ -309,7 +311,8 @@
 						"packages/ai/test/request-telemetry.test.ts",
 						"packages/ai/test/sampling-options.test.ts",
 						"packages/ai/test/provider-boundaries.test.ts",
-						"packages/ai/test/constrained-inputs.test.ts"
+						"packages/ai/test/constrained-inputs.test.ts",
+						"packages/ai/test/stream-and-retry-lifecycle.test.ts"
 					]
 				},
 				{
@@ -341,7 +344,8 @@
 						"packages/codemode/test/invocation-lifecycle.test.ts",
 						"packages/codemode/test/admission-and-delivery.test.ts",
 						"packages/codemode/test/execution-contract.test.ts",
-						"packages/codemode/test/runtime-limits.test.ts"
+						"packages/codemode/test/runtime-limits.test.ts",
+						"packages/codemode/test/worker-entrypoint.test.ts"
 					]
 				},
 				{
@@ -378,7 +382,9 @@
 						"packages/mcp/test/pipe-lifecycle.test.ts",
 						"packages/mcp/test/stream-boundaries.test.ts",
 						"packages/mcp/test/http-retry-boundaries.test.ts",
-						"packages/mcp/test/stdio-lifecycle.test.ts"
+						"packages/mcp/test/stdio-lifecycle.test.ts",
+						"packages/mcp/test/stdio-errors.test.ts",
+						"packages/mcp/test/memory-transport-lifecycle.test.ts"
 					]
 				},
 				{
@@ -393,7 +399,8 @@
 						"packages/mcp/test/oauth-lifecycle.test.ts",
 						"packages/mcp/test/oauth-recovery.test.ts",
 						"packages/mcp/test/stored-auth-races.test.ts",
-						"packages/mcp/test/client-metadata.test.ts"
+						"packages/mcp/test/client-metadata.test.ts",
+						"packages/mcp/test/discovery-failures.test.ts"
 					]
 				}
 			]
@@ -484,7 +491,8 @@
 						"packages/durable/test/script-services.test.ts",
 						"packages/durable/test/script-recovery.test.ts",
 						"packages/durable/test/script-resume-boundaries.test.ts",
-						"packages/durable/test/script-output-files.test.ts"
+						"packages/durable/test/script-output-files.test.ts",
+						"packages/durable/test/windows-native.test.ts"
 					]
 				},
 				{
@@ -611,7 +619,11 @@
 				},
 				{
 					"behavior": "real terminal negotiation and cleanup",
-					"tests": ["packages/tui/test/process-terminal.test.ts", "packages/tui/test/terminal-lifecycle.test.ts"]
+					"tests": [
+						"packages/tui/test/process-terminal.test.ts",
+						"packages/tui/test/terminal-lifecycle.test.ts",
+						"packages/tui/test/interactive-terminal.test.ts"
+					]
 				}
 			]
 		}
@@ -640,9 +652,9 @@
 	],
 	"unverified": [
 		"Live provider/model operation and interactive OAuth acceptance require credentials and explicit runs.",
-		"macOS, Windows and ARM64 native execution require those platform runners.",
+		"Android device execution is not covered by the cross-compilation jobs. Native desktop CI does not establish every deployment environment.",
 		"SSH acceptance against an external server requires a configured host.",
-		"Visual acceptance requires real terminal applications.",
+		"The automated Unix terminal scenarios do not establish visual appearance in every terminal application.",
 		"Public declaration checks run through npm run check; V8 does not measure type-only contracts or child-process internals."
 	]
 }

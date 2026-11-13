@@ -113,7 +113,7 @@ The verification workflow runs the owned suite on its native platform matrix. It
 | Telemetry | Spans, propagation, metrics, trace queries, stored snapshots and trace rendering | `packages/telemetry/test` |
 | TUI | Input, editing, history, layout, rendering, overlays, mouse interaction, formatting and native helpers | `packages/tui/test` and `packages/tui/native` |
 
-The storage-driver scenarios run against memory, JSONL and SQLite. Terminal rendering scenarios send the library's output through a terminal emulator and inspect the resulting screen. Native clipboard tests use a private virtual display or a test backend, so they do not replace the desktop clipboard.
+The storage-driver scenarios run against memory, JSONL and SQLite. Terminal rendering scenarios send the library's output through a terminal emulator and inspect the resulting screen. Linux clipboard scenarios use a private virtual display, and shared bridge tests use a test backend. Windows CI also enables real clipboard round trips on its disposable desktop. See the [native helper guide](../packages/tui/native/README.md) before enabling those checks locally.
 
 Array range checks compare 1,200 combinations with native JavaScript and replay
 each resulting revision. Store import and replication checks reject malformed
@@ -204,7 +204,9 @@ Parked-tool checks remove an extension before wake or cancellation and verify th
 saved outcome and error report. A failing cancellation callback must still let
 the task settle.
 
-Offline provider tests inspect request encoding, device-login polling, token refresh, cancellation and malformed replies using synthetic credentials. Env tests run the generated Unix upload script in a temporary local directory. Windows command tests inspect the protocol and upload framing; native Windows execution still requires a Windows runner. Browser adapter tests use DOM event fixtures; real browser and terminal acceptance remain separate checks.
+Offline provider tests inspect request encoding, device-login polling, token refresh, cancellation and malformed replies using synthetic credentials. Retry tests cover cancellation before and during backoff, retry limits and terminal errors. These checks do not contact model providers.
+
+Env tests run the generated Unix upload script in a temporary local directory. Windows-only Durable tests run real PowerShell commands, retain UTF-8 output and finish when a detached descendant keeps a pipe open. The workflow runs them on Windows x64 and arm64. Browser adapter tests use DOM event fixtures; real browser and terminal acceptance remain separate checks.
 
 MCP checks bound pagination, isolate failing progress and close listeners, and
 reject unsupported HTTP response types without disabling later requests. An
@@ -217,6 +219,38 @@ modifier support and a Linux display becoming available after startup. They mock
 the platform and module loader. They do not replace native tests on each operating
 system. Transient-event tests exercise older contract readers locally and over a
 memory link, including mapping failures, refusal and subscription release.
+
+## Platform and terminal checks
+
+The native workflow runs on Linux, macOS and Windows for x64 and arm64. Each job
+builds the Env daemon and terminal helper, checks types, runs owned tests and
+installs the package archives. Android jobs cross-compile the Env daemon; they
+do not run device tests. Node 22 and 24 compatibility jobs run on Linux after the
+native jobs pass.
+
+Tests follow each operating system's contracts. Unix permission-bit assertions
+and stale Unix socket-file cleanup do not run on Windows. A separate process-lock
+test checks exclusion, cancellation and reacquisition through the active backend.
+Windows file-conformance tests request native symlinks from Git Bash, since its
+default `ln -s` behavior can copy the file instead. Discovery fixtures resolve
+temporary directories before comparing canonical paths, including Windows' short
+directory aliases.
+
+MCP write-error checks inject a failing writable pipe on every platform and
+assert both the rejected send and the error notification. A separate Unix test
+closes a real child's input descriptor. This descriptor test is skipped on
+Windows; the rest of its real stdio lifecycle tests still run there.
+
+`packages/tui/test/interactive-terminal.test.ts` runs a built TUI in a real Unix
+pseudoterminal. It checks both screen modes with Unicode paste, submission,
+overlays, 2,000-row expansion, streaming updates, resize and exit. Kitty key press
+and release reports must toggle a control only once. The fixture checks raw-mode
+restoration and removal of its input and resize listeners. Screen assertions use
+a terminal emulator. Visual appearance in other terminal applications remains a
+separate acceptance check.
+
+Archive lifecycle tests read valid and invalid inputs and stop iteration early.
+Each case must release its input stream before the caller reuses the file.
 
 ## Inspect behavior coverage
 

@@ -22,3 +22,5 @@ The tests create private servers and virtual displays. They check responsiveness
 The macOS helper uses the system pasteboard for text, images and file paths. It also reports modifier state. The Windows helper supports Unicode text, PNG and bitmap clipboard images, modifier state and virtual terminal input.
 
 The shared Node-API bridge test compiles a test backend and checks values, writes and errors in a child process. Native platform loading has a separate test. These tests do not replace desktop acceptance on each operating system.
+
+On a Windows test desktop, set `AXI_TEST_NATIVE_CLIPBOARD=1` to run Unicode and empty-text clipboard round trips against the actual helper. This test replaces the desktop clipboard, so it is disabled by default. The Windows CI jobs enable it on their disposable runners. Linux transfer tests use private virtual displays.

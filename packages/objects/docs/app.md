@@ -129,6 +129,8 @@ The host stores four index tables and summary documents in its Store. Immutable 
 
 `importData(archive, address, context, options)` checks app identity, address kind, format, paths and limits. It refuses existing data unless `options.existing` is `"replace"`. It stages the worker's files and Store, puts the old directory aside when replacing, installs the new directory, then imports the server part in one commit. Copying to another address rewrites its ownership keys. Defaults allow 100,000 entries and 4 GiB of unpacked data.
 
+Archive readers close their input iterator after completion, rejection or an early stop. File-backed sources release their input handle before a caller replaces or removes the archive.
+
 A definite import failure restores the old directory and removes the new one. An uncertain server commit leaves the new directory in place and preserves the old directory beside it. The error identifies this condition. After recovering the server Store, repeat the import with `existing: "replace"`. Format 1 archives lack the server part and are refused.
 
 `deleteData(address, context)` commits deletion of the server-owned data before removing the worker directory. Repeating it removes a directory left by an interrupted deletion. Import and delete hold the worker's process lock and are refused while that worker runs. Stop it through `app.workers.get(kind).stop(address, context)` first.

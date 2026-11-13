@@ -35,7 +35,7 @@ The package exposes its object runtime at the root. Separate imports provide con
 
 `@axi/env` connects Durable to local and SSH environments through a native daemon. It provides file operations, file listing, watches, command execution, pseudo-terminals, host-key management and verified daemon deployment. Connections restart after loss; open handles remain tied to their original connection session.
 
-`@axi/tui` provides scrollback and fullscreen renderers, layout, overlays, mouse selection, a multiline editor, completion, Markdown, mathematical notation, images and color utilities. It is independent of Durable. Applications connect runtime subscriptions and commands to their own message and tool components. Native helpers build locally on Linux, macOS and Windows. Cross-platform runtime verification remains outstanding.
+`@axi/tui` provides scrollback and fullscreen renderers, layout, overlays, mouse selection, a multiline editor, completion, Markdown, mathematical notation, images and color utilities. It is independent of Durable. Applications connect runtime subscriptions and commands to their own message and tool components. The verification workflow builds and tests native helpers on Linux, macOS and Windows for x64 and arm64. See [testing](docs/testing.md) for runtime checks and their limits.
 
 ## Install and release
 
