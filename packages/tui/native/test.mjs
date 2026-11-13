@@ -218,7 +218,7 @@ test(
 	"Linux ARM64 native segments support 64 KiB pages",
 	{
 		skip:
-			process.arch !== "arm64" &&
+			!(process.platform === "linux" && process.arch === "arm64") &&
 			!existsSync(new URL("./linux/prebuilds/linux-arm64/linux-platform-x11.node", import.meta.url)),
 	},
 	() => {
