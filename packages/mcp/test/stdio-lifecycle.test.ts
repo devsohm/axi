@@ -1,4 +1,7 @@
 import { join } from "node:path";
+import { execFile } from "node:child_process";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { promisify } from "node:util";
 import { tmpdir } from "node:os";
 import { expect, test, vi } from "vitest";
 import { StdioTransport, type JsonRpcMessage } from "../src/index.ts";
@@ -6,6 +9,44 @@ import { StdioTransport, type JsonRpcMessage } from "../src/index.ts";
 function child(script: string, extra: Partial<ConstructorParameters<typeof StdioTransport>[0]> = {}) {
 	return new StdioTransport({ command: process.execPath, args: ["-e", script], closeTimeoutMs: 50, ...extra });
 }
+
+test.skipIf(process.platform === "win32")(
+	"exiting the application terminates its tracked stdio process group",
+	async () => {
+		const directory = await mkdtemp(join(tmpdir(), "axi-mcp-exit-"));
+		const marker = join(directory, "terminated");
+		let pid: number | undefined;
+		const peer = `process.on("SIGTERM", () => { require("node:fs").writeFileSync(${JSON.stringify(marker)}, "SIGTERM"); process.exit(0); }); process.stdout.write(JSON.stringify({jsonrpc:"2.0",method:"ready"})+"\\n"); setInterval(()=>{},1000);`;
+		try {
+			const result = await promisify(execFile)(
+				process.execPath,
+				[
+					"--input-type=module",
+					"-e",
+					`
+import { StdioTransport } from ${JSON.stringify(new URL("../src/transports/stdio.ts", import.meta.url).href)};
+const transport = new StdioTransport({ command: process.execPath, args: ["-e", ${JSON.stringify(peer)}], stderr: "inherit" });
+transport.onMessage(() => process.stdout.write(String(transport.pid), () => process.exit(0)));
+await transport.start();`,
+				],
+				{ timeout: 10000 },
+			);
+			pid = Number(result.stdout);
+			expect(Number.isInteger(pid) && pid > 1).toBe(true);
+			await vi.waitFor(async () => expect(await readFile(marker, "utf8")).toBe("SIGTERM"));
+		} finally {
+			if (pid) {
+				try {
+					process.kill(-pid, "SIGKILL");
+				} catch (error) {
+					if (!(error instanceof Error && "code" in error && error.code === "ESRCH")) throw error;
+				}
+			}
+			await rm(directory, { recursive: true, force: true });
+		}
+	},
+	15000,
+);
 
 test.skipIf(process.platform === "win32")(
 	"a Unix peer closing stdin reports the write failure and can still be shut down cleanly",

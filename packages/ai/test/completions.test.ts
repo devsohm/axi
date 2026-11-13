@@ -39,6 +39,35 @@ function answer(): Response {
 
 describe("Chat Completions", () => {
 	it.each([
+		{ details: undefined, top: 31, expected: 31 },
+		{ details: {}, top: 31, expected: 31 },
+		{ details: { reasoning_tokens: 0 }, top: 31, expected: 31 },
+		{ details: { reasoning_tokens: 13 }, top: 31, expected: 13 },
+		{ details: undefined, top: undefined, expected: 0 },
+	])(
+		"reasoning accounting preserves nested-field precedence and provider fallbacks: $details $top",
+		async ({ details, top, expected }) => {
+			const result = await stream({ ...model, provider: "github-copilot" }, context, {
+				apiKey: "offline",
+				fetch: async () =>
+					response([
+						{
+							...chunk({ content: "answer" }, "stop"),
+							usage: {
+								prompt_tokens: 9,
+								completion_tokens: 47,
+								completion_tokens_details: details,
+								reasoning_tokens: top,
+							},
+						},
+					]),
+			}).result();
+			expect(result.stopReason).toBe("stop");
+			expect(result.usage).toMatchObject({ input: 9, output: 47, reasoning: expected, totalTokens: 56 });
+		},
+	);
+
+	it.each([
 		{ usage: { prompt_tokens: 7, cached_tokens: 4 }, input: 3, cacheRead: 4 },
 		{ usage: { prompt_tokens: 7, cached_tokens: 4, prompt_cache_hit_tokens: 5 }, input: 2, cacheRead: 5 },
 		{ usage: { prompt_tokens: 7, prompt_cache_hit_tokens: 5, prompt_tokens_details: { cached_tokens: 0 } }, input: 7, cacheRead: 0 },

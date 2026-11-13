@@ -32,11 +32,17 @@ test("metadata discovery uses the global fetch when no adapter is supplied", asy
 			authorizationServerMetadataUrl: new URL(issuer + "/metadata"),
 		}),
 	).toMatchObject({ authorizationServerUrl: issuer, authorizationServerMetadata: metadata });
+	expect(await discoverOAuthServerInfo("https://service.example/")).toMatchObject({
+		authorizationServerUrl: issuer,
+		authorizationServerMetadata: metadata,
+	});
 	expect(fetch.mock.calls.map(([input]) => String(input))).toEqual([
 		"https://service.example/.well-known/oauth-protected-resource",
 		issuer + "/.well-known/oauth-authorization-server",
 		"https://service.example/.well-known/oauth-protected-resource",
 		issuer + "/metadata",
+		"https://service.example/.well-known/oauth-protected-resource",
+		issuer + "/.well-known/oauth-authorization-server",
 	]);
 });
 

@@ -44,7 +44,7 @@ test.each([
 });
 
 test("a request requires a supported response body and a later request still works", async () => {
-	for (const status of [202, 204, 200]) {
+	for (const [status, type] of [[202], [204], [200, "text/plain"], [200]] as const) {
 		let requests = 0,
 			cancellations = 0;
 		const messages: unknown[] = [];
@@ -62,7 +62,7 @@ test("a request requires a supported response body and a later request still wor
 						: null,
 					{
 						status,
-						headers: status === 200 ? { "content-type": "text/plain" } : {},
+						headers: type ? { "content-type": type } : {},
 					},
 				);
 			},
@@ -143,7 +143,7 @@ test("a malformed SSE message is reported while a later valid notification is de
 				? new Response(
 						new ReadableStream({
 							start(controller) {
-								controller.enqueue(new TextEncoder().encode(`data: {broken\n\ndata: ${JSON.stringify(message)}\n\n`));
+								controller.enqueue(new TextEncoder().encode(`event: heartbeat\ndata: {ignored\n\ndata:   \n\ndata: {broken\n\nevent: message\ndata: ${JSON.stringify(message)}\n\n`));
 							},
 						}),
 						{ headers: { "content-type": "text/event-stream" } },
@@ -158,6 +158,32 @@ test("a malformed SSE message is reported while a later valid notification is de
 		await vi.waitFor(() => expect(messages).toEqual([message]));
 		expect(errors).toHaveLength(1);
 		expect(errors[0]).toBeInstanceOf(SyntaxError);
+	} finally {
+		await transport.close();
+	}
+});
+
+test("HTTP requests retain their configured headers and deliver every message in a JSON batch in order", async () => {
+	const headers = { "x-project": "first" };
+	const replies = [
+		{ jsonrpc: "2.0", method: "server.ready" },
+		{ jsonrpc: "2.0", id: 1, result: 42 },
+	];
+	const messages: unknown[] = [];
+	const transport = new StreamableHttpTransport({
+		url: "https://peer.invalid/mcp",
+		headers,
+		fetch: async (_url, init) => {
+			expect(new Headers(init?.headers).get("x-project")).toBe("first");
+			return Response.json(replies);
+		},
+	});
+	headers["x-project"] = "later";
+	transport.onMessage((message) => messages.push(message));
+	try {
+		await transport.start();
+		await transport.send(request);
+		expect(messages).toEqual(replies);
 	} finally {
 		await transport.close();
 	}
@@ -274,6 +300,79 @@ test("closing during reconnect cancels the delay and makes no further HTTP reque
 		expect(gets).toBe(1);
 		await transport.close();
 		await vi.advanceTimersByTimeAsync(60000);
+		expect(gets).toBe(1);
+	} finally {
+		await transport.close();
+	}
+});
+
+test("an idle notification stream that stayed healthy resets the reconnect budget", async () => {
+	vi.useFakeTimers();
+	let gets = 0;
+	const errors: Error[] = [];
+	const transport = new StreamableHttpTransport({
+		url: "https://peer.invalid/mcp",
+		reconnect: { initialDelayMs: 1, maxDelayMs: 5, maxRetries: 1 },
+		fetch: async (_url, init) => {
+			if (init?.method !== "GET") return new Response(null, { status: 202 });
+			gets++;
+			if (gets === 1) throw new TypeError("Disconnected");
+			if (gets === 3) return new Response(null, { status: 405 });
+			return new Response(
+				new ReadableStream({
+					start(controller) {
+						setTimeout(() => controller.close(), 6);
+					},
+				}),
+				{
+					headers: { "content-type": "text/event-stream" },
+				},
+			);
+		},
+	});
+	transport.onError((error) => errors.push(error));
+	try {
+		await transport.start();
+		await transport.send(initialized);
+		await vi.advanceTimersByTimeAsync(1);
+		expect(gets).toBe(2);
+		await vi.advanceTimersByTimeAsync(7);
+		expect(gets).toBe(3);
+		expect(errors).toEqual([]);
+	} finally {
+		await transport.close();
+	}
+});
+
+test("closing from a notification callback prevents a reconnect after that stream ends", async () => {
+	vi.useFakeTimers();
+	let gets = 0;
+	const transport = new StreamableHttpTransport({
+		url: "https://peer.invalid/mcp",
+		fetch: async (_url, init) => {
+			if (init?.method !== "GET") return new Response(null, { status: 202 });
+			gets++;
+			return new Response(
+				new ReadableStream({
+					start(controller) {
+						controller.enqueue(Buffer.from('data: {"jsonrpc":"2.0","method":"ready"}\n\n'));
+						controller.close();
+					},
+				}),
+				{ headers: { "content-type": "text/event-stream" } },
+			);
+		},
+	});
+	const messages: unknown[] = [];
+	transport.onMessage((message) => {
+		messages.push(message);
+		void transport.close();
+	});
+	try {
+		await transport.start();
+		await transport.send(initialized);
+		await vi.advanceTimersByTimeAsync(60000);
+		expect(messages).toEqual([{ jsonrpc: "2.0", method: "ready" }]);
 		expect(gets).toBe(1);
 	} finally {
 		await transport.close();

@@ -22,12 +22,16 @@ async function fixture() {
 	const directory = await mkdtemp(join(tmpdir(), "axi-platform-coverage-"));
 	await mkdir(join(directory, "scripts"));
 	await copyFile(join(root, "scripts/coverage-platforms.mjs"), join(directory, "scripts/coverage-platforms.mjs"));
+	await copyFile(join(root, "scripts/coverage-provider.mjs"), join(directory, "scripts/coverage-provider.mjs"));
+	await copyFile(join(root, "scripts/coverage-node.mjs"), join(directory, "scripts/coverage-node.mjs"));
+	await copyFile(join(root, "scripts/coverage-instrument.ts"), join(directory, "scripts/coverage-instrument.ts"));
 	await symlink(
 		join(root, "node_modules"),
 		join(directory, "node_modules"),
 		process.platform === "win32" ? "junction" : "dir",
 	);
 	await json(join(directory, "package.json"), { workspaces: ["packages/sample"] });
+	await writeFile(join(directory, "vitest.config.ts"), 'export default { test: { coverage: { autoAttachSubprocess: true } } };');
 	await mkdir(join(directory, source, ".."), { recursive: true });
 	await writeFile(join(directory, source), code);
 	for (const [index, target] of targets.entries()) {
@@ -160,6 +164,8 @@ test("coverage capture rejects a failed suite and records source identities only
 		const record = JSON.parse(await readFile(join(directory, "coverage/coverage-platform.json")));
 		assert.equal(record.passed, 1);
 		assert.match(record.commit, /^[a-f\d]{40}$/);
+		assert.equal(record.instrumentation.configuration, createHash("sha256").update(await readFile(join(directory, "vitest.config.ts"))).digest("hex"));
+		assert.equal(record.instrumentation.collector, createHash("sha256").update(await readFile(join(directory, "scripts/coverage-provider.mjs"))).digest("hex"));
 		assert.deepEqual(Object.keys(record.sources), [source]);
 		assert.deepEqual(Object.keys(JSON.parse(await readFile(join(directory, "coverage/coverage-portable.json")))), [
 			source,

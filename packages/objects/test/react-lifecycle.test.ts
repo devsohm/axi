@@ -7,6 +7,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { build } from "esbuild";
 import { expect, it } from "vitest";
+import { bundleCoverage } from "../../../scripts/coverage-instrument.ts";
 
 const chromium = [process.env.CHROMIUM_BIN, "/usr/bin/chromium", "/usr/bin/chromium-browser"].find(
 	(path): path is string => path !== undefined && existsSync(path),
@@ -17,6 +18,7 @@ it.skipIf(chromium === undefined)(
 	async () => {
 		const directory = await mkdtemp(join(tmpdir(), "axi-react-"));
 		const completed = Promise.withResolvers<unknown>();
+		const coverage = bundleCoverage(process.env.AXI_COVERAGE_DIRECTORY);
 		let browser: ChildProcess | undefined;
 		let deadline: ReturnType<typeof setTimeout> | undefined;
 		let closed: Promise<void> | undefined;
@@ -34,7 +36,7 @@ it.skipIf(chromium === undefined)(
 					30000,
 				);
 			}
-			if (request.method === "POST" && request.url === "/result") {
+			if (request.method === "POST" && (request.url === "/result" || request.url === "/coverage")) {
 				let body = "";
 				request.setEncoding("utf8");
 				request.on("data", (chunk: string) => {
@@ -42,7 +44,8 @@ it.skipIf(chromium === undefined)(
 				});
 				request.on("end", () => {
 					try {
-						completed.resolve(JSON.parse(body));
+						if (request.url === "/coverage") coverage.write(JSON.parse(body));
+						else completed.resolve(JSON.parse(body));
 					} catch (error) {
 						completed.reject(error);
 					}
@@ -67,6 +70,7 @@ it.skipIf(chromium === undefined)(
 				outfile: script,
 				bundle: true,
 				platform: "browser",
+				plugins: [coverage.plugin],
 				conditions: ["source"],
 				define: { "process.env.NODE_ENV": '"production"' },
 			});

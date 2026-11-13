@@ -9,6 +9,28 @@ function authorization(state: string, redirectUrl: string): McpSignInRedirect {
 	return { kind: "redirect", state, redirectUrl, authorizationUrl: "https://login.invalid/authorize" };
 }
 
+test("a saved callback without a port obtains a local port and leaves the registration unchanged", async () => {
+	const store = new MemoryOAuthStateStore();
+	const state = {
+		serverUrl: "https://mcp.invalid",
+		clientInformation: {
+			client_id: "local",
+			redirect_uris: ["http://localhost/callback"],
+		},
+	};
+	store.save(state);
+	const { callback, redirectUrl } = await listenForLoopbackSignIn({ serverUrl: state.serverUrl, store, settings: {} });
+	try {
+		expect(Number(new URL(redirectUrl).port)).toBeGreaterThan(0);
+		const received = callback.waitForCallback("ready");
+		expect((await fetch(redirectUrl + "?state=ready&code=accepted")).status).toBe(200);
+		expect(await received).toEqual({ state: "ready", code: "accepted" });
+		expect(store.load()).toEqual(state);
+	} finally {
+		await callback.close();
+	}
+});
+
 test("default callback pages report invalid states, denied authorization and success", async () => {
 	const callback = await OAuthCallbackServer.listen();
 	try {

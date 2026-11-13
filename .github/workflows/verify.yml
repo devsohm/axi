@@ -34,6 +34,9 @@ jobs:
         with:
           toolchain: 1.98.1
       - run: npm ci
+      - name: Install workerd test dependencies
+        if: runner.os == 'Linux'
+        run: npm ci --prefix test/workers --ignore-scripts
       - run: npm run build
       - run: npm run build:daemon --workspace @axi/env
       - name: Install X11 test dependencies
@@ -280,6 +283,7 @@ jobs:
           path: packages/tui/native
       - run: chmod +x packages/env/bin/axi-env-linux-x64/axi-env
       - run: npm ci
+      - run: npm ci --prefix test/workers --ignore-scripts
       - run: npm run build
       - run: npm run check
       - name: Install the headless browser session bus

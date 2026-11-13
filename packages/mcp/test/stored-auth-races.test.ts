@@ -1,6 +1,6 @@
 import { afterEach, expect, test, vi } from "vitest";
 import type { UnauthorizedContext, McpFetch } from "../src/auth-provider.ts";
-import { createMcpAuthProvider } from "../src/oauth/auth-provider.ts";
+import { createMcpAuthProvider, refreshStoredTokens } from "../src/oauth/auth-provider.ts";
 import type { McpOAuthServerStore } from "../src/oauth/client-settings.ts";
 import type { McpOAuthState } from "../src/oauth/provider.ts";
 
@@ -31,6 +31,30 @@ function unauthorized(fetch: McpFetch, token = "old", challenge = "Bearer"): Una
 		response: new Response(null, { status: 401, headers: { "www-authenticate": challenge } }),
 	};
 }
+
+test("stored-token refresh uses the default fetch and cached issuer without starting browser authorization", async () => {
+	let state = initial();
+	const store: McpOAuthServerStore = {
+		load: () => structuredClone(state),
+		save(next) {
+			state = next;
+		},
+		withRefreshLock: async (fn) => fn(),
+	};
+	const fetch = vi.fn<typeof globalThis.fetch>(async (url, init) => {
+		expect(String(url)).toBe("https://issuer.example.test/token");
+		expect(Object.fromEntries(new URLSearchParams(String(init?.body)))).toMatchObject({
+			grant_type: "refresh_token",
+			refresh_token: "rotate",
+			client_id: "local-client",
+		});
+		return Response.json({ access_token: "fresh", token_type: "Bearer" });
+	});
+	vi.stubGlobal("fetch", fetch);
+	expect(await refreshStoredTokens({ serverUrl, store, settings: {}, clientName: "test" }, state)).toBe("AUTHORIZED");
+	expect(fetch).toHaveBeenCalledTimes(1);
+	expect(state.tokens).toMatchObject({ access_token: "fresh", refresh_token: "rotate" });
+});
 
 test("token readers and settled waiters survive a rejected refresh lock and a later request retries", async () => {
 	let state = initial(),

@@ -18,6 +18,58 @@ it("exports provider compatibility fields with their declared value types", () =
 	expectTypeOf<ProviderCompat["promptCacheKeyMode"]>().toEqualTypeOf<"auto" | "enabled" | "disabled" | undefined>();
 });
 
+it.each([
+	{ id: "gemini-3.8-flash", levels: ["low", "medium", "high"] },
+	{ id: "gemini-4-argon", levels: ["low", "medium", "high"] },
+	{ id: "gemini-4-carbon", levels: ["low", "medium", "high"] },
+	{ id: "kimi-k3", levels: ["low", "high", "max"] },
+] as const)("the bundled Copilot catalog exposes its declared effort levels for $id", ({ id, levels }) => {
+	const model = MODELS["github-copilot"][id];
+	if (!model || !hasApi(model, "openai-completions")) throw new Error("Missing Copilot completion model");
+	expect(model.compat?.supportsReasoningEffort).toBe(true);
+	expect(getSupportedThinkingLevels(model)).toEqual(levels);
+});
+
+it.each([
+	{ controls: undefined },
+	{ controls: [] },
+	{ controls: [{ type: "toggle" as const }] },
+	{ controls: [{ type: "effort" as const, values: ["low" as const, "high" as const] }] },
+])("Copilot completion models forward only declared effort controls: $controls", async ({ controls }) => {
+	const source = buildModelsDevCatalog({
+		"github-copilot": {
+			models: {
+				"fixture-gemini": {
+					tool_call: true,
+					reasoning: true,
+					reasoning_options: controls,
+				},
+			},
+		},
+	});
+	const selected = source.models.find((model) => model.id === "fixture-gemini");
+	if (!selected || !hasApi(selected, "openai-completions")) throw new Error("Missing Copilot completion model");
+	expect(selected.compat?.supportsReasoningEffort).toBe(controls?.some((option) => option.type === "effort") ?? false);
+	const requests: unknown[] = [];
+	const { streamSimple } = await import("../src/api/openai-completions.ts");
+	for (const reasoning of ["low", "high"] as const) {
+		await streamSimple(selected, normalizeContext({ messages: [{ role: "user", content: "hello", timestamp: 0 }] }), {
+			apiKey: "offline",
+			reasoning,
+			onPayload(payload) {
+				requests.push(payload);
+				throw new Error("captured before dispatch");
+			},
+		}).result();
+	}
+	expect(requests).toHaveLength(2);
+	expect(requests).toMatchObject(
+		selected.compat?.supportsReasoningEffort ? [{ reasoning_effort: "low" }, { reasoning_effort: "high" }] : [{}, {}],
+	);
+	if (!selected.compat?.supportsReasoningEffort)
+		for (const request of requests) expect(request).not.toHaveProperty("reasoning_effort");
+});
+
 it("can generate again after replacing the catalog with a smaller upstream listing", () => {
 	const root = mkdtempSync(join(tmpdir(), "axi-regenerate-"));
 	const copy = join(root, "ai");

@@ -42,6 +42,7 @@ type RawUsage = {
 	prompt_cache_hit_tokens?: number;
 	prompt_tokens_details?: { cached_tokens?: number; cache_write_tokens?: number };
 	completion_tokens_details?: { reasoning_tokens?: number };
+	reasoning_tokens?: number;
 };
 type StreamingTool = ToolCall;
 type ToolInput = { kind: "json"; arguments: ToolCallArgumentsStream } | { kind: "custom"; property: string; jsonBuffer: GrammarToolInputJsonBuffer };
@@ -63,7 +64,7 @@ function readUsage(raw: RawUsage, model: Model<"openai-completions">): Assistant
 		output,
 		cacheRead,
 		cacheWrite,
-		reasoning: raw.completion_tokens_details?.reasoning_tokens || 0,
+		reasoning: raw.completion_tokens_details?.reasoning_tokens || raw.reasoning_tokens || 0,
 		totalTokens: input + output + cacheRead + cacheWrite,
 		cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
 	};

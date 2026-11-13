@@ -674,7 +674,11 @@ export function buildModelsDevCatalog(data: SourceCatalog, nvidiaIds: readonly s
 			if (Object.keys(metadata).length) model.compat = metadata;
 		}
 		if (api === "openai-completions")
-			model.compat = { supportsStore: false, supportsDeveloperRole: false, supportsReasoningEffort: false };
+			model.compat = {
+				supportsStore: false,
+				supportsDeveloperRole: false,
+				supportsReasoningEffort: source.reasoning_options?.some((option) => option.type === "effort") ?? false,
+			};
 		emit(model, source);
 	}
 	const gateways = new Set<string>();

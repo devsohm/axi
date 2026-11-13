@@ -177,9 +177,11 @@ void run()
 		(value) => ({ value }),
 		(error) => ({ error: String(error), stack: error?.stack }),
 	)
-	.then((result) => {
+	.then(async (result) => {
 		document.getElementById("result")!.textContent = btoa(
 			String.fromCharCode(...new TextEncoder().encode(JSON.stringify(result))),
 		);
+		const coverage = Reflect.get(globalThis, "__VITEST_COVERAGE__");
+		if (coverage) await fetch("/coverage", { method: "POST", body: JSON.stringify(coverage) });
 		return fetch("/result", { method: "POST", body: JSON.stringify(result) });
 	});

@@ -43,7 +43,7 @@ cargo test --locked --manifest-path packages/env/daemon/Cargo.toml
 
 Vitest builds the local Env daemon before running tests, including filtered runs. This prevents tests from using an older binary after its source changes. Rust is required for these source tests. The build is incremental.
 
-Coverage output is in `coverage/index.html` and `coverage/coverage-summary.json`. It measures the TypeScript code exercised by the local JavaScript suite. It does not measure Rust, C, subprocess internals, visual correctness or provider availability.
+Coverage output is in `coverage/index.html` and `coverage/coverage-summary.json`. Istanbul measures the TypeScript code exercised by the JavaScript suite. The test loader also records source executions in Node child processes and worker threads that inherit its environment. Forced termination can prevent the final snapshot. The Chromium fixture and the workerd integration test report their instrumented source execution to the same collector. Rust, C, visual correctness and live-provider availability require separate checks.
 
 The JavaScript runner selects package tests from the root manifest's eight workspaces and integration tests from `test/*.test.ts`. Measured source files come from the eight workspaces. It resolves workspace package exports to their TypeScript source files. Package imports and direct source imports therefore share one module instance. The resolver honors the package's export restrictions before selecting the source file. Installed archive checks run separately with Node's normal package resolution and exercise the built JavaScript.
 
@@ -59,12 +59,21 @@ branch locations. The HTML report displays these locations beside the source.
 functions and branches with their source lines. Run coverage first to refresh
 the measurements.
 
-The V8 converter can produce invalid negative branch counters. The gap command
-labels them and leaves them uncredited. Cross-check these locations with another
-coverage provider before treating them as missing tests.
+The coverage fixture checks parent, child-process and worker-thread execution
+against a disabled-collector control. It checks exact invocation counts,
+unexecuted functions, both branches, dynamic imports, reload URLs, exit handlers and application warnings.
+Collection rejects incompatible source maps. Type-only source modules stay in
+the inventory after the instrumenter confirms that they have no executable
+counters.
+
+The workerd case in the JavaScript suite runs workspace source. It skips on
+Windows or when the isolated worker dependencies are absent. Linux CI installs
+those dependencies. `npm run test:workers` separately checks the built packages
+and the Code Mode deployment example. `verify` runs both forms.
 
 `coverage:capture` records a passing local report with its commit, runtime,
 instrumentation versions and SHA-256 hash of every measured source module. It
+also records hashes of the test configuration, collector scripts and shared instrumenter. It
 also writes portable source paths. Run it after `test:coverage`; `verify` runs
 both commands in that order.
 
@@ -75,7 +84,7 @@ modules and incompatible counter maps. Counter IDs may differ; source positions
 identify matching counters. Results are written to `coverage/combined`.
 
 The combined report credits code executed on another native platform. It does
-not credit unexecuted code, browser bundles, child-process internals or native
+not credit unexecuted code, unreported browser execution or native
 Rust and C code. An uncovered path can be reachable, platform-specific or
 unreachable under the documented contract. Investigate the path before adding
 a test. Do not fabricate an invalid internal state or remove a measured module
@@ -115,7 +124,7 @@ and reference release on unmount. The page reports completion to a local HTTP
 test server. Chromium startup has a separate deadline from the page's checks.
 The driver waits for subscriptions before emitting transient events. A rendered
 view alone does not mean that React's passive subscription effect has finished.
-Its browser execution is separate from Node's V8 coverage totals.
+During coverage runs, the fixture reports its source execution before it posts the result. Other browser checks remain separate unless they report their own instrumented execution.
 
 Linux CI starts a private D-Bus session for the JavaScript suite. For a headless
 Linux checkout, install `dbus-daemon` and run `dbus-run-session -- npm test` to use

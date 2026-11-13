@@ -1,22 +1,21 @@
-import { existsSync, realpathSync } from "node:fs";
+import { realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
 import manifest from "./package.json" with { type: "json" };
+import { typescriptSources } from "./scripts/coverage-provider.mjs";
+import { workspaceSource } from "./scripts/coverage-instrument.ts";
 
 const temporary = realpathSync(tmpdir());
 
 export default defineConfig({
+	esbuild: false,
+	oxc: false,
 	plugins: [
+		typescriptSources,
 		{
 			name: "workspace-test-sources",
 			enforce: "pre",
-			resolveId(specifier) {
-				if (!specifier.startsWith("@axi/")) return;
-				const target = fileURLToPath(import.meta.resolve(specifier)).replaceAll("\\", "/");
-				const source = target.replace(/\/dist\/(.*)\.js$/, "/src/$1.ts");
-				if (source !== target && existsSync(source)) return source;
-			},
+			resolveId: workspaceSource,
 		},
 	],
 	test: {
@@ -24,7 +23,8 @@ export default defineConfig({
 		env: { TMPDIR: temporary },
 		include: [...manifest.workspaces.map((directory) => `${directory}/test/**/*.test.ts`), "test/*.test.ts"],
 		coverage: {
-			provider: "v8",
+			provider: "custom",
+			customProviderModule: "./scripts/coverage-provider.mjs",
 			include: manifest.workspaces.map((directory) => `${directory}/src/**/*.ts`),
 			exclude: ["**/*.d.ts"],
 			reporter: ["text", "json", "json-summary", "html"],

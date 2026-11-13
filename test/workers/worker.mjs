@@ -7,7 +7,13 @@ import { createModels, fauxProvider, fauxAssistantMessage, fauxToolCall, fauxTex
 import { openDurableObjectSqliteStorage } from "@axi/durable/storage/sqlite/cloudflare";
 import { createInlineCodemodeSandbox, CodemodeSandboxDurableObject } from "@axi/codemode/cloudflare";
 import { RemoteCodemodeSandbox } from "@axi/codemode/portable";
-export class Sandbox extends CodemodeSandboxDurableObject {}
+const coverage = () => ({
+	context: (globalThis.__AXI_COVERAGE_CONTEXT__ ??= crypto.randomUUID()),
+	data: globalThis.__VITEST_COVERAGE__ ?? {},
+});
+export class Sandbox extends CodemodeSandboxDurableObject {
+	fetch() { return Response.json(coverage()); }
+}
 const Counter = defineDoc({
 	checkpointWhen: () => false,
 	kind: "runtime.counter",
@@ -16,7 +22,8 @@ const Counter = defineDoc({
 	initial: () => ({ count: 0 }),
 });
 export class State extends DurableObject {
-	async fetch() {
+	async fetch(request) {
+		if (new URL(request.url).pathname === "/coverage") return Response.json(coverage());
 		const db = new DurableObjectSqliteDatabase(this.ctx.storage);
 		await db.exec("CREATE TABLE IF NOT EXISTS checks (id INTEGER PRIMARY KEY, value TEXT)");
 		await db.run("DELETE FROM checks");
@@ -47,6 +54,21 @@ export class State extends DurableObject {
 			new Uint8Array(bytes).subarray(2, 5),
 			bytes.subarray(2, 5),
 		);
+		const binaryRead = await db.get("SELECT ? AS bytes", new Uint8Array([1, 2, 3]));
+		const integers = await db.get("SELECT ? AS lower, ? AS upper", BigInt(Number.MIN_SAFE_INTEGER), BigInt(Number.MAX_SAFE_INTEGER));
+		let precisionErrors = 0;
+		for (const value of [BigInt(Number.MIN_SAFE_INTEGER) - 1n, BigInt(Number.MAX_SAFE_INTEGER) + 1n]) {
+			try { await db.get("SELECT ? AS value", value); } catch (error) {
+				if (!(error instanceof RangeError)) throw error;
+				precisionErrors++;
+			}
+		}
+		const defaultSession = createSession(await openDurableObjectSqliteStorage(this.ctx.storage));
+		const defaultCount = await defaultSession.commit(async (tx) => ++(await tx.doc(Counter)).count, context);
+		await defaultSession.close(context);
+		const reopenedDefault = createSession(await openDurableObjectSqliteStorage(this.ctx.storage));
+		const defaultRestored = (await reopenedDefault.snapshot(Counter, context)).count;
+		await reopenedDefault.close(context);
 		let session = createSession(await openDurableObjectSqliteStorage(this.ctx.storage, { prefix: "runtime" }));
 		const count = await session.commit(async (tx) => {
 			const doc = await tx.doc(Counter);
@@ -63,6 +85,9 @@ export class State extends DurableObject {
 		} finally {
 			await vm.close();
 		}
+		const defaultVm = createInlineCodemodeSandbox();
+		let defaultScript;
+		try { defaultScript = await defaultVm.execute("return 41;"); } finally { await defaultVm.close(); }
 		const remote = new RemoteCodemodeSandbox({
 			remote: () => this.env.SANDBOX.getByName("test"),
 			tools: [{ name: "twice", execute: (args) => args * 2 }],
@@ -117,9 +142,17 @@ export class State extends DurableObject {
 		} finally {
 			await harness.close(context);
 		}
+		await db.close();
+		const afterClose = await db.all("SELECT * FROM checks ORDER BY id");
 		return Response.json({
 			rows,
 			binary,
+			binaryRead: Array.from(binaryRead.bytes),
+			integers,
+			precisionErrors,
+			defaultStorage: { count: defaultCount, restored: defaultRestored },
+			defaultScript,
+			afterClose,
 			rejected,
 			count,
 			restored,
@@ -130,4 +163,4 @@ export class State extends DurableObject {
 		});
 	}
 }
-export default { fetch: (_request, env) => env.STATE.get(env.STATE.idFromName("check")).fetch("https://object/") };
+export default { fetch: (request, env) => env.STATE.get(env.STATE.idFromName("check")).fetch(request) };

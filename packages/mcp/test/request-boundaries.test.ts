@@ -158,44 +158,59 @@ test("resource and tool helpers validate responses at the transport boundary", a
 	}
 });
 
-test("progress replaces malformed metadata, renews the deadline and retains an empty abort reason", async () => {
-	vi.useFakeTimers();
-	const { client, server, received } = await connected(() => undefined);
-	const progress: unknown[] = [];
-	const controller = new AbortController();
-	try {
-		let settled = false;
-		const pending = client.request(
-			"work",
-			{ _meta: 17 },
-			{
-				signal: controller.signal,
-				onProgress: (value) => progress.push(value),
-			},
-		);
-		void pending.then(
-			() => {
-				settled = true;
-			},
-			() => {
-				settled = true;
-			},
-		);
-		await vi.advanceTimersByTimeAsync(900);
-		await server.send({ jsonrpc: "2.0", method: "notifications/progress", params: { progressToken: 2, progress: 1 } });
-		expect(received).toContainEqual({ jsonrpc: "2.0", id: 2, method: "work", params: { _meta: { progressToken: 2 } } });
-		expect(progress).toEqual([{ progressToken: 2, progress: 1 }]);
-		await vi.advanceTimersByTimeAsync(900);
-		expect(settled).toBe(false);
-		controller.abort("");
-		await expect(pending).rejects.toMatchObject({ name: "AbortError" });
-		await Promise.resolve();
-		expect(received).toContainEqual({ jsonrpc: "2.0", method: "notifications/cancelled", params: { requestId: 2 } });
-	} finally {
-		await client.close();
-		vi.useRealTimers();
-	}
-});
+test.each([
+	{ reason: "", notice: { requestId: 2 } },
+	{ reason: null, notice: { requestId: 2, reason: "Aborted" } },
+])(
+	"progress replaces malformed metadata, renews the deadline and preserves abort reason $reason",
+	async ({ reason, notice }) => {
+		vi.useFakeTimers();
+		const { client, server, received } = await connected(() => undefined);
+		const progress: unknown[] = [];
+		const controller = new AbortController();
+		try {
+			let settled = false;
+			const pending = client.request(
+				"work",
+				{ _meta: 17 },
+				{
+					signal: controller.signal,
+					onProgress: (value) => progress.push(value),
+				},
+			);
+			void pending.then(
+				() => {
+					settled = true;
+				},
+				() => {
+					settled = true;
+				},
+			);
+			await vi.advanceTimersByTimeAsync(900);
+			await server.send({
+				jsonrpc: "2.0",
+				method: "notifications/progress",
+				params: { progressToken: 2, progress: 1 },
+			});
+			expect(received).toContainEqual({
+				jsonrpc: "2.0",
+				id: 2,
+				method: "work",
+				params: { _meta: { progressToken: 2 } },
+			});
+			expect(progress).toEqual([{ progressToken: 2, progress: 1 }]);
+			await vi.advanceTimersByTimeAsync(900);
+			expect(settled).toBe(false);
+			controller.abort(reason);
+			await expect(pending).rejects.toMatchObject({ name: "AbortError" });
+			await Promise.resolve();
+			expect(received).toContainEqual({ jsonrpc: "2.0", method: "notifications/cancelled", params: notice });
+		} finally {
+			await client.close();
+			vi.useRealTimers();
+		}
+	},
+);
 
 test("timeouts and aborts cancel pending requests and later responses cannot settle them again", async () => {
 	const { client, server, received } = await connected(() => undefined);

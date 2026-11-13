@@ -72,6 +72,8 @@ Image generation supports text and image input and returns text and embedded ima
 
 GitHub Copilot exposes `microsoft-decision-1` through classifier accessors. It uses the authenticated account endpoint with `/v1/systemone`; chat and classifier catalogs stay separate.
 
+Copilot chat models that declare effort controls forward the selected thinking level as `reasoning_effort`. Chat Completions usage reads reasoning tokens from nested completion details, then from the provider's top-level `reasoning_tokens` field. These tokens remain part of the reported output total.
+
 The generic serialized message transport supports remote assistant events and diagnostic metadata. The optional `@axi/ai/compat` entry provides a global API registry and catalog access. Prefer a `Models` collection when separate applications or requests need independent configuration.
 
 Google and Vertex use the Google SDK, with thinking controls, signature replay, image tool results and custom fetch. Token-limit continuation responses return partial output with `stopReason: "length"`; the SDK does not send another request automatically. Vertex supports API keys and scoped application credentials. Bedrock uses the AWS SDK, with profile and bearer authentication, proxy routing, signed headers, encrypted reasoning and cache accounting. Mistral uses native HTTP and SSE, with thinking, tool arguments and prompt affinity. The Workers AI binding adapter forwards requests without changing their bodies or headers.

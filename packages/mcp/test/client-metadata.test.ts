@@ -24,6 +24,7 @@ test("an existing provider keeps its server-specific metadata identity when call
 		store: { load: () => undefined, save() {}, withRefreshLock: async <T>(fn: () => Promise<T>) => fn() },
 	};
 	const provider = createOAuthClientProvider(options, callback);
+	expect(() => provider.redirectToAuthorization(new URL("https://login.example.test/authorize"))).not.toThrow();
 	const metadata = {
 		issuer: "https://login.example.test",
 		authorization_endpoint: "https://login.example.test/authorize",
