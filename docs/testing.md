@@ -143,6 +143,10 @@ Controlled pipe-error fixtures replace both process creation and termination.
 They never signal an unspawned operating-system handle. Separate stdio lifecycle
 checks start real children and verify their termination.
 
+SSH bootstrap checks execute the generated shell scripts through a local proxy.
+The proxy preserves the command's exit status when the command closes input
+early. These cases do not contact an SSH server.
+
 Editor tests cover completion by keyboard and mouse, paste-marker deletion,
 history limits and Unicode wrapping. Overlay tests cover focus restoration,
 visibility on resize, anchors and terminal color queries. Color tests inspect
@@ -240,8 +244,9 @@ memory link, including mapping failures, refusal and subscription release.
 The native workflow runs on Linux, macOS and Windows for x64 and arm64. Each job
 builds the Env daemon and terminal helper, checks types, runs owned tests and
 installs the package archives. Android jobs cross-compile the Env daemon; they
-do not run device tests. Node 22 and 24 compatibility jobs run on Linux after the
-native jobs pass.
+do not run device tests. Node 22 and 24 compatibility jobs reuse the Linux x64
+binaries once that target passes. Other native targets continue independently.
+The combined archive waits for every target and both compatibility jobs.
 
 The Objects terminal launcher's sandbox scenarios require Node 26.5.1 or later.
 Node 22 and 24 still run the launcher's protocol and unsupported-runtime checks.

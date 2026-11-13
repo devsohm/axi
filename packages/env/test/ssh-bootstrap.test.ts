@@ -45,6 +45,7 @@ if (step.hostKey) {
 }
 if (step.local) {
  const child = spawn("/bin/sh", ["-c", command], { stdio: ["pipe", "inherit", "inherit"] });
+ child.stdin.on("error", error => { if (error.code !== "EPIPE") throw error; });
  child.stdin.end(input);
  child.on("exit", code => process.exit(code ?? 1));
 } else if (step.hold) {

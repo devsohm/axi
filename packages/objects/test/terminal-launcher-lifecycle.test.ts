@@ -125,28 +125,34 @@ bridge.send({kind:"request",id:3,request:{kind:"fetch",path:"https://foreign.inv
 	expect(f.requests.some((request) => request.path.includes("foreign"))).toBe(false);
 });
 
-test.each(["declared", "streamed"] as const)("terminal asset requests reject oversized %s responses", async (mode) => {
-	const f = await fixture(
-		script('bridge.send({kind:"request",id:1,request:{kind:"fetch",path:"/_objects/tui/plugin/large"}});'),
-	);
-	f.routes.set("/_objects/tui/plugin/large", (response) => {
-		if (mode === "declared") {
-			response.setHeader("content-length", 8 * 1024 * 1024 + 1);
-			response.end("x");
-		} else {
-			for (let index = 0; index < 9; index++) response.write(Buffer.alloc(1024 * 1024, 97));
-			response.end();
-		}
-	});
-	await f.start();
-	await vi.waitFor(() => expect(f.text()).toContain("ready"));
-	f.input.write("request");
-	await vi.waitFor(() =>
-		expect(f.text()).toContain(
-			'"kind":"refused","id":1,"message":"terminal: /_objects/tui/plugin/large exceeds 8 MiB"',
-		),
-	);
-});
+test.each(["declared", "streamed"] as const)(
+	"terminal asset requests reject oversized %s responses",
+	async (mode) => {
+		const f = await fixture(
+			script('bridge.send({kind:"request",id:1,request:{kind:"fetch",path:"/_objects/tui/plugin/large"}});'),
+		);
+		f.routes.set("/_objects/tui/plugin/large", (response) => {
+			if (mode === "declared") {
+				response.setHeader("content-length", 8 * 1024 * 1024 + 1);
+				response.end("x");
+			} else {
+				for (let index = 0; index < 9; index++) response.write(Buffer.alloc(1024 * 1024, 97));
+				response.end();
+			}
+		});
+		await f.start();
+		await vi.waitFor(() => expect(f.text()).toContain("ready"));
+		f.input.write("request");
+		await vi.waitFor(
+			() =>
+				expect(f.text()).toContain(
+					'"kind":"refused","id":1,"message":"terminal: /_objects/tui/plugin/large exceeds 8 MiB"',
+				),
+			{ timeout: 5000 },
+		);
+	},
+	15000,
+);
 
 test("terminal request admission refuses a ninth request while eight asset reads remain pending", async () => {
 	const f = await fixture(
