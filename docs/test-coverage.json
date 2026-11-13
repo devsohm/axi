@@ -101,7 +101,8 @@
 						"packages/objects/test/store-engine.test.ts",
 						"packages/objects/test/store-runtime.test.ts",
 						"packages/objects/test/store-replication.test.ts",
-						"packages/objects/test/store-record-validation.test.ts"
+						"packages/objects/test/store-record-validation.test.ts",
+						"packages/objects/test/store-import-boundaries.test.ts"
 					]
 				},
 				{
