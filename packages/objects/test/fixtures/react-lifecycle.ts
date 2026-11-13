@@ -1,4 +1,4 @@
-import { createElement, useLayoutEffect } from "react";
+import { createElement, useLayoutEffect, useMemo } from "react";
 import { flushSync } from "react-dom";
 import { createRoot } from "react-dom/client";
 import {
@@ -13,6 +13,7 @@ import {
 	local,
 	method,
 	str,
+	type EventMember,
 	type Held,
 } from "../../src/index.ts";
 import { BACKGROUND_CONTEXT as context } from "../../src/context/index.ts";
@@ -76,6 +77,7 @@ async function run() {
 	);
 	const root = createRoot(document.getElementById("app")!);
 	let held: Held<typeof Feed> | undefined;
+	const attached = new WeakSet<Held<typeof Feed>>();
 	let edit: (value: string) => void = () => {};
 	function View({ name, label, pageKey }: { name: string; label: string; pageKey: string }) {
 		const ref = useHold(Feed, { name });
@@ -84,7 +86,18 @@ async function run() {
 			total = useRegistry(Counts);
 		const [draft, setDraft] = usePageState(pageKey, "");
 		const { t, locale } = useMessages(messages);
-		useEvents(ref?.next, ({ value }) => received.push(`${label}:${value}`));
+		const member = useMemo<EventMember<string> | undefined>(() => {
+			if (!ref) return;
+			return {
+				async on(listener, scope) {
+					await new Promise((resolve) => setTimeout(resolve, 25));
+					const subscription = await ref.next.on(listener, scope);
+					attached.add(ref);
+					return subscription;
+				},
+			};
+		}, [ref]);
+		useEvents(member, ({ value }) => received.push(`${label}:${value}`));
 		useLayoutEffect(() => {
 			if (label === "updated") void ref?.emit("layout", context);
 		}, [ref, label]);
@@ -104,45 +117,48 @@ async function run() {
 	function snapshot() {
 		return JSON.parse(document.querySelector("output")?.textContent ?? "null");
 	}
-	async function until(check: () => boolean) {
+	async function until(stage: string, check: () => boolean) {
 		for (let tries = 0; tries < 200; tries++) {
 			if (check()) return;
 			await new Promise((resolve) => setTimeout(resolve, 5));
 		}
 		throw new Error(
-			`Browser state did not settle: ${JSON.stringify({ view: snapshot(), failures, state: held?.state.value })}`,
+			`Browser state did not settle at ${stage}: ${JSON.stringify({ view: snapshot(), failures, received, state: held?.state.value })}`,
 		);
 	}
 	try {
 		paint("east", "initial");
-		await until(() => snapshot()?.status === "live" && snapshot()?.total === 17);
+		await until("initial view", () => snapshot()?.status === "live" && snapshot()?.total === 17);
+		await until("initial subscription", () => held !== undefined && attached.has(held));
 		const initial = snapshot();
 		await held!.increment(context);
-		await until(() => snapshot()?.count === 1);
+		await until("increment", () => snapshot()?.count === 1);
 		await held!.emit("first", context);
-		await until(() => received.length === 1);
+		await until("first event", () => received.length === 1);
 		flushSync(() => edit("unfinished input"));
 		const changed = snapshot();
 		paint("east", "updated");
-		await until(() => received.length === 2);
+		await until("layout event", () => received.length === 2);
 		const beforeLanguage = document.querySelector("output");
 		hostLanguage(host).set(createLanguage("fr", NO_TRANSLATIONS, () => {}));
-		await until(() => snapshot()?.title === "Prêt");
+		await until("language", () => snapshot()?.title === "Prêt");
 		const translated = snapshot();
 		const sameElement = beforeLanguage === document.querySelector("output");
 		paint("east", "remounted", "draft", "new-component");
-		await until(() => snapshot()?.status === "live");
+		await until("remounted view", () => snapshot()?.status === "live");
+		await until("remounted subscription", () => held !== undefined && attached.has(held));
 		const restoredDraft = snapshot().draft;
 		const previous = held!;
 		paint("west", "replacement", "other");
-		await until(() => snapshot()?.status === "live" && snapshot()?.count === 0);
-		await until(() => previous.state.value.kind === "ended");
+		await until("replacement view", () => snapshot()?.status === "live" && snapshot()?.count === 0);
+		await until("previous reference release", () => previous.state.value.kind === "ended");
+		await until("replacement subscription", () => held !== undefined && attached.has(held));
 		const replacement = snapshot();
 		await held!.emit("last", context);
-		await until(() => received.length === 3);
+		await until("last event", () => received.length === 3);
 		const last = held!;
 		flushSync(() => root.unmount());
-		await until(() => last.state.value.kind === "ended");
+		await until("unmount", () => last.state.value.kind === "ended");
 		let releasedCall = false;
 		try {
 			await last.emit("after unmount", context);

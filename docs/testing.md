@@ -87,6 +87,8 @@ uses an isolated temporary browser profile and skips when Chromium is absent.
 It checks live values, page-state retention, language changes, event listeners
 and reference release on unmount. The page reports completion to a local HTTP
 test server. Chromium startup has a separate deadline from the page's checks.
+The driver waits for subscriptions before emitting transient events. A rendered
+view alone does not mean that React's passive subscription effect has finished.
 Its browser execution is separate from Node's V8 coverage totals.
 
 Client startup checks cover an unavailable server, the initial script-watch
