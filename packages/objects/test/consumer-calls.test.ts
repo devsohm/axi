@@ -33,9 +33,10 @@ it("rejects waiting calls when their provider fails without sending them after a
 	const consumer = new ConsumerSide(link);
 	const hold = consumer.attach({ request: {}, caller: {}, failed } as unknown as RemoteObject, undefined);
 	consumer.opened(1);
-	const active = consumer.call(hold, 0, data, 1, context);
+	const owner = {};
+	const active = consumer.call(hold, 0, data, 1, owner, context);
 	let waiting: unknown = "pending";
-	const queued = consumer.call(hold, 0, data, 2, context).catch((error) => {
+	const queued = consumer.call(hold, 0, data, 2, owner, context).catch((error) => {
 		waiting = error;
 	});
 	try {

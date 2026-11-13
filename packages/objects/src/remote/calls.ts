@@ -23,9 +23,12 @@ export class CallWindow<C extends QueuedCall<unknown> = QueuedCall> {
 		this.#queued.delete(call);
 	}
 	removeHold(hold: C["hold"]): C[] {
+		return this.removeWhere(call => call.hold === hold);
+	}
+	removeWhere(matches: (call: C) => boolean): C[] {
 		const removed: C[] = [];
 		for (const call of this.#queued)
-			if (call.hold === hold) {
+			if (matches(call)) {
 				this.#queued.delete(call);
 				removed.push(call);
 			}

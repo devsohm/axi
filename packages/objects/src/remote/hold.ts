@@ -221,7 +221,7 @@ export class Hold implements Holder, UnboundRequest {
 		this.#restart(state.request);
 	}
 	call(method: string, args: unknown, context: Context, parent?: TelemetryContext): Promise<unknown> {
-		return this.#object!.call(method, args, context, this.caller, this.#request!.version, parent);
+		return this.#object!.callAs(method, args, context, this.caller, this.#request!.version, parent);
 	}
 	method(index: number): { readonly name: string; readonly resultBytes: boolean } {
 		const state = this.#names(),

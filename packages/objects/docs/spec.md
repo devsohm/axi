@@ -106,6 +106,38 @@ Hold encoding captures one address and principal before writing their fields. Tr
 
 Only parent links can stamp principals and incarnations. Routes authorize each hold before resolution. Revocation ends matching external objects, unbound work and downstream links. The host's own principal is exempt.
 
+Compatible remote references made on one host share a transport hold on the same
+path. The sharing key includes contract name, version, fingerprint, parameter
+identity, placed address, caller incarnation and the caller's JSON in insertion
+order. A custom principal key does not combine callers whose JSON differs.
+Different paths, addresses or caller identities remain separate.
+
+A joining reference uses the existing replicas and becomes live immediately when
+that hold is live. Values received by both references have the same object
+identity. Each reference retains its own calls, watches, subscriptions and
+release. Releasing one first removes its queued calls, then aborts its sent
+calls in reverse send order. Other references continue. The final release ends
+the hold; a later reference creates a new hold. Presence counts transport holds,
+not the number of client components sharing them.
+
+A join does not repeat provider or relay admission, obtain a new snapshot or
+check a new snapshot against part limits. Events arriving after the join can
+reach it, including events already in transit. A failed or missing state member
+at the join exposes no earlier reference's last value. After that member receives
+a value, the joining reference retains its own last-value history.
+
+Object-owned dependencies and relayed holds do not share. Suspended paths,
+broken objects and a waiting hold on an open link also require separate holds.
+A join to a failed route without a link requests resolution again. A received
+oversized state part fails all references sharing that hold. Retrying one moves
+only that reference to a private hold and preserves its watches and member
+history. The other references remain failed until retried. These rules do not
+change the wire format.
+
+The shared hold's telemetry span is a root on the host's adapter, linked to its
+first traced getter. A later getter links to that span while it remains open.
+Reconnection creates another root linked to the first hold.
+
 Each origin has independent call and state windows. Two unacknowledged local state messages fill the state window. Method replies and control messages remain independent. Remote views keep their last snapshot while disconnected. Sent calls fail on loss and are never replayed automatically.
 
 An untrusted link admits up to `callWindow` outstanding calls, default 10,000. Trusted links have no call-window limit. Events have a separate per-origin window, default 32 messages. A full event window drops new events before encoding. Event acknowledgements do not release state credit. A relay returns event credit only when its downstream consumer acknowledges delivery.

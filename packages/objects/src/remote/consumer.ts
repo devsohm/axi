@@ -23,6 +23,7 @@ import type { RemoteObject } from "./remote-object.ts";
 type Reply = Extract<Message, { kind: "result" | "error" }>;
 type Request = {
 	readonly hold: number;
+	readonly owner: object;
 	readonly send: () => void;
 	readonly resolve: (value: unknown) => void;
 	readonly reject: (error: unknown) => void;
@@ -54,7 +55,7 @@ export class ConsumerSide {
 		});
 		return hold;
 	}
-	call(hold: number, method: number, data: MethodData, args: unknown, context: Context): Promise<unknown> {
+	call(hold: number, method: number, data: MethodData, args: unknown, owner: object, context: Context): Promise<unknown> {
 		const signal = context.abortSignal;
 		signal?.throwIfAborted();
 		const payload = takesNoArgs(data) ? undefined : payloadPart(args, data.args.bytes);
@@ -74,6 +75,7 @@ export class ConsumerSide {
 		const settle = (): void => signal?.removeEventListener("abort", cancel);
 		const request: Request = {
 			hold,
+			owner,
 			resolve: (value) => {
 				settle();
 				result.resolve(value);
@@ -105,6 +107,20 @@ export class ConsumerSide {
 	release(hold: number, error: ObjectsError): void {
 		this.#link.send({ kind: "release", hold });
 		this.forget(hold, error);
+	}
+	cancelCalls(hold: number, owner: object, label: string): void {
+		const queued = this.#window.removeWhere(call => call.hold === hold && call.owner === owner);
+		const active = [...this.#requests].filter(([, call]) => call.hold === hold && call.owner === owner).reverse();
+		if (!queued.length && !active.length) return;
+		// Cancel later wire calls before an earlier cancellation frees a relay's send slot.
+		for (const [id] of active) {
+			this.#requests.delete(id);
+			this.#link.send({ kind: "abort", call: id });
+		}
+		for (const _ of active) this.#window.freed();
+		const error = new ObjectsError({ code: "released", message: `${label}: released` });
+		for (const call of queued) call.reject(error);
+		for (const [, call] of active) call.reject(error);
 	}
 	retry(hold: number, operation: RetryOperation): void {
 		this.#link.send({

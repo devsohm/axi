@@ -29,10 +29,19 @@ export class MemberSource extends Source implements Dependent {
 	readonly #listeners = new Set<Subscriber>();
 	#previousFrame: { readonly value: JsonValue | undefined } | undefined;
 	#interrupted = false;
+	#seen: (() => boolean) | undefined;
 	constructor(source: DeriveSource, batch: Batch) {
 		super(batch);
 		this.#state = { kind: "following", source };
 		this.#connect(source);
+	}
+	unseen(seen: () => boolean): void { this.#seen = seen; }
+	#startOf(source: DeriveSource): WatchStart {
+		const start = source instanceof Source ? source.start() : { kind: "value" as const, value: source.value };
+		if (this.#seen === undefined || start.kind === "value") return start;
+		if (!this.#seen()) return { kind: "failed", error: start.error, last: undefined };
+		this.#seen = undefined;
+		return start;
 	}
 	get value(): JsonValue {
 		const state = this.#state;
@@ -44,7 +53,7 @@ export class MemberSource extends Source implements Dependent {
 		const state = this.#state;
 		switch (state.kind) {
 			case "following":
-				return state.source instanceof Source ? state.source.start() : { kind: "value", value: state.source.value };
+				return this.#startOf(state.source);
 			case "frozen":
 				return state.failure === undefined
 					? { kind: "value", value: state.value }
@@ -96,8 +105,7 @@ export class MemberSource extends Source implements Dependent {
 		}
 		if (state.kind !== "following") return;
 		this.#disconnect();
-		const start =
-			state.source instanceof Source ? state.source.start() : ({ kind: "value", value: state.source.value } as const);
+		const start = this.#startOf(state.source);
 		this.#state =
 			start.kind === "value"
 				? { kind: "frozen", value: start.value }

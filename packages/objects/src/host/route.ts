@@ -57,7 +57,7 @@ export class Route {
 		if (!entry) {
 			const made: Entry = {
 				address,
-				path: new Path((event) => this.#changed(made, event)),
+				path: new Path((event) => this.#changed(made, event), () => made.suspended),
 				resolving: false,
 				suspended: false,
 				failure: undefined,

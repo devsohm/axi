@@ -2,7 +2,7 @@ import type { TelemetryCarrier, TelemetrySpan } from "@axi/telemetry";
 import { BACKGROUND_CONTEXT, withTelemetry, type Context } from "../context/index.ts";
 import { OpenSpan, carrierOf, parentOf, ended, spanFailed, untraced } from "../telemetry.ts";
 import type { JsonValue } from "../json.ts";
-import type { Contract, ParamsOf } from "../contracts/index.ts";
+import type { Contract } from "../contracts/index.ts";
 import {
 	currentVariants,
 	type MethodData,
@@ -49,13 +49,14 @@ export class RemoteObject implements Target {
 	readonly request: HoldRequest;
 	readonly caller: Caller;
 	readonly #host: AnyHost;
-	readonly #params: ParamsOf<Contract>;
+	readonly #params: CheckedParams;
 	#path: Path;
 	#dependent: ObjectsObject | undefined;
 	#status: RefState = LOADING;
 	#snapshot: Bound | undefined;
 	#connection: { readonly side: ConsumerSide; readonly id: number } | undefined;
-	#reference: Binding | undefined;
+	readonly #references = new Set<Binding>();
+	#unindex: (() => void) | undefined;
 	#failure: ObjectsError | undefined;
 	#holding?: OpenSpan;
 	#firstHold?: TelemetryCarrier;
@@ -69,14 +70,16 @@ export class RemoteObject implements Target {
 		path: Path,
 		dependent: ObjectsObject | undefined,
 		context: Context = BACKGROUND_CONTEXT,
+		unindex?: () => void,
 	) {
 		this.#host = host;
 		this.contract = contract;
 		this.label = checked.key ? `${contract.name}(${checked.key})` : contract.name;
-		if (!untraced(context.telemetry)) {
-			this.#holding = new OpenSpan(context.telemetry, "objects.hold", {
+		if (!untraced(host.telemetry)) {
+			this.#holding = new OpenSpan(host.telemetry, "objects.hold", {
 				"objects.host": host.spanHost, type: contract.name, object: this.label.slice(0, 256), "address.kind": address.kind,
 			});
+			if (!untraced(context.telemetry)) this.#holding.span.addLink({ context: context.telemetry });
 			this.#firstHold = carrierOf(this.#holding.span);
 		}
 		this.request = {
@@ -87,9 +90,10 @@ export class RemoteObject implements Target {
 			address,
 		};
 		this.caller = caller;
-		this.#params = checked.params;
+		this.#params = checked;
 		this.#path = path;
 		this.#dependent = dependent;
+		this.#unindex = unindex;
 	}
 	get state(): RefState {
 		return this.#status;
@@ -135,12 +139,35 @@ export class RemoteObject implements Target {
 		return undefined;
 	}
 	hold(binding: Binding): void {
-		this.#reference = binding;
+		const snapshot = this.#snapshot;
+		if (snapshot && this.#references.size) {
+			const unseen = new Map<string, number>();
+			for (const variant of currentVariants(this.contract).values())
+				for (const member of variant.state.keys()) {
+					const replica = snapshot.replicas.get(member);
+					if (this.#status.kind !== "live" || !snapshot.names.state.includes(member) || replica?.start().kind !== "value")
+						unseen.set(member, replica?.generation ?? 0);
+				}
+			binding.joined(unseen);
+		}
+		this.#references.add(binding);
 	}
-	unhold(_binding: Binding): void {
+	generationOf(member: string): number | undefined { return this.#snapshot?.replicas.get(member)?.generation; }
+	unhold(binding: Binding): void {
+		if (!this.#references.delete(binding)) return;
+		if (this.#references.size) {
+			this.#connection?.side.cancelCalls(this.#connection.id, binding, this.label);
+			return;
+		}
 		const error = new ObjectsError({ code: "released", message: `${this.label}: released` });
+		this.#unpublish();
 		this.#connection?.side.release(this.#connection.id, error);
 		this.#end(error);
+	}
+	#unpublish(): void {
+		const unindex = this.#unindex;
+		this.#unindex = undefined;
+		unindex?.();
 	}
 	attach(link: HostLink): void {
 		this.#connection = { side: link.consumer, id: link.consumer.attach(this, this.#dependent?.activationChain(), this.holdTrace()) };
@@ -157,12 +184,12 @@ export class RemoteObject implements Target {
 		if (this.#status.kind !== "ended")
 			this.#move({ kind: "failed", cause: { kind: "waiting", error }, retryAt: undefined });
 	}
-	async call(name: string, args: unknown, context: Context): Promise<unknown> {
+	async call(name: string, args: unknown, context: Context, binding: Binding): Promise<unknown> {
 		const snapshot = this.#snapshot!,
 			method = snapshot.methods.get(name);
 		if (!method) throw invalid("member", `${this.label} (variant ${snapshot.variant}) has no method "${name}"`);
 		const parent = context.telemetry;
-		if (untraced(parent)) return this.#connection!.side.call(this.#connection!.id, snapshot.names.methods.indexOf(name), method, args, context);
+		if (untraced(parent)) return this.#connection!.side.call(this.#connection!.id, snapshot.names.methods.indexOf(name), method, args, binding, context);
 		return parent.startSpan({ name: "objects.call", attributes: {
 			"objects.host": this.#host.spanHost, type: this.contract.name, member: name, object: this.label.slice(0, 256),
 			"address.kind": this.request.address.kind, ...this.#host.principalAttributes(this.caller.principal, context),
@@ -173,6 +200,7 @@ export class RemoteObject implements Target {
 			snapshot.names.methods.indexOf(name),
 			method,
 			args,
+			binding,
 			withTelemetry(span, context),
 		);
 		span.setAttributes({ outcome: "ok" });
@@ -193,28 +221,46 @@ export class RemoteObject implements Target {
 	keyedMember(name: string): never {
 		throw invalid("member", `${this.label} has no keyed member "${name}": keyed members are local`);
 	}
-	retry(operation: RetryOperation): void {
+	retry(operation: RetryOperation, binding: Binding): void {
 		if (this.#status.kind !== "failed") return;
 		if (this.#path !== this.#host.unplaced) {
 			if (operation.hops > 0) this.#connection?.side.retry(this.#connection.id, operation);
 			return;
 		}
+		const own = new RemoteObject(this.#host, this.contract, this.#params, this.request.address, this.caller,
+			this.#host.unplaced, this.#dependent);
+		const snapshot = this.#snapshot;
+		if (snapshot) {
+			const nodes = new Map(snapshot.names.events.map(name => [name, new EventNode()]));
+			own.#snapshot = {
+				...snapshot,
+				replicas: new Map([...snapshot.replicas].map(([name, value]) => [name, value.fork(this.#host.batch)])),
+				eventNode: name => nodes.get(name),
+			};
+		}
+		this.#host.unplaced.attach(own);
+		this.#references.delete(binding);
+		binding.transfer(own);
+		if (!this.#references.size) this.#end(new ObjectsError({ code: "released", message: `${this.label}: released` }));
+		own.#place();
+	}
+	#place(): void {
 		let path: Path;
 		try {
-			path = this.#host.pathOf(this.contract, this.#params, this.caller.principal);
+			path = this.#host.pathOf(this.contract, this.#params.params, this.caller.principal);
 		} catch (error) {
 			this.#broken(asObjectsError(error, this.contract.name));
 			return;
 		}
 		this.#path.detach(this);
 		this.#path = path;
-		this.#move(LOADING);
 		path.attach(this);
 	}
 	tooLarge(error: ObjectsError): void {
 		const connection = this.#connection;
 		if (!connection) return;
 		this.#connection = undefined;
+		this.#unpublish();
 		connection.side.release(connection.id, error);
 		this.#path.detach(this);
 		this.#path = this.#host.unplaced;
@@ -336,20 +382,23 @@ export class RemoteObject implements Target {
 	revoke(error: ObjectsError): void {
 		const connection = this.#connection;
 		this.#connection = undefined;
+		this.#unpublish();
 		connection?.side.release(connection.id, error);
 		this.lost(error);
 	}
 	lost(error: ObjectsError): void {
-		const reference = this.#reference;
+		const references = [...this.#references];
+		this.#unpublish();
 		this.#connection?.side.forget(this.#connection.id, error);
 		this.#end(error);
-		reference?.end(error);
+		for (const reference of references) reference.end(error);
 	}
 	#end(error: ObjectsError): void {
+		this.#unpublish();
 		this.#held("ended");
 		const snapshot = this.#snapshot;
 		this.#status = { kind: "ended", error };
-		this.#reference = undefined;
+		this.#references.clear();
 		this.#dependent = undefined;
 		this.#connection = undefined;
 		this.#snapshot = undefined;
@@ -357,9 +406,13 @@ export class RemoteObject implements Target {
 		for (const replica of snapshot?.replicas.values() ?? []) replica.end(error);
 	}
 	#move(state: RefState): void {
+		if (state.kind === "failed" && state.cause.kind === "broken") this.#unpublish();
 		this.#status = state;
-		this.#reference?.retarget();
-		this.#reference?.moved();
+		const references = [...this.#references];
+		const retarget = () => { for (const reference of references) reference.retarget(); };
+		if (references.some(reference => reference.following)) this.#host.batch.within(retarget, BACKGROUND_CONTEXT);
+		else retarget();
+		for (const reference of references) if (this.#references.has(reference)) reference.moved();
 	}
 	#broken(error: ObjectsError): void {
 		this.#held("failed", error);

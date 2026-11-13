@@ -6,6 +6,15 @@ export type Principal = { readonly kind: string; readonly [field: string]: JsonV
 export type PrincipalKeyFunction<P extends Principal = Principal> = (principal: P) => string;
 const keys = new WeakMap<Principal, WeakMap<object, string>>();
 const defaultKey = {};
+const serialized = new WeakMap<Principal, string>();
+export function principalJson(principal: Principal, context: Context): string {
+	const cached = serialized.get(principal);
+	if (cached !== undefined) return cached;
+	objectsMetrics(context.telemetry.metrics).counter("objects.data.walks").add(1);
+	const value = JSON.stringify(principal);
+	serialized.set(principal, value);
+	return value;
+}
 export function principalKey<P extends Principal>(principal: P, context: Context, customKey?: PrincipalKeyFunction<P>): string {
 	let cached = keys.get(principal);
 	if (!cached) keys.set(principal, cached = new WeakMap());

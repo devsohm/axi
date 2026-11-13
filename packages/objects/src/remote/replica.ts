@@ -18,9 +18,18 @@ export class Replica extends Source {
 	#ops = noOps;
 	#retired = false;
 	#retiredWhileFailed = false;
+	#values: number;
 	constructor(batch: Batch, state: MemberSnapshot) {
 		super(batch);
 		this.#status = state.kind === "value" ? state : { kind: "failed", error: handedOut(state.error), last: undefined };
+		this.#values = state.kind === "value" ? 1 : 0;
+	}
+	get generation(): number { return this.#values; }
+	fork(batch: Batch): Replica {
+		const copy = new Replica(batch, { kind: "value", value: null });
+		copy.#status = this.#status;
+		copy.#values = this.#values;
+		return copy;
 	}
 	get value(): JsonValue {
 		if (this.#status.kind === "value") return this.#status.value;
@@ -41,6 +50,7 @@ export class Replica extends Source {
 		return { ops, value: applyImmutable(status.kind === "value" ? status.value : null, ops) };
 	}
 	adopt(value: JsonValue, ops: readonly Op[], retired: boolean): void {
+		this.#values++;
 		this.#status = { kind: "value", value };
 		this.#ops = ops;
 		this.#retired = retired || this.#retiredWhileFailed;

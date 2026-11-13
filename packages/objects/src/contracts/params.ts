@@ -32,4 +32,6 @@ export function readParams(fields: readonly [string, unknown][], path: string): 
 		properties: Object.fromEntries(schemas.map(([name, schema]) => [name, schema.schema])) },
 		normal: schemas.map(([name, schema]) => [name, schema.normal]) };
 }
-export const joinKey = (parts: readonly string[]): string => parts.map((part) => part.replace(/[\\|]/g, "\\$&")).join("|");
+export const joinKey = (parts: readonly string[]): string => parts.map((part) =>
+	part.includes("|") || part.includes("\\") ? part.replace(/[\\|]/g, "\\$&") : part,
+).join("|");

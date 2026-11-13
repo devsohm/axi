@@ -84,12 +84,13 @@ export interface Target {
 	waitFor?<T>(waiting: Promise<T>, context: Context): Promise<T>;
 	hold(binding: Binding): void;
 	unhold(binding: Binding): void;
-	call(method: string, args: unknown, context: Context, caller: Caller, version?: number): Promise<unknown>;
+	call(method: string, args: unknown, context: Context, binding: Binding): Promise<unknown>;
+	generationOf?(member: string): number | undefined;
 	member(member: string, version?: number): DeriveSource;
 	keyedMapping?(member: string, version: number): ((value: JsonValue) => JsonValue) | undefined;
 	keyedMember(member: string): KeyedSlot;
 	pinKey(member: string, key: string, context: Context, version?: number): Promise<PinnedKey>;
-	retry(operation: RetryOperation): void;
+	retry(operation: RetryOperation, binding: Binding): void;
 	pathTo(target: LocalTarget, visited: Set<Target>): LocalTarget[] | undefined;
 }
 export type Attachable = {
@@ -137,6 +138,7 @@ export class Binding {
 	readonly #watches = new Set<Watch<JsonValue>>();
 	readonly #pins: KeyedMemberAt[] = [];
 	readonly #remoteMembers = new Map<string, MemberSource>();
+	#unseen: Map<string, number> | undefined;
 	readonly #variants: ReturnType<typeof currentVariants>;
 	#attached = false;
 	#variant: string = LOCAL;
@@ -232,11 +234,31 @@ export class Binding {
 	}
 	bind(target: Target): void {
 		if (this.#status.kind === "unbound") {
-			this.#status = { kind: "bound", target };
-			target.hold(this);
-			this.retarget();
-			this.moved();
+			this.#boundTo(target);
 		}
+	}
+	transfer(target: Target): void {
+		if (this.#status.kind === "bound") this.#boundTo(target);
+	}
+	#boundTo(target: Target): void {
+		this.#status = { kind: "bound", target };
+		target.hold(this);
+		this.retarget();
+		this.moved();
+	}
+	joined(members: ReadonlyMap<string, number>): void {
+		for (const [member, generation] of members) {
+			if (this.#remoteMembers.has(member)) continue;
+			(this.#unseen ??= new Map()).set(member, generation);
+		}
+	}
+	#seen(member: string): boolean {
+		const before = this.#unseen?.get(member);
+		if (before === undefined) return true;
+		const now = this.target?.generationOf?.(member);
+		if (now === undefined || now <= before) return false;
+		this.#unseen!.delete(member);
+		return true;
 	}
 	whenUnbound(place: (cause: FailureCause) => void): void {
 		this.#place = place;
@@ -381,6 +403,7 @@ export class Binding {
 					? attached
 					: this.#requireTarget();
 			source = new MemberSource(target.member(name, this.version), this.#owner!.batch);
+			if (this.#unseen?.has(name)) source.unseen(() => this.#seen(name));
 			if (state.kind !== "live" && target.kind === "remote") {
 				source.freeze();
 				if (state.kind === "failed") source.fail(state.cause.error, BACKGROUND_CONTEXT);
@@ -477,7 +500,7 @@ export class Binding {
 	}
 	retry(operation = retryOperation()): void {
 		const status = this.#status;
-		if (status.kind === "bound") status.target.retry(operation);
+		if (status.kind === "bound") status.target.retry(operation, this);
 		else if (status.kind === "refused") {
 			this.#status = { kind: "unbound" };
 			this.moved();
@@ -510,6 +533,7 @@ export class Binding {
 			sources = [...this.#remoteMembers.values()];
 		this.#heldKeys = undefined;
 		this.#remoteMembers.clear();
+		this.#unseen = undefined;
 		if (keys || sources.length) {
 			const detach = () => {
 				keys?.end(error);
@@ -555,7 +579,7 @@ export class Binding {
 		const target = this.#requireTarget();
 		this.#calls ??= new AbortController();
 		const linked = withLinkedAbortSignal(this.#calls.signal, context);
-		return target.call(method, args, linked.context, this.caller, this.version).finally(linked.release);
+		return target.call(method, args, linked.context, this).finally(linked.release);
 	}
 	#until(decide: (state: RefState) => Decision, context: Context): Promise<void> {
 		if (this.#status.kind === "released") return Promise.reject(this.#status.state.error);

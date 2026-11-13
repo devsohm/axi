@@ -10,6 +10,14 @@ Use `defineFacet()` to group declarations. The facet's `host.serve()` registers 
 
 `host.get(type, params, context)` waits for a live reference. `host.hold()` returns a reference while it loads. References expose `state`, `retry()` and `release()`. State is `loading`, `live`, `failed` or `ended`. A failed reference carries its cause and optional retry time.
 
+References to the same remote object can share transport work within one host.
+Each component still owns and releases its reference. Releasing one leaves the
+others active; the last release closes the hold. A component that joins a live
+hold can read its current values immediately. Sharing requires the same path,
+contract, parameters, placed address and caller identity. Object dependencies
+and relayed holds remain separate. See the [sharing rules](spec.md#links-and-authority)
+for failure, retry, event and admission behavior.
+
 Use `self.get()` inside a factory to declare an object-owned dependency. Use `ctx.get()` inside a call for a reference released when that call settles. Release references acquired directly from the host yourself. `host.root()` supplies the same call ownership to application code.
 
 ## Factory declarations

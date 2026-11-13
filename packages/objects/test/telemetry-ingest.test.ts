@@ -58,7 +58,9 @@ it("retains disconnected page spans, stamps the authenticated sender and never s
 		expect(batches[0]!.spans[0]).toMatchObject({ name: "clicked", attributes: { "objects.host": "browser", "identity.kind": "visitor" } });
 		expect(batches[0]!.spans[0]!.attributes).not.toHaveProperty("objects.principal");
 		expect(batches[0]!.spans[1]!.attributes).toHaveProperty("app.color", "blue");
-		expect(principalReads).toBe(2);
+		expect(batches[0]!.spans.map(span => span.name)).toEqual(["clicked", "clicked again", "objects.hold"]);
+		expect(batches[0]!.spans[2]!.attributes).toMatchObject({ "objects.host": "browser", "identity.kind": "visitor" });
+		expect(principalReads).toBe(3);
 		expect(recorder.queuedSpans).toBe(0);
 	} finally { sender.stop(); await client.close(context); await server.close(context); }
 });

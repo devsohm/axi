@@ -21,7 +21,7 @@ import type { Dependency } from "./dependencies.ts";
 import type { PinnedKey } from "./reference.ts";
 import type { CloseFailed, NativeCloseReason } from "./native.ts";
 import { LIVE, LOADING, type Ended, type Failed, type RefState } from "./ref-state.ts";
-import { retryOperation, type LocalTarget, type Target } from "./reference.ts";
+import { retryOperation, type Binding, type LocalTarget, type Target } from "./reference.ts";
 import { RetryWakes, type RetrySource } from "./retry-on.ts";
 import type { Request } from "./staging.ts";
 import { OPENING } from "./old-work.ts";
@@ -235,7 +235,11 @@ export class ObjectsObject implements LocalTarget {
 		this.#wakes ??= new RetryWakes();
 		this.#wakes.replace(sources, () => this.#wake());
 	}
-	async call(
+	call(method: string, args: unknown, context: Context, binding: Binding): Promise<unknown> {
+		return this.callAs(method, args, context, binding.caller, binding.version);
+	}
+	generationOf(): undefined { return undefined; }
+	async callAs(
 		method: string,
 		args: unknown,
 		context: Context,

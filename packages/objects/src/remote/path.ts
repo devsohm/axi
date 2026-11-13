@@ -11,10 +11,15 @@ export type PathEvent =
 export class Path {
 	readonly #held = new Set<Upstream>();
 	readonly #notify: (event: PathEvent) => void;
+	readonly #isSuspended: () => boolean;
 	#current: HostLink | undefined;
 	#used = false;
-	constructor(changed: (event: PathEvent) => void) {
+	constructor(changed: (event: PathEvent) => void, isSuspended: () => boolean = () => false) {
 		this.#notify = changed;
+		this.#isSuspended = isSuspended;
+	}
+	get suspended(): boolean {
+		return this.#isSuspended();
 	}
 	get link(): HostLink | undefined {
 		return this.#current;
@@ -29,6 +34,9 @@ export class Path {
 		this.#held.add(holder);
 		if (this.#current) holder.attach(this.#current);
 		else this.#notify({ kind: "attached", holder });
+	}
+	requested(holder: Upstream): void {
+		if (this.#current === undefined) this.#notify({ kind: "attached", holder });
 	}
 	detach(holder: Upstream): void {
 		this.#held.delete(holder);

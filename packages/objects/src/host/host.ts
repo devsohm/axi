@@ -10,7 +10,7 @@ import {
 import type { JsonValue } from "../json.ts";
 import type { Watchable } from "../watch.ts";
 import type { Address, Contract, HostKind, ParamsOf } from "../contracts/index.ts";
-import { contractData, type Params } from "../contracts/internal.ts";
+import { contractData, joinKey, type Params } from "../contracts/internal.ts";
 import { ObjectsError, type FailureCause, type Principal, type PrincipalKeyFunction } from "../data/index.ts";
 import { OpenSpan, capped, countingOnly, ended, objectsMetrics, parentOf, untraced } from "../telemetry.ts";
 import {
@@ -21,9 +21,10 @@ import {
 	identityKey,
 	invalid,
 	principalKey,
+	principalJson,
 } from "../data/internal.ts";
 import { binaryCodec, type Codec, type Compression, type Link, type PartLimits } from "../link/index.ts";
-import { linkLimits } from "../link/internal.ts";
+import { linkLimits, type WireAddress } from "../link/internal.ts";
 import type { Registry, RegistryValue } from "../registries/index.ts";
 import { type RegistryContribution, RegistryRecord, type RegistryValueSource } from "../registries/internal.ts";
 import type { HoldRequest } from "../remote/hold.ts";
@@ -206,6 +207,7 @@ export class ObjectsHost<P extends Principal = Principal, R extends JsonValue = 
 	readonly #links = new Set<HostLink>();
 	readonly #parent = new Path(() => {});
 	readonly #routes = new Map<string, Route>();
+	readonly #shared = new WeakMap<Path, Map<string, RemoteObject>>();
 	readonly #destinations: Destination;
 	readonly #closingSignal = new AbortController();
 	readonly #heartbeat: { readonly ping: number; readonly close: number };
@@ -542,19 +544,7 @@ export class ObjectsHost<P extends Principal = Principal, R extends JsonValue = 
 		const principal = binding.caller.principal,
 			placed = this.#destinations.reference(type, checked.params, principal, context);
 		if (placed.kind === "path") {
-			const object = new RemoteObject(
-				this,
-				type,
-				checked,
-				placed.address,
-				binding.caller,
-				placed.path,
-				binding.dependent instanceof ObjectsObject ? binding.dependent : undefined,
-				context,
-			);
-			placed.path.attach(object);
-			binding.bind(object);
-			return object;
+			return this.#remote(binding, type, checked, placed.path, placed.address, context);
 		}
 		const served = this.#served.get(type.name),
 			mismatch =
@@ -575,6 +565,37 @@ export class ObjectsHost<P extends Principal = Principal, R extends JsonValue = 
 		const object = this.#object(served!, checked, principal, context, [], binding.dependent);
 		binding.bind(object);
 		if (object.activationSpan && !untraced(context.telemetry)) context.telemetry.addLink({ context: object.activationSpan });
+		return object;
+	}
+	#remote(binding: Binding, type: Contract, checked: CheckedParams, path: Path, address: WireAddress, context: Context): RemoteObject {
+		const caller = binding.caller;
+		const key = binding.dependent !== undefined || path.suspended ? undefined : joinKey([
+			type.name, String(type.version), type.fingerprint, checked.key,
+			joinKey([address.kind, canonicalJson(address.params as JsonValue, context)]),
+			caller.principal === undefined ? "-" : `+${principalJson(caller.principal, context)}`, caller.incarnation,
+		]);
+		let table = this.#shared.get(path);
+		const existing = key === undefined ? undefined : table?.get(key);
+		const waiting = existing?.state.kind === "failed" && existing.state.cause.kind === "waiting";
+		if (existing !== undefined && !(waiting && path.link !== undefined)) {
+			binding.bind(existing);
+			if (waiting) path.requested(existing);
+			if (existing.span && !untraced(context.telemetry)) context.telemetry.addLink({ context: existing.span });
+			return existing;
+		}
+		if (key !== undefined && existing === undefined && table === undefined) {
+			table = new Map();
+			this.#shared.set(path, table);
+		}
+		const indexed = key !== undefined && existing === undefined ? table : undefined;
+		const object = new RemoteObject(this, type, checked, address, caller, path,
+			binding.dependent instanceof ObjectsObject ? binding.dependent : undefined, context,
+			indexed === undefined ? undefined : () => { if (indexed.get(key!) === object) indexed.delete(key!); },
+		);
+		// Publish an owned, already-bound entry before route resolution can re-enter this host.
+		if (indexed !== undefined) indexed.set(key!, object);
+		binding.bind(object);
+		path.attach(object);
 		return object;
 	}
 	place(request: HoldRequest, link: HostLink, caller: Caller, context: Context): Placed {

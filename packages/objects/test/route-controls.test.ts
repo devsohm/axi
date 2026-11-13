@@ -70,7 +70,7 @@ it("calls an address callback without an internal receiver", async () => {
 	}
 });
 
-it("links a shared route span to its first trigger and each waiting span to that route", async () => {
+it("links a shared route and hold to their first trigger, and a joining getter to the open hold", async () => {
 	const Worker = hostKind("trace.worker");
 	const Value = remote("trace.value", {
 		version: 1, params: {}, hostAddress: () => Worker(),
@@ -92,10 +92,13 @@ it("links a shared route span to its first trigger and each waiting span to that
 		const route = spans.find((span) => span.name === "objects.resolve")!;
 		expect(route.links).toHaveLength(1);
 		const waiting = spans.filter((span) => span.name === "objects.hold");
-		expect(waiting).toHaveLength(2);
+		expect(waiting).toHaveLength(1);
 		expect(route.links[0]!.context).toEqual(waiting[0]!.context);
-		for (const span of waiting)
-			expect(span.links.map((link) => link.context)).toEqual([route.context]);
+		const firstGetter = spans.find(span => span.name === "first")!;
+		const secondGetter = spans.find(span => span.name === "second")!;
+		expect(waiting[0]!.parentId).toBeNull();
+		expect(waiting[0]!.links.map(link => link.context)).toEqual([firstGetter.context, route.context]);
+		expect(secondGetter.links.map(link => link.context)).toEqual([waiting[0]!.context]);
 	} finally {
 		pending.reject(new Error("test ended"));
 		await host.close(context);
