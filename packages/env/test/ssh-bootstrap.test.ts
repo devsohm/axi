@@ -2,17 +2,22 @@ import { createHash, generateKeyPairSync } from "node:crypto";
 import { mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { getOrThrow } from "@axi/durable/env";
+import { BACKGROUND_CONTEXT as context } from "@axi/objects/context";
 import { expect, test, vi } from "vitest";
+import { RemoteExecutionEnv } from "../src/remote-env.ts";
 import {
 	acceptHostKey,
 	connectSsh,
 	deployDaemon,
 	detectPlatform,
 	forgetHostKey,
+	localDaemon,
 	HostKeyChangedError,
 	HostKeyUnknownError,
 	SshError,
 	scanHostKey,
+	sshConnection,
 	type SshTarget,
 	type RemotePlatform,
 } from "../src/ssh.ts";
@@ -31,6 +36,14 @@ const base = new URL("./", import.meta.url);
 const commands = JSON.parse(await readFile(new URL("plan.json", base), "utf8"));
 const step = commands.shift();
 await writeFile(new URL("plan.json", base), JSON.stringify(commands));
+if (step?.stream) {
+ const command = process.argv.slice(process.argv.indexOf("--") + 2).join(" ");
+ await appendFile(new URL("calls.jsonl", base), JSON.stringify({ args: process.argv.slice(2), command, input: "" }) + "\\n");
+ const child = spawn("/bin/sh", ["-c", command], { stdio: ["pipe", "inherit", "inherit"], env: { ...process.env, SHELL: "/bin/sh" } });
+ child.stdin.on("error", error => { if (error.code !== "EPIPE") throw error; });
+ process.stdin.pipe(child.stdin);
+ await new Promise(resolve => child.on("exit", code => process.exit(code ?? 1)));
+}
 const chunks = [];
 if (step?.closeInput) closeSync(0);
 else for await (const chunk of process.stdin) chunks.push(chunk);
@@ -63,7 +76,7 @@ if (step.local) {
 	return {
 		directory,
 		target,
-		async plan(steps: { stdout?: string; stderr?: string; code?: number; local?: boolean; hostKey?: string; hold?: boolean; closeInput?: boolean }[]) {
+		async plan(steps: { stdout?: string; stderr?: string; code?: number; local?: boolean; stream?: boolean; hostKey?: string; hold?: boolean; closeInput?: boolean }[]) {
 			await writeFile(plan, JSON.stringify(steps));
 			await writeFile(join(directory, "calls.jsonl"), "");
 		},
@@ -77,6 +90,41 @@ if (step.local) {
 		close: () => rm(directory, { recursive: true, force: true }),
 	};
 }
+
+test.skipIf(process.platform === "win32").each(["eager", "lazy"])(
+	"%s SSH connections verify and restart the real daemon without losing remote files",
+	async (mode) => {
+		const peer = await peerFixture();
+		const home = join(peer.directory, "home with 'quote");
+		const options = { ...peer.target, binary: localDaemon(), loginShell: mode === "lazy" };
+		try {
+			await peer.plan([
+				{ stdout: `AXI-ENV-PROBE\nLinux\nx86_64\nGNU/Linux\n${home}\n-\n-\n` },
+				{ local: true }, { local: true }, { stream: true },
+				{ local: true }, { stream: true },
+			]);
+			const client = mode === "eager" ? await connectSsh(options) : sshConnection(options);
+			const { connection } = client;
+			try {
+				if (typeof client.remote === "function") expect(client.remote()).toBeUndefined();
+				const first = await connection.info();
+				const env = new RemoteExecutionEnv({ connection, id: "ssh-restart", cwd: peer.directory, shellPath: "/bin/sh" });
+				getOrThrow(await env.writeFile("retained.txt", "saved before disconnect", context));
+				process.kill(first.pid, "SIGTERM");
+				await vi.waitFor(async () => expect((await connection.info()).pid).not.toBe(first.pid));
+				expect(getOrThrow(await env.readTextFile("retained.txt", context))).toBe("saved before disconnect");
+				const calls = await peer.calls();
+				expect(calls).toHaveLength(6);
+				expect(calls.filter(({ command }) => command.includes("AXI-ENV-PROBE"))).toHaveLength(1);
+				if (typeof client.remote === "function") expect(client.remote()).toMatchObject({ home, platform: "linux" });
+			} finally {
+				connection.close();
+			}
+		} finally {
+			await peer.close();
+		}
+	},
+);
 
 test.skipIf(process.platform === "win32")(
 	"stalled SSH platform probes terminate at their deadlines and retain diagnostic output",
