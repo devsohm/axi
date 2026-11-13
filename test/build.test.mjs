@@ -54,3 +54,24 @@ if (process.env.BUILD_FIXTURE_FAIL === "1") process.exit(19);
 		}
 	});
 }
+
+test("checkout preserves catalog hashes even when Git defaults to CRLF", async () => {
+	const root = await mkdtemp(join(tmpdir(), "axi-checkout-"));
+	const catalog = Buffer.from('{\n  "model": "example"\n}\n');
+	const binary = Buffer.from([0, 13, 10, 26, 255]);
+	try {
+		await run("git", ["init", "-q", root]);
+		await run("git", ["-C", root, "config", "core.autocrlf", "true"]);
+		await copyFile(new URL("../.gitattributes", import.meta.url), join(root, ".gitattributes"));
+		await writeFile(join(root, "models.json"), catalog);
+		await writeFile(join(root, "runtime.wasm"), binary);
+		await run("git", ["-C", root, "add", "."]);
+		await rm(join(root, "models.json"));
+		await rm(join(root, "runtime.wasm"));
+		await run("git", ["-C", root, "checkout-index", "--all", "--force"]);
+		assert.deepEqual(await readFile(join(root, "models.json")), catalog);
+		assert.deepEqual(await readFile(join(root, "runtime.wasm")), binary);
+	} finally {
+		await rm(root, { recursive: true, force: true });
+	}
+});
