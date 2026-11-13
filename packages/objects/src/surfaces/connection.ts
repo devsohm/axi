@@ -22,6 +22,7 @@ export interface LoopEnvironment {
 export type LoopOptions = {
 	readonly open: (events: SocketEvents) => LoopLink;
 	readonly onState: (state: ConnectionState) => void;
+	/** Checked alongside reconnects. One pending answer covers later closes; false ends the loop. */
 	readonly canRetry: () => Promise<boolean>;
 	readonly environment: LoopEnvironment;
 };
@@ -32,8 +33,8 @@ export function keepConnected(options: LoopOptions): { stop(): void } {
 	let current: Socket | undefined,
 		retries = 0,
 		stopped = false,
-		deciding = false,
-		urgent = false;
+		asking = false;
+	let wokenAt: number | undefined;
 	let retry: (() => void) | undefined, stale: (() => void) | undefined;
 	function connect(): void {
 		retry = undefined;
@@ -63,26 +64,26 @@ export function keepConnected(options: LoopOptions): { stop(): void } {
 			stale = undefined;
 			if (stopped) return;
 			options.onState("waiting");
-			if (socket.opened !== undefined && clock.now() - socket.opened >= STABLE_MS) retries = 0;
-			deciding = true;
-			urgent = false;
+			const now = clock.now();
+			if (socket.opened !== undefined && now - socket.opened >= STABLE_MS) retries = 0;
+			const immediate = wokenAt !== undefined && now - wokenAt <= STALE_MS + WAKE_GRACE_MS;
+			wokenAt = undefined;
+			const backoff = Math.min(RETRY_MAX_MS, RETRY_INITIAL_MS * 2 ** retries++);
+			retry = clock.after(immediate ? 0 : clock.online() ? backoff : RETRY_MAX_MS, connect);
+			if (asking) return;
+			asking = true;
 			const decided = (again: boolean): void => {
-				deciding = false;
-				if (!again || stopped) return;
-				const backoff = Math.min(RETRY_MAX_MS, RETRY_INITIAL_MS * 2 ** retries++);
-				retry = clock.after(urgent ? 0 : clock.online() ? backoff : RETRY_MAX_MS, connect);
+				asking = false;
+				if (!again) stop();
 			};
 			void options.canRetry().then(decided, () => decided(true));
 		});
 	}
 	const removeWake = clock.onWake(() => {
+		wokenAt = clock.now();
 		if (retry) {
 			retry();
 			connect();
-			return;
-		}
-		if (deciding) {
-			urgent = true;
 			return;
 		}
 		const socket = current;
@@ -93,15 +94,16 @@ export function keepConnected(options: LoopOptions): { stop(): void } {
 			if (current === socket && clock.now() - socket.frame > STALE_MS) socket.link!.close();
 		});
 	});
+	function stop(): void {
+		if (stopped) return;
+		stopped = true;
+		removeWake();
+		retry?.();
+		retry = undefined;
+		const socket = current;
+		socket?.link?.close();
+		if (socket !== undefined) options.onState("waiting");
+	}
 	connect();
-	return {
-		stop() {
-			if (stopped) return;
-			stopped = true;
-			removeWake();
-			retry?.();
-			retry = undefined;
-			current?.link?.close();
-		},
-	};
+	return { stop };
 }

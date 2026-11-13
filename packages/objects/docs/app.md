@@ -1,6 +1,6 @@
 # App host
 
-The `@axi/objects/app` entry assembles an Objects server and its worker processes. It supplies sessions, client pairing, files and data export. It does not supply a coding agent, model prompts or an application interface.
+The `@axi/objects/app` entry assembles an Objects server and its worker processes. It supplies sign-ins, client pairing, files and data export. It does not supply a coding agent, model prompts or an application interface.
 
 ## Start a server
 
@@ -74,15 +74,17 @@ Worker keys are encoded for filesystem use. Keys whose encoded length exceeds 16
 
 SQLite may also create `-wal` and `-shm` files. They belong to the database. Do not delete or copy individual database files while the app is running.
 
-## Sign-in and sessions
+## Sign-ins
 
-`ownerLink()` returns a URL whose fragment carries a single-use, ten-minute sign-in token. The default listener uses loopback. The sign-in page exchanges that token for a signed session cookie. The app also retains a reusable device token in `owner-token`; keep that file private.
+`ownerLink()` returns a URL whose fragment carries a single-use, ten-minute sign-in token. The default listener uses loopback. The sign-in page exchanges that token for a signed `objects-sign-in` cookie. The app also retains a reusable device token in `owner-token`; keep that file private.
 
-The owner link, token file and device pairing all sign in as `principal.owner`. Owner-only routes compare complete canonical JSON, independent of property order. Changing the owner between starts replaces the token file and revokes its previous session. Other sessions for the previous owner keep that principal until the app revokes them explicitly.
+The owner link, token file and device pairing all sign in as `principal.owner`. Owner-only routes compare complete canonical JSON, independent of property order. Changing the owner between starts replaces the token file and revokes its previous sign-in. Other sign-ins for the previous owner keep that principal until the app revokes them explicitly.
 
-`Sessions` issues, lists, verifies and revokes credentials. Stored browser and device sessions retain a secret hash, principal and usage times. Lists omit hashes. Sessions expire after 400 days without use. Cookies are renewed after a day of use. Revocation prevents later authentication with the credential.
+`SignIns` issues, lists, verifies and revokes credentials. `SignInInfo` describes a listed credential and `SignInKind` selects browser, device or ephemeral authentication. Stored browser and device sign-ins retain a secret hash, principal and usage times. Lists omit hashes. Sign-ins expire after 400 days without use. Cookies are renewed after a day of use. Revocation prevents later authentication with the credential.
 
-An ephemeral session stays in memory. Its connection keeps it alive, followed by a 60-second reconnect grace period. It does not become a saved browser or device session. `ephemeralLoginFacet` lets a client choose a temporary name; it requires the app's principal union to include `EphemeralUser`.
+An ephemeral sign-in stays in memory. Its connection keeps it alive, followed by a 60-second reconnect grace period. `limits.ephemeralSignIns` sets the number retained, with a default of 1,000. The oldest is revoked when the limit is exceeded. `ephemeralLoginFacet` lets a client choose a temporary name; it requires the app's principal union to include `EphemeralUser`.
+
+The public exports are `SignIns`, `SignInInfo`, `SignInKind` and `SIGN_IN_COOKIE`. The stored document is `objects.app.sign-ins` with a `signIns` map. Earlier authentication used a different document and cookie. After upgrading, browsers and paired devices must sign in again. Startup replaces an owner-token file that no longer authenticates. This authentication document is separate from Durable conversation storage.
 
 Device pairing starts at `POST /_objects/pair`. The device shows a code. The owner compares and approves that code at `/_objects/pair/<code>`. The device polls for its token. Pending pairings expire after ten minutes and have global and per-address limits.
 

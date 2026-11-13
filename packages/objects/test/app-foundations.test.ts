@@ -5,11 +5,11 @@ import { expect, it, vi } from "vitest";
 import { BACKGROUND_CONTEXT as context } from "../src/context/index.ts";
 import { createHost, openStore, sqliteBackend } from "../src/index.ts";
 import { openNodeSqliteDatabase } from "../src/sqlite/node.ts";
-import { createSessions, Sessions } from "../src/node/app/sessions.ts";
+import { createSignIns, SignIns } from "../src/node/app/sign-ins.ts";
 import { Files, filesFacet } from "../src/node/app/files.ts";
 import { createLayout, workerDirectory } from "../src/node/app/layout.ts";
 import { hashToken, matchesHash, secretFile, writeSecret } from "../src/node/app/secrets.ts";
-import { EphemeralSessions } from "../src/node/app/ephemeral-sessions.ts";
+import { EphemeralSignIns } from "../src/node/app/ephemeral-sign-ins.ts";
 import { OwnerLink } from "../src/node/app/owner.ts";
 import { Pairings } from "../src/node/app/pairing.ts";
 
@@ -63,7 +63,7 @@ it("expires owner links and consumes each pairing result once", () => {
 it("keeps ephemeral credentials only while a connection or its grace period remains", () => {
 	vi.useFakeTimers();
 	try {
-		const sessions = new EphemeralSessions(1, 50);
+		const sessions = new EphemeralSignIns(1, 50);
 		sessions.issue("one", "hash", { kind: "user" });
 		const close = sessions.linkOpened("one")!;
 		vi.advanceTimersByTime(100);
@@ -81,23 +81,24 @@ it("keeps ephemeral credentials only while a connection or its grace period rema
 	}
 });
 
-it("persists session hashes and completed uploads through the real SQLite store", async () => {
+it("persists sign-in hashes and completed uploads through the real SQLite store", async () => {
 	const dir = await mkdtemp(join(tmpdir(), "axi-app-data-")),
 		path = join(dir, "store.sqlite");
 	const store = await openStore(sqliteBackend(await openNodeSqliteDatabase(path)), context),
 		host = createHost({ store, onError() {} });
 	await host.load(
 		[
-			{ name: "sessions", facet: createSessions("cookie-secret").facet },
+			{ name: "sessions", facet: createSignIns("cookie-secret").facet },
 			{ name: "files", facet: filesFacet(join(dir, "files"), { maxFile: 32, maxTotal: 64 }) },
 		],
 		context,
 	);
 	let secret = "";
 	try {
-		const sessions = await host.get(Sessions, {}, context),
+		const sessions = await host.get(SignIns, {}, context),
 			issued = await sessions.issue({ principal: { kind: "owner" }, label: "test", kind: "device" }, context);
 		secret = issued.token.split(".")[1]!;
+		expect(issued.cookie).toMatch(/^objects-sign-in=/);
 		expect(await sessions.verify(issued.token, context)).toEqual({ kind: "owner" });
 		expect(await sessions.verify("constructor.bad", context)).toBeNull();
 		expect(sessions.list.value.find((item) => item.id === issued.id)).not.toHaveProperty("hash");

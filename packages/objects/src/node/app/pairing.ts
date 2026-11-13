@@ -4,7 +4,7 @@ import { samePrincipal } from "../../data/principal.ts";
 import { defineFacet, type Facet } from "../../host/index.ts";
 import { Http, type HttpRequest, type HttpResponse } from "../http/index.ts";
 import { hashToken, newToken } from "./secrets.ts";
-import { Sessions } from "./sessions.ts";
+import { SignIns } from "./sign-ins.ts";
 export type PairingStarter = { readonly kind: "owner" } | { readonly kind: "anonymous"; readonly address: string };
 export type PairingLimits = { readonly maxPending?: number; readonly perAddress?: number };
 type Pairing = {
@@ -117,8 +117,8 @@ export function pairingFacet<P extends Principal>(pairings: Pairings, owner: P):
 					if (!samePrincipal(context.principal, owner, context)) return { kind: "error", status: 403 };
 					const pairing = pairings.waiting(request.params.code ?? "");
 					if (!pairing) return { kind: "html", status: 404, body: "<p>No such pairing (or it expired).</p>" };
-					const sessions = await context.get(Sessions, {}),
-						{ token } = await sessions.issue({ principal: owner, label: pairing.label, kind: "device" }, context);
+					const signIns = await context.get(SignIns, {}),
+						{ token } = await signIns.issue({ principal: owner, label: pairing.label, kind: "device" }, context);
 					pairing.token = token;
 					return { kind: "html", body: `<p>Approved: ${html(pairing.label)} is signed in as the owner.</p>` };
 				},

@@ -187,9 +187,9 @@ Worker starts serialize per address and hold process locks. Stale file locks are
 
 ## App host and clients
 
-The app host opens one server Store and one Store per worker address. Startup holds a data-directory lock. Closing the app releases that lock after its components close. Persistent device and browser sessions store hashes rather than token secrets. Ephemeral sessions and pending sign-in links remain in memory.
+The app host opens one server Store and one Store per worker address. Startup holds a data-directory lock. Closing the app releases that lock after its components close. Persistent device and browser sign-ins store hashes rather than token secrets. The `SignIns` contract and its persisted document use `objects.app.sign-ins`; that document holds a `signIns` map. Browser cookies use `SIGN_IN_COOKIE`, whose value is `objects-sign-in`. Ephemeral sign-ins and pending sign-in links remain in memory. `limits.ephemeralSignIns` bounds the ephemeral entries.
 
-The app chooses `principal.owner`, which must be strict JSON and differ from the server principal. Sign-in, pairing and invites use this value. `AppInfo` version 2 exposes it. Owner comparison uses cached canonical principal keys. Changing the owner revokes the token-file session and replaces that file, leaving other sessions unchanged. Worker kinds require a worker-principal function.
+The app chooses `principal.owner`, which must be strict JSON and differ from the server principal. Sign-in, pairing and invites use this value. `AppInfo` version 2 exposes it. Owner comparison uses cached canonical principal keys. Changing the owner revokes the token-file sign-in and replaces that file, leaving other sign-ins unchanged. Worker kinds require a worker-principal function.
 
 The listener starts before worker and client base builds. Shared builds publish once. `basesBuilt` waits for build outcomes; `baseWatched` also waits for their initial source comparisons and the deferred server-entry scan. Failed builds report `base_build` without stopping the server. Affected client routes return 503; affected workers fail before requesting application start data. Closing discards late background results without waiting for blocked builds or scans.
 
@@ -210,6 +210,8 @@ Browser pages enable built-in themes by default. `themes: false` omits the theme
 The web surface installs routes by default and requires a page template. `routes: false` publishes scripts without contributing HTTP routes or policy. Its file, page-assets and base-hash accessors share the same lazy build. A failed build returns a 503 file response or undefined metadata. The public base builder collects referenced SVG, PNG, JPEG, GIF, WebP, WOFF, WOFF2, TTF and WebAssembly files and records their input hashes. `pageBootstrap` creates the registration bootstrap for a supplied base hash and script set.
 
 Connection-loop hooks run on their options object. Reconnect admission reads the current retry callback after each disconnect. A following client selects its server-base callback during startup and calls it without a receiver. A page selects its theme setting once during startup.
+
+After a disconnect, the connection loop schedules another attempt while asking `canRetry`. Only one such question may be pending; its answer covers intervening closes. A refusal stops the loop, closes its current attempt and reports `waiting`. A rejection permits retrying. A close within 26 seconds of a wake retries immediately once, then uses ordinary backoff. An outdated server-base answer stops the loop before calling `outdated`.
 
 Browser styles are loaded inactive before code reload. Only accepted plugins activate their prepared styles. Old styles remain until the page draws a frame. Failed and timed-out loads report `stylesheet_failed`; cancellation removes prepared styles. A client records the script each plugin actually runs, so reconnect can retry a failed replacement. An object's retained UI can show without its old styling while that object restarts.
 

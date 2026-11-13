@@ -4,7 +4,7 @@ import { createHost, defineFacet, openStore, sqliteBackend } from "../src/index.
 import { ephemeralLoginFacet, type EphemeralUser } from "../src/node/app/ephemeral.ts";
 import { appInfoFacet } from "../src/node/app/info.ts";
 import { inviteFacet } from "../src/node/app/invite.ts";
-import { createSessions, Sessions } from "../src/node/app/sessions.ts";
+import { createSignIns, SignIns } from "../src/node/app/sign-ins.ts";
 import { createHttp, Http, type HttpError } from "../src/node/http/index.ts";
 import { openNodeSqliteDatabase } from "../src/sqlite/node.ts";
 
@@ -26,7 +26,7 @@ async function application() {
 			await host.load(
 				[
 					{ name: "http", facet: http.facet },
-					{ name: "sessions", facet: createSessions<Principal>("test-cookie-key").facet },
+					{ name: "sessions", facet: createSignIns<Principal>("test-cookie-key").facet },
 					{
 						name: "info",
 						facet: appInfoFacet<Principal>({
@@ -52,7 +52,7 @@ async function application() {
 			)
 		).failed,
 	).toEqual([]);
-	const sessions = await host.get(Sessions, {}, context);
+	const sessions = await host.get(SignIns, {}, context);
 	const owner = await sessions.issue({ principal: { kind: "owner" }, label: "owner", kind: "device" }, context);
 	return {
 		sessions,

@@ -5,7 +5,7 @@ import { samePrincipal } from "../../data/principal.ts";
 import { defineFacet, type Facet, type Host } from "../../host/index.ts";
 import { Http } from "../http/index.ts";
 import { hashToken, matchesHash, newToken, readSecret, writeSecret } from "./secrets.ts";
-import { Sessions } from "./sessions.ts";
+import { SignIns } from "./sign-ins.ts";
 export const OWNER_PATH = "/_objects/owner";
 export class OwnerLink {
 	#current: { hash: string; expiry: number } | undefined;
@@ -37,8 +37,8 @@ export function ownerFacet<P extends Principal>(link: OwnerLink, owner: P): Face
 					handler: async (request, context) => {
 						const body = (await request.json()) as { token?: unknown } | null;
 						if (typeof body?.token !== "string" || !link.consume(body.token)) return { kind: "error", status: 403 };
-						const sessions = await context.get(Sessions, {}),
-							issued = await sessions.issue(
+						const signIns = await context.get(SignIns, {}),
+							issued = await signIns.issue(
 								{
 								principal: owner,
 									label: "owner browser",
@@ -62,8 +62,8 @@ export async function ownerTokenFile<P extends Principal>(
 ): Promise<string> {
 	const previous = await readSecret(path);
 	return host.root(async (ctx) => {
-		const sessions = await ctx.get(Sessions, {}),
-			principal = previous === undefined ? undefined : (await sessions.verify(previous, ctx)) as P | null;
+		const signIns = await ctx.get(SignIns, {}),
+			principal = previous === undefined ? undefined : (await signIns.verify(previous, ctx)) as P | null;
 		if (
 			previous !== undefined &&
 			samePrincipal(principal ?? undefined, owner, ctx)
@@ -71,8 +71,8 @@ export async function ownerTokenFile<P extends Principal>(
 			await chmod(path, 0o600);
 			return previous;
 		}
-		if (previous !== undefined && principal != null) await sessions.revoke(previous.split(".", 1)[0]!, ctx);
-		const { token } = await sessions.issue({ principal: owner, label: "owner token file", kind: "device" }, ctx);
+		if (previous !== undefined && principal != null) await signIns.revoke(previous.split(".", 1)[0]!, ctx);
+		const { token } = await signIns.issue({ principal: owner, label: "owner token file", kind: "device" }, ctx);
 		await writeSecret(path, token, previous === undefined ? "create" : "replace");
 		return token;
 	}, context);

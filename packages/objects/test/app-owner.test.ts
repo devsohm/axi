@@ -5,7 +5,7 @@ import { afterEach, expect, it } from "vitest";
 import { BACKGROUND_CONTEXT as context } from "../src/context/index.ts";
 import { hostKind } from "../src/contracts/index.ts";
 import { samePrincipal } from "../src/data/internal.ts";
-import { AppInfo, Sessions, startServer, type App, type AppOptions } from "../src/node/app/index.ts";
+import { AppInfo, SignIns, startServer, type App, type AppOptions } from "../src/node/app/index.ts";
 
 type Identity = { readonly kind: "service" } | { readonly kind: "person"; readonly id: string };
 const server: Identity = { kind: "service" },
@@ -70,7 +70,7 @@ it("starts without workers and signs browser and device credentials in as the co
 	expect(response.status).toBe(200);
 	const file = (await readFile(app.ownerTokenFile, "utf8")).trim();
 	await app.host.root(async (ctx) => {
-		const sessions = await ctx.get(Sessions, {});
+		const sessions = await ctx.get(SignIns, {});
 		expect(await sessions.verify(file, ctx)).toEqual(owner);
 		expect(sessions.list.value.map((session) => session.principal)).toEqual([owner, owner]);
 	}, context);
@@ -81,7 +81,7 @@ it("keeps equivalent owners' credentials and revokes only the file credential wh
 	const first = await start(),
 		token = (await readFile(first.ownerTokenFile, "utf8")).trim();
 	const separate = await first.host.root(
-		async (ctx) => (await ctx.get(Sessions, {})).issue({ principal: owner, kind: "device", label: "separate" }, ctx),
+		async (ctx) => (await ctx.get(SignIns, {})).issue({ principal: owner, kind: "device", label: "separate" }, ctx),
 		context,
 	);
 	await first.close(context);
@@ -94,7 +94,7 @@ it("keeps equivalent owners' credentials and revokes only the file credential wh
 	expect(replacement).not.toBe(token);
 	 if (process.platform !== "win32") expect((await stat(next.ownerTokenFile)).mode & 0o777).toBe(0o600);
 	await next.host.root(async (ctx) => {
-		const sessions = await ctx.get(Sessions, {});
+		const sessions = await ctx.get(SignIns, {});
 		expect(await sessions.verify(token, ctx)).toBeNull();
 		expect(await sessions.verify(replacement, ctx)).toEqual(nextOwner);
 		expect(await sessions.verify(separate.token, ctx)).toEqual(owner);

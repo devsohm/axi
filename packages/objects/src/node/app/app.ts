@@ -40,7 +40,7 @@ import { createLayout, defaultDataDir, openDataDir, privateStore, workerDirector
 import { OWNER_PATH, OwnerLink, ownerFacet, ownerTokenFile } from "./owner.ts";
 import { Pairings, pairingFacet } from "./pairing.ts";
 import { secretFile } from "./secrets.ts";
-import { createSessions } from "./sessions.ts";
+import { createSignIns } from "./sign-ins.ts";
 
 export const Server = hostKind("server");
 export type AppApi = { readonly name: string; readonly versions: readonly string[]; readonly modules: HostPackages };
@@ -64,7 +64,7 @@ export type AppError =
 	| { readonly kind: "server_scan"; readonly error: unknown };
 export type AppLimits = {
 	readonly uploads?: number;
-	readonly ephemeralSessions?: number;
+	readonly ephemeralSignIns?: number;
 	readonly pendingPairings?: number;
 	readonly pairingsPerAddress?: number;
 	readonly importBytes?: number;
@@ -172,7 +172,7 @@ export async function startServer<P extends Principal>(options: AppOptions<P>, c
 	})();
 	const { store, layout, cookieSecret } = resources,
 		{ api, limits = {}, onError } = options;
-	const sessions = createSessions<P>(cookieSecret, { maxEphemeral: limits.ephemeralSessions });
+	const signIns = createSignIns<P>(cookieSecret, { maxEphemeral: limits.ephemeralSignIns });
 	const host = createHost<P>({
 		address: Server(),
 		principal: options.principal.server,
@@ -186,7 +186,7 @@ export async function startServer<P extends Principal>(options: AppOptions<P>, c
 		host,
 		{
 			listen: options.listen ?? { host: "127.0.0.1", port: 0 },
-			links: { path: "/objects", opened: sessions.opened },
+			links: { path: "/objects", opened: signIns.opened },
 			telemetry: options.telemetry,
 			onError: (error) => onError({ kind: "http", error }),
 		},
@@ -268,7 +268,7 @@ export async function startServer<P extends Principal>(options: AppOptions<P>, c
 	const core: PluginFacet<P>[] = [
 		{ name: "objects.http", facet: http.facet },
 		{ name: "objects.app.info", facet: appInfoFacet({ dataDir, name: options.name, version: api.versions[0] ?? "", owner: options.principal.owner }) },
-		{ name: "objects.app.sessions", facet: sessions.facet },
+		{ name: "objects.app.sign-ins", facet: signIns.facet },
 		{ name: "objects.app.owner", facet: ownerFacet(owner, options.principal.owner) },
 		{
 			name: "objects.app.pairing",

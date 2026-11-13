@@ -6,7 +6,7 @@ import { Http } from "../http/index.ts";
 import { AppInfo } from "./info.ts";
 import { fragmentPage } from "./owner.ts";
 import { hashToken, newToken } from "./secrets.ts";
-import { Sessions } from "./sessions.ts";
+import { SignIns } from "./sign-ins.ts";
 export function inviteFacet<P extends Principal>(): Facet<P> {
 	const waiting = new Map<string, { principal: JsonValue; label: string; expires: number }>(),
 		path = "/_objects/invite";
@@ -40,8 +40,8 @@ export function inviteFacet<P extends Principal>(): Facet<P> {
 						if (hash === undefined || !invite) return { kind: "error", status: 403 };
 						waiting.delete(hash);
 						if (invite.expires <= Date.now()) return { kind: "error", status: 403 };
-						const sessions = await context.get(Sessions, {}),
-							issued = await sessions.issue(
+						const signIns = await context.get(SignIns, {}),
+							issued = await signIns.issue(
 								{
 									principal: invite.principal,
 									label: invite.label,

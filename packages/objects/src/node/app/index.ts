@@ -29,6 +29,6 @@ export { copyFiles } from "./files-copy.ts";
 export { privateDirectory, privateStore } from "./layout.ts";
 export { AppInfo, WorkerInfo } from "./info.ts";
 export { inviteFacet } from "./invite.ts";
-export { SESSION_COOKIE, Sessions, type SessionInfo, type SessionKind } from "./sessions.ts";
+export { SIGN_IN_COOKIE, SignIns, type SignInInfo, type SignInKind } from "./sign-ins.ts";
 export { defineUsers } from "./users.ts";
 export { startWorker, type WorkerOptions } from "./worker.ts";

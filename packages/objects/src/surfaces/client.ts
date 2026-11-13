@@ -106,6 +106,7 @@ export async function startClient<P extends Principal>(options: ClientOptions<P>
 		async canRetry() {
 			const latest = await serverBase?.();
 			if (latest !== undefined && latest !== options.base) {
+				loop.stop();
 				options.outdated();
 				return false;
 			}

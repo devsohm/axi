@@ -13,11 +13,11 @@ import {
 	type HttpRequest,
 	type HttpWrap,
 } from "../http/index.ts";
-import { EphemeralSessions } from "./ephemeral-sessions.ts";
+import { EphemeralSignIns } from "./ephemeral-sign-ins.ts";
 import { hashToken, matchesHash, newToken } from "./secrets.ts";
 
-export type SessionKind = "browser" | "device" | "ephemeral";
-export type SessionInfo = {
+export type SignInKind = "browser" | "device" | "ephemeral";
+export type SignInInfo = {
 	readonly id: string;
 	readonly label: string;
 	readonly kind: "browser" | "device";
@@ -25,7 +25,7 @@ export type SessionInfo = {
 	readonly created: number;
 	readonly lastUsed: number;
 };
-export const Sessions = local("objects.app.sessions", {
+export const SignIns = local("objects.app.sign-ins", {
 	version: 1,
 	params: {},
 	members: {
@@ -47,12 +47,12 @@ export const Sessions = local("objects.app.sessions", {
 		revoke: method(str()),
 	},
 });
-export const SESSION_COOKIE = "objects-session";
+export const SIGN_IN_COOKIE = "objects-sign-in";
 const idle = 400 * 24 * 60 * 60_000;
-const StoredSessions = defineState("objects.app.sessions", {
+const StoredSignIns = defineState("objects.app.sign-ins", {
 	version: 1,
 	schema: obj({
-		sessions: map(
+		signIns: map(
 			obj({
 				hash: str(),
 				label: str(),
@@ -64,11 +64,11 @@ const StoredSessions = defineState("objects.app.sessions", {
 		),
 	}),
 	persist: true,
-	initial: () => ({ sessions: {} }),
+	initial: () => ({ signIns: {} }),
 	checkpointWhen: (_value, _ops, info) => info.deltasSinceBase >= 50,
 });
-export type SessionLimits = { readonly maxEphemeral?: number };
-export type KitSessions<P extends Principal> = {
+export type SignInLimits = { readonly maxEphemeral?: number };
+export type KitSignIns<P extends Principal> = {
 	readonly facet: Facet<P>;
 	readonly opened: (request: HttpRequest) => (() => void) | undefined;
 };
@@ -77,11 +77,11 @@ function bearer(request: HttpRequest): string | undefined {
 }
 function tokenCookie(
 	token: string,
-	kind: SessionKind,
+	kind: SignInKind,
 	request: Pick<HttpRequest, "provenance">,
 	secret: string,
 ): string {
-	return cookie(SESSION_COOKIE, token, { request, secret, maxAge: kind === "ephemeral" ? undefined : idle / 1000 });
+	return cookie(SIGN_IN_COOKIE, token, { request, secret, maxAge: kind === "ephemeral" ? undefined : idle / 1000 });
 }
 function rolling(secret: string, authenticate: (token: string, context: Context) => Principal | undefined): HttpWrap {
 	return {
@@ -95,7 +95,7 @@ function rolling(secret: string, authenticate: (token: string, context: Context)
 				Object.keys(response.headers ?? {}).some((header) => header.toLowerCase() === "set-cookie")
 			)
 				return response;
-			const current = readSignedCookie(request, SESSION_COOKIE, secret);
+			const current = readSignedCookie(request, SIGN_IN_COOKIE, secret);
 			if (
 				current?.expires === undefined ||
 				current.expires - Date.now() > idle - 24 * 60 * 60_000 ||
@@ -109,11 +109,11 @@ function rolling(secret: string, authenticate: (token: string, context: Context)
 		},
 	};
 }
-export function createSessions<P extends Principal>(cookieSecret: string, limits: SessionLimits = {}): KitSessions<P> {
-	const ephemeral = new EphemeralSessions(limits.maxEphemeral ?? 1000);
+export function createSignIns<P extends Principal>(cookieSecret: string, limits: SignInLimits = {}): KitSignIns<P> {
+	const ephemeral = new EphemeralSignIns(limits.maxEphemeral ?? 1000);
 	const facet = defineFacet<P>((host) =>
-		host.serve(Sessions, (_params, self) => {
-			const state = self.state(StoredSessions);
+		host.serve(SignIns, (_params, self) => {
+			const state = self.state(StoredSignIns);
 			const verify = (token: string, context: Context): Principal | undefined => {
 				const dot = token.indexOf(".");
 				if (dot <= 0) return undefined;
@@ -121,7 +121,7 @@ export function createSessions<P extends Principal>(cookieSecret: string, limits
 					secret = token.slice(dot + 1),
 					transient = ephemeral.get(id);
 				if (transient) return matchesHash(secret, transient.hash) ? transient.principal : undefined;
-				const stored = state.value.sessions;
+				const stored = state.value.signIns;
 				if (!Object.hasOwn(stored, id)) return undefined;
 				const session = stored[id]!;
 				if (!matchesHash(secret, session.hash)) return undefined;
@@ -130,20 +130,20 @@ export function createSessions<P extends Principal>(cookieSecret: string, limits
 				if (expired || now - session.lastUsed > 60_000)
 					void state
 						.change((draft) => {
-							if (expired) delete draft.sessions[id];
-							else if (Object.hasOwn(draft.sessions, id)) draft.sessions[id]!.lastUsed = now;
+							if (expired) delete draft.signIns[id];
+							else if (Object.hasOwn(draft.signIns, id)) draft.signIns[id]!.lastUsed = now;
 						}, context)
 						.catch(() => {});
 				return expired ? undefined : (JSON.parse(session.principal) as Principal);
 			};
 			self.contribute(Authenticators, (request, context) => {
-				const token = bearer(request) ?? readCookie(request, SESSION_COOKIE, cookieSecret);
+				const token = bearer(request) ?? readCookie(request, SIGN_IN_COOKIE, cookieSecret);
 				return token === undefined ? undefined : verify(token, context);
 			});
 			self.contribute(Http, { wraps: [rolling(cookieSecret, verify)] });
 			return {
 				list: self.derive([state], ([value]) =>
-					Object.entries(value.sessions).map(([id, session]) => ({
+					Object.entries(value.signIns).map(([id, session]) => ({
 						id,
 						label: session.label,
 						kind: session.kind,
@@ -160,7 +160,7 @@ export function createSessions<P extends Principal>(cookieSecret: string, limits
 					if (kind === "ephemeral") ephemeral.issue(id, hash, principal as Principal);
 					else
 						await state.change((draft) => {
-							draft.sessions[id] = {
+							draft.signIns[id] = {
 								hash,
 								label,
 								kind,
@@ -185,7 +185,7 @@ export function createSessions<P extends Principal>(cookieSecret: string, limits
 				revoke: async (id, context) => {
 					if (!ephemeral.revoke(id))
 						await state.change((draft) => {
-							delete draft.sessions[id];
+							delete draft.signIns[id];
 						}, context);
 					return null;
 				},
@@ -195,7 +195,7 @@ export function createSessions<P extends Principal>(cookieSecret: string, limits
 	return {
 		facet,
 		opened(request) {
-			const token = bearer(request) ?? readCookie(request, SESSION_COOKIE, cookieSecret),
+			const token = bearer(request) ?? readCookie(request, SIGN_IN_COOKIE, cookieSecret),
 				dot = token?.indexOf(".") ?? -1;
 			return dot > 0 ? ephemeral.linkOpened(token!.slice(0, dot)) : undefined;
 		},

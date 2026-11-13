@@ -2,6 +2,8 @@
 
 Objects can run a client host in a browser or a terminal sandbox. The host keeps references connected, watches published plugin scripts and replaces changed facets while it runs. A failed replacement keeps the previous working facet. A failed script download reports `update_failed` and retries after one second. The delay doubles up to 30 seconds. Updates run in order; a new script set replaces the pending retry. Stopping the client cancels retries.
 
+Connection retries start after 250 milliseconds and double to a five-second limit. Ten seconds of stable connection resets that delay. `canRetry` and the server-base check run beside the next attempt, so a slow check cannot delay reconnecting. One pending check covers later closes. A refusal closes the current attempt and reports `waiting`. A changed server base closes that attempt before calling `outdated`. Waking retries a scheduled attempt immediately; a close soon after waking also receives one immediate retry before ordinary backoff resumes.
+
 ## Browser clients
 
 Use `webSurface` from `@axi/objects/surfaces` on the server. Give it a browser entry file, the plugin component and a page template. Add the returned facet to the server's core facets. Use its rollout step after the server step when publishing plugin changes.

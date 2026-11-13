@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import * as objects from "@axi/objects";
 import { BACKGROUND_CONTEXT as context } from "@axi/objects/context";
-import { AppInfo, Sessions, startServer } from "@axi/objects/app";
+import { AppInfo, SignIns, startServer } from "@axi/objects/app";
 import { Http } from "@axi/objects/http";
 import { startPage } from "@axi/objects/web";
 import { HostProvider, useHold } from "@axi/objects/react";
@@ -41,7 +41,7 @@ try {
 	const info = await app.host.get(AppInfo, {}, context);
 	assert.equal(info.name.value, "installed-app");
 	info.release();
-	const sessions = await app.host.get(Sessions, {}, context);
+	const sessions = await app.host.get(SignIns, {}, context);
 	const device = await sessions.issue({ principal: { kind: "owner" }, label: "installed", kind: "device" }, context);
 	assert.deepEqual(await sessions.verify(device.token, context), { kind: "owner" });
 	sessions.release();
@@ -49,13 +49,13 @@ try {
 	await app.close(context);
 	app = await startServer(options, context);
 	assert.equal(await readFile(app.ownerTokenFile, "utf8"), owner);
-	const restored = await app.host.get(Sessions, {}, context);
+	const restored = await app.host.get(SignIns, {}, context);
 	assert.deepEqual(await restored.verify(device.token, context), { kind: "owner" });
 	await restored.revoke(device.id, context);
 	assert.equal(await restored.verify(device.token, context), null);
 	restored.release();
 	assert.deepEqual(errors, []);
-	console.log(JSON.stringify({ installedApp: true, sessionsRestored: true, clientImports: true }));
+	console.log(JSON.stringify({ installedApp: true, signInsRestored: true, clientImports: true }));
 } finally {
 	await app?.close(context);
 	await rm(directory, { recursive: true, force: true });

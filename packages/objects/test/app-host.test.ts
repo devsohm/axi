@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { expect, it, vi } from "vitest";
 import { BACKGROUND_CONTEXT as context } from "../src/context/index.ts";
 import * as objects from "../src/index.ts";
-import { AppInfo, Sessions, startServer, type AppError, type AppOptions } from "../src/node/app/index.ts";
+import { AppInfo, SignIns, startServer, type AppError, type AppOptions } from "../src/node/app/index.ts";
 import { Http } from "../src/node/http/index.ts";
 
 type Principal = { readonly kind: "owner" } | { readonly kind: "server" } | { readonly kind: "worker" };
@@ -52,7 +52,7 @@ export default defineFacet((_host,self)=>self.contribute(Http,{routes:{
 		expect((await signIn()).status).toBe(403);
 		const cookie = signedIn.headers.get("set-cookie")!.split(";")[0]!;
 		expect(await (await fetch(`${await origin()}/account`, { headers: { cookie } })).json()).toEqual({ kind: "owner" });
-		const sessions = await app.host.get(Sessions, {}, context),
+		const sessions = await app.host.get(SignIns, {}, context),
 			device = await sessions.issue({ principal: { kind: "owner" }, label: "terminal", kind: "device" }, context);
 		sessions.release();
 		const ownerToken = await readFile(app.ownerTokenFile, "utf8");
@@ -66,7 +66,7 @@ export default defineFacet((_host,self)=>self.contribute(Http,{routes:{
 		expect(
 			await (await fetch(`${await origin()}/account`, { headers: { authorization: `Bearer ${device.token}` } })).json(),
 		).toEqual({ kind: "owner" });
-		const restored = await app.host.get(Sessions, {}, context);
+		const restored = await app.host.get(SignIns, {}, context);
 		expect(restored.list.value.some((entry) => entry.id === device.id && entry.label === "terminal")).toBe(true);
 		await restored.revoke(device.id, context);
 		restored.release();

@@ -2,7 +2,7 @@ import type { Principal } from "../../data/index.ts";
 import { defineFacet, type Facet } from "../../host/index.ts";
 import { Http } from "../http/index.ts";
 import { newToken } from "./secrets.ts";
-import { Sessions } from "./sessions.ts";
+import { SignIns } from "./sign-ins.ts";
 export type EphemeralUser = { readonly kind: "user"; readonly id: string; readonly name: string };
 export function ephemeralLoginFacet<P extends Principal>(
 	..._fits: EphemeralUser extends P ? [] : ["the app's principal type must hold { kind: 'user', id, name }"]
@@ -17,8 +17,8 @@ export function ephemeralLoginFacet<P extends Principal>(
 							name = typeof body?.name === "string" ? body.name.trim().slice(0, 40) : "";
 						if (!name) return { kind: "error", status: 400 };
 						const principal: EphemeralUser = { kind: "user", id: newToken(12), name },
-							sessions = await context.get(Sessions, {}),
-							issued = await sessions.issue(
+							signIns = await context.get(SignIns, {}),
+							issued = await signIns.issue(
 								{ principal, label: name, kind: "ephemeral", secure: request.provenance.kind !== "local" },
 								context,
 							);
