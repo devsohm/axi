@@ -214,6 +214,29 @@ test(
 	},
 );
 
+test("the native desktop clipboard API reuses its platform helper", {
+	skip: !["darwin", "win32"].includes(process.platform) || !["x64", "arm64"].includes(process.arch),
+}, async () => {
+	const { getNativeClipboard } = await import("../dist/index.js");
+	const helper = require(`./${process.platform}/prebuilds/${process.platform}-${process.arch}/${process.platform}-platform.node`);
+	assert.equal(getNativeClipboard(), helper);
+	assert.equal(getNativeClipboard(), helper);
+	for (const name of ["getText", "getImage", "setText"]) assert.equal(typeof helper[name], "function");
+});
+
+test("the Windows clipboard round-trips empty and Unicode text through the native API", {
+	skip: process.platform !== "win32" || process.env.AXI_TEST_NATIVE_CLIPBOARD !== "1",
+}, async () => {
+	const { getNativeClipboard } = await import("../dist/index.js");
+	const clipboard = getNativeClipboard();
+	assert.ok(clipboard?.setText);
+	for (const text of ["Axi 日本語 café", "", "replacement"]) {
+		await clipboard.setText(text);
+		assert.equal(await clipboard.getText(), text);
+		assert.equal(await clipboard.getImage(), null);
+	}
+});
+
 test(
 	"Linux ARM64 native segments support 64 KiB pages",
 	{

@@ -38,7 +38,7 @@ test("remote filesystem resolves file URLs, preserves empty files and reports in
 		expect(await env.openDirReader("renamed", context)).toMatchObject({ ok: false, error: { code: "not_directory" } });
 		expect(await env.readBinaryFile("renamed/child", context)).toMatchObject({
 			ok: false,
-			error: { code: "not_directory" },
+			error: { code: process.platform === "win32" ? "not_found" : "not_directory" },
 		});
 	} finally {
 		await env.cleanup(context);

@@ -50,7 +50,7 @@ it("round-trips application rows, server data and finished files and removes an 
 		expect(await readFile(serverPart, "utf8")).toBe(await readFile(server, "utf8"));
 		expect(await readdir(join(target, "files"))).toEqual(["saved.txt"]);
 		expect(await readFile(join(target, "files/saved.txt"), "utf8")).toBe("retained file");
-		expect((await stat(join(target, "store.sqlite"))).mode & 0o777).toBe(0o600);
+		if (process.platform !== "win32") expect((await stat(join(target, "store.sqlite"))).mode & 0o777).toBe(0o600);
 		const reopened = await openStore(
 				sqliteBackend(await openNodeSqliteDatabase(join(target, "store.sqlite"))),
 				context,

@@ -3,10 +3,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { InMemoryTelemetryContext } from "@axi/telemetry";
 import { expect, it } from "vitest";
-import { BACKGROUND_CONTEXT as context } from "../src/context/index.ts";
+import { BACKGROUND_CONTEXT as context, withAbortSignal } from "../src/context/index.ts";
 import { arr, constant, createHost, defineFacet, defineRegistry, defineTable, int, local, method, obj, query, sqliteBackend, openStore, str, type StoreSelf } from "../src/index.ts";
 import { createHttp, Http } from "../src/node/http/index.ts";
-import { clearStaleLockAt, lockAt } from "../src/node/workers/lock.ts";
+import { clearStaleLockAt, lockAt, processLock } from "../src/node/workers/lock.ts";
 import { openNodeSqliteDatabase } from "../src/sqlite/node.ts";
 
 it("rejects local reads before load and permits them after publication", async () => {
@@ -81,7 +81,7 @@ it("publishes bounded live rows in the same committed state and preserves them a
 	} finally { await host.close(context); await store.close(context); }
 });
 
-it("clears only an unheld file lock and leaves a live holder intact", async () => {
+it.skipIf(process.platform === "win32")("clears only an unheld file lock and leaves a live holder intact", async () => {
 	const directory = await mkdtemp(join(tmpdir(), "axi-lock-"));
 	const lock = { kind: "file", address: join(directory, "worker.sock") } as const;
 	try {
@@ -92,4 +92,18 @@ it("clears only an unheld file lock and leaves a live holder intact", async () =
 		finally { await held.release(); }
 		expect(await clearStaleLockAt(lock, context)).toBe(false);
 	} finally { await rm(directory, { recursive: true, force: true }); }
+});
+
+it("process locks exclude a second holder and cancellation leaves the live holder usable", async () => {
+	const name = `axi-native-lock-${process.pid}`;
+	const held = await processLock(name, context);
+	const controller = new AbortController();
+	const reason = new Error("lock acquisition cancelled");
+	const waiting = processLock(name, withAbortSignal(controller.signal, context));
+	const rejected = expect(waiting).rejects.toBe(reason);
+	controller.abort(reason);
+	await rejected;
+	await held.release();
+	const next = await processLock(name, context);
+	await next.release();
 });

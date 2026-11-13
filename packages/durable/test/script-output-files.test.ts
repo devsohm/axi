@@ -1,6 +1,6 @@
 import { mkdtemp, readFile, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { createModels, fauxAssistantMessage, fauxProvider, fauxToolCall } from "@axi/ai";
 import { InlineCodemodeSandbox, loadQuickJSWasm } from "@axi/codemode";
 import { BACKGROUND_CONTEXT as context, type Context } from "@axi/objects/context";
@@ -78,7 +78,10 @@ test.each(["available", "absent", "directory-failure", "write-failure"] as const
 				expect(saved).toContain("H".repeat(400));
 				expect(saved).toContain("L".repeat(400));
 				expect(saved).toContain("console marker");
-				expect(result.details).toMatchObject({ fullOutputPath: join(directories[0]!, "output.txt") });
+				const details = result.details;
+				if (!details || typeof details !== "object" || !("fullOutputPath" in details) || typeof details.fullOutputPath !== "string")
+					throw new Error("Missing full output path");
+				expect(resolve(details.fullOutputPath)).toBe(join(directories[0]!, "output.txt"));
 				expect(text).toContain("Full output:");
 			} else {
 				expect(result.details).not.toHaveProperty("fullOutputPath");

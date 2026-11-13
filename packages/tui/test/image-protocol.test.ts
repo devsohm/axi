@@ -1,4 +1,5 @@
 import { afterEach, expect, test, vi } from "vitest";
+import { pathToFileURL } from "node:url";
 import {
 	calculateImageCellSize,
 	cropKittyImageLine,
@@ -57,7 +58,7 @@ test("terminal capabilities honor terminal families, multiplexers and explicit o
 			{ TERM_PROGRAM: "Orca", ORCA_IMAGE_PROTOCOL: "kitty" },
 			{ images: "kitty", trueColor: true, hyperlinks: true },
 		],
-		[{ TERM_PROGRAM: "Orca" }, { images: null, trueColor: false, hyperlinks: false }],
+		[{ TERM_PROGRAM: "Orca" }, { images: null, trueColor: process.platform === "win32", hyperlinks: false }],
 		[
 			{ TERM: "screen", TERM_PROGRAM: "Orca", ORCA_IMAGE_PROTOCOL: "kitty" },
 			{ images: null, trueColor: false, hyperlinks: false },
@@ -158,7 +159,7 @@ test("image sizing respects both bounds and iTerm encoding preserves binary leng
 	);
 	setCapabilities({ images: null, trueColor: false, hyperlinks: true });
 	expect(imageFallback("image/png", undefined, "/a b.png")).toBe(
-		"[Image: \x1b]8;;file:///a%20b.png\x1b\\/a b.png\x1b]8;;\x1b\\ [image/png]]",
+		`[Image: \x1b]8;;${pathToFileURL("/a b.png").href}\x1b\\/a b.png\x1b]8;;\x1b\\ [image/png]]`,
 	);
 });
 

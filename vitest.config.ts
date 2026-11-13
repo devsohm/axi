@@ -4,6 +4,8 @@ import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
 import manifest from "./package.json" with { type: "json" };
 
+const temporary = realpathSync(tmpdir());
+
 export default defineConfig({
 	plugins: [
 		{
@@ -11,7 +13,7 @@ export default defineConfig({
 			enforce: "pre",
 			resolveId(specifier) {
 				if (!specifier.startsWith("@axi/")) return;
-				const target = fileURLToPath(import.meta.resolve(specifier));
+				const target = fileURLToPath(import.meta.resolve(specifier)).replaceAll("\\", "/");
 				const source = target.replace(/\/dist\/(.*)\.js$/, "/src/$1.ts");
 				if (source !== target && existsSync(source)) return source;
 			},
@@ -19,7 +21,7 @@ export default defineConfig({
 	],
 	test: {
 		globalSetup: ["packages/env/test/build-daemon.ts"],
-		env: { TMPDIR: realpathSync(tmpdir()) },
+		env: { TMPDIR: temporary, ...(process.platform === "win32" ? { TMP: temporary, TEMP: temporary } : {}) },
 		include: [...manifest.workspaces.map((directory) => `${directory}/test/**/*.test.ts`), "test/*.test.ts"],
 		coverage: {
 			provider: "v8",

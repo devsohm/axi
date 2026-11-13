@@ -10,7 +10,7 @@ import { normalizeContext } from "../src/utils/transcript.ts";
 import { cpSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { spawnSync } from "node:child_process";
 
 it("exports provider compatibility fields with their declared value types", () => {
@@ -31,7 +31,7 @@ it("can generate again after replacing the catalog with a smaller upstream listi
 	writeFileSync(preload, "globalThis.fetch=async()=>Response.json({});");
 	try {
 		for (let attempt = 0; attempt < 2; attempt++) {
-			const result = spawnSync(process.execPath, ["--import", preload, "catalog/generate.ts"], {
+			const result = spawnSync(process.execPath, ["--import", pathToFileURL(preload).href, "catalog/generate.ts"], {
 				cwd: copy,
 				env: { ...process.env, NODE_OPTIONS: "--conditions=source" },
 				encoding: "utf8",

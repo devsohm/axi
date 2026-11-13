@@ -61,6 +61,7 @@ jobs:
         shell: cmd
         env:
           TARGET_ARCH: ${{ endsWith(matrix.target, 'arm64') && 'arm64' || 'x64' }}
+          AXI_TEST_NATIVE_CLIPBOARD: "1"
         run: |
           for /f "tokens=*" %%i in ('"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -property installationPath') do call "%%i\VC\Auxiliary\Build\vcvarsall.bat" %TARGET_ARCH%
           if errorlevel 1 exit /b 1

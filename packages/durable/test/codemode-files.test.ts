@@ -1,6 +1,6 @@
 import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { createModels, fauxAssistantMessage, fauxProvider, fauxToolCall } from "@axi/ai";
 import { InlineCodemodeSandbox, loadQuickJSWasm } from "@axi/codemode";
 import { BACKGROUND_CONTEXT as context } from "@axi/objects/context";
@@ -58,7 +58,7 @@ return {saved: 2};`;
 		const path = paths[0];
 		if (path === undefined) throw new Error("Missing saved image path");
 		expect(paths[1]).toBe(path);
-		expect(path).toBe(join(dirname(path), "image-1.png"));
+		expect(resolve(path)).toBe(join(dirname(path), "image-1.png"));
 		expect(await readFile(path)).toEqual(Buffer.from(png));
 		expect(message.content.filter((item) => item.type === "image")).toEqual([
 			{ type: "image", data: Buffer.from(png).toString("base64"), mimeType: "image/png" },

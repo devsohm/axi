@@ -1,4 +1,6 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import { join, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 
 const native = vi.hoisted(() => ({
 	load: Object.assign(vi.fn(), { resolve: vi.fn() }),
@@ -31,29 +33,30 @@ afterEach(() => {
 
 test("native lookup keeps installation, module and executable locations in order without duplicates", async () => {
 	const { getNativeModuleCandidates } = await import("../src/native-module-path.ts");
-	const resolve = vi.fn(() => "/workspace/tui/dist/index.js");
+	const directory = resolve("/workspace/tui");
+	const resolvePackage = vi.fn(() => join(directory, "dist/index.js"));
 	expect(
 		getNativeModuleCandidates("native/helper.node", {
-			moduleUrl: "file:///workspace/tui/dist/native-module-path.js",
-			execPath: "/runtime/axi",
-			resolvePackage: resolve,
+			moduleUrl: pathToFileURL(join(directory, "dist/native-module-path.js")).href,
+			execPath: resolve("/runtime/axi"),
+			resolvePackage,
 		}),
 	).toEqual([
-		"/workspace/tui/native/helper.node",
-		"/workspace/tui/dist/native/helper.node",
-		"/runtime/native/helper.node",
+		join(directory, "native/helper.node"),
+		join(directory, "dist/native/helper.node"),
+		resolve("/runtime/native/helper.node"),
 	]);
-	expect(resolve).toHaveBeenCalledWith("@axi/tui");
+	expect(resolvePackage).toHaveBeenCalledWith("@axi/tui");
 });
 
 test("standalone lookup survives a missing installed package", async () => {
 	const { getNativeModuleCandidates } = await import("../src/native-module-path.ts");
 	expect(
 		getNativeModuleCandidates("native/helper.node", {
-			moduleUrl: "file:///application/entry.js",
-			execPath: "/runtime/axi",
+			moduleUrl: pathToFileURL(resolve("/application/entry.js")).href,
+			execPath: resolve("/runtime/axi"),
 		}),
-	).toEqual(["/native/helper.node", "/application/native/helper.node", "/runtime/native/helper.node"]);
+	).toEqual([resolve("/native/helper.node"), resolve("/application/native/helper.node"), resolve("/runtime/native/helper.node")]);
 });
 
 test.each(["darwin", "win32"])("%s accepts a valid helper after an unusable candidate and reuses it", async (os) => {

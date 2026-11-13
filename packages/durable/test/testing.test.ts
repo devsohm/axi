@@ -23,7 +23,7 @@ import {
 
 it("rejects a reader that returns a byte-order mark for an empty range", async () => {
 	const cwd = await mkdtemp(join(tmpdir(), "axi-reader-check-"));
-	const env = new NodeExecutionEnv({ cwd });
+	const env = new NodeExecutionEnv({ cwd, shellEnv: { MSYS: "winsymlinks:nativestrict" }, watch: { pollIntervalMs: 50 } });
 	const readers: BinaryReader[] = [];
 	const open = env.openBinaryReader.bind(env);
 	vi.spyOn(env, "openBinaryReader").mockImplementation(async (...args) => {

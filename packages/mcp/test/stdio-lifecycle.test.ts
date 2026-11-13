@@ -9,9 +9,12 @@ function child(script: string, extra: Partial<ConstructorParameters<typeof Stdio
 
 test("a peer closing stdin reports the write failure and can still be shut down cleanly", async () => {
 	const transport = child(`
-		require("node:fs").closeSync(0);
-		process.stdout.write(JSON.stringify({ jsonrpc: "2.0", method: "ready" }) + "\\n");
-		setInterval(() => {}, 1000);
+		const input = require("node:fs").createReadStream(null, { fd: 0, autoClose: true });
+		input.on("close", () => {
+			process.stdout.write(JSON.stringify({ jsonrpc: "2.0", method: "ready" }) + "\\n");
+			setInterval(() => {}, 1000);
+		});
+		input.destroy();
 	`);
 	const ready = Promise.withResolvers<void>(),
 		errors: Error[] = [];
@@ -20,8 +23,8 @@ test("a peer closing stdin reports the write failure and can still be shut down 
 	try {
 		await transport.start();
 		await ready.promise;
-		await expect(transport.send({ jsonrpc: "2.0", method: "notice" })).rejects.toMatchObject({ code: "EPIPE" });
-		await vi.waitFor(() => expect(errors).toContainEqual(expect.objectContaining({ code: "EPIPE" })));
+		await expect(transport.send({ jsonrpc: "2.0", method: "notice" })).rejects.toMatchObject({ code: expect.stringMatching(/^(EPIPE|ECONNRESET)$/) });
+		await vi.waitFor(() => expect(errors).toContainEqual(expect.objectContaining({ code: expect.stringMatching(/^(EPIPE|ECONNRESET)$/) })));
 		await transport.close();
 		expect(transport.pid).toBeUndefined();
 	} finally {
@@ -43,12 +46,14 @@ test("closing an unstarted stdio transport prevents spawning and emits close onc
 	expect(closed).toHaveBeenCalledTimes(1);
 });
 
-test("a failed spawn rejects startup and releases the transport", async () => {
+test("an unavailable command releases the transport whether spawning or command lookup fails", async () => {
 	const transport = new StdioTransport({ command: join(tmpdir(), "axi-mcp-no-command", "missing-executable") });
 	const closed = vi.fn();
 	transport.onClose(closed);
 	try {
-		await expect(transport.start()).rejects.toMatchObject({ code: "ENOENT" });
+		const starting = transport.start();
+		if (process.platform === "win32") await starting.catch(error => expect(error).toMatchObject({ code: "ENOENT" }));
+		else await expect(starting).rejects.toMatchObject({ code: "ENOENT" });
 		await vi.waitFor(() => expect(closed).toHaveBeenCalledTimes(1));
 		expect(transport.pid).toBeUndefined();
 		await expect(transport.send({ jsonrpc: "2.0", method: "notice" })).rejects.toMatchObject({
