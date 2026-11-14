@@ -128,3 +128,58 @@ test("character jumps cross logical lines and preserve the draft", () => {
 	expect(editor.getCursor()).toEqual({ line: 0, col: 1 });
 	expect(editor.getText()).toBe("a.b\nc.d");
 });
+
+test("word navigation crosses logical lines without changing the draft or splitting a paste marker", () => {
+	const { editor } = setup();
+	editor.setText("one two\nthree");
+	editor.render(20);
+	for (const cursor of [
+		{ line: 1, col: 0 },
+		{ line: 0, col: 7 },
+		{ line: 0, col: 4 },
+		{ line: 0, col: 0 },
+		{ line: 0, col: 0 },
+	]) {
+		editor.handleInput("\x1b[1;5D");
+		expect(editor.getCursor()).toEqual(cursor);
+	}
+	for (const cursor of [
+		{ line: 0, col: 3 },
+		{ line: 0, col: 7 },
+		{ line: 1, col: 0 },
+		{ line: 1, col: 5 },
+		{ line: 1, col: 5 },
+	]) {
+		editor.handleInput("\x1b[1;5C");
+		expect(editor.getCursor()).toEqual(cursor);
+	}
+	expect(editor.getText()).toBe("one two\nthree");
+	const payload = "line\n".repeat(12);
+	editor.setText("");
+	editor.handleInput("\x1b[200~" + payload + "\x1b[201~");
+	const marker = editor.getText();
+	editor.handleInput("\x1b[1;5D");
+	expect(editor.getCursor()).toEqual({ line: 0, col: 0 });
+	editor.handleInput("\x1b[1;5C");
+	expect(editor.getCursor()).toEqual({ line: 0, col: marker.length });
+	expect(editor.getExpandedText()).toBe(payload);
+});
+
+test("arrow navigation reaches line edges before entering history and restores the draft cursor", () => {
+	const { editor } = setup();
+	editor.addToHistory("");
+	editor.addToHistory("saved");
+	editor.setText("draft");
+	editor.render(20);
+	editor.handleInput("\x1b[A");
+	expect(editor.getCursor()).toEqual({ line: 0, col: 0 });
+	expect(editor.getText()).toBe("draft");
+	editor.handleInput("\x1b[A");
+	expect(editor.getText()).toBe("saved");
+	editor.handleInput("\x1b[B");
+	expect(editor.getText()).toBe("draft");
+	expect(editor.getCursor()).toEqual({ line: 0, col: 0 });
+	editor.handleInput("\x1b[B");
+	expect(editor.getCursor()).toEqual({ line: 0, col: 5 });
+	expect(editor.getText()).toBe("draft");
+});
