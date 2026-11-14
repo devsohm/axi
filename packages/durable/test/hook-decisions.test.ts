@@ -17,6 +17,7 @@ import {
 	hook,
 	LiveDoc,
 	MemoryStorage,
+	UserEntry,
 	type Storage,
 } from "../src/index.ts";
 import { openNodeSqliteStorage } from "../src/storage/sqlite/node.ts";
@@ -176,15 +177,66 @@ test.each(["abort", "followUp"] as const)("a %s during review preserves the comm
 	}
 });
 
-test("malformed after-tools decisions are reported and do not prevent the next answer", async () => {
-	const f = await fixture("afterTools", [{ terminate: false }]);
+const invalidAfterTools: JsonValue[] = [false, "terminate", [], { terminate: false }, { terminate: true, extra: 1 }];
+test.each(invalidAfterTools)(
+	"malformed after-tools decision %j is reported without preventing the next answer",
+	async (decision) => {
+		const f = await fixture("afterTools", [decision]);
+		try {
+			const input = await f.conversation.submit({ type: "input", content: "Inspect this" }, context);
+			await vi.waitFor(() => expect(f.seen).toEqual([0]), { timeout: 600 });
+			f.gates[0]!.resolve();
+			expect(await input.wait(context)).toMatchObject({ status: "done" });
+			expect(f.reports).toHaveLength(1);
+			expect(f.reports[0]).toMatchObject({ kind: "extension_error", extension: "reviews" });
+		} finally {
+			await f.close();
+		}
+	},
+);
+
+const continuations: { name: string; value: JsonValue; accepted: boolean }[] = [
+	{ name: "number", value: 7, accepted: false },
+	{ name: "null", value: null, accepted: false },
+	{ name: "empty array", value: [], accepted: false },
+	{ name: "scalar text block", value: [{ type: "text", text: 7 }], accepted: false },
+	{ name: "incomplete image", value: [{ type: "image", data: "AQID" }], accepted: false },
+	{ name: "unknown block", value: [{ type: "video", data: "AQID", mimeType: "video/webm" }], accepted: false },
+	{ name: "null block", value: [null], accepted: false },
+	{ name: "empty text", value: "", accepted: true },
+	{ name: "text blocks", value: [{ type: "text", text: "Review notes" }], accepted: true },
+	{ name: "image block", value: [{ type: "image", data: "AQID", mimeType: "image/png" }], accepted: true },
+];
+test.each(continuations)("answer review validates a $name continuation", async ({ value, accepted }) => {
+	const f = await fixture("onYield", [{ continue: value }]);
 	try {
-		const input = await f.conversation.submit({ type: "input", content: "Inspect this" }, context);
-		await vi.waitFor(() => expect(f.seen).toEqual([0]), { timeout: 600 });
+		const input = await f.conversation.submit({ type: "input", content: "Original question" }, context);
+		await vi.waitFor(() => expect(f.seen).toEqual([0]));
 		f.gates[0]!.resolve();
 		expect(await input.wait(context)).toMatchObject({ status: "done" });
-		expect(f.reports).toHaveLength(1);
-		expect(f.reports[0]).toMatchObject({ kind: "extension_error", extension: "reviews" });
+		await f.harness.waitForIdle(context);
+		const entries = (await f.conversation.entries({ order: "ascending" }, 30, undefined, context)).items;
+		expect(entries.filter(AssistantEntry.is)).toHaveLength(accepted ? 2 : 1);
+		const userMessages = entries.filter(UserEntry.is).flatMap((entry) => entry.model ?? []);
+		expect(userMessages).toHaveLength(accepted ? 2 : 1);
+		if (accepted) expect(userMessages[1]?.content).toEqual(value);
+		expect(f.reports).toEqual([]);
+		expect(await f.harness.snapshot(LiveDoc, f.conversation.id, context)).toEqual({});
+	} finally {
+		await f.close();
+	}
+});
+
+test("an empty after-tools decision continues without an extension error", async () => {
+	const f = await fixture("afterTools", [{}]);
+	try {
+		const input = await f.conversation.submit({ type: "input", content: "Inspect this" }, context);
+		await vi.waitFor(() => expect(f.seen).toEqual([0]));
+		f.gates[0]!.resolve();
+		expect(await input.wait(context)).toMatchObject({ status: "done" });
+		await f.harness.waitForIdle(context);
+		expect((await f.conversation.entries({}, 30, undefined, context)).items.filter(AssistantEntry.is)).toHaveLength(2);
+		expect(f.reports).toEqual([]);
 	} finally {
 		await f.close();
 	}

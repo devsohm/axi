@@ -107,6 +107,14 @@ The SQLite adapter checks confirm rollback, transaction queue isolation and
 expired transaction handles. Storage-helper checks inspect the records written
 by each workload; they make no performance claim.
 
+Delta model checks apply batches of edits to both tracked state and ordinary
+JavaScript values. They compare the resulting value, delta replay, aborted
+changes and retained revisions. Reference lifetime checks cover members, keyed
+documents and event subscriptions after release or host closure. Nested-tool
+checks verify result conversion, structured-output errors, keyed child reuse and
+the explicit keys required after a wake. Generation review checks validate
+continuation content before another request starts.
+
 Task-runtime checks cover child ownership, abort controls, document history,
 entry paging and invocation cleanup. SQL expression cases compare known results
 with both the in-process evaluator and SQLite. Terminal checks cover negotiation,

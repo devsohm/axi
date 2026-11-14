@@ -58,6 +58,7 @@ import {
 	McpClient,
 	LATEST_PROTOCOL_VERSION,
 	createMcpToolName,
+	mcpServerSummary,
 	normalizeMcpInputSchema,
 	validateMcpServerConfig,
 } from "@axi/mcp";
@@ -260,6 +261,8 @@ const openHarness = async () =>
 	);
 try {
 	assert.equal(createMcpToolName("installed-server", "read"), "mcp__installed_server__read");
+	assert.equal(mcpServerSummary("  Installed tools\nDetails", "Unused"), "Installed tools");
+	assert.equal(mcpServerSummary(undefined, "\n Fallback instructions\nDetails"), "Fallback instructions");
 	assert.deepEqual(normalizeMcpInputSchema({}), { type: "object", properties: {} });
 	assert.equal(validateMcpServerConfig("installed", { command: process.execPath }).kind, "stdio");
 	const pipeOutput = [];

@@ -2,7 +2,7 @@ export type { AuthProvider, McpFetch, UnauthorizedContext } from "./auth-provide
 export { McpClient, type McpClientOptions, type McpRequestOptions } from "./client.ts";
 export * from "./protocol/content.ts";
 export * from "./config.ts";
-export { createMcpToolName, mcpNamespace } from "./naming.ts";
+export { createMcpToolName, mcpNamespace, mcpServerSummary } from "./naming.ts";
 export { normalizeMcpInputSchema } from "./input-schema.ts";
 export { limitMcpContent, MCP_OUTPUT_MAX_BYTES, type LimitedMcpContent, type McpOutputSaver } from "./output-limit.ts";
 export {

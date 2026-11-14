@@ -33,6 +33,7 @@
 					"tests": [
 						"packages/objects/test/delta.test.ts",
 						"packages/objects/test/delta-model.test.ts",
+						"packages/objects/test/delta-batched-model.test.ts",
 						"packages/objects/test/replay-model.test.ts",
 						"packages/objects/test/contracts.test.ts",
 						"packages/objects/test/host-address-keys.test.ts",
@@ -59,6 +60,7 @@
 					"tests": [
 						"packages/objects/test/route-controls.test.ts",
 						"packages/objects/test/host-contract-boundaries.test.ts",
+						"packages/objects/test/reference-end-lifetimes.test.ts",
 						"packages/objects/test/host-plugin-boundaries.test.ts",
 						"packages/objects/test/factory-failures.test.ts",
 						"packages/objects/test/registry-retry.test.ts",
@@ -310,6 +312,7 @@
 						"packages/ai/test/retry.test.ts",
 						"packages/ai/test/request-overflow.test.ts",
 						"packages/ai/test/tool-validation.test.ts",
+						"packages/ai/test/schema-alternatives.test.ts",
 						"packages/ai/test/request-telemetry.test.ts",
 						"packages/ai/test/sampling-options.test.ts",
 						"packages/ai/test/provider-boundaries.test.ts",
@@ -365,6 +368,10 @@
 			"name": "@axi/mcp",
 			"directory": "packages/mcp",
 			"areas": [
+				{
+					"behavior": "tool naming, server summaries and shared application helpers",
+					"tests": ["packages/mcp/test/helpers.test.ts", "packages/mcp/test/server-summary.test.ts"]
+				},
 				{
 					"behavior": "requests, pagination, cancellation and callback ownership",
 					"tests": [
@@ -451,6 +458,7 @@
 						"packages/durable/test/tool-fault-cleanup.test.ts",
 						"packages/durable/test/bash-long-line.test.ts",
 						"packages/durable/test/tool-parking.test.ts",
+						"packages/durable/test/tool-nested-contracts.test.ts",
 						"packages/durable/test/tool-hook-boundaries.test.ts",
 						"packages/durable/test/join-policies.test.ts",
 						"packages/durable/test/scheduler-inbox-cancellation.test.ts"

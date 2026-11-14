@@ -69,7 +69,10 @@ test("image rows keep following hard breaks, captions and list spacing outside t
 		expect(lines.every((line) => !line.includes("\n"))).toBe(true);
 		expect(lines[0]).toContain(image);
 		expect(lines.slice(1).map((line) => stripTerminalSequences(line).trim())).toEqual([
-			"caption", "last line", "", "- next",
+			"caption",
+			"last line",
+			"",
+			"- next",
 		]);
 	}
 });
@@ -183,4 +186,62 @@ test("default text styling and background cover padding and continue after neste
 	}
 	markdown.setText(" \t\n");
 	expect(markdown.render(64)).toEqual([]);
+});
+
+test.each(["$x^2$", "\\(x^2\\)", "$$\nx^2\n$$", "\\[\nx^2\n\\]"])(
+	"math rendering can be disabled without losing its delimiters: %s",
+	(source) => {
+		const markdown = new Markdown(source, 0, 0, theme, undefined, { renderLatex: false });
+		expect(render(markdown).join("\n")).toBe(source);
+	},
+);
+
+test.each([1, 2, 3, 5, 8])("tables retain raw source when width %i cannot fit their columns", (width) => {
+	const source = "| A | B |\n| --- | --- |\n| x | y |";
+	const lines = render(new Markdown(source, 0, 0, theme), width);
+	for (const line of lines) expect(visibleWidth(line)).toBeLessThanOrEqual(width);
+	expect(lines.join("").replaceAll(" ", "")).toBe(source.replaceAll(" ", "").replaceAll("\n", ""));
+});
+
+test("reference links are resolved again after their definitions change", () => {
+	setCapabilities({ images: null, trueColor: true, hyperlinks: true });
+	const markdown = new Markdown("[guide][ref]\n\n[ref]: https://example.test/old", 0, 0, theme);
+	expect(markdown.render(80).join("")).toContain("\x1b]8;;https://example.test/old\x1b\\");
+	markdown.setText("[guide][ref]\n\n[ref]: https://example.test/new");
+	const updated = markdown.render(80).join("");
+	expect(updated).toContain("\x1b]8;;https://example.test/new\x1b\\");
+	expect(updated).not.toContain("https://example.test/old");
+});
+
+test("a transform receives the available content width and refreshes only after invalidation", () => {
+	let caption = "first";
+	const transform = vi.fn((_source: string, width: number) => `### ${caption} ${width}`);
+	const markdown = new Markdown("source", 2, 0, theme, undefined, { transform });
+	expect(render(markdown, 30)).toEqual(["  ### first 26"]);
+	expect(render(markdown, 30)).toEqual(["  ### first 26"]);
+	expect(transform).toHaveBeenCalledTimes(1);
+	caption = "next";
+	markdown.invalidate();
+	expect(render(markdown, 30)).toEqual(["  ### next 26"]);
+	expect(render(markdown, 25)).toEqual(["  ### next 21"]);
+	expect(transform).toHaveBeenCalledTimes(3);
+});
+
+test("inline images, raw HTML and comments preserve surrounding visible text", () => {
+	const markdown = new Markdown(
+		"A ![diagram](https://example.test/image.png) B <b>bold</b> <!--hidden--> C",
+		0,
+		0,
+		theme,
+	);
+	expect(render(markdown, 100)).toEqual(["A diagram B <b>bold</b> C"]);
+});
+
+test("unsupported math and incomplete closers stay literal when escape preservation is enabled", () => {
+	for (const source of [String.raw`$\unknown{x}$`, String.raw`$x\$`, "\\[\nplain text", String.raw`$$x\$$`]) {
+		expect(render(new Markdown(source, 0, 0, theme, undefined, { preserveBackslashEscapes: true })).join("\n")).toBe(
+			source,
+		);
+	}
+	expect(render(new Markdown(String.raw`$x\$`, 0, 0, theme))).toEqual(["$x$"]);
 });

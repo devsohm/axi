@@ -38,7 +38,7 @@ read
 
 Use `PipeTransport({ open })` when another component runs the server. The `open` callback connects stdout and stderr handlers and returns a pipe with `write`, `closeStdin`, `close` and an `exited` promise. The transport frames JSON-RPC messages, keeps a bounded stderr tail, and closes stdin before terminating an unresponsive server. It can connect to an Env remote process without spawning a local server.
 
-`validateMcpServerConfig(name, entry)` validates shared stdio and HTTP settings and keeps application fields. `isMcpServerOverride(entry)` identifies entries that only override settings. `createMcpToolName(server, tool)` produces a provider-safe identifier, with a hash suffix for collisions or long names. `mcpNamespace(server)` gives the server's namespace. `normalizeMcpInputSchema(schema)` supplies missing object-schema fields.
+`validateMcpServerConfig(name, entry)` validates shared stdio and HTTP settings and keeps application fields. `isMcpServerOverride(entry)` identifies entries that only override settings. `createMcpToolName(server, tool)` produces a provider-safe identifier, with a hash suffix for collisions or long names. `mcpNamespace(server)` gives the server's namespace. `mcpServerSummary(description, instructions)` selects the first trimmed line of the description, falls back to the server's initialization instructions, and returns an empty string when both are blank. `normalizeMcpInputSchema(schema)` supplies missing object-schema fields.
 
 ## Convert tool results for a model
 

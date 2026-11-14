@@ -30,6 +30,8 @@ Notification, error and close registration returns removal callbacks. Notificati
 
 ## Tools and resources
 
+`mcpServerSummary(description, instructions)` returns one line for a server summary. It prefers a non-blank description, then non-blank initialization instructions. It trims the selected text, keeps its first newline-delimited line, and trims that line. With no usable text it returns an empty string. It preserves Unicode and does not limit the line length.
+
 `listTools()`, `listResources()` and `listResourceTemplates()` collect all pages. Empty or null cursors end pagination. Repeated cursors or more than 1,000 pages fail. Listed tools require a name and object input schema. Resources require a URI; templates require a URI template. A missing name falls back to that address. Page methods preserve the cursor for the next request.
 
 `readResource()` validates that each result item has a URI and text or blob contents. `callTool()` preserves the result, including `structuredContent` of any JSON type and `isError`. Absent content becomes an empty list. An `isError` result is distinct from a JSON-RPC protocol failure.

@@ -49,6 +49,7 @@ Exports from the package root. The linked declarations contain exact signatures.
 | `McpHttpError` | class | [`transports/streamable-http.d.ts`](../dist/transports/streamable-http.d.ts) |
 | `McpHttpServerConfig` | interface | [`config.d.ts`](../dist/config.d.ts) |
 | `mcpNamespace` | function | [`naming.d.ts`](../dist/naming.d.ts) |
+| `mcpServerSummary` | function | [`naming.d.ts`](../dist/naming.d.ts) |
 | `McpOAuthConfig` | interface | [`config.d.ts`](../dist/config.d.ts) |
 | `McpOutputSaver` | typealias | [`output-limit.d.ts`](../dist/output-limit.d.ts) |
 | `McpPipe` | interface | [`transports/pipe.d.ts`](../dist/transports/pipe.d.ts) |
