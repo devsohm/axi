@@ -116,6 +116,14 @@ check diagnostic output, listener removal, dialog mouse focus and capability
 probes. The tmux probe cases simulate the external command; they do not establish
 acceptance in an installed tmux session.
 
+Generation recovery cases reopen SQLite and JSONL checkpoints in the answer,
+review and after-run phases at their restart limit. They check the saved answer,
+queued input and model request count. These cases prepare persisted task records;
+the process-kill cases separately exercise abrupt termination. Migration cases
+resume older generation versions using the saved input. Code Mode recovery also
+closes the sandbox before the Session and checks that reopening preserves the
+previously committed effect.
+
 Delta model checks apply batches of edits to both tracked state and ordinary
 JavaScript values. They compare the resulting value, delta replay, aborted
 changes and retained revisions. Reference lifetime checks cover members, keyed

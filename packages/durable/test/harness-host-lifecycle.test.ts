@@ -183,6 +183,57 @@ test("a task scan failure during opening closes the acquired backend and retains
 	expect(storage.backendClosed).toBe(true);
 });
 
+test.each(["subscribe", "unsubscribe"] as const)(
+	"a registry %s failure releases storage without replacing the original error",
+	async (stage) => {
+		const failure = new Error("Registry listener failed"),
+			registry = createRegistry(),
+			reports: Report[] = [];
+		class Storage extends MemoryStorage {
+			closes = 0;
+			override async close(ctx: Parameters<MemoryStorage["close"]>[0]) {
+				this.closes++;
+				await super.close(ctx);
+			}
+		}
+		const storage = new Storage();
+		const opened = Harness.open(
+			storage,
+			{
+				models: createModels(),
+				registry: {
+					snapshot: () => registry.snapshot(),
+					subscribe(listener) {
+						if (stage === "subscribe") throw failure;
+						const detach = registry.subscribe(listener);
+						return () => {
+							detach();
+							throw failure;
+						};
+					},
+				},
+				onReport: (report) => reports.push(report),
+			},
+			context,
+		);
+		if (stage === "subscribe") {
+			await expect(opened).rejects.toBe(failure);
+		} else {
+			const harness = await opened;
+			try {
+				await harness.root(context);
+				await harness.close(context);
+				await harness.close(context);
+				expect(await harness.closed).toEqual({ kind: "closed" });
+				expect(reports).toEqual([{ kind: "host_error", callback: "registry", error: failure }]);
+			} finally {
+				await harness.close(context);
+			}
+		}
+		expect(storage.closes).toBe(1);
+	},
+);
+
 test("provider cleanup failure is reported without preventing backend closure", async () => {
 	const models = createModels(),
 		provider = fauxProvider(),

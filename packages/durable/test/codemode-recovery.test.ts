@@ -33,9 +33,10 @@ const Counter = defineDoc({
 	checkpointWhen: () => false,
 });
 
-test.each(["resume", "version", "deadline", "fingerprint", "call-count"] as const)(
+test.each(["resume", "sandbox-close", "version", "deadline", "fingerprint", "call-count"] as const)(
 	"a saved code execution handles %s after reopening SQLite",
 	async (scenario) => {
+		const resumes = scenario === "resume" || scenario === "sandbox-close";
 		const directory = await mkdtemp(join(tmpdir(), "axi-code-recovery-"));
 		directories.push(directory);
 		const file = join(directory, "session.sqlite");
@@ -111,9 +112,14 @@ test.each(["resume", "version", "deadline", "fingerprint", "call-count"] as cons
 			await entered.promise;
 			expect(await first.session.snapshot(Counter, context)).toEqual({ calls: 1 });
 			expect((await first.session.snapshot(CodemodeJournalDoc, id, context))?.entries).toHaveLength(1);
+			if (scenario === "sandbox-close") {
+				await sandbox.close();
+				expect((await first.session.snapshot(CodemodeRunDoc, id, context))?.result).toBeUndefined();
+				expect((await first.storage.task(id, context))?.state.status).toBe("running");
+			}
 			await first.session.close(context);
 			await sandbox.close();
-			if (scenario !== "resume") {
+			if (!resumes) {
 				const session = createSession(await openNodeSqliteStorage(file));
 				try {
 					await session.commit(async (tx) => {
@@ -154,9 +160,9 @@ test.each(["resume", "version", "deadline", "fingerprint", "call-count"] as cons
 					.find((message) => message.role === "toolResult" && message.toolCallId === "script");
 				if (message?.role !== "toolResult") throw new Error("Missing resumed script result");
 				const text = message.content.flatMap((item) => (item.type === "text" ? [item.text] : [])).join("\n");
-				expect(message.isError).toBe(scenario !== "resume");
+				expect(message.isError).toBe(!resumes);
 				expect(await reopened.session.snapshot(Counter, context)).toEqual({ calls: 1 });
-				if (scenario === "resume") {
+				if (resumes) {
 					expect(await reopened.session.snapshot(CodemodeStoreDoc, conversationId, context)).toEqual({
 						values: { answer: { first: "7", second: "9" } },
 					});

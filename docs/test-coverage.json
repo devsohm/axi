@@ -472,7 +472,10 @@
 						"packages/durable/test/tool-nested-contracts.test.ts",
 						"packages/durable/test/tool-hook-boundaries.test.ts",
 						"packages/durable/test/join-policies.test.ts",
-						"packages/durable/test/scheduler-inbox-cancellation.test.ts"
+						"packages/durable/test/scheduler-inbox-cancellation.test.ts",
+						"packages/durable/test/answered-restart-limit.test.ts",
+						"packages/durable/test/generation-migration.test.ts",
+						"packages/durable/test/scheduler-agent-lifecycle.test.ts"
 					]
 				},
 				{
@@ -490,7 +493,8 @@
 						"packages/durable/test/automatic-compaction.test.ts",
 						"packages/durable/test/generation-hooks.test.ts",
 						"packages/durable/test/generation-controls.test.ts",
-						"packages/durable/test/compaction-failures.test.ts"
+						"packages/durable/test/compaction-failures.test.ts",
+						"packages/durable/test/generation-boundaries.test.ts"
 					]
 				},
 				{
