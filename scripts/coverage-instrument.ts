@@ -51,10 +51,11 @@ export function bundleCoverage(directory: string | undefined) {
 			});
 			const instrumenter = createSourceInstrumenter();
 			builder.onLoad({ filter: /[/\\]packages[/\\][^/\\]+[/\\]src[/\\].*\.ts$/ }, ({ path }) => {
-				const source = transformSource(readFileSync(path, "utf8"), path);
-				maps.set(path, source.map);
+				const file = path.replaceAll("\\", "/");
+				const source = transformSource(readFileSync(path, "utf8"), file);
+				maps.set(file, source.map);
 				return {
-					contents: instrumenter.instrumentSync(source.code, path),
+					contents: instrumenter.instrumentSync(source.code, file),
 					loader: "js",
 					resolveDir: dirname(path),
 				};

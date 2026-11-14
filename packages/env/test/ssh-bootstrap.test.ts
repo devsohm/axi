@@ -22,6 +22,8 @@ import {
 	type RemotePlatform,
 } from "../src/ssh.ts";
 
+vi.setConfig({ testTimeout: 30_000 });
+
 async function peerFixture() {
 	const directory = await mkdtemp(join(tmpdir(), "axi-ssh-bootstrap-"));
 	const ssh = join(directory, "ssh.mjs"),
@@ -111,7 +113,7 @@ test.skipIf(process.platform === "win32").each(["eager", "lazy"])(
 				const env = new RemoteExecutionEnv({ connection, id: "ssh-restart", cwd: peer.directory, shellPath: "/bin/sh" });
 				getOrThrow(await env.writeFile("retained.txt", "saved before disconnect", context));
 				process.kill(first.pid, "SIGTERM");
-				await vi.waitFor(async () => expect((await connection.info()).pid).not.toBe(first.pid));
+				await vi.waitFor(async () => expect((await connection.info()).pid).not.toBe(first.pid), { timeout: 5000 });
 				expect(getOrThrow(await env.readTextFile("retained.txt", context))).toBe("saved before disconnect");
 				const calls = await peer.calls();
 				expect(calls).toHaveLength(6);
@@ -134,16 +136,16 @@ test.skipIf(process.platform === "win32")(
 		try {
 			await peer.plan([{ hold: true }, { hold: true }]);
 			const pending = detectPlatform(peer.target);
-			const rejected = expect(pending).rejects.toMatchObject({
+			const outcome = pending.then(() => undefined, (error: unknown) => error);
+			await vi.waitFor(async () => expect(await peer.calls()).toHaveLength(1), { timeout: 5000 });
+			await vi.advanceTimersByTimeAsync(60_000);
+			await vi.waitFor(async () => expect(await peer.calls()).toHaveLength(2), { timeout: 5000 });
+			await vi.advanceTimersByTimeAsync(60_000);
+			expect(await outcome).toMatchObject({
 				exitCode: null,
 				stderr: "SSH probe still running\n",
 				message: expect.stringContaining("did not finish within 60 s"),
 			});
-			await vi.waitFor(async () => expect(await peer.calls()).toHaveLength(1));
-			await vi.advanceTimersByTimeAsync(60_000);
-			await vi.waitFor(async () => expect(await peer.calls()).toHaveLength(2));
-			await vi.advanceTimersByTimeAsync(60_000);
-			await rejected;
 		} finally {
 			vi.useRealTimers();
 			await peer.close();

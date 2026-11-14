@@ -27,6 +27,14 @@ export default {
 		globalThis.__AXI_COVERAGE_TEST_RUNNER__ = true;
 		return istanbul.startCoverage(options);
 	},
+	takeCoverage(options) {
+		// Native imports bypass Vite's source-map cache, including imports inside a test worker.
+		for (const [file, map] of globalThis.__AXI_COVERAGE_SOURCE_MAPS__ ?? []) {
+			const data = globalThis.__VITEST_COVERAGE__?.[file];
+			if (data) data.inputSourceMap = map;
+		}
+		return istanbul.takeCoverage(options);
+	},
 	async getProvider() {
 		const provider = await istanbul.getProvider();
 		provider.name = "custom";

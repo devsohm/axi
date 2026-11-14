@@ -75,7 +75,7 @@ test("bundle coverage records executed source and rejects unrelated report paths
 		collector.write(context.__VITEST_COVERAGE__);
 		const files = await readdir(output);
 		assert.equal(files.length, 1);
-		const report = JSON.parse(await readFile(join(output, files[0]), "utf8"))[source];
+		const report = JSON.parse(await readFile(join(output, files[0]), "utf8"))[source.replaceAll("\\", "/")];
 		assert.ok(report.inputSourceMap);
 		const functions = Object.entries(report.fnMap);
 		assert.equal(report.f[functions.find(([, fn]) => fn.name === "choose")[0]], 1);
@@ -110,6 +110,7 @@ test("coverage keeps parent, child and worker execution separate before creditin
 			);
 		}
 		await writeFile(join(directory, "src/target.ts"), "export const value = 23;");
+		await writeFile(join(directory, "src/native.ts"), "export function onlyNative(flag: boolean): number { if (flag) return 29; return -1; }\nexport function unusedNative(): number { return 0; }\n");
 		await writeFile(
 			join(directory, "test/child.mjs"),
 			'import { choose, load, cleanup } from "../src/child.ts"; process.on("exit", cleanup); await load(); (await import("../src/child.ts?reload")).choose(true); process.emitWarning("fixture application warning"); console.log(choose(true));',
@@ -124,12 +125,15 @@ test("coverage keeps parent, child and worker execution separate before creditin
 import { execFile } from "node:child_process";
 import { once } from "node:events";
 import { Worker } from "node:worker_threads";
+import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { expect, test } from "vitest";
 import { choose as chooseChild, load as loadChild } from "../src/child.ts";
 import { choose as chooseWorker, load as loadWorker } from "../src/worker.ts";
 test("real child and worker execute", async () => {
+  const native = createRequire(import.meta.url)(fileURLToPath(new URL("../src/native.ts", import.meta.url)));
+  expect(native.onlyNative(true)).toBe(29);
   expect((await loadChild()).value).toBe(23);
   expect((await loadWorker()).value).toBe(23);
   expect(chooseChild(false)).toBe(-1);
@@ -156,6 +160,12 @@ test("real child and worker execute", async () => {
 				maxBuffer: 1024 * 1024,
 			});
 			const report = JSON.parse(await readFile(join(directory, "coverage/coverage-final.json"), "utf8"));
+			const native = report[join(directory, "src/native.ts").replaceAll("\\", "/")];
+			const nativeFunctions = Object.entries(native.fnMap);
+			assert.equal(nativeFunctions.find(([, fn]) => fn.name === "onlyNative")[1].decl.start.line, 1);
+			assert.equal(nativeFunctions.find(([, fn]) => fn.name === "unusedNative")[1].decl.start.line, 2);
+			assert.equal(native.f[nativeFunctions.find(([, fn]) => fn.name === "onlyNative")[0]], enabled ? 1 : 0);
+			assert.equal(native.f[nativeFunctions.find(([, fn]) => fn.name === "unusedNative")[0]], 0);
 			for (const name of ["child", "worker"]) {
 				const file = report[join(directory, "src", name + ".ts").replaceAll("\\", "/")];
 				assert.ok(file, `Missing ${name} source module`);
@@ -189,7 +199,7 @@ test("real child and worker execute", async () => {
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { transformSource } from ${JSON.stringify(new URL("../scripts/coverage-instrument.ts", import.meta.url).href)};
-const filename = ${JSON.stringify(join(directory, "src/child.ts"))};
+const filename = ${JSON.stringify(join(directory, "src/child.ts").replaceAll("\\", "/"))};
 const report = structuredClone(globalThis.__VITEST_COVERAGE__[filename]);
 report.fnMap[0].name += "-incompatible";
 report.inputSourceMap = transformSource(readFileSync(filename, "utf8"), filename).map;

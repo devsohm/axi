@@ -62,6 +62,8 @@ the measurements.
 The coverage fixture checks parent, child-process and worker-thread execution
 against a disabled-collector control. It checks exact invocation counts,
 unexecuted functions, both branches, dynamic imports, reload URLs, exit handlers and application warnings.
+It also checks source locations and counts for native imports that bypass the
+test runner's module loader.
 Collection rejects incompatible source maps. Type-only source modules stay in
 the inventory after the instrumenter confirms that they have no executable
 counters.

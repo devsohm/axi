@@ -10,12 +10,13 @@ const root = process.env.AXI_COVERAGE_ROOT,
 	directory = process.env.AXI_COVERAGE_DIRECTORY;
 if (root && directory && process.env.AXI_COVERAGE_ATTACH !== "0") {
 	const files = new Map();
+	globalThis.__AXI_COVERAGE_SOURCE_MAPS__ = files;
 	const instrumenter = createSourceInstrumenter();
 	registerHooks({
 		load(url, context, next) {
 			const result = next(url, context);
 			if (!url.startsWith("file:")) return result;
-			const file = fileURLToPath(url),
+			const file = fileURLToPath(url).replaceAll("\\", "/"),
 				path = relative(root, file).replaceAll("\\", "/");
 			if (!/^(?:packages\/[^/]+\/)?src\/.*\.ts$/.test(path) || path.endsWith(".d.ts")) return result;
 			const source = typeof result.source === "string" ? result.source : Buffer.from(result.source).toString("utf8");
