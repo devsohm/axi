@@ -93,6 +93,8 @@ export function anthropicClient(
 		);
 	else if (oauth) Object.assign(headers, { "user-agent": "claude-cli/2.1.322", "x-app": "cli" }, model.headers);
 	else {
+		// Preserve API-key header authentication across SDK bearer-default changes.
+		if (options.apiKey) headers["x-api-key"] = options.apiKey;
 		const compat = anthropicCompat(model);
 		if (options.sessionId && anthropicRetention(options) !== "none" && compat.sendSessionAffinityHeaders)
 			headers[compat.sessionAffinityFormat === "openrouter" ? "x-session-id" : "x-session-affinity"] =
@@ -116,7 +118,7 @@ export function anthropicClient(
 	return {
 		client: new ExplicitAnthropic({
 			...base,
-			...(copilot || oauth ? { authToken: options.apiKey ?? null } : { apiKey: options.apiKey ?? null }),
+			...(copilot || oauth ? { authToken: options.apiKey ?? null } : {}),
 			defaultHeaders: headers,
 		}),
 		oauth,

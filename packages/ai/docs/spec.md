@@ -166,6 +166,10 @@ A configuration check uses the API-key authentication method selected at its sta
 
 Google requests retain the selected API key during client setup. Vertex's application-credential setup selects its project and location before reading request headers. Request headers resolve before client identity.
 
+Anthropic API-key requests use `x-api-key`. OAuth and Copilot requests use bearer authentication. Request headers can replace or remove those headers. A gateway using only `cf-aig-authorization` must also set `Authorization: null` to suppress the SDK's ordinary authentication requirement. The adapter does not load the SDK's ambient credential profiles.
+
+Anthropic workload identity requires `ANTHROPIC_FEDERATION_RULE_ID`, `ANTHROPIC_ORGANIZATION_ID`, and `ANTHROPIC_IDENTITY_TOKEN_FILE`. Optional `ANTHROPIC_WORKSPACE_ID` and `ANTHROPIC_SERVICE_ACCOUNT_ID` scope the token exchange. A resolved key or authentication header takes precedence. The SDK reads the identity file, exchanges its assertion, and caches the access token. Calls with the same endpoint, federation configuration and fetch implementation share that cache. Request-specific headers remain separate.
+
 OAuth resolution refreshes tokens with at most five minutes remaining, or a larger requested `minOAuthValidityMs`. Concurrent requests check expiry again under the credential lock. Cancellation stops a caller waiting for that lock. After a refresh starts, it has a separate 15-second timeout and still saves the result if the caller cancels, because the previous refresh token may no longer work. An explicit `minOAuthValidityMs` also checks the refreshed token; the ordinary five-minute window only triggers refresh.
 
 ## Catalog refresh
