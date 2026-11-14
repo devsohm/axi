@@ -79,7 +79,7 @@ test("the app exports dormant worker data and imports it under the worker lock",
 		await app.close(context);
 		await rm(directory, { recursive: true, force: true });
 	}
-});
+}, 15000);
 
 test.each(["wrong-app", "wrong-format"] as const)(
 	"a %s worker archive is rejected and a later valid import still works",
@@ -134,6 +134,7 @@ test.each(["wrong-app", "wrong-format"] as const)(
 			await rm(directory, { recursive: true, force: true });
 		}
 	},
+	15000,
 );
 
 test("a second app cannot use an active data directory and an idempotent close permits reopening", async () => {

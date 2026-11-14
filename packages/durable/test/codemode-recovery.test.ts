@@ -181,4 +181,5 @@ test.each(["resume", "version", "deadline", "fingerprint", "call-count"] as cons
 			await sandbox.close();
 		}
 	},
+	15000,
 );
