@@ -152,7 +152,8 @@ for (const remote of [false, true]) {
 				await use(env);
 			} finally {
 				await env.cleanup(context);
-				await rm(cwd, { recursive: true, force: true });
+				// Allow transient Windows locks while removing this test's temporary directory.
+				await rm(cwd, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
 			}
 		},
 		{
