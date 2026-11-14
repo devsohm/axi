@@ -1,6 +1,7 @@
 import { parentPort, workerData } from "node:worker_threads";
 import { isHostToWorkerMessage, type WorkerData } from "./protocol.ts";
 import { startVm } from "./vm.ts";
+import { describeError } from "../errors.ts";
 if (parentPort) {
 	const port = parentPort,
 		data = workerData as WorkerData,
@@ -19,7 +20,7 @@ if (parentPort) {
 		.catch((error: unknown) =>
 			port.postMessage({
 				type: "crash",
-				message: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
+				message: describeError(error),
 			}),
 		);
 }

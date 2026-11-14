@@ -144,3 +144,21 @@ test("ordinary replies need no replay sequence and disposal prevents any later d
 		vm.dispose();
 	}
 });
+
+test("failure to read the host's script source reports a crash and leaves a disposable VM", async () => {
+	const messages: WorkerToHostMessage[] = [];
+	const vm = await startVm({
+		wasm: await loadQuickJSWasm(),
+		shouldInterrupt: () => false,
+		post: (message) => messages.push(message),
+		data: {
+			get code(): string { throw new Error("Source unavailable"); },
+			tools: [], globals: [], store: {}, memoryLimitBytes: undefined,
+		},
+	});
+	try {
+		expect(messages).toEqual([{ type: "crash", message: "Error: Source unavailable" }]);
+	} finally {
+		vm.dispose();
+	}
+});

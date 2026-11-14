@@ -1,6 +1,7 @@
 import type { CodemodeError, CodemodeSandboxBaseOptions } from "../types.ts";
 import type { CodemodeWasmModule } from "../wasm.ts";
-import { CodemodeSandboxBase, errorMessage, type VmChannel, type VmLauncher } from "./execution.ts";
+import { CodemodeSandboxBase, type VmChannel, type VmLauncher } from "./execution.ts";
+import { errorMessage } from "../errors.ts";
 import { DEFAULT_INTERRUPT_BUDGET, inlineLauncher } from "./inline.ts";
 import {
 	isWorkerToHostMessage,

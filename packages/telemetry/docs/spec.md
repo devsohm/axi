@@ -141,7 +141,7 @@ The suite checks result preservation, rejection identity, status precedence, rec
 
 ## Stored queries
 
-`getTrace(traceId)` returns settled spans ordered by start time, then span ID. `findTraces(query?)` groups settled spans by trace ID. Supply a positive page size; the default is 20. Traces are ordered by earliest start time descending, then trace ID ascending. A continuation cursor preserves that order. Keep query filters unchanged across pages.
+`getTrace(traceId)` returns settled spans ordered by start time, then span ID. `findTraces(query?)` groups settled spans by trace ID. Supply a positive page size; the default is 20. Traces are ordered by earliest start time descending, then trace ID ascending. IDs use ordinal string ordering. A continuation cursor preserves that order. Keep query filters unchanged across pages.
 
 Name and inclusive start-time filters use the earliest span. `errors: true` matches an error anywhere in the trace. Attribute equalities must all match the same span and distinguish booleans from numbers. Returned data is detached from the recorder.
 

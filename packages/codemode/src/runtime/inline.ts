@@ -1,6 +1,7 @@
 import type { CodemodeSandboxBaseOptions } from "../types.ts";
 import type { CodemodeWasmModule } from "../wasm.ts";
-import { CodemodeSandboxBase, errorMessage, type VmLauncher } from "./execution.ts";
+import { CodemodeSandboxBase, type VmLauncher } from "./execution.ts";
+import { errorMessage } from "../errors.ts";
 import { startVm } from "./vm.ts";
 export const DEFAULT_INTERRUPT_BUDGET = 100000;
 export const INLINE_MAX_STACK_SIZE = 256 * 1024;

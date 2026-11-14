@@ -23,6 +23,7 @@ import type {
 	TelemetryUpDownCounter,
 } from "./metrics.ts";
 import { NOOP_TELEMETRY_CONTEXT } from "./noop.ts";
+import { compareIds } from "./order.ts";
 
 export interface RecordedTelemetryEvent {
 	readonly name: string;
@@ -304,7 +305,7 @@ export class InMemoryTelemetryContext
 					})),
 				}),
 			)
-			.sort((a, b) => a.startedMs - b.startedMs || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+			.sort((a, b) => a.startedMs - b.startedMs || compareIds(a.id, b.id));
 	}
 	async getTrace(traceId: string): Promise<StoredTrace | undefined> {
 		const spans = this.storedSpans().filter((span) => span.traceId === traceId);
@@ -333,7 +334,7 @@ export class InMemoryTelemetryContext
 						))
 				);
 			})
-			.sort(([aid, a], [bid, b]) => b[0]!.startedMs - a[0]!.startedMs || (aid < bid ? -1 : aid > bid ? 1 : 0));
+			.sort(([aid, a], [bid, b]) => b[0]!.startedMs - a[0]!.startedMs || compareIds(aid, bid));
 		const limit = query.limit ?? 20;
 		const traces = matches.slice(0, limit).map(([traceId, spans]) => ({ traceId, spans }));
 		const last = traces.at(-1)!;

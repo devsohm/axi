@@ -1,3 +1,5 @@
+import { errorMessage } from "./errors.ts";
+
 export const CODEMODE_OPTIONS_PREFIX = "// @options:";
 export const CODEMODE_SOURCE_GRAMMAR = String.raw`
 start: options_source | plain_source
@@ -30,7 +32,7 @@ function readOptions(text: string): CodemodeSourceOptions {
 		parsed = JSON.parse(text);
 	} catch (error) {
 		throw new CodemodeSourceError(
-			`@options must be valid JSON with supported fields ${fields}: ${error instanceof Error ? error.message : String(error)}`,
+			`@options must be valid JSON with supported fields ${fields}: ${errorMessage(error)}`,
 		);
 	}
 	if (!parsed || typeof parsed !== "object" || Array.isArray(parsed))

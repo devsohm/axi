@@ -1,4 +1,5 @@
 import { toCodemodeIdentifier } from "../identifier.ts";
+import { errorMessage } from "../errors.ts";
 import type * as T from "../types.ts";
 import {
 	isWorkerToHostMessage,
@@ -16,9 +17,6 @@ export interface VmChannel {
 	stop(): Promise<void>;
 }
 export type VmLauncher = (data: VmStartData, events: VmEvents) => VmChannel | Promise<VmChannel>;
-export function errorMessage(error: unknown): string {
-	return error instanceof Error ? error.message : String(error);
-}
 class BridgeError extends Error {}
 function decode(text: string, subject: string): unknown {
 	try {

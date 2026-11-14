@@ -1,7 +1,8 @@
 import { Worker } from "node:worker_threads";
 import type { CodemodeSandboxOptions } from "../types.ts";
 import { loadQuickJSWasm, type CodemodeWasmModule } from "../wasm.ts";
-import { CodemodeSandboxBase, errorMessage, type VmLauncher } from "./execution.ts";
+import { CodemodeSandboxBase, type VmLauncher } from "./execution.ts";
+import { errorMessage } from "../errors.ts";
 import type { WorkerData } from "./protocol.ts";
 function launcher(options: CodemodeSandboxOptions): VmLauncher {
 	return async (data, events) => {

@@ -1,6 +1,8 @@
 import { Intrinsics, JSException, MAX_STACK_SIZE, QuickJS, type JSValueHandle } from "quickjs-wasi";
 import type { CodemodeWasmModule } from "../wasm.ts";
 import { PRELUDE_SOURCE } from "./prelude-source.ts";
+import { describeError } from "../errors.ts";
+import { quietOutput } from "./wasi.ts";
 import type { HostToWorkerMessage, VmStartData, WorkerToHostMessage } from "./protocol.ts";
 export interface VmSession {
 	deliver(message: HostToWorkerMessage): void;
@@ -35,17 +37,6 @@ function scriptException(error: JSException): string {
 	return JSON.stringify({ name: error.name, message: error.message, stack: stack ? `${title}\n${stack}` : title });
 }
 type Clock = { creating: boolean; startedAt: number; now: number; seed: number };
-function quietOutput(memory: { readonly buffer: ArrayBufferLike }) {
-	return {
-		fd_write(_fd: number, buffers: number, count: number, written: number): number {
-			const view = new DataView(memory.buffer);
-			let length = 0;
-			for (let i = 0; i < count; i++) length += view.getUint32(buffers + 8 * i + 4, true);
-			view.setUint32(written, length, true);
-			return 0;
-		},
-	};
-}
 function clockOutput(clock: Clock) {
 	const random = randomSource(clock.seed ^ 0x9e3779b9);
 	return (memory: { readonly buffer: ArrayBufferLike }) => ({
@@ -97,7 +88,7 @@ export async function startVm(options: StartVmOptions): Promise<VmSession> {
 	let api: JSValueHandle, settle: JSValueHandle, stalled: JSValueHandle;
 	const native = vm._getExports();
 	const crash = (error: unknown): void =>
-		post({ type: "crash", message: error instanceof Error ? `${error.name}: ${error.message}` : String(error) });
+		post({ type: "crash", message: describeError(error) });
 	const drain = (): void => {
 		let jobs = 0;
 		while (native.qjs_is_job_pending()) {
