@@ -13,10 +13,12 @@ import {
 	type TaskId,
 	type TaskRecord,
 	type TaskState,
+	type Storage,
 } from "../src/index.ts";
 import { idFromNumber } from "../src/ids.ts";
 import { commitWrites } from "../src/testing/commit-writes.ts";
 import { SessionImpl } from "../src/session/session.ts";
+import { TaskGraphView } from "../src/harness/task-graph.ts";
 
 const definition = defineTask<null, { phase: "run" }, null>({
 	name: "graph-job",
@@ -30,6 +32,54 @@ const definition = defineTask<null, { phase: "run" }, null>({
 	async abort() {},
 });
 const extension = defineExtension({ name: "graph-jobs", tasks: [definition] });
+
+test.each(["watch", "observe"] as const)(
+	"a graph %s cancelled immediately after attachment is discarded before return",
+	async (method) => {
+		const controller = new AbortController(),
+			reason = new Error("Graph caller left during attachment");
+		class Session extends SessionImpl {
+			cancelRead = false;
+			override async readOnLine<Value>(job: (storage: Storage) => Promise<Value>): Promise<Value> {
+				const result = await super.readOnLine(job);
+				if (this.cancelRead) {
+					this.cancelRead = false;
+					controller.abort(reason);
+				}
+				return result;
+			}
+		}
+		const session = new Session(new MemoryStorage()),
+			graph = new TaskGraphView(session, { blocked: () => undefined, subscribeBlocked: () => () => {} }),
+			listener = { advance: vi.fn(), end: vi.fn() };
+		try {
+			const conversation = await session.commit(
+				(tx) => tx.createConversation({ ownership: { kind: "ownerless" } }),
+				context,
+			);
+			session.cancelRead = true;
+			const invocation = withAbortSignal(controller.signal, context);
+			await expect(method === "watch" ? graph.watch(invocation) : graph.observe(listener, invocation)).rejects.toBe(
+				reason,
+			);
+			const task = await session.commit(
+				(tx) =>
+					tx.createTask(definition, null, { conversationId: conversation.id, ownership: { kind: "conversation" } }),
+				context,
+			);
+			expect(listener.advance).not.toHaveBeenCalled();
+			expect(listener.end).not.toHaveBeenCalled();
+			const current = await graph.watch(context);
+			try {
+				expect(current.value.tasks[String(task)]).toMatchObject({ kind: "graph-job", state: { status: "pending" } });
+			} finally {
+				await current.stop();
+			}
+		} finally {
+			await session.close(context);
+		}
+	},
+);
 
 async function fixture() {
 	const registry = createRegistry(),

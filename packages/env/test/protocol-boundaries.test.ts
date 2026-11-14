@@ -3,6 +3,28 @@ import { expect, test, vi } from "vitest";
 import { Connection, isConnectionLost, nodePlatform } from "../src/connection.ts";
 
 const peer = [process.execPath, fileURLToPath(new URL("./fixtures/peer.ts", import.meta.url))];
+
+test("daemon stderr continues reaching the caller after startup completes", async () => {
+	const logged = Promise.withResolvers<void>();
+	const logs: string[] = [];
+	const connection = new Connection({
+		command: peer,
+		onLog: (text) => {
+			logs.push(text);
+			if (logs.join("").includes("after startup")) logged.resolve();
+		},
+	});
+	try {
+		await connection.info();
+		expect((await connection.request("log", { message: "after startup" })).json).toEqual({ logged: true });
+		await logged.promise;
+		expect(logs.join("")).toContain("after startup");
+		expect((await connection.request("echo", { value: "ready" })).json).toEqual({ value: "ready" });
+	} finally {
+		connection.close();
+	}
+});
+
 function frame(type: number, body: string, declared = Buffer.byteLength(body)): Buffer {
 	const bytes = Buffer.from(body),
 		packet = Buffer.alloc(13 + bytes.length);

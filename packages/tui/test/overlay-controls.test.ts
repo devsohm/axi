@@ -31,6 +31,38 @@ function setup(fullscreen = false) {
 	return { ui, terminal };
 }
 
+test("fullscreen mouse focus selects the enclosing dialog before routing later keyboard input", async () => {
+	const { ui, terminal } = setup(true),
+		draft = new Input();
+	let typed = "";
+	class Dialog extends Container {
+		handleInput(data: string) {
+			typed += data;
+		}
+	}
+	const dialog = new Dialog();
+	dialog.addChild({ render: () => ["choose"], invalidate() {}, handleMouse: () => ({ handled: true, focus: true }) });
+	ui.addChild(draft);
+	ui.setFocus(draft);
+	ui.start();
+	const visible = ui.showOverlay(dialog, { anchor: "top-left", width: 10 });
+	const hidden = ui.showOverlay(new Text("hidden", 0, 0), { nonCapturing: true });
+	hidden.setHidden(true);
+	visible.unfocus({ target: draft });
+	ui.renderNow();
+	expect(visible.isFocused()).toBe(false);
+	const bounds = visible.getBounds();
+	if (!bounds) throw new Error("Dialog was not rendered");
+	terminal.input(`\x1b[<0;${bounds.col + 1};${bounds.row + 1}M`);
+	terminal.input(`\x1b[<0;${bounds.col + 1};${bounds.row + 1}m`);
+	terminal.input("chosen");
+	ui.renderNow();
+	expect(visible.isFocused()).toBe(true);
+	expect(typed).toBe("chosen");
+	expect(draft.getValue()).toBe("");
+	await terminal.screen();
+});
+
 test("nested overlays restore the surviving input after hiding their original parent", async () => {
 	const { ui, terminal } = setup();
 	const draft = new Input(),

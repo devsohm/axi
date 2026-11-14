@@ -63,6 +63,9 @@ process.stdin.on("data", (chunk: Buffer) => {
 		else if (json.op === "echo") {
 			send(4, id, { kind: "progress" }, payload);
 			send(2, id, { value: json.value }, payload);
+		} else if (json.op === "log") {
+			process.stderr.write(`${json.message}\n`);
+			send(2, id, { logged: true });
 		} else if (json.op === "drop") process.exit(0);
 		else if (json.op === "raw") {
 			process.stdout.write(payload);

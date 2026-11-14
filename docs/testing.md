@@ -19,7 +19,7 @@ Run:
 npm run verify
 ```
 
-This command builds the packages and native components, checks TypeScript, runs the JavaScript coverage suite, runs Rust and native tests, checks Durable Object execution, and verifies installed package archives. Archive verification installs dependencies into a temporary consumer and removes that consumer afterward. It does not contact model-provider APIs.
+This command checks formatting, builds the packages and native components, checks TypeScript, runs the JavaScript coverage suite, runs Rust and native tests, checks Durable Object execution, and verifies installed package archives. Archive verification installs dependencies into a temporary consumer and removes that consumer afterward. It does not contact model-provider APIs.
 
 The workspace build removes each package's generated `dist` directory first. This prevents deleted source files from remaining in package archives. Source files, native binaries and dependencies are preserved.
 
@@ -106,6 +106,15 @@ Unicode edits and cursor positions with a plain-text model after every action.
 The SQLite adapter checks confirm rollback, transaction queue isolation and
 expired transaction handles. Storage-helper checks inspect the records written
 by each workload; they make no performance claim.
+
+Authentication cases check cancelled key prompts, failed token exchanges and
+expired callback servers. Provider cases check lazy loading, tool identifiers,
+image replies, tool redefinitions and malformed classifier answers without live
+credentials. Task-graph cases cancel listeners immediately after attachment and
+check that later commits remain observable to new listeners. Terminal cases
+check diagnostic output, listener removal, dialog mouse focus and capability
+probes. The tmux probe cases simulate the external command; they do not establish
+acceptance in an installed tmux session.
 
 Delta model checks apply batches of edits to both tracked state and ordinary
 JavaScript values. They compare the resulting value, delta replay, aborted

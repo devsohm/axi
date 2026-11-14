@@ -34,6 +34,7 @@ jobs:
         with:
           toolchain: 1.98.1
       - run: npm ci
+      - run: npm run format:check
       - name: Install workerd test dependencies
         if: runner.os == 'Linux'
         run: npm ci --prefix test/workers --ignore-scripts

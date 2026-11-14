@@ -16,6 +16,7 @@ function script(name, ...args) {
 	run(process.execPath, [npm, "run", name, ...args]);
 }
 
+script("format:check");
 script("build");
 script("build:native", "--workspace", "@axi/tui");
 script("check");

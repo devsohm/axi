@@ -279,7 +279,9 @@
 						"packages/ai/test/compat-dispatch.test.ts",
 						"packages/ai/test/cli-auth.test.ts",
 						"packages/ai/test/provider-routing.test.ts",
-						"packages/ai/test/http-proxy.test.ts"
+						"packages/ai/test/http-proxy.test.ts",
+						"packages/ai/test/auth-input-boundaries.test.ts",
+						"packages/ai/test/copilot-catalog-policy.test.ts"
 					]
 				},
 				{
@@ -305,7 +307,10 @@
 						"packages/ai/test/tool-history.test.ts",
 						"packages/ai/test/request-encoding.test.ts",
 						"packages/ai/test/responses-replay.test.ts",
-						"packages/ai/test/codex-protocol-boundaries.test.ts"
+						"packages/ai/test/codex-protocol-boundaries.test.ts",
+						"packages/ai/test/multimodal-request-contracts.test.ts",
+						"packages/ai/test/provider-loading.test.ts",
+						"packages/ai/test/transcript-redefinitions.test.ts"
 					]
 				},
 				{
@@ -330,7 +335,8 @@
 						"packages/ai/test/classifiers.test.ts",
 						"packages/ai/test/llama-classifier-lifecycle.test.ts",
 						"packages/ai/test/faux.test.ts",
-						"packages/ai/test/lazy.test.ts"
+						"packages/ai/test/lazy.test.ts",
+						"packages/ai/test/system-one-answers.test.ts"
 					]
 				}
 			]
@@ -616,7 +622,8 @@
 						"packages/tui/test/fullscreen-boundaries.test.ts",
 						"packages/tui/test/fullscreen-navigation.test.ts",
 						"packages/tui/test/scrollback-boundaries.test.ts",
-						"packages/tui/test/transcript-search.test.ts"
+						"packages/tui/test/transcript-search.test.ts",
+						"packages/tui/test/render-diagnostics.test.ts"
 					]
 				},
 				{
@@ -629,7 +636,8 @@
 						"packages/tui/test/color-boundaries.test.ts",
 						"packages/tui/test/colors.test.ts",
 						"packages/tui/test/ansi-state.test.ts",
-						"packages/tui/test/math-boundaries.test.ts"
+						"packages/tui/test/math-boundaries.test.ts",
+						"packages/tui/test/terminal-capability-probe.test.ts"
 					]
 				},
 				{

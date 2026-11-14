@@ -131,10 +131,10 @@ it("refuses defaulted identity fields in declarations and their types", () => {
 	expect(() => local("default.integer", { version: 1, params: { id: int({ default: 1 }) }, members: {} })).toThrow(
 		"a param is a required",
 	);
-	// @ts-expect-error Identity parameters cannot declare defaults.
 	expect(() =>
 		remote("default.boolean", {
 			version: 1,
+			// @ts-expect-error Identity parameters cannot declare defaults.
 			params: { id: bool({ default: true }) },
 			hostAddress: () => Place(),
 			variants: { user: {} },

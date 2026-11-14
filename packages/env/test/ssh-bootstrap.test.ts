@@ -115,6 +115,17 @@ if (step.local) {
 	};
 }
 
+test.skipIf(process.platform === "win32")("a truncated platform probe cannot select a remote binary", async () => {
+	const peer = await peerFixture();
+	try {
+		await peer.plan([{ stdout: "AXI-ENV-PROBE" }]);
+		await expect(detectPlatform(peer.target)).rejects.toThrow("Unsupported remote architecture");
+		expect(await peer.calls()).toHaveLength(1);
+	} finally {
+		await peer.close();
+	}
+});
+
 test.skipIf(process.platform === "win32").each(["eager", "lazy"])(
 	"%s SSH connections verify and restart the real daemon without losing remote files",
 	async (mode) => {
