@@ -67,4 +67,32 @@ describe("MCP client operation order", () => {
 			await client.close();
 		}
 	});
+	it("a reentrant transport close cannot send a response after the client has ended", async () => {
+		const client = new McpClient({ name: "client", version: "1" });
+		const transport = new DirectServer({
+			protocolVersion: "2025-11-25",
+			capabilities: {},
+			serverInfo: { name: "server", version: "1" },
+		});
+		const errors: Error[] = [];
+		client.onError((error) => errors.push(error));
+		try {
+			await client.connect(transport);
+			transport.receive({
+				get jsonrpc(): "2.0" {
+					void client.close();
+					return "2.0";
+				},
+				id: 99,
+				method: "ping",
+			});
+			await new Promise<void>((resolve) => setImmediate(resolve));
+			expect(client.connectionState).toBe("closed");
+			expect(transport.sent.filter((message) => "id" in message && message.id === 99)).toEqual([]);
+			expect(errors).toEqual([]);
+			await expect(client.request("ping")).rejects.toMatchObject({ name: "McpConnectionClosedError" });
+		} finally {
+			await client.close();
+		}
+	});
 });

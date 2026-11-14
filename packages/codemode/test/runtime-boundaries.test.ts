@@ -6,7 +6,9 @@ import {
 	serveCodemodeRemote,
 	type CodemodeRemoteMessage,
 } from "../src/index.ts";
-import { describeError, errorMessage } from "../src/errors.ts";
+import { describeError, errorMessage, scriptException } from "../src/errors.ts";
+import { inlineLauncher } from "../src/runtime/inline.ts";
+import { isWorkerToHostMessage } from "../src/runtime/protocol.ts";
 import { quietOutput } from "../src/runtime/wasi.ts";
 
 test.each([
@@ -38,6 +40,56 @@ test("discarded WASI writes acknowledge their byte count after memory growth", (
 	view.setUint32(65540, 4, true);
 	expect(output.fd_write(1, 65536, 1, 65544)).toBe(0);
 	expect(view.getUint32(65544, true)).toBe(4);
+});
+
+test("script diagnostics preserve absent or empty stacks and empty messages", () => {
+	expect(
+		JSON.parse(scriptException({ name: "SyntaxError", message: "Unexpected token", stack: "at code.js:2\n" })),
+	).toEqual({
+		name: "SyntaxError",
+		message: "Unexpected token",
+		stack: "SyntaxError: Unexpected token\nat code.js:2",
+	});
+	expect(JSON.parse(scriptException({ name: "SyntaxError", message: "", stack: "" }))).toEqual({
+		name: "SyntaxError",
+		message: "",
+		stack: "SyntaxError",
+	});
+	expect(JSON.parse(scriptException({ name: "Error", message: "Failed" }))).toEqual({
+		name: "Error",
+		message: "Failed",
+		stack: "Error: Failed",
+	});
+});
+
+test("an inline channel ignores a host response arriving after shutdown", async () => {
+	const messages: unknown[] = [];
+	const channel = await inlineLauncher(loadQuickJSWasm())(
+		{
+			code: "return await tools.answer();",
+			tools: [{ name: "answer", jsName: "answer", description: "Return an answer" }],
+			globals: [],
+			store: {},
+			memoryLimitBytes: undefined,
+		},
+		{
+			message: (value) => messages.push(value),
+			failure: (error) => {
+				throw new Error(error.message);
+			},
+		},
+	);
+	try {
+		const call = messages.filter(isWorkerToHostMessage).find((message) => message.type === "call");
+		if (call?.type !== "call") throw new Error("Missing host call");
+		await channel.stop();
+		const before = structuredClone(messages);
+		channel.post({ type: "result", id: call.id, ok: true, payload: "42" });
+		await new Promise<void>((resolve) => setImmediate(resolve));
+		expect(messages).toEqual(before);
+	} finally {
+		await channel.stop();
+	}
 });
 
 test.each(["inline", "worker"] as const)(

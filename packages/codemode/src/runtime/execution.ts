@@ -17,6 +17,9 @@ export interface VmChannel {
 	stop(): Promise<void>;
 }
 export type VmLauncher = (data: VmStartData, events: VmEvents) => VmChannel | Promise<VmChannel>;
+export function ignoreShutdownError(): undefined {
+	return undefined;
+}
 class BridgeError extends Error {}
 function decode(text: string, subject: string): unknown {
 	try {
@@ -140,7 +143,7 @@ class Invocation {
 			(channel) => {
 				// Cancellation can finish the invocation before its asynchronous launch returns.
 				if (this.finished) {
-					void channel.stop().catch(() => undefined);
+					void channel.stop().catch(ignoreShutdownError);
 					return;
 				}
 				this.#channel = channel;
@@ -301,7 +304,7 @@ class Invocation {
 		}
 		void this.#channel
 			.stop()
-			.catch(() => undefined)
+			.catch(ignoreShutdownError)
 			.then(() => this.#resolve(result));
 	}
 }

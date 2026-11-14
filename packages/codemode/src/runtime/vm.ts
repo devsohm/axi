@@ -1,7 +1,7 @@
 import { Intrinsics, JSException, MAX_STACK_SIZE, QuickJS, type JSValueHandle } from "quickjs-wasi";
 import type { CodemodeWasmModule } from "../wasm.ts";
 import { PRELUDE_SOURCE } from "./prelude-source.ts";
-import { describeError } from "../errors.ts";
+import { describeError, scriptException } from "../errors.ts";
 import { quietOutput } from "./wasi.ts";
 import type { HostToWorkerMessage, VmStartData, WorkerToHostMessage } from "./protocol.ts";
 export interface VmSession {
@@ -30,11 +30,6 @@ function randomSource(seed: number): () => number {
 		mixed ^= mixed + Math.imul(mixed ^ (mixed >>> 7), mixed | 61);
 		return (mixed ^ (mixed >>> 14)) >>> 0;
 	};
-}
-function scriptException(error: JSException): string {
-	const title = error.message ? `${error.name}: ${error.message}` : error.name;
-	const stack = error.stack?.trimEnd();
-	return JSON.stringify({ name: error.name, message: error.message, stack: stack ? `${title}\n${stack}` : title });
 }
 type Clock = { creating: boolean; startedAt: number; now: number; seed: number };
 function clockOutput(clock: Clock) {
@@ -87,8 +82,7 @@ export async function startVm(options: StartVmOptions): Promise<VmSession> {
 	const queued = new Map<number, HostToWorkerMessage>();
 	let api: JSValueHandle, settle: JSValueHandle, stalled: JSValueHandle;
 	const native = vm._getExports();
-	const crash = (error: unknown): void =>
-		post({ type: "crash", message: describeError(error) });
+	const crash = (error: unknown): void => post({ type: "crash", message: describeError(error) });
 	const drain = (): void => {
 		let jobs = 0;
 		while (native.qjs_is_job_pending()) {

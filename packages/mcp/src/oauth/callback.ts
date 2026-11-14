@@ -38,10 +38,7 @@ export class OAuthCallbackServer {
 		const host = options.host ?? "127.0.0.1",
 			redirectHost = options.redirectHost ?? host,
 			path = options.path ?? "/callback";
-		let instance: OAuthCallbackServer | undefined;
-		const server = createServer((request, response) => {
-			if (instance) instance.#handle(request.url ?? "/", response);
-		});
+		const server = createServer();
 		await new Promise<void>((resolve, reject) => {
 			server.once("error", reject);
 			server.listen(options.port ?? 0, host, () => {
@@ -51,12 +48,13 @@ export class OAuthCallbackServer {
 		});
 		const address = server.address();
 		if (!address || typeof address === "string") throw new Error("OAuth callback server did not bind to TCP");
-		instance = new OAuthCallbackServer(
+		const instance = new OAuthCallbackServer(
 			server,
 			`http://${redirectHost.includes(":") ? `[${redirectHost}]` : redirectHost}:${address.port}${path}`,
 			[path, ...(options.extraPaths ?? [])],
 			options,
 		);
+		server.on("request", (request, response) => instance.#handle(request.url ?? "/", response));
 		return instance;
 	}
 	waitForCallback(state: string, path?: string): Promise<OAuthCallback> {
@@ -126,7 +124,9 @@ export class OAuthCallbackServer {
 			pending.reject(new Error("OAuth callback server closed"));
 		}
 		this.#pending.clear();
-		const closed = new Promise<void>((resolve, reject) => this.#server.close((error) => (error ? reject(error) : resolve())));
+		const closed = new Promise<void>((resolve, reject) =>
+			this.#server.close((error) => (error ? reject(error) : resolve())),
+		);
 		this.#server.closeAllConnections();
 		await closed;
 	}

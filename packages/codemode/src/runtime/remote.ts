@@ -1,6 +1,6 @@
 import type { CodemodeError, CodemodeSandboxBaseOptions } from "../types.ts";
 import type { CodemodeWasmModule } from "../wasm.ts";
-import { CodemodeSandboxBase, type VmChannel, type VmLauncher } from "./execution.ts";
+import { CodemodeSandboxBase, ignoreShutdownError, type VmChannel, type VmLauncher } from "./execution.ts";
 import { errorMessage } from "../errors.ts";
 import { DEFAULT_INTERRUPT_BUDGET, inlineLauncher } from "./inline.ts";
 import {
@@ -59,7 +59,7 @@ export function serveCodemodeRemote(
 			const batch = take();
 			void (message ? exchange([...batch, message]).catch(() => null) : Promise.resolve())
 				.then(() => channel?.stop())
-				.catch(() => undefined)
+				.catch(ignoreShutdownError)
 				.then(() => resolve());
 		};
 		const accept = (reply: CodemodeRemoteReply): void => {
@@ -101,7 +101,7 @@ export function serveCodemodeRemote(
 			(started) => {
 				channel = started;
 				if (ended) {
-					void started.stop().catch(() => undefined);
+					void started.stop().catch(ignoreShutdownError);
 					return;
 				}
 				for (const reply of replies.splice(0)) started.post(reply);

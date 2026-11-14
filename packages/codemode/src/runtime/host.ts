@@ -1,7 +1,7 @@
 import { Worker } from "node:worker_threads";
 import type { CodemodeSandboxOptions } from "../types.ts";
 import { loadQuickJSWasm, type CodemodeWasmModule } from "../wasm.ts";
-import { CodemodeSandboxBase, type VmLauncher } from "./execution.ts";
+import { CodemodeSandboxBase, ignoreShutdownError, type VmLauncher } from "./execution.ts";
 import { errorMessage } from "../errors.ts";
 import type { WorkerData } from "./protocol.ts";
 function launcher(options: CodemodeSandboxOptions): VmLauncher {
@@ -44,7 +44,7 @@ function launcher(options: CodemodeSandboxOptions): VmLauncher {
 		);
 		const stop = async (): Promise<void> => {
 			Atomics.store(new Int32Array(interrupt), 0, 1);
-			void worker.terminate().catch(() => undefined);
+			void worker.terminate().catch(ignoreShutdownError);
 			worker.unref();
 		};
 		try {

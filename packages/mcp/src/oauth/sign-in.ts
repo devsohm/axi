@@ -42,13 +42,12 @@ export async function cancellable<T>(signal: AbortSignal | undefined, fn: () => 
 }
 async function waitForRefresh<T>(promise: Promise<T>, signal?: AbortSignal): Promise<T> {
 	if (!signal) return promise;
-	let abort = () => {};
+	const waiter = Promise.withResolvers<T>();
+	const abort = () => waiter.reject(new McpSignInCancelledError());
 	try {
-		return await new Promise<T>((resolve, reject) => {
-			abort = () => reject(new McpSignInCancelledError());
-			signal.addEventListener("abort", abort, { once: true });
-			promise.then(resolve, reject);
-		});
+		signal.addEventListener("abort", abort, { once: true });
+		promise.then(waiter.resolve, waiter.reject);
+		return await waiter.promise;
 	} finally {
 		signal.removeEventListener("abort", abort);
 	}
