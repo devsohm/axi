@@ -134,6 +134,29 @@ test("keys and explicit authentication headers take precedence over federation c
 	expect(fetch).not.toHaveBeenCalled();
 });
 
+const headerOverrides: { model: Record<string, string>; request: ProviderHeaders; key: string | null }[] = [
+	{ model: { "X-Api-Key": "model" }, request: { "x-api-key": "request" }, key: "request" },
+	{ model: { "x-api-key": "model" }, request: { "X-Api-Key": "request" }, key: "request" },
+	{ model: { "X-Api-Key": "model" }, request: { "x-api-key": null, Authorization: "Bearer request" }, key: null },
+];
+test.each(headerOverrides)(
+	"API-key overrides remain authoritative across header casing: %j",
+	async ({ model: modelHeaders, request, key }) => {
+		let received: Headers | undefined;
+		const result = await stream({ ...model, headers: modelHeaders }, context, {
+			apiKey: "default-key",
+			headers: request,
+			fetch: async (_url, init) => {
+				received = new Headers(init?.headers);
+				return answer();
+			},
+		}).result();
+		expect(result.stopReason, result.errorMessage).toBe("stop");
+		expect(received?.get("x-api-key")).toBe(key);
+		expect(received?.get("authorization")).toBe(key === null ? "Bearer request" : null);
+	},
+);
+
 test("federated SDK credentials are reused while request headers stay local to each call", async () => {
 	const directory = await mkdtemp(join(tmpdir(), "axi-federation-")),
 		path = join(directory, "identity");

@@ -67,6 +67,15 @@ class ExplicitAnthropic extends Anthropic {
 	protected override _shouldResolveDefaultCredentials(): boolean {
 		return false;
 	}
+	protected override async apiKeyAuth(options: Parameters<Anthropic["apiKeyAuth"]>[0]) {
+		// Preserve the API-key wire format before the SDK merges model and request headers.
+		const headers = await super.apiKeyAuth(options);
+		if (headers !== undefined && this.apiKey !== null) {
+			headers.values.delete("authorization");
+			headers.values.set("x-api-key", this.apiKey);
+		}
+		return headers;
+	}
 }
 let cachedFederation: { key: string; fetch: typeof globalThis.fetch | undefined; client: Anthropic } | undefined;
 export function anthropicClient(
@@ -93,8 +102,6 @@ export function anthropicClient(
 		);
 	else if (oauth) Object.assign(headers, { "user-agent": "claude-cli/2.1.322", "x-app": "cli" }, model.headers);
 	else {
-		// Preserve API-key header authentication across SDK bearer-default changes.
-		if (options.apiKey) headers["x-api-key"] = options.apiKey;
 		const compat = anthropicCompat(model);
 		if (options.sessionId && anthropicRetention(options) !== "none" && compat.sendSessionAffinityHeaders)
 			headers[compat.sessionAffinityFormat === "openrouter" ? "x-session-id" : "x-session-affinity"] =
@@ -118,7 +125,7 @@ export function anthropicClient(
 	return {
 		client: new ExplicitAnthropic({
 			...base,
-			...(copilot || oauth ? { authToken: options.apiKey ?? null } : {}),
+			...(copilot || oauth ? { authToken: options.apiKey ?? null } : { apiKey: options.apiKey ?? null }),
 			defaultHeaders: headers,
 		}),
 		oauth,
