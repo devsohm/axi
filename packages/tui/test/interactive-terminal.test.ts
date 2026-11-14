@@ -51,7 +51,16 @@ test.skipIf(process.platform === "win32").each(["regular", "fullscreen"])(
 					emulator.write(bytes);
 				},
 			});
-			await vi.waitFor(async () => expect((await events()).some((event) => event.event === "ready")).toBe(true));
+			// Slower CI hosts need a separate allowance for loading the child process.
+			await vi.waitFor(
+				async () => {
+					expect(
+						(await events()).some((event) => event.event === "ready"),
+						`UI startup output:\n${Buffer.concat(output).toString("utf8")}`,
+					).toBe(true);
+				},
+				{ timeout: 10000 },
+			);
 			terminal.write("draft\x1b[200~ 日本語\nsecond line\x1b[201~\r");
 			await vi.waitFor(async () =>
 				expect((await events()).find((event) => event.event === "submitted")).toEqual({
