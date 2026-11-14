@@ -15,6 +15,36 @@ const Counter = defineDoc({
 afterEach(closeSchedulers);
 
 for (const method of ["watch", "observe"] as const) {
+	test(`${method} cancellation after registration discards the attachment before returning`, async () => {
+		const controller = new AbortController(),
+			failure = new Error("Caller left during attachment");
+		class Session extends SessionImpl {
+			override subscribeClose(listener: () => void): () => void {
+				const detach = super.subscribeClose(listener);
+				controller.abort(failure);
+				return detach;
+			}
+		}
+		const session = new Session(new MemoryStorage()),
+			listener = { advance: vi.fn(), end: vi.fn() };
+		try {
+			await session.commit((tx) => tx.doc(Counter), context);
+			const invocation = withAbortSignal(controller.signal, context);
+			await expect(
+				method === "watch" ? session.watchDoc(Counter, invocation) : session.observeDoc(Counter, listener, invocation),
+			).rejects.toBe(failure);
+			expect(session.documentCacheSizes.attached).toBe(0);
+			await session.commit(async (tx) => {
+				(await tx.doc(Counter)).count = 5;
+			}, context);
+			expect(await session.snapshot(Counter, context)).toEqual({ count: 5 });
+			expect(listener.advance).not.toHaveBeenCalled();
+			expect(listener.end).not.toHaveBeenCalled();
+		} finally {
+			await session.close(context);
+		}
+	});
+
 	test.each(["before-admission", "queued", "loading"] as const)(
 		`${method} attachment cancelled %s leaves no observer behind`,
 		async (stage) => {

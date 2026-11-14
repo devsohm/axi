@@ -109,6 +109,30 @@ test("streaming a changed search corpus updates counts without moving the viewpo
 	expect(ui.viewportTop).toBe(top);
 });
 
+test("several matches on one styled row retain cell positions while the selected match changes", async () => {
+	setKeybindings(new KeybindingsManager(TUI_KEYBINDINGS, { "tui.altScreen.search": "ctrl+f" }));
+	const { ui, terminal } = setup({
+		searchMatchStyle: (text) => `\x1b[4m${text}\x1b[24m`,
+		searchCurrentMatchStyle: (text) => `\x1b[7m${text}\x1b[27m`,
+	});
+	ui.addChild(new Text("猫 needle \x1b[31mneedle\x1b[39m needle", 0, 0));
+	ui.start();
+	ui.renderNow();
+	terminal.input("\x06");
+	terminal.input("needle");
+	ui.renderNow();
+	for (const selected of [1, 2, 3]) {
+		const screen = await terminal.screen();
+		expect(screen[0]).toBe("猫 needle needle needle");
+		expect(screen.join("\n")).toContain(`${selected}/3`);
+		const raw = ui.getScreenLines()[0]!;
+		expect(raw.match(/\x1b\[7m/g)).toHaveLength(1);
+		expect(raw.match(/\x1b\[4m/g)).toHaveLength(2);
+		terminal.input("\r");
+		ui.renderNow();
+	}
+});
+
 test("components that capture viewport input receive paging keys until focus is released", async () => {
 	const { ui, terminal } = setup(),
 		received: string[] = [];

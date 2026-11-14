@@ -226,6 +226,7 @@
 						"packages/objects/test/app-foundations.test.ts",
 						"packages/objects/test/files.test.ts",
 						"packages/objects/test/app-host.test.ts",
+						"packages/objects/test/app-assembly.test.ts",
 						"packages/objects/test/app-data-lifecycle.test.ts",
 						"packages/objects/test/app-archive.test.ts",
 						"packages/objects/test/app-data-transaction.test.ts",
@@ -272,6 +273,7 @@
 						"packages/ai/test/oauth-flows.test.ts",
 						"packages/ai/test/anthropic-login-boundaries.test.ts",
 						"packages/ai/test/catalog-auth.test.ts",
+						"packages/ai/test/credential-store-lifecycle.test.ts",
 						"packages/ai/test/auth-resolution.test.ts",
 						"packages/ai/test/entrypoints.test.ts",
 						"packages/ai/test/compat-dispatch.test.ts",
@@ -293,6 +295,7 @@
 						"packages/ai/test/google.test.ts",
 						"packages/ai/test/google-fetch.test.ts",
 						"packages/ai/test/google-contracts.test.ts",
+						"packages/ai/test/google-tool-routing.test.ts",
 						"packages/ai/test/google-response.test.ts",
 						"packages/ai/test/bedrock.test.ts",
 						"packages/ai/test/azure-responses.test.ts",
@@ -325,6 +328,7 @@
 					"tests": [
 						"packages/ai/test/images.test.ts",
 						"packages/ai/test/classifiers.test.ts",
+						"packages/ai/test/llama-classifier-lifecycle.test.ts",
 						"packages/ai/test/faux.test.ts",
 						"packages/ai/test/lazy.test.ts"
 					]
@@ -423,6 +427,7 @@
 					"behavior": "records, documents, forks, transactions and backend recovery",
 					"tests": [
 						"packages/durable/test/session.test.ts",
+						"packages/durable/test/session-close-boundaries.test.ts",
 						"packages/durable/test/session-deferred-boundaries.test.ts",
 						"packages/durable/test/record-cache-lifecycle.test.ts",
 						"packages/durable/test/document-history-boundaries.test.ts",
@@ -469,6 +474,7 @@
 					"tests": [
 						"packages/durable/test/conversation-watch.test.ts",
 						"packages/durable/test/harness-state.test.ts",
+						"packages/durable/test/harness-host-lifecycle.test.ts",
 						"packages/durable/test/recovery-settings.test.ts",
 						"packages/durable/test/compaction-lifecycle.test.ts",
 						"packages/durable/test/compaction-cut-boundaries.test.ts",

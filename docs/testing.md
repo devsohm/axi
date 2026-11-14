@@ -225,6 +225,12 @@ retaining queued writes and inputs outside the selected scope. Compaction checks
 cover retry limits, unavailable models, custom summaries and request cancellation.
 Document tests check deferred deadlines, migration, unloading, observer
 cancellation, retirement and historical entry boundaries.
+Attachment checks cancel after a document subscription registers but before its
+handle returns. The subscription must detach without publishing a later change.
+Session close checks contain subscriber failures, retain backend close errors,
+and allow document commits when background timers are unavailable.
+Harness checks replace a model catalog between turns, contain provider cleanup
+failures, and reject retained conversation handles after their task invocation ends.
 Live-state migration tests open version 1 and 2 documents on SQLite and JSONL.
 They check read-only migration, the saved version after a transaction, and the
 value after closing and reopening storage.
@@ -278,6 +284,17 @@ saved outcome and error report. A failing cancellation callback must still let
 the task settle.
 
 Offline provider tests inspect request encoding, device-login polling, token refresh, cancellation and malformed replies using synthetic credentials. Retry tests cover cancellation before and during backoff, retry limits and terminal errors. These checks do not contact model providers.
+
+Google and Vertex checks use the actual SDK with controlled fetch responses to
+inspect function-calling modes, strict-schema requirements and generated call IDs.
+Local classifier checks cover all three answer types, token-discovery recovery,
+ranked-token search limits and score-level validation. Credential-store checks
+cover enumeration, failed edits and cancellation of queued deletions.
+
+The assembled Objects host test starts a real worker, reloads server, worker,
+browser and terminal plugins, and reopens the worker's saved state. It fetches the
+published client bundles and checks that worker telemetry reaches the server.
+Separate failed-build checks keep owner routes available while client bundles fail.
 
 Env tests run the generated Unix upload script in a temporary local directory. Windows-only Durable tests run real PowerShell commands, retain UTF-8 output and finish when a detached descendant keeps a pipe open. The workflow runs them on Windows x64 and arm64. Browser adapter tests use DOM event fixtures; real browser and terminal acceptance remain separate checks.
 
