@@ -2,6 +2,7 @@ import { createHash, generateKeyPairSync } from "node:crypto";
 import { mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { getOrThrow } from "@axi/durable/env";
 import { BACKGROUND_CONTEXT as context } from "@axi/objects/context";
 import { expect, test, vi } from "vitest";
@@ -38,6 +39,15 @@ const base = new URL("./", import.meta.url);
 const commands = JSON.parse(await readFile(new URL("plan.json", base), "utf8"));
 const step = commands.shift();
 await writeFile(new URL("plan.json", base), JSON.stringify(commands));
+if (step?.peer) {
+ const command = process.argv.slice(process.argv.indexOf("--") + 2).join(" ");
+ await appendFile(new URL("calls.jsonl", base), JSON.stringify({ args: process.argv.slice(2), command, input: "" }) + "\\n");
+ const token = process.argv[process.argv.indexOf("--token") + 1];
+ const child = spawn(process.execPath, [${JSON.stringify(fileURLToPath(new URL("./fixtures/peer.ts", import.meta.url)))}, "--windows", "--token", token], { stdio: ["pipe", "inherit", "inherit"] });
+ child.stdin.on("error", error => { if (error.code !== "EPIPE") throw error; });
+ process.stdin.pipe(child.stdin);
+ await new Promise(resolve => child.on("exit", code => process.exit(code ?? 1)));
+}
 if (step?.stream) {
  const command = process.argv.slice(process.argv.indexOf("--") + 2).join(" ");
  await appendFile(new URL("calls.jsonl", base), JSON.stringify({ args: process.argv.slice(2), command, input: "" }) + "\\n");
@@ -78,7 +88,7 @@ if (step.local) {
 	return {
 		directory,
 		target,
-		async plan(steps: { stdout?: string; stderr?: string; code?: number; local?: boolean; stream?: boolean; hostKey?: string; hold?: boolean; closeInput?: boolean }[]) {
+		async plan(steps: { stdout?: string; stderr?: string; code?: number; local?: boolean; stream?: boolean; peer?: boolean; hostKey?: string; hold?: boolean; closeInput?: boolean }[]) {
 			await writeFile(plan, JSON.stringify(steps));
 			await writeFile(join(directory, "calls.jsonl"), "");
 		},
@@ -127,6 +137,36 @@ test.skipIf(process.platform === "win32").each(["eager", "lazy"])(
 		}
 	},
 );
+
+test.skipIf(process.platform === "win32").each([
+	["cmd", "C:\\Users\\Tester"],
+	["cmd", "C:\\Users\\With Space"],
+	["powershell", "C:\\Users\\O'Brien"],
+] as const)("a Windows %s SSH peer starts the verified daemon under %s", async (shell, home) => {
+	const peer = await peerFixture();
+	const binary = localDaemon();
+	const digest = createHash("sha256").update(await readFile(binary)).digest("hex").slice(0, 32);
+	const file = `${home}\\.axi\\mobile\\tools\\axi-env-${digest}.exe`;
+	const executable = shell === "powershell" ? `& '${file.replaceAll("'", "''")}'` : file.includes(" ") ? `"${file}"` : file;
+	try {
+		await peer.plan([
+			{ stdout: `AXI-ENV-PROBE\nWindows\nx64\n-\n${home}\n-\n-\n` },
+			{ stdout: shell === "cmd" ? "Windows_NT\n" : "%OS%\n" },
+			{ stdout: "present\n" },
+			{ peer: true },
+		]);
+		const { connection, remote } = await connectSsh({ ...peer.target, binary });
+		try {
+			expect(remote).toMatchObject({ platform: "windows", arch: "x64", shell, home });
+			expect((await connection.info()).os).toBe("windows");
+			expect((await connection.request("echo", { value: "connected" })).json.value).toBe("connected");
+			const calls = await peer.calls();
+			expect(calls).toHaveLength(4);
+			const args = calls[3]!.args;
+			expect(args.slice(args.indexOf("--") + 2, -1)).toEqual([executable, "serve", "--token"]);
+		} finally { connection.close(); }
+	} finally { await peer.close(); }
+});
 
 test.skipIf(process.platform === "win32")(
 	"stalled SSH platform probes terminate at their deadlines and retain diagnostic output",

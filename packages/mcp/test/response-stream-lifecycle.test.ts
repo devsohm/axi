@@ -79,3 +79,30 @@ test("closing while a response stream waits to reconnect cancels the pending GET
 		await transport.close();
 	}
 });
+
+test("closing during a failed response-stream reconnect cannot emit a late error reply", async () => {
+	vi.useFakeTimers();
+	const messages: JsonRpcMessage[] = [];
+	let gets = 0;
+	const transport = new StreamableHttpTransport({
+		url: "https://peer.invalid/mcp",
+		openGetStream: false,
+		reconnect: { initialDelayMs: 1 },
+		fetch: async (_url, init) => {
+			if (init?.method !== "GET") return stream(true);
+			gets++;
+			await transport.close();
+			throw new Error("Disconnected during shutdown");
+		},
+	});
+	transport.onMessage((message) => messages.push(message));
+	try {
+		await transport.start();
+		await transport.send(request);
+		await vi.advanceTimersByTimeAsync(100);
+		expect(gets).toBe(1);
+		expect(messages).toEqual([{ jsonrpc: "2.0", method: "working" }]);
+	} finally {
+		await transport.close();
+	}
+});

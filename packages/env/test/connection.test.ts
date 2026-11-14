@@ -151,6 +151,16 @@ it("closing as shared startup completes rejects another caller waiting to send",
 	}
 });
 
+it("closing a ready connection rejects a caller that has not yet sent its frame", async () => {
+	const connection = new Connection({ command });
+	try {
+		await connection.info();
+		const pending = connection.request("hold", {});
+		connection.close();
+		await expect(pending).rejects.toMatchObject({ code: "unknown", fields: { lost: true } });
+	} finally { connection.close(); }
+});
+
 it("cancelling during request admission keeps the shared connection usable", async () => {
 	const connection = new Connection({ command });
 	const controller = new AbortController();

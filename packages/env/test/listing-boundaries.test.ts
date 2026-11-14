@@ -2,8 +2,9 @@ import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { afterEach, expect, test, vi } from "vitest";
 import { BACKGROUND_CONTEXT as context } from "@axi/objects/context";
+import { FileError } from "@axi/durable/env";
 import { Connection } from "../src/connection.ts";
-import { listFilesOver } from "../src/list-files.ts";
+import { listFilesOver, LocalExecutionEnv } from "../src/list-files.ts";
 import { openProcess } from "../src/process.ts";
 import { localDaemon } from "../src/ssh.ts";
 
@@ -106,6 +107,18 @@ test("an already-aborted listing never starts the transport", async () => {
 	} finally {
 		connection.close();
 	}
+});
+
+test("local listing preserves a path-resolution error without contacting the daemon", async () => {
+	const connection = new Connection({ command: [] });
+	const env = new LocalExecutionEnv({ connection, cwd: tmpdir() });
+	const request = vi.spyOn(connection, "request");
+	const failed = { ok: false, error: new FileError("permission_denied", "No access", "private") } as const;
+	const resolve = vi.spyOn(env, "absolutePath").mockResolvedValueOnce(failed);
+	try {
+		expect(await env.listFiles("private", undefined, context)).toBe(failed);
+		expect(request).not.toHaveBeenCalled();
+	} finally { resolve.mockRestore(); request.mockRestore(); connection.close(); }
 });
 
 test.each([false, true])("process environment inheritance is explicit: %s", async (inheritEnv) => {
