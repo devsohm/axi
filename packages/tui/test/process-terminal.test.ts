@@ -2,6 +2,7 @@ import { fileURLToPath } from "node:url";
 import { tmpdir } from "node:os";
 import { expect, test, vi } from "vitest";
 import { Connection, localDaemon, openTerminal, type RemoteTerminal } from "@axi/env";
+import { CHILD_STARTUP_TIMEOUT_MS } from "./fixtures/startup.ts";
 
 test.skipIf(process.platform === "win32")(
 	"a real PTY negotiates keys, preserves paste, handles resize and restores raw input",
@@ -18,7 +19,9 @@ test.skipIf(process.platform === "win32")(
 				argv: [process.execPath, fileURLToPath(new URL("./fixtures/process-terminal.mjs", import.meta.url))],
 				onData: (bytes) => output.push(bytes),
 			});
-			await vi.waitFor(() => expect(text()).toContain("READY"));
+			await vi.waitFor(() => expect(text(), "PTY child startup").toContain("READY"), {
+				timeout: CHILD_STARTUP_TIMEOUT_MS,
+			});
 			terminal.resize(60, 20);
 			await vi.waitFor(() => expect(text()).toContain("SIZE:60x20"));
 			terminal.write("\x1b[?7u\x1b[?1;2ca\x1b[200~b\nc\x1b[201~d\r");
@@ -39,7 +42,7 @@ test.skipIf(process.platform === "win32")(
 			connection.close();
 		}
 	},
-	10000,
+	20000,
 );
 
 test("a fresh keyboard report is negotiated after an incomplete unrelated escape sequence", async () => {

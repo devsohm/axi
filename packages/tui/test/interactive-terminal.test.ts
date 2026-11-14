@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { Terminal as Emulator } from "@xterm/headless";
 import { Connection, localDaemon, openTerminal, type RemoteTerminal } from "@axi/env";
 import { expect, test, vi } from "vitest";
+import { CHILD_STARTUP_TIMEOUT_MS } from "./fixtures/startup.ts";
 
 test.skipIf(process.platform === "win32").each(["regular", "fullscreen"])(
 	"the %s UI handles editing, overlays, large output, streaming, resizing and Ctrl+C in a real PTY",
@@ -51,7 +52,6 @@ test.skipIf(process.platform === "win32").each(["regular", "fullscreen"])(
 					emulator.write(bytes);
 				},
 			});
-			// Slower CI hosts need a separate allowance for loading the child process.
 			await vi.waitFor(
 				async () => {
 					expect(
@@ -59,7 +59,7 @@ test.skipIf(process.platform === "win32").each(["regular", "fullscreen"])(
 						`UI startup output:\n${Buffer.concat(output).toString("utf8")}`,
 					).toBe(true);
 				},
-				{ timeout: 10000 },
+				{ timeout: CHILD_STARTUP_TIMEOUT_MS },
 			);
 			terminal.write("draft\x1b[200~ 日本語\nsecond line\x1b[201~\r");
 			await vi.waitFor(async () =>
