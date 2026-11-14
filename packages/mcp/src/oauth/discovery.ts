@@ -17,7 +17,7 @@ const suffix = (path: string): string => (path.endsWith("/") ? path.slice(0, -1)
 function fetchMetadata(
 	url: URL,
 	fetch: McpFetch,
-	version = LATEST_PROTOCOL_VERSION,
+	version: string,
 	signal?: AbortSignal,
 ): Promise<Response> {
 	return fetch(url, { headers: { Accept: "application/json", "MCP-Protocol-Version": version }, signal });

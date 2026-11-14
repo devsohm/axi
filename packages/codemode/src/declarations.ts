@@ -36,7 +36,7 @@ function description(value: unknown): string {
 	const text = (value as { description?: unknown } | null | undefined)?.description;
 	return typeof text === "string" ? text.trim() : "";
 }
-function comment(text: string | undefined, pad = ""): string {
+function comment(text: string | undefined, pad: string): string {
 	const value = text?.trim();
 	if (!value) return "";
 	const lines = value.replaceAll("*/", "*\\/").split(/\r?\n/);

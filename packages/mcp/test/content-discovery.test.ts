@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { toLlmContent } from "../src/index.ts";
+import { McpAuthRequiredError, McpSessionExpiredError, toLlmContent } from "../src/index.ts";
 import { normalizeMcpInputSchema } from "../src/input-schema.ts";
 import { OAuthError, OAuthIssuerMismatchError } from "../src/oauth/errors.ts";
 import {
@@ -66,6 +66,17 @@ test("structured results become JSON only when a tool returned no content blocks
 		{ type: "text", text: "rendered" },
 	]);
 	expect(toLlmContent({ content: [] })).toEqual([]);
+	expect(Reflect.apply(toLlmContent, undefined, [{ structuredContent: { count: 2 } }])).toEqual([
+		{ type: "text", text: '{\n  "count": 2\n}' },
+	]);
+});
+
+test("HTTP authentication and session errors retain their public status when no body was supplied", () => {
+	const challenge = 'Bearer realm="private"';
+	expect(new McpAuthRequiredError(new Response(null, { headers: { "www-authenticate": challenge } }))).toMatchObject({
+		name: "McpAuthRequiredError", status: 401, body: "", wwwAuthenticate: challenge,
+	});
+	expect(new McpSessionExpiredError()).toMatchObject({ name: "McpSessionExpiredError", status: 404, body: "" });
 });
 
 test("authorization challenges parse quoted and bare fields without accepting unrelated schemes", () => {

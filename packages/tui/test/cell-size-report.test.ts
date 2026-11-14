@@ -11,9 +11,12 @@ import {
 } from "../src/terminal-image.ts";
 import { TestTerminal } from "./support/terminal.ts";
 
-test.each([TuiMainScreen, TuiAltScreen])(
-	"%s consumes cell-size reports and uses their dimensions for images",
-	(Screen) => {
+test.each([
+	{ name: "main screen", Screen: TuiMainScreen },
+	{ name: "alternate screen", Screen: TuiAltScreen },
+])(
+	"$name consumes cell-size reports and uses their dimensions for images",
+	({ Screen }) => {
 		const terminal = new TestTerminal(30, 12),
 			ui = new Screen(terminal),
 			input = new Input();

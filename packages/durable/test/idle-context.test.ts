@@ -1,11 +1,11 @@
 import { createModels } from "@axi/ai";
 import { BACKGROUND_CONTEXT as context } from "@axi/objects/context";
-import { expect, test } from "vitest";
+import { expect, test, vi } from "vitest";
 import { createRegistry, defineExtension, defineTask, Harness, MemoryStorage } from "../src/index.ts";
 import { SCHEDULER_IDLE_STATE } from "../src/harness/harness.ts";
 import type { Conversation, ConversationId } from "../src/index.ts";
 
-async function fixture() {
+async function fixture(backgroundTimers = false) {
 	const clock = { now: 2_000, retention: 1_000 };
 	const Read = defineTask<ConversationId, { phase: "read" }, null>({
 		name: "context-reader",
@@ -31,7 +31,7 @@ async function fixture() {
 			now: () => clock.now,
 			settings: () => ({ contextRetentionMs: clock.retention }),
 			setTimer: (callback, delay, { background }) => {
-				if (background) return undefined;
+				if (background && !backgroundTimers) return undefined;
 				const timer = setTimeout(callback, delay);
 				return () => clearTimeout(timer);
 			},
@@ -83,5 +83,24 @@ test("zero retention removes earlier contexts even after the clock moves backwar
 		expect(state()).toEqual({ contexts: 0, idleContexts: 0, idleMismatches: 0, fullIdleChecks: 0 });
 	} finally {
 		await harness.close(context);
+	}
+});
+
+test("the background deadline expires idle context without another task or commit", async () => {
+	vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+	const { harness, clock, conversation, read, state } = await fixture(true);
+	try {
+		clock.retention = 20;
+		const target = await conversation();
+		await read(target);
+		expect(state()).toMatchObject({ contexts: 1, idleContexts: 1, idleMismatches: 0 });
+		clock.now += 20;
+		await vi.advanceTimersByTimeAsync(20);
+		expect(state()).toMatchObject({ contexts: 0, idleContexts: 0, idleMismatches: 0 });
+		await read(target);
+		expect(state()).toMatchObject({ contexts: 1, idleContexts: 1, idleMismatches: 0 });
+	} finally {
+		await harness.close(context);
+		vi.useRealTimers();
 	}
 });

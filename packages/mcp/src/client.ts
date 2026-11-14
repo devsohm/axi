@@ -297,7 +297,7 @@ export class McpClient {
 		}
 		throw new Error(`MCP ${method} exceeded 1000 pages`);
 	}
-	#channel(connecting = false): McpTransport {
+	#channel(connecting: boolean): McpTransport {
 		if (this.#transport && (this.#state === "connected" || (connecting && this.#state === "connecting")))
 			return this.#transport;
 		throw new McpConnectionClosedError(`MCP client is ${this.#state}`);

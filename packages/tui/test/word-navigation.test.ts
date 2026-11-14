@@ -33,3 +33,25 @@ it.each([
 	expect(receivers).toEqual([undefined, undefined, undefined, undefined]);
 	expect(visited).toEqual([" ", "value", "value"]);
 });
+
+it("word navigation handles empty input, whitespace-only input and punctuation runs", () => {
+	expect(findWordForward("", 0)).toBe(0);
+	expect(findWordBackward("", 0)).toBe(0);
+	expect(findWordForward("word", 4)).toBe(4);
+	expect(findWordBackward("word", -1)).toBe(0);
+	expect(findWordForward("   ", 0)).toBe(3);
+	expect(findWordBackward("   ", 3)).toBe(0);
+	expect(findWordForward("!?+ word", 0)).toBe(3);
+	expect(findWordBackward("word !?+", 8)).toBe(5);
+	expect(findWordForward("🙂👍 word", 0)).toBe(4);
+	expect(findWordBackward("word 🙂👍", 9)).toBe(5);
+});
+
+it("custom word segments retain ASCII punctuation boundaries and permit atomic markers", () => {
+	const segment: WordNavigationOptions["segment"] = (text) => [{ segment: text, input: text, index: 0, isWordLike: true }];
+	expect(findWordForward("alpha.beta", 0, { segment })).toBe(5);
+	expect(findWordBackward("alpha.beta", 10, { segment })).toBe(6);
+	const atomic = { segment, isAtomicSegment: (part: string) => part === "[paste]" };
+	expect(findWordForward("[paste]", 0, atomic)).toBe(7);
+	expect(findWordBackward("[paste]", 7, atomic)).toBe(0);
+});

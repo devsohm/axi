@@ -282,6 +282,32 @@ test("retry exhaustion reports one failure after the configured number of GET at
 	}
 });
 
+test("short empty notification streams consume the retry budget without treating them as healthy", async () => {
+	vi.useFakeTimers();
+	let gets = 0;
+	const errors: Error[] = [];
+	const transport = new StreamableHttpTransport({
+		url: "https://peer.invalid/mcp",
+		reconnect: { initialDelayMs: 1, maxDelayMs: 1000, maxRetries: 2 },
+		fetch: async (_url, init) => {
+			if (init?.method !== "GET") return new Response(null, { status: 202 });
+			gets++;
+			return new Response("", { headers: { "content-type": "text/event-stream" } });
+		},
+	});
+	transport.onError((error) => errors.push(error));
+	try {
+		await transport.start();
+		await transport.send(initialized);
+		await vi.advanceTimersByTimeAsync(10);
+		expect(errors).toHaveLength(1);
+		expect(gets).toBe(3);
+		expect(errors[0]?.message).toContain("could not be reopened");
+	} finally {
+		await transport.close();
+	}
+});
+
 test("closing during reconnect cancels the delay and makes no further HTTP request", async () => {
 	vi.useFakeTimers();
 	let gets = 0;

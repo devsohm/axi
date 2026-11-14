@@ -28,7 +28,7 @@ test.skipIf(process.platform === "win32")(
 				onData() {},
 			});
 			try {
-				for (let i = 0; i < 1000; i++) input.write(`${String(i).padStart(7, "0")}\n`);
+				for (let i = 0; i < 1000; i++) input.write(new TextEncoder().encode(`${String(i).padStart(7, "0")}\n`));
 				expect(await input.exited).toBe(0);
 				expect(await readFile(join(cwd, "captured"), "utf8")).toBe(
 					Array.from({ length: 1000 }, (_, i) => `${String(i).padStart(7, "0")}\n`).join(""),
@@ -42,6 +42,27 @@ test.skipIf(process.platform === "win32")(
 		}
 	},
 );
+
+test.skipIf(process.platform === "win32")("terminal environment isolation reaches the child process", async () => {
+	const connection = new Connection({ command: [localDaemon()] });
+	let output = "";
+	try {
+		const terminal = await openTerminal(connection, {
+			cwd: tmpdir(),
+			cols: 80,
+			rows: 24,
+			argv: [process.execPath, "-e", "process.stdout.write(process.env.AXI_TERMINAL_VALUE ?? 'missing')"],
+			env: { AXI_TERMINAL_VALUE: "isolated" },
+			inheritEnv: false,
+			onData: (bytes) => { output += Buffer.from(bytes).toString(); },
+		});
+		expect(await terminal.exited).toBe(0);
+		expect(output).toBe("isolated");
+		terminal.close();
+	} finally {
+		connection.close();
+	}
+});
 
 test.skipIf(process.platform === "win32")(
 	"terminal resize reaches the program and closing ends its foreground job",

@@ -108,3 +108,46 @@ it("reports an actual spawn failure and can start a later daemon on the same con
 		connection.close();
 	}
 });
+
+it("normalizes a non-Error command-factory failure and can retry startup", async () => {
+	let launches = 0;
+	const connection = new Connection({ command: async () => {
+		if (++launches === 1) throw "Cannot deploy daemon";
+		return command;
+	} });
+	try {
+		await expect(connection.info()).rejects.toMatchObject({ code: "spawn_error", message: "Cannot deploy daemon" });
+		expect((await connection.request("echo", { value: "reconnected" })).json.value).toBe("reconnected");
+		expect(launches).toBe(2);
+	} finally {
+		connection.close();
+	}
+});
+
+it("closing from request admission rejects the request without sending it to a closed session", async () => {
+	const connection = new Connection({ command });
+	try {
+		await connection.info();
+		await expect(connection.request("hold", {}, { onStart: () => connection.close() })).rejects.toMatchObject({
+			message: "Connection closed",
+		});
+		await expect(connection.info()).rejects.toMatchObject({ message: "Connection closed" });
+	} finally {
+		connection.close();
+	}
+});
+
+it("cancelling during request admission keeps the shared connection usable", async () => {
+	const connection = new Connection({ command });
+	const controller = new AbortController();
+	try {
+		await connection.info();
+		await expect(connection.request("hold", {}, {
+			signal: controller.signal,
+			onStart: () => controller.abort(),
+		})).rejects.toMatchObject({ code: "aborted" });
+		expect((await connection.request("echo", { value: "not cancelled" })).json.value).toBe("not cancelled");
+	} finally {
+		connection.close();
+	}
+});
