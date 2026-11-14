@@ -14,14 +14,8 @@ export type CommitPersistence =
 	| { readonly kind: "immediate" }
 	| { readonly kind: "deferred"; readonly withinMs?: number };
 export type CheckpointInfo = { readonly deltasSinceBase: number };
-export type CheckpointWhen<T> = (
-	value: T,
-	ops: readonly Op[],
-	info: CheckpointInfo,
-) => boolean;
-type DocumentOf<S extends TSchema> = Static<S> extends JsonObject
-	? Static<S>
-	: never;
+export type CheckpointWhen<T> = (value: T, ops: readonly Op[], info: CheckpointInfo) => boolean;
+type DocumentOf<S extends TSchema> = Static<S> extends JsonObject ? Static<S> : never;
 export type KeyedBy = boolean | KindShape;
 type StateOptions<S extends TSchema, K extends KeyedBy> = {
 	readonly schema: S;
@@ -55,16 +49,7 @@ export function defineState<S extends TSchema, K extends KeyedBy>(
 	checkName(name, "A state name");
 	const { schema, version, initial, migrate, keyed, persist, checkpointWhen } = options;
 	if (keyed !== undefined && typeof keyed !== "boolean") kindParams(keyed);
-	return new StateDefinition(
-		name,
-		schema,
-		version,
-		initial,
-		migrate,
-		keyed ?? false,
-		persist ?? false,
-		checkpointWhen,
-	);
+	return new StateDefinition(name, schema, version, initial, migrate, keyed ?? false, persist ?? false, checkpointWhen);
 }
 
 export class StateDefinition<T extends JsonObject, K extends KeyedBy, P extends boolean = false> {
@@ -117,10 +102,7 @@ export class StateDefinition<T extends JsonObject, K extends KeyedBy, P extends 
 		return value;
 	}
 	migrate(old: JsonObject, from: number, context: Context): T {
-		if (!this.#upgrade)
-			throw new Error(
-				`${this.name}: no migrate from version ${from} to ${this.version}`,
-			);
+		if (!this.#upgrade) throw new Error(`${this.name}: no migrate from version ${from} to ${this.version}`);
 		const value = this.#upgrade(old, from);
 		this.#validate(value, `migrate() from version ${from}`, context);
 		return value;

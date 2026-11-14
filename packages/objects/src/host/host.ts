@@ -230,14 +230,19 @@ export class ObjectsHost<P extends Principal = Principal, R extends JsonValue = 
 		this.principal = options.principal;
 		this.#key = options.principalKey;
 		this.#principalAttributes = options.principalAttributes;
-		this.#counting = options.telemetry?.metrics && !untraced(options.telemetry) ? countingOnly(options.telemetry.metrics) : undefined;
+		this.#counting =
+			options.telemetry?.metrics && !untraced(options.telemetry) ? countingOnly(options.telemetry.metrics) : undefined;
 		this.#onError = options.onError;
 		this.batch = new Batch((error) => this.report(error), options.telemetry?.metrics);
 		this.#activity = new Activity(this.batch);
 		this.compression = options.compression;
 		this.#revocations = new RevocationKeys(options.revokedBy as RevokedBy<Principal, JsonValue> | undefined);
 		const close = options.closeTimeout ?? 30000;
-		this.timeouts = { close, ready: options.readyTimeout ?? 60000, reload: Math.min(close, options.reloadDrainTimeout ?? 5000) };
+		this.timeouts = {
+			close,
+			ready: options.readyTimeout ?? 60000,
+			reload: Math.min(close, options.reloadDrainTimeout ?? 5000),
+		};
 		this.#heartbeat = { ping: options.heartbeat?.ping ?? 15000, close: options.heartbeat?.close ?? 30000 };
 		this.#destinations = new Destination(this.address, this.#routes, this.#parent);
 		this.store = options.store as ObjectsStore | undefined;
@@ -257,13 +262,19 @@ export class ObjectsHost<P extends Principal = Principal, R extends JsonValue = 
 		for (const { name } of facets) if (!isPluginName(name)) throw new Error(`"${name}" is not a valid plugin name`);
 		this.#status = "loading";
 		if (untraced(context.telemetry)) return this.#load(facets, context);
-		return context.telemetry.startSpan({ name: "objects.load", attributes: { "objects.host": this.spanHost, plugins: facets.length } }, async (span) => {
-			try {
-				const result = await this.#load(facets, withTelemetry(span, context));
-				span.setAttributes({ failed: result.failed.length });
-				return result;
-			} catch (error) { ended(span, "load_failed", error, context.abortSignal); throw error; }
-		});
+		return context.telemetry.startSpan(
+			{ name: "objects.load", attributes: { "objects.host": this.spanHost, plugins: facets.length } },
+			async (span) => {
+				try {
+					const result = await this.#load(facets, withTelemetry(span, context));
+					span.setAttributes({ failed: result.failed.length });
+					return result;
+				} catch (error) {
+					ended(span, "load_failed", error, context.abortSignal);
+					throw error;
+				}
+			},
+		);
 	}
 	async #load(facets: readonly PluginFacet<P>[], context: Context): Promise<LoadReport> {
 		const staged = emptyStaged<P>(),
@@ -347,7 +358,10 @@ export class ObjectsHost<P extends Principal = Principal, R extends JsonValue = 
 		const error = (label: string): ObjectsError =>
 			new ObjectsError({ code: "forbidden", reason: "revoked", message: `${label}: revoked` });
 		for (const object of [...this.#objects.values()])
-			if (object.principal !== undefined && revoked(object.principal)) { object.end(error(object.label)); count++; }
+			if (object.principal !== undefined && revoked(object.principal)) {
+				object.end(error(object.label));
+				count++;
+			}
 		const waiting = error("an unbound request");
 		this.#requests.revoke(revoked, waiting);
 		for (const link of this.#links) link.revokeUnbound(revoked, waiting);
@@ -355,7 +369,11 @@ export class ObjectsHost<P extends Principal = Principal, R extends JsonValue = 
 			if (holder.kind === "remote" && holder.caller.principal !== undefined && revoked(holder.caller.principal))
 				holder.revoke(error(holder.label));
 		for (const link of this.#links) if (link.role === "route") link.send({ kind: "revoke", revocation });
-		for (const link of [...this.#links]) if (link.role === "child" && revoked(link.principal)) { link.close(); count++; }
+		for (const link of [...this.#links])
+			if (link.role === "child" && revoked(link.principal)) {
+				link.close();
+				count++;
+			}
 		if (!untraced(context.telemetry)) {
 			const span = new OpenSpan(context.telemetry, "objects.revoke", { "objects.host": this.spanHost });
 			span.span.setAttributes({ count });
@@ -444,17 +462,28 @@ export class ObjectsHost<P extends Principal = Principal, R extends JsonValue = 
 		const principal = "principal" in options ? options.principal : this.principal;
 		const run = fn as (ctx: Ctx) => Promise<T>;
 		if (!options.trace || untraced(this.telemetry)) return this.#roots.run(run, principal, this.#counted(context));
-		return this.telemetry.startSpan({ name: options.trace.name, attributes: { "objects.host": this.spanHost, ...options.trace.attributes } }, async (span) => {
-			try { return await this.#roots.run(run, principal, withTelemetry(span, context)); }
-			catch (error) { ended(span, "trace_failed", error, context.abortSignal); throw error; }
-		});
+		return this.telemetry.startSpan(
+			{ name: options.trace.name, attributes: { "objects.host": this.spanHost, ...options.trace.attributes } },
+			async (span) => {
+				try {
+					return await this.#roots.run(run, principal, withTelemetry(span, context));
+				} catch (error) {
+					ended(span, "trace_failed", error, context.abortSignal);
+					throw error;
+				}
+			},
+		);
 	}
 	principalAttributes(principal: P | undefined, context: Context): Readonly<SpanAttributes> {
 		if (principal === undefined) return {};
-		return this.#principalAttributes ? this.#principalAttributes(principal) : { "objects.principal": principalKey(principal, context, this.#key).slice(0, 256) };
+		return this.#principalAttributes
+			? this.#principalAttributes(principal)
+			: { "objects.principal": principalKey(principal, context, this.#key).slice(0, 256) };
 	}
 	#counted(context: Context): Context {
-		return this.#counting && context.telemetry === NOOP_TELEMETRY_CONTEXT ? withTelemetry(this.#counting, context) : context;
+		return this.#counting && context.telemetry === NOOP_TELEMETRY_CONTEXT
+			? withTelemetry(this.#counting, context)
+			: context;
 	}
 	registryRecord(name: string): RegistryRecord {
 		let record = this.#registries.get(name);
@@ -476,12 +505,22 @@ export class ObjectsHost<P extends Principal = Principal, R extends JsonValue = 
 		return this.#status === "closed";
 	}
 	undeclaredRegistries(): { readonly name: string; readonly version: number }[] {
-		return [...this.#registries].flatMap(([name, record]) => record.providedVersion === undefined && record.newestContribution !== undefined ? [{ name, version: record.newestContribution }] : []).sort((a, b) => a.name < b.name ? -1 : 1);
+		return [...this.#registries]
+			.flatMap(([name, record]) =>
+				record.providedVersion === undefined && record.newestContribution !== undefined
+					? [{ name, version: record.newestContribution }]
+					: [],
+			)
+			.sort((a, b) => (a.name < b.name ? -1 : 1));
 	}
 	unservedNames(): readonly string[] {
-		return this.#requests.names().filter((name) => !this.#served.has(name) && this.#registries.get(name)?.providedVersion === undefined);
+		return this.#requests
+			.names()
+			.filter((name) => !this.#served.has(name) && this.#registries.get(name)?.providedVersion === undefined);
 	}
-	activationsUnderWay(): number { return [...this.#objects.values()].filter((object) => object.activating).length; }
+	activationsUnderWay(): number {
+		return [...this.#objects.values()].filter((object) => object.activating).length;
+	}
 	index(name: string, request: UnboundRequest, cause?: FailureCause): void {
 		this.#requests.add(name, request, cause);
 	}
@@ -503,7 +542,8 @@ export class ObjectsHost<P extends Principal = Principal, R extends JsonValue = 
 			linked = withLinkedAbortSignal(expired.signal, context);
 		const timer = setTimeout(() => expired.abort(binding.lastFailure ?? notLive(binding.label, timeout)), timeout);
 		try {
-			const live = binding.live(linked.context), target = binding.target;
+			const live = binding.live(linked.context),
+				target = binding.target;
 			await (target instanceof ObjectsObject ? this.waitAsOldWork(live, target, type, context) : live);
 			return binding;
 		} catch (error) {
@@ -564,16 +604,31 @@ export class ObjectsHost<P extends Principal = Principal, R extends JsonValue = 
 			throw new ObjectsError({ code: "forbidden", message: `${type.name}: an anonymous caller gets no remote object` });
 		const object = this.#object(served!, checked, principal, context, [], binding.dependent);
 		binding.bind(object);
-		if (object.activationSpan && !untraced(context.telemetry)) context.telemetry.addLink({ context: object.activationSpan });
+		if (object.activationSpan && !untraced(context.telemetry))
+			context.telemetry.addLink({ context: object.activationSpan });
 		return object;
 	}
-	#remote(binding: Binding, type: Contract, checked: CheckedParams, path: Path, address: WireAddress, context: Context): RemoteObject {
+	#remote(
+		binding: Binding,
+		type: Contract,
+		checked: CheckedParams,
+		path: Path,
+		address: WireAddress,
+		context: Context,
+	): RemoteObject {
 		const caller = binding.caller;
-		const key = binding.dependent !== undefined || path.suspended ? undefined : joinKey([
-			type.name, String(type.version), type.fingerprint, checked.key,
-			joinKey([address.kind, canonicalJson(address.params as JsonValue, context)]),
-			caller.principal === undefined ? "-" : `+${principalJson(caller.principal, context)}`, caller.incarnation,
-		]);
+		const key =
+			binding.dependent !== undefined || path.suspended
+				? undefined
+				: joinKey([
+						type.name,
+						String(type.version),
+						type.fingerprint,
+						checked.key,
+						joinKey([address.kind, canonicalJson(address.params as JsonValue, context)]),
+						caller.principal === undefined ? "-" : `+${principalJson(caller.principal, context)}`,
+						caller.incarnation,
+					]);
 		let table = this.#shared.get(path);
 		const existing = key === undefined ? undefined : table?.get(key);
 		const waiting = existing?.state.kind === "failed" && existing.state.cause.kind === "waiting";
@@ -588,9 +643,20 @@ export class ObjectsHost<P extends Principal = Principal, R extends JsonValue = 
 			this.#shared.set(path, table);
 		}
 		const indexed = key !== undefined && existing === undefined ? table : undefined;
-		const object = new RemoteObject(this, type, checked, address, caller, path,
-			binding.dependent instanceof ObjectsObject ? binding.dependent : undefined, context,
-			indexed === undefined ? undefined : () => { if (indexed.get(key!) === object) indexed.delete(key!); },
+		const object = new RemoteObject(
+			this,
+			type,
+			checked,
+			address,
+			caller,
+			path,
+			binding.dependent instanceof ObjectsObject ? binding.dependent : undefined,
+			context,
+			indexed === undefined
+				? undefined
+				: () => {
+						if (indexed.get(key!) === object) indexed.delete(key!);
+					},
 		);
 		// Publish an owned, already-bound entry before route resolution can re-enter this host.
 		if (indexed !== undefined) indexed.set(key!, object);
@@ -610,7 +676,15 @@ export class ObjectsHost<P extends Principal = Principal, R extends JsonValue = 
 			error = this.#destinations.misplaced(served!.contract, checked.params);
 		if (error) return { kind: "waiting", cause: { kind: "waiting", error } };
 		const chain = request.chain ?? [],
-			object = this.#object(served!, checked, principal, context, chain, undefined, parentOf(request.trace, this.telemetry)),
+			object = this.#object(
+				served!,
+				checked,
+				principal,
+				context,
+				chain,
+				undefined,
+				parentOf(request.trace, this.telemetry),
+			),
 			id = object.activationId;
 		if (id !== undefined && chain.includes(id)) throw this.cycle(chain, id, [object.label]);
 		return { kind: "object", object };
@@ -726,7 +800,8 @@ export class ObjectsHost<P extends Principal = Principal, R extends JsonValue = 
 					const now = Date.now();
 					const late = now - last - every;
 					last = now;
-					for (const current of [...this.#links]) current.tick(now, late >= every ? late : 0, this.#heartbeat.ping, this.#heartbeat.close);
+					for (const current of [...this.#links])
+						current.tick(now, late >= every ? late : 0, this.#heartbeat.ping, this.#heartbeat.close);
 				}, every);
 			}
 		}
@@ -917,14 +992,27 @@ export class ObjectsHost<P extends Principal = Principal, R extends JsonValue = 
 		for (const { name } of facets) if (!isPluginName(name)) throw new Error(`"${name}" is not a valid plugin name`);
 		const run = this.#reloadTail.then(async () => {
 			if (untraced(context.telemetry)) return this.#reload(facets, context, options.failed ?? []);
-			return context.telemetry.startSpan({ name: "objects.reload", attributes: { "objects.host": this.spanHost, plugins: facets.length } }, async (span) => {
-				try {
-					const result = await this.#reload(facets, withTelemetry(span, context), options.failed ?? []);
-					span.setAttributes({ added: result.plugins.added.length, changed: result.plugins.changed.length, removed: result.plugins.removed.length, failed: result.failed.length, fates: result.objects.length });
-					for (const { object, kind } of result.objects) span.addEvent("objects.reload.fate", { object: capped(object), fate: kind });
-					return result;
-				} catch (error) { ended(span, "reload_failed", error, context.abortSignal); throw error; }
-			});
+			return context.telemetry.startSpan(
+				{ name: "objects.reload", attributes: { "objects.host": this.spanHost, plugins: facets.length } },
+				async (span) => {
+					try {
+						const result = await this.#reload(facets, withTelemetry(span, context), options.failed ?? []);
+						span.setAttributes({
+							added: result.plugins.added.length,
+							changed: result.plugins.changed.length,
+							removed: result.plugins.removed.length,
+							failed: result.failed.length,
+							fates: result.objects.length,
+						});
+						for (const { object, kind } of result.objects)
+							span.addEvent("objects.reload.fate", { object: capped(object), fate: kind });
+						return result;
+					} catch (error) {
+						ended(span, "reload_failed", error, context.abortSignal);
+						throw error;
+					}
+				},
+			);
 		});
 		this.#reloadTail = run.then(
 			() => {},
@@ -965,16 +1053,26 @@ export class ObjectsHost<P extends Principal = Principal, R extends JsonValue = 
 		for (const record of this.#registries.values()) record.reportUndeclared();
 		const attempts = new Map<ObjectsObject, ReturnType<ObjectsObject["reload"]>>();
 		for (const action of actions) {
-			if (action.kind === "end") action.object.remove({ kind: "waiting", error: new ObjectsError({ code: "unavailable", message: `${action.object.served.contract.name} is not served here` }) });
+			if (action.kind === "end")
+				action.object.remove({
+					kind: "waiting",
+					error: new ObjectsError({
+						code: "unavailable",
+						message: `${action.object.served.contract.name} is not served here`,
+					}),
+				});
 		}
 		for (const action of actions) {
-			if (action.kind !== "end") attempts.set(action.object, action.object.reload(action.served, action.kind, action.requests));
+			if (action.kind !== "end")
+				attempts.set(action.object, action.object.reload(action.served, action.kind, action.requests));
 		}
 		for (const action of actions) action.object.startSuccessor();
 		const checks = actions.map(async (action): Promise<ReloadedObject> => {
 			const { object } = action;
 			if (action.kind === "end") return { object: object.label, kind: "ended" };
-			const cause = await (action.kind === "restart" || object.openOldAttempt !== undefined ? object.readinessCause : attempts.get(object)!.checked);
+			const cause = await (action.kind === "restart" || object.openOldAttempt !== undefined
+				? object.readinessCause
+				: attempts.get(object)!.checked);
 			return cause === undefined
 				? { object: object.label, kind: action.kind === "restart" ? "restarted" : "retried" }
 				: { object: object.label, kind: "parked", cause };

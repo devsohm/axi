@@ -9,12 +9,10 @@ export class IdAllocator {
 		return this.#next;
 	}
 	mint(): number {
-		if (this.#next >= Number.MAX_SAFE_INTEGER)
-			throw new Error("ID space is exhausted");
+		if (this.#next >= Number.MAX_SAFE_INTEGER) throw new Error("ID space is exhausted");
 		return this.#next++;
 	}
 	raise(id: number): void {
-		if (id >= this.#next)
-			this.#next = Math.min(Number.MAX_SAFE_INTEGER, id + 1);
+		if (id >= this.#next) this.#next = Math.min(Number.MAX_SAFE_INTEGER, id + 1);
 	}
 }

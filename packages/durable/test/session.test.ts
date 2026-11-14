@@ -45,21 +45,37 @@ describe("Session lifecycle", () => {
 	it("captures persistence defaults and commit options once and rejects a null window", async () => {
 		let defaults = 0;
 		let options = 0;
-		const session = createSession(new MemoryStorage(), { get persistWithinMs() { defaults++; return 0; } });
+		const session = createSession(new MemoryStorage(), {
+			get persistWithinMs() {
+				defaults++;
+				return 0;
+			},
+		});
 		const atOpen = defaults;
 		try {
-			await session.commit(() => {}, context, { get persistence() { options++; return { kind: "deferred" as const }; } });
+			await session.commit(() => {}, context, {
+				get persistence() {
+					options++;
+					return { kind: "deferred" as const };
+				},
+			});
 			await session.commit(() => {}, context, { persistence: { kind: "deferred" } });
 			let nullWindow: unknown;
 			try {
 				// @ts-expect-error A JavaScript caller can supply a malformed persistence window.
 				await session.commit(() => {}, context, { persistence: { kind: "deferred", withinMs: null } });
-			} catch (error) { nullWindow = error instanceof Error ? error.message : error; }
+			} catch (error) {
+				nullWindow = error instanceof Error ? error.message : error;
+			}
 			expect({ atOpen, defaults, options, nullWindow }).toEqual({
-				atOpen: 1, defaults: 1, options: 1,
+				atOpen: 1,
+				defaults: 1,
+				options: 1,
 				nullWindow: "CommitPersistence.withinMs must be a number of milliseconds, 0 or more",
 			});
-		} finally { await session.close(context); }
+		} finally {
+			await session.close(context);
+		}
 	});
 	it("closes an idle session without publishing an empty storage commit", async () => {
 		class ObservedStorage extends MemoryStorage {

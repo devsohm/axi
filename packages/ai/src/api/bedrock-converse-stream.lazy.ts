@@ -8,6 +8,8 @@ export function setBedrockProviderLoader(loader: () => Promise<ProviderStreams>)
 	implementation = loader;
 }
 const load = (specifier: string): Promise<ProviderStreams> =>
-	import(new URL(import.meta.url.endsWith(".js") ? specifier.replace(/\.ts$/, ".js") : specifier, import.meta.url).href);
+	import(
+		new URL(import.meta.url.endsWith(".js") ? specifier.replace(/\.ts$/, ".js") : specifier, import.meta.url).href
+	);
 export const bedrockConverseStreamApi = (): ProviderStreams =>
-	lazyApi(() => implementation ? implementation() : load("./bedrock-converse-stream.ts"));
+	lazyApi(() => (implementation ? implementation() : load("./bedrock-converse-stream.ts")));

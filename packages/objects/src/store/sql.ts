@@ -1,12 +1,7 @@
 import type { SqliteValue } from "../sqlite/index.ts";
 import type { Column, ColumnRecord } from "./columns.ts";
 import type { ExprNode, SetNode, WhereNode } from "./expression.ts";
-import {
-	physicalColumns,
-	ROW_VERSION,
-	toSqlite,
-	versionColumn,
-} from "./rows.ts";
+import { physicalColumns, ROW_VERSION, toSqlite, versionColumn } from "./rows.ts";
 import { prefixUpperBound } from "./text.ts";
 
 export type Statement = {
@@ -23,10 +18,8 @@ export function quote(name: string): string {
 export function tableSqlName(owner: string, table: string): string {
 	return [owner, table].join(":");
 }
-const names = (columns: readonly string[]): string =>
-	columns.map(quote).join(", ");
-const marks = (columns: readonly unknown[]): string =>
-	columns.map(() => "?").join(", ");
+const names = (columns: readonly string[]): string => columns.map(quote).join(", ");
+const marks = (columns: readonly unknown[]): string => columns.map(() => "?").join(", ");
 function literal(value: string | number | boolean): string {
 	return typeof value === "string"
 		? `'${value.replaceAll("'", "''")}'`
@@ -37,15 +30,9 @@ function literal(value: string | number | boolean): string {
 export function columnSql(name: string, column: ColumnRecord): string[] {
 	const label = quote(name),
 		required = column.optional ? "" : " NOT NULL";
-	const fallback =
-		column.default === undefined ? "" : ` DEFAULT ${literal(column.default)}`;
-	if (column.type === "json")
-		return [
-			`${label} TEXT${required}`,
-			`${quote(versionColumn(name))} INTEGER${required}`,
-		];
-	const storage =
-		column.type === "str" ? "TEXT" : column.type === "num" ? "REAL" : "INTEGER";
+	const fallback = column.default === undefined ? "" : ` DEFAULT ${literal(column.default)}`;
+	if (column.type === "json") return [`${label} TEXT${required}`, `${quote(versionColumn(name))} INTEGER${required}`];
+	const storage = column.type === "str" ? "TEXT" : column.type === "num" ? "REAL" : "INTEGER";
 	const check =
 		column.type === "bool"
 			? ` CHECK (${label} IN (0, 1))`
@@ -60,16 +47,9 @@ export function createTableSql(
 	key: readonly string[],
 ): string {
 	const declarations: string[] = [];
-	for (const [name, column] of Object.entries(columns))
-		declarations.push(...columnSql(name, column));
-	declarations.push(
-		`${quote(ROW_VERSION)} INTEGER NOT NULL`,
-		`PRIMARY KEY (${names(key)})`,
-	);
-	const suffix =
-		key.length === 1 && columns[key[0]!]!.type === "int"
-			? ""
-			: ", WITHOUT ROWID";
+	for (const [name, column] of Object.entries(columns)) declarations.push(...columnSql(name, column));
+	declarations.push(`${quote(ROW_VERSION)} INTEGER NOT NULL`, `PRIMARY KEY (${names(key)})`);
+	const suffix = key.length === 1 && columns[key[0]!]!.type === "int" ? "" : ", WITHOUT ROWID";
 	return `CREATE TABLE ${quote(table)} (${declarations.join(", ")}) STRICT${suffix}`;
 }
 function putSql(table: string, physical: readonly string[]): string {
@@ -110,14 +90,8 @@ class SqlWriter {
 		return "?";
 	}
 	where(node: WhereNode): string {
-		if ("and" in node)
-			return node.and.length
-				? `(${node.and.map((item) => this.where(item)).join(" AND ")})`
-				: "1";
-		if ("or" in node)
-			return node.or.length
-				? `(${node.or.map((item) => this.where(item)).join(" OR ")})`
-				: "0";
+		if ("and" in node) return node.and.length ? `(${node.and.map((item) => this.where(item)).join(" AND ")})` : "1";
+		if ("or" in node) return node.or.length ? `(${node.or.map((item) => this.where(item)).join(" OR ")})` : "0";
 		if ("not" in node) return `(NOT ${this.where(node.not)})`;
 		if ("isNull" in node) return `${quote(node.isNull)} IS NULL`;
 		if ("inArray" in node)
@@ -126,14 +100,10 @@ class SqlWriter {
 			const [column, prefix] = node.prefix,
 				upper = prefixUpperBound(prefix);
 			const lower = `${quote(column)} >= ${this.bind(prefix)}`;
-			return upper === undefined
-				? lower
-				: `(${lower} AND ${quote(column)} < ${this.bind(upper)})`;
+			return upper === undefined ? lower : `(${lower} AND ${quote(column)} < ${this.bind(upper)})`;
 		}
-		const compare = (
-			op: string,
-			pair: readonly [string, string | number | boolean],
-		): string => `${quote(pair[0])} ${op} ${this.bind(toSqlite(pair[1]))}`;
+		const compare = (op: string, pair: readonly [string, string | number | boolean]): string =>
+			`${quote(pair[0])} ${op} ${this.bind(toSqlite(pair[1]))}`;
 		if ("eq" in node) return compare("=", node.eq);
 		if ("ne" in node) return compare("<>", node.ne);
 		if ("lt" in node) return compare("<", node.lt);
@@ -155,10 +125,8 @@ class SqlWriter {
 			const replacement = `${this.bind(to)} || substr(${this.expr(subject)}, ${this.bind(length + 1)})`;
 			return `(CASE WHEN ${prefix} THEN ${replacement} ELSE ${this.expr(subject)} END)`;
 		}
-		const infix = (
-			pair: readonly [ExprNode, ExprNode],
-			operator: string,
-		): string => `(${this.expr(pair[0])} ${operator} ${this.expr(pair[1])})`;
+		const infix = (pair: readonly [ExprNode, ExprNode], operator: string): string =>
+			`(${this.expr(pair[0])} ${operator} ${this.expr(pair[1])})`;
 		const call = (name: string, pair: readonly [ExprNode, ExprNode]): string =>
 			`${name}(${this.expr(pair[0])}, ${this.expr(pair[1])})`;
 		if ("add" in node) return infix(node.add, "+");
@@ -174,9 +142,7 @@ class SqlWriter {
 			sql.push(`${quote(name)} = ${this.expr(expression)}`);
 			const version = versions.get(name);
 			if (version !== undefined)
-				sql.push(
-					`${quote(versionColumn(name))} = ${this.bind(expression === null ? null : version)}`,
-				);
+				sql.push(`${quote(versionColumn(name))} = ${this.bind(expression === null ? null : version)}`);
 		}
 		return sql.join(", ");
 	}
@@ -201,9 +167,7 @@ export class TableSql {
 		this.#key = key.map((name) => `${quote(name)} = ?`).join(" AND ");
 		this.#columns = names([
 			...columns.map((column) => column.name),
-			...columns
-				.filter((column) => column.type === "json")
-				.map((column) => versionColumn(column.name)),
+			...columns.filter((column) => column.type === "json").map((column) => versionColumn(column.name)),
 		]);
 		this.put = putSql(table, physical);
 		this.get = `SELECT ${this.#columns} FROM ${quote(table)} WHERE ${this.#key}`;
@@ -212,11 +176,7 @@ export class TableSql {
 	getColumns(columns: readonly string[]): string {
 		return `SELECT ${names(columns)} FROM ${quote(this.table)} WHERE ${this.#key}`;
 	}
-	update(
-		set: SetNode,
-		key: readonly SqliteValue[],
-		versions: ReadonlyMap<string, number>,
-	): Statement {
+	update(set: SetNode, key: readonly SqliteValue[], versions: ReadonlyMap<string, number>): Statement {
 		const writer = new SqlWriter(),
 			assignments = writer.set(set, versions);
 		writer.params.push(...key);
@@ -225,11 +185,7 @@ export class TableSql {
 			params: writer.params,
 		};
 	}
-	updateWhere(
-		where: WhereNode,
-		set: SetNode,
-		versions: ReadonlyMap<string, number>,
-	): Statement {
+	updateWhere(where: WhereNode, set: SetNode, versions: ReadonlyMap<string, number>): Statement {
 		const writer = new SqlWriter(),
 			assignments = writer.set(set, versions),
 			condition = writer.where(where);
@@ -260,12 +216,8 @@ export class TableSql {
 			conditions.push(
 				`(${names(order.columns)}) ${order.direction === "asc" ? ">" : "<"} (${after.map((value) => writer.bind(value)).join(", ")})`,
 			);
-		const filter = conditions.length
-			? ` WHERE ${conditions.join(" AND ")}`
-			: "";
-		const ordering = order.columns
-			.map((name) => `${quote(name)} ${order.direction.toUpperCase()}`)
-			.join(", ");
+		const filter = conditions.length ? ` WHERE ${conditions.join(" AND ")}` : "";
+		const ordering = order.columns.map((name) => `${quote(name)} ${order.direction.toUpperCase()}`).join(", ");
 		const sql = `SELECT ${columns === undefined ? this.#columns : names(columns)} FROM ${quote(this.table)}${filter} ORDER BY ${ordering} LIMIT ${writer.bind(limit)}`;
 		return { sql, params: writer.params };
 	}

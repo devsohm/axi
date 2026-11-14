@@ -324,7 +324,9 @@ export function convertResponsesMessages<A extends Api>(
 	return result;
 }
 
-type ToolInput = { kind: "json"; arguments: ToolCallArgumentsStream } | { kind: "custom"; property: string; jsonBuffer: GrammarToolInputJsonBuffer; unsent: string };
+type ToolInput =
+	| { kind: "json"; arguments: ToolCallArgumentsStream }
+	| { kind: "custom"; property: string; jsonBuffer: GrammarToolInputJsonBuffer; unsent: string };
 type Slot =
 	| { kind: "thinking"; block: ThinkingContent; index: number }
 	| { kind: "text"; block: TextContent; index: number }
@@ -368,7 +370,12 @@ export async function processResponsesStream<A extends Api>(
 				const property = options.grammarToolInputProperties?.get(item.name) ?? "input";
 				const jsonBuffer = { input: "", started: false, closed: false };
 				block.arguments = { [property]: item.input || "" };
-				input = { kind: "custom", property, jsonBuffer, unsent: appendGrammarToolInputJsonDelta(jsonBuffer, property, item.input || "") ?? "" };
+				input = {
+					kind: "custom",
+					property,
+					jsonBuffer,
+					unsent: appendGrammarToolInputJsonDelta(jsonBuffer, property, item.input || "") ?? "",
+				};
 			}
 			slot = { kind: "toolCall", index, block, input };
 			unfinished.add(block);
@@ -388,9 +395,14 @@ export async function processResponsesStream<A extends Api>(
 	const grammarDelta = (slot: Extract<Slot, { kind: "toolCall" }>, value: string | undefined, close: boolean) => {
 		const input = slot.input;
 		if (input.kind !== "custom") return;
-		let delta = close ? closeGrammarToolInputJson(input.jsonBuffer, input.property, value) : appendGrammarToolInputJsonDelta(input.jsonBuffer, input.property, value ?? "");
+		let delta = close
+			? closeGrammarToolInputJson(input.jsonBuffer, input.property, value)
+			: appendGrammarToolInputJsonDelta(input.jsonBuffer, input.property, value ?? "");
 		slot.block.arguments = { [input.property]: input.jsonBuffer.input };
-		if (input.unsent !== "") { delta = input.unsent + (delta ?? ""); input.unsent = ""; }
+		if (input.unsent !== "") {
+			delta = input.unsent + (delta ?? "");
+			input.unsent = "";
+		}
 		toolDelta(slot, delta);
 	};
 	const finish = (response: Terminal) => {
@@ -529,17 +541,17 @@ export async function processResponsesStream<A extends Api>(
 						...(item.phase ? { phase: item.phase } : {}),
 					});
 					stream.push({ type: "text_end", contentIndex: current.index, content: current.block.text, partial: output });
-				} else if (
-					current?.kind === "toolCall" &&
-					item.type === "function_call" &&
-					current.input.kind === "json"
-				) {
+				} else if (current?.kind === "toolCall" && item.type === "function_call" && current.input.kind === "json") {
 					if (item.arguments) current.input.arguments.replace(item.arguments);
 					Object.assign(current.block, current.input.arguments.finish());
 					if (item.namespace !== undefined) current.block.namespace = item.namespace;
 					unfinished.delete(current.block);
 					stream.push({ type: "toolcall_end", contentIndex: current.index, toolCall: current.block, partial: output });
-				} else if (current?.kind === "toolCall" && item.type === "custom_tool_call" && current.input.kind === "custom") {
+				} else if (
+					current?.kind === "toolCall" &&
+					item.type === "custom_tool_call" &&
+					current.input.kind === "custom"
+				) {
 					grammarDelta(current, item.input, true);
 					if (item.namespace !== undefined) current.block.namespace = item.namespace;
 					unfinished.delete(current.block);
@@ -567,5 +579,7 @@ export async function processResponsesStream<A extends Api>(
 		}
 	}
 	if (!terminal) throw new Error("OpenAI Responses stream ended before a terminal response event");
-	if (output.stopReason === "toolUse") for (const call of unfinished) throw new Error(`OpenAI Responses stream completed with an unfinished tool call: ${call.name} (${call.id})`);
+	if (output.stopReason === "toolUse")
+		for (const call of unfinished)
+			throw new Error(`OpenAI Responses stream completed with an unfinished tool call: ${call.name} (${call.id})`);
 }

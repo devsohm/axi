@@ -130,8 +130,12 @@ test("shared member watchers receive a commit in subscription order", async () =
 		const order: string[] = [];
 		const secondWatch = await second.data.watch(context);
 		const firstWatch = await first.data.watch(context);
-		secondWatch.start(async () => { order.push("second"); });
-		firstWatch.start(async () => { order.push("first"); });
+		secondWatch.start(async () => {
+			order.push("second");
+		});
+		firstWatch.start(async () => {
+			order.push("first");
+		});
 		await first.add(1, context);
 		await vi.waitFor(() => expect(order).toEqual(["second", "first"]));
 		await secondWatch.stop();

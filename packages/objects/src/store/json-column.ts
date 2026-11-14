@@ -13,10 +13,7 @@ export type JsonColumnOptions<T> = {
 	readonly migrate?: (old: JsonValue, from: number) => T;
 };
 export type JsonColumnSchema<T> = TUnsafe<T> & { readonly json: JsonColumn };
-export function json<S extends TSchema>(
-	schema: S,
-	options: JsonColumnOptions<Static<S>>,
-): JsonColumnSchema<Static<S>> {
+export function json<S extends TSchema>(schema: S, options: JsonColumnOptions<Static<S>>): JsonColumnSchema<Static<S>> {
 	return Object.assign(Type.Unsafe<Static<S>>({}), {
 		json: new JsonColumn(schema, options.version, options.migrate),
 	});
@@ -27,15 +24,9 @@ export class JsonColumn {
 	readonly version: number;
 	readonly fingerprint: string;
 	readonly #migrate: ((old: JsonValue, from: number) => unknown) | undefined;
-	constructor(
-		schema: TSchema,
-		version: number,
-		migrate: ((old: JsonValue, from: number) => unknown) | undefined,
-	) {
+	constructor(schema: TSchema, version: number, migrate: ((old: JsonValue, from: number) => unknown) | undefined) {
 		if (!Number.isSafeInteger(version) || version < 1)
-			throw new Error(
-				`json(...): version ${version} is not a positive integer`,
-			);
+			throw new Error(`json(...): version ${version} is not a positive integer`);
 		const snapshot = snapshotSchema(schema, "json(...)");
 		this.schema = snapshot.schema;
 		this.version = version;

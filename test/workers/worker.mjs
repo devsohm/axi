@@ -12,7 +12,9 @@ const coverage = () => ({
 	data: globalThis.__VITEST_COVERAGE__ ?? {},
 });
 export class Sandbox extends CodemodeSandboxDurableObject {
-	fetch() { return Response.json(coverage()); }
+	fetch() {
+		return Response.json(coverage());
+	}
 }
 const Counter = defineDoc({
 	checkpointWhen: () => false,
@@ -55,10 +57,16 @@ export class State extends DurableObject {
 			bytes.subarray(2, 5),
 		);
 		const binaryRead = await db.get("SELECT ? AS bytes", new Uint8Array([1, 2, 3]));
-		const integers = await db.get("SELECT ? AS lower, ? AS upper", BigInt(Number.MIN_SAFE_INTEGER), BigInt(Number.MAX_SAFE_INTEGER));
+		const integers = await db.get(
+			"SELECT ? AS lower, ? AS upper",
+			BigInt(Number.MIN_SAFE_INTEGER),
+			BigInt(Number.MAX_SAFE_INTEGER),
+		);
 		let precisionErrors = 0;
 		for (const value of [BigInt(Number.MIN_SAFE_INTEGER) - 1n, BigInt(Number.MAX_SAFE_INTEGER) + 1n]) {
-			try { await db.get("SELECT ? AS value", value); } catch (error) {
+			try {
+				await db.get("SELECT ? AS value", value);
+			} catch (error) {
 				if (!(error instanceof RangeError)) throw error;
 				precisionErrors++;
 			}
@@ -87,7 +95,11 @@ export class State extends DurableObject {
 		}
 		const defaultVm = createInlineCodemodeSandbox();
 		let defaultScript;
-		try { defaultScript = await defaultVm.execute("return 41;"); } finally { await defaultVm.close(); }
+		try {
+			defaultScript = await defaultVm.execute("return 41;");
+		} finally {
+			await defaultVm.close();
+		}
 		const remote = new RemoteCodemodeSandbox({
 			remote: () => this.env.SANDBOX.getByName("test"),
 			tools: [{ name: "twice", execute: (args) => args * 2 }],

@@ -84,11 +84,16 @@ test.skipIf(process.platform === "win32")(
 		}
 	},
 );
-test.skipIf(process.platform === "win32")("reading a character device does not treat its stat size as regular-file contents", async () => {
-	const connection = new Connection({ command: [localDaemon()] });
-	const env = new RemoteExecutionEnv({ connection, id: "device-reader", cwd: tmpdir() });
-	try {
-		expect(getOrThrow(await env.readTextFile("/dev/null", context))).toBe("");
-		expect(getOrThrow(await env.readBinaryFile("/dev/null", context))).toHaveLength(0);
-	} finally { connection.close(); }
-});
+test.skipIf(process.platform === "win32")(
+	"reading a character device does not treat its stat size as regular-file contents",
+	async () => {
+		const connection = new Connection({ command: [localDaemon()] });
+		const env = new RemoteExecutionEnv({ connection, id: "device-reader", cwd: tmpdir() });
+		try {
+			expect(getOrThrow(await env.readTextFile("/dev/null", context))).toBe("");
+			expect(getOrThrow(await env.readBinaryFile("/dev/null", context))).toHaveLength(0);
+		} finally {
+			connection.close();
+		}
+	},
+);

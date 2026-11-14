@@ -73,8 +73,7 @@ export class Channel {
 		if (this.closed) return;
 		const bytes = this.#options.codec.encode(message);
 		this.#bytes.add(bytes.byteLength, { direction: "sent" });
-		if (this.#connection.kind === "greeting")
-			this.#connection.outgoing.push(bytes);
+		if (this.#connection.kind === "greeting") this.#connection.outgoing.push(bytes);
 		else this.#link.send(bytes);
 	}
 	close(): void {
@@ -134,17 +133,11 @@ export class Channel {
 				try {
 					greeting = this.#read(bytes);
 				} catch (cause) {
-					throw new Error(
-						`handshake: the first message is no ${this.#options.codec.name} message`,
-						{ cause },
-					);
+					throw new Error(`handshake: the first message is no ${this.#options.codec.name} message`, { cause });
 				}
-				if (greeting.kind !== "hello")
-					throw new Error(`handshake: ${greeting.kind} before hello`);
+				if (greeting.kind !== "hello") throw new Error(`handshake: ${greeting.kind} before hello`);
 				if (greeting.protocol !== PROTOCOL_VERSION)
-					throw new Error(
-						`handshake: protocol ${greeting.protocol}, this host speaks ${PROTOCOL_VERSION}`,
-					);
+					throw new Error(`handshake: protocol ${greeting.protocol}, this host speaks ${PROTOCOL_VERSION}`);
 				const queued = this.#connection.outgoing;
 				this.#connection = {
 					kind: "open",
@@ -156,10 +149,8 @@ export class Channel {
 				return;
 			}
 			const message = this.#read(bytes);
-			if (message.kind === "hello")
-				throw new Error("handshake: a second hello");
-			if (message.kind === "ping")
-				this.#link.send(this.#options.codec.encode({ kind: "pong" }));
+			if (message.kind === "hello") throw new Error("handshake: a second hello");
+			if (message.kind === "ping") this.#link.send(this.#options.codec.encode({ kind: "pong" }));
 			else if (message.kind !== "pong") return this.#handler.message(message);
 		} catch (error) {
 			this.#fail(error);

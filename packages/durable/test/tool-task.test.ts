@@ -4,7 +4,16 @@ import { join } from "node:path";
 import { fauxAssistantMessage, fauxToolCall, Type } from "@axi/ai";
 import { BACKGROUND_CONTEXT as context, awaitWithContext } from "@axi/objects/context";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { AssistantEntry, defineDoc, defineTask, defineTool, LiveDoc, ToolTask, ToolResultEntry, UsageDoc } from "../src/index.ts";
+import {
+	AssistantEntry,
+	defineDoc,
+	defineTask,
+	defineTool,
+	LiveDoc,
+	ToolTask,
+	ToolResultEntry,
+	UsageDoc,
+} from "../src/index.ts";
 import type { ToolTaskResult } from "../src/harness/tool.ts";
 import type { Extension, ToolExecutionApi, ToolRegistration } from "../src/harness/types.ts";
 import { openNodeSqliteStorage } from "../src/storage/sqlite/node.ts";
@@ -66,22 +75,33 @@ async function eventually(check: () => boolean | Promise<boolean>): Promise<void
 describe("durable tool execution", () => {
 	it("forwards a tool commit's persistence options and returns its callback value", async () => {
 		const progress = defineDoc({
-			kind: "progress", version: 1, scope: "conversation", history: "latest", fork: "initial",
-			initial: () => ({ value: 0 }), checkpointWhen: () => false,
+			kind: "progress",
+			version: 1,
+			scope: "conversation",
+			history: "latest",
+			fork: "initial",
+			initial: () => ({ value: 0 }),
+			checkpointWhen: () => false,
 		});
 		let observed: { commits: number; value: number } | undefined;
 		const tool = textTool(async (_args, api, ctx) => {
 			const before = commit.mock.calls.length;
-			const value = await api.commit(async tx => {
-				(await tx.doc(progress, api.conversationId)).value++;
-				return 42;
-			}, ctx, { persistence: { kind: "deferred", withinMs: Infinity } });
+			const value = await api.commit(
+				async (tx) => {
+					(await tx.doc(progress, api.conversationId)).value++;
+					return 42;
+				},
+				ctx,
+				{ persistence: { kind: "deferred", withinMs: Infinity } },
+			);
 			observed = { commits: commit.mock.calls.length - before, value };
 			return { output: [] };
 		});
 		const opened = await openTools([tool]);
 		const commit = vi.spyOn(opened.storage, "commit");
-		await opened.session.commit(async tx => { await tx.doc(progress, opened.conversation); }, context);
+		await opened.session.commit(async (tx) => {
+			await tx.doc(progress, opened.conversation);
+		}, context);
 		const id = await call(opened, "echo", { text: "x" });
 		opened.scheduler.resume();
 		await result(opened, id);
@@ -234,21 +254,37 @@ describe("durable tool execution", () => {
 	it("lets result hooks repair rejected calls without executing the tool", async () => {
 		let executions = 0;
 		const observed: string[] = [];
-		const tool = textTool(async () => { executions++; return {}; });
+		const tool = textTool(async () => {
+			executions++;
+			return {};
+		});
 		for (const kind of ["tool_unavailable", "invalid_arguments", "blocked"]) {
-			const opened = await openTools(kind === "tool_unavailable" ? [] : [tool], { extensions: [{ name: "repair", hooks: [{
-				task: ToolTask.definition.name,
-				handlers: {
-					beforeTool: () => kind === "blocked" ? { block: "policy" } : undefined,
-					afterTool: (_call: unknown, rejected: { diagnostics: { code: string }[] }) => {
-						observed.push(rejected.diagnostics[0]!.code);
-						return { isError: false, output: [{ type: "text", text: "fixed" }] };
+			const opened = await openTools(kind === "tool_unavailable" ? [] : [tool], {
+				extensions: [
+					{
+						name: "repair",
+						hooks: [
+							{
+								task: ToolTask.definition.name,
+								handlers: {
+									beforeTool: () => (kind === "blocked" ? { block: "policy" } : undefined),
+									afterTool: (_call: unknown, rejected: { diagnostics: { code: string }[] }) => {
+										observed.push(rejected.diagnostics[0]!.code);
+										return { isError: false, output: [{ type: "text", text: "fixed" }] };
+									},
+								},
+							},
+						],
 					},
-				},
-			}] }] });
+				],
+			});
 			const id = await call(opened, "echo", kind === "invalid_arguments" ? {} : { text: "go" });
 			opened.scheduler.resume();
-			expect((await result(opened, id)).message).toMatchObject({ role: "toolResult", isError: false, content: [{ type: "text", text: "fixed" }] });
+			expect((await result(opened, id)).message).toMatchObject({
+				role: "toolResult",
+				isError: false,
+				content: [{ type: "text", text: "fixed" }],
+			});
 		}
 		expect(observed).toEqual(["tool_unavailable", "invalid_arguments", "blocked"]);
 		expect(executions).toBe(0);
@@ -311,16 +347,18 @@ describe("durable tool execution", () => {
 		expect((await opened.session.snapshot(LiveDoc, opened.conversation, context))?.nestedTools).toBeUndefined();
 	});
 	it("reports structured output property names without JSON pointer escaping", async () => {
-		const tool = textTool(
-			async () => ({ output: [], structuredOutput: { "output/total~value": "invalid" } }),
-			{ structuredOutputSchema: Type.Object({ "output/total~value": Type.Number() }) },
-		);
+		const tool = textTool(async () => ({ output: [], structuredOutput: { "output/total~value": "invalid" } }), {
+			structuredOutputSchema: Type.Object({ "output/total~value": Type.Number() }),
+		});
 		const opened = await openTools([tool]),
 			id = await call(opened, "echo", { text: "x" });
 		opened.scheduler.resume();
 		expect((await result(opened, id)).task.state.outcome.status).toBe("completed");
 		expect(opened.reports).toMatchObject([
-			{ error: { message: expect.stringContaining("schema: output/total~value:") }, info: { kind: "extension_error", extension: "tools" } },
+			{
+				error: { message: expect.stringContaining("schema: output/total~value:") },
+				info: { kind: "extension_error", extension: "tools" },
+			},
 		]);
 	});
 	it.each(["safe", "unsafe"] as const)("recovers %s tool intent after a clean close", async (replay) => {
@@ -419,7 +457,11 @@ describe("durable tool execution", () => {
 				{ code: "truncated", message: "Output truncated: 1 lines, 8 bytes dropped" },
 			],
 		});
-		expect(settled.message).toMatchObject({ role: "toolResult", isError: true, content: [{ type: "text", text: "kept" }, expect.anything()] });
+		expect(settled.message).toMatchObject({
+			role: "toolResult",
+			isError: true,
+			content: [{ type: "text", text: "kept" }, expect.anything()],
+		});
 		expect(execute).not.toHaveBeenCalled();
 		expect(afterTool).toHaveBeenCalledTimes(restarts === 0 ? 1 : 0);
 	});

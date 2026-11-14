@@ -1,8 +1,15 @@
 import { expect, test } from "vitest";
-import { parseCodemodeSource, renderDeclarations, renderToolSignature, schemaToType, resolveSchemaRef } from "../src/index.ts";
+import {
+	parseCodemodeSource,
+	renderDeclarations,
+	renderToolSignature,
+	schemaToType,
+	resolveSchemaRef,
+} from "../src/index.ts";
 
 test("local schema lookup preserves identity and ignores unusable URI fragments", () => {
-	const field = { type: "string" }, schema = { $defs: { "a/b~ c": field } };
+	const field = { type: "string" },
+		schema = { $defs: { "a/b~ c": field } };
 	expect(resolveSchemaRef("#", schema)).toBe(schema);
 	expect(resolveSchemaRef("#/$defs/a~1b~0%20c", schema)).toBe(field);
 	expect(resolveSchemaRef("#", false)).toBe(false);
@@ -11,10 +18,12 @@ test("local schema lookup preserves identity and ignores unusable URI fragments"
 });
 
 test("a malformed schema reference cannot prevent rendering another tool", () => {
-	const text = renderDeclarations({ tools: [
-		{ name: "broken", inputSchema: { $defs: {}, $ref: "#/$defs/%" }, execute() {} },
-		{ name: "ready", inputSchema: { type: "string" }, execute() {} },
-	] });
+	const text = renderDeclarations({
+		tools: [
+			{ name: "broken", inputSchema: { $defs: {}, $ref: "#/$defs/%" }, execute() {} },
+			{ name: "ready", inputSchema: { type: "string" }, execute() {} },
+		],
+	});
 	expect(text).toContain("broken(args: unknown)");
 	expect(text).toContain("ready(args: string)");
 });

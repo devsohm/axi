@@ -18,11 +18,7 @@ export function payloadPart(
 			segments.push(bytes);
 			return { $bytes: segments.length - 1 };
 		}
-		if (
-			value !== null &&
-			typeof value === "object" &&
-			Object.hasOwn(value, "$bytes")
-		)
+		if (value !== null && typeof value === "object" && Object.hasOwn(value, "$bytes"))
 			throw invalid("args", '"$bytes" is reserved in values crossing a link');
 		return value;
 	});
@@ -37,25 +33,15 @@ export function parseJson(bytes: Uint8Array): unknown {
 export function parsePart(json: string | Uint8Array): unknown {
 	return typeof json === "string" ? JSON.parse(json) : parseJson(json);
 }
-export function parsePayload(
-	json: string | Uint8Array,
-	segments: readonly Uint8Array[] | undefined,
-): unknown {
+export function parsePayload(json: string | Uint8Array, segments: readonly Uint8Array[] | undefined): unknown {
 	const value = parsePart(json);
 	return segments === undefined ? value : resolveSegments(value, segments);
 }
-export function resolveSegments(
-	value: unknown,
-	segments: readonly Uint8Array[],
-): unknown {
+export function resolveSegments(value: unknown, segments: readonly Uint8Array[]): unknown {
 	if (typeof value !== "object" || value === null) return value;
 	if (!Array.isArray(value) && Object.hasOwn(value, "$bytes")) {
 		const index: unknown = Reflect.get(value, "$bytes");
-		if (
-			Object.keys(value).length !== 1 ||
-			typeof index !== "number" ||
-			segments[index] === undefined
-		)
+		if (Object.keys(value).length !== 1 || typeof index !== "number" || segments[index] === undefined)
 			throw new Error("payload: a malformed byte segment reference");
 		return segments[index];
 	}
@@ -73,22 +59,16 @@ export function resolveSegments(
 	return value;
 }
 export function partText(part: Part): string {
-	if (!(part instanceof DeflatedPart))
-		return `[0,${typeof part === "string" ? part : readUtf8(part)}]`;
+	if (!(part instanceof DeflatedPart)) return `[0,${typeof part === "string" ? part : readUtf8(part)}]`;
 	let text = "";
 	for (let offset = 0; offset < part.bytes.length; offset += 0x8000)
-		text += String.fromCharCode(
-			...part.bytes.subarray(offset, offset + 0x8000),
-		);
+		text += String.fromCharCode(...part.bytes.subarray(offset, offset + 0x8000));
 	return `[1,"${btoa(text)}"]`;
 }
 export function textPart(value: unknown): Part {
-	if (!Array.isArray(value) || value.length !== 2)
-		throw new Error("text: a part is no [codec, payload] pair");
+	if (!Array.isArray(value) || value.length !== 2) throw new Error("text: a part is no [codec, payload] pair");
 	if (value[0] === 0) return JSON.stringify(value[1]);
 	if (value[0] === 1 && typeof value[1] === "string")
-		return new DeflatedPart(
-			Uint8Array.from(atob(value[1]), (char) => char.charCodeAt(0)),
-		);
+		return new DeflatedPart(Uint8Array.from(atob(value[1]), (char) => char.charCodeAt(0)));
 	throw new Error("text: a part of an unknown codec");
 }

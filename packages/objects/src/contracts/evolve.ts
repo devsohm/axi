@@ -18,20 +18,32 @@ import type { Change, CurrentStep, Increment, MemberNames, MethodAt, Variants, V
 import { Method, type TSchema } from "./schema.ts";
 import { snapshotArguments, snapshotSchema } from "./snapshot.ts";
 
-type Put<V extends Variants, X, Side extends "state" | "methods", M extends string, T> = { [Y in keyof V]: Y extends X
-	? { [S in keyof V[Y]]: S extends Side ? { [F in keyof V[Y][S] | M]: F extends M ? T : V[Y][S][F] } : V[Y][S] } : V[Y] };
-type Drop<V extends Variants, X, Side extends "state" | "methods", M extends string> = { [Y in keyof V]: Y extends X
-	? { [S in keyof V[Y]]: S extends Side ? Omit<V[Y][S], M> : V[Y][S] } : V[Y] };
+type Put<V extends Variants, X, Side extends "state" | "methods", M extends string, T> = {
+	[Y in keyof V]: Y extends X
+		? { [S in keyof V[Y]]: S extends Side ? { [F in keyof V[Y][S] | M]: F extends M ? T : V[Y][S][F] } : V[Y][S] }
+		: V[Y];
+};
+type Drop<V extends Variants, X, Side extends "state" | "methods", M extends string> = {
+	[Y in keyof V]: Y extends X ? { [S in keyof V[Y]]: S extends Side ? Omit<V[Y][S], M> : V[Y][S] } : V[Y];
+};
 type KeyedNames<V extends Variants> = keyof NonNullable<V[typeof LOCAL]["keyed"]> & string;
 type PutKeyed<V extends Variants, M extends string, S extends TSchema> = {
-	[X in keyof V]: X extends typeof LOCAL ? Omit<V[X], "keyed"> & {
-		keyed: { [N in keyof NonNullable<V[X]["keyed"]> | M]: N extends M ? S : NonNullable<V[X]["keyed"]>[N & keyof NonNullable<V[X]["keyed"]>] };
-	} : V[X];
+	[X in keyof V]: X extends typeof LOCAL
+		? Omit<V[X], "keyed"> & {
+				keyed: {
+					[N in keyof NonNullable<V[X]["keyed"]> | M]: N extends M
+						? S
+						: NonNullable<V[X]["keyed"]>[N & keyof NonNullable<V[X]["keyed"]>];
+				};
+			}
+		: V[X];
 };
 type DropKeyed<V extends Variants, M extends string> = {
-	[X in keyof V]: X extends typeof LOCAL ? Omit<V[X], "keyed"> & {
-		keyed: Omit<NonNullable<V[X]["keyed"]>, M>;
-	} : V[X];
+	[X in keyof V]: X extends typeof LOCAL
+		? Omit<V[X], "keyed"> & {
+				keyed: Omit<NonNullable<V[X]["keyed"]>, M>;
+			}
+		: V[X];
 };
 type EventNames<V extends Variants, X extends keyof V> = keyof NonNullable<V[X]["events"]> & string;
 type PutEvent<V extends Variants, X, M extends string, T> = {
@@ -55,9 +67,27 @@ type DropEvent<V extends Variants, X, M extends string> = {
 interface Methods<K extends Kind, V extends Variants, C extends Change> {
 	readonly "~variants"?: V;
 	readonly "~changes"?: C;
-	args<M extends MemberNames<V, "methods">, A extends TSchema>(member: M, args: A): Editor<K, Put<V, VariantsWith<V, M>, "methods", M, Method<A, MethodAt<V, M>["result"]>>, C | [VariantsWith<V, M>, M, "args"]>;
-	result<M extends MemberNames<V, "methods">, R extends TSchema>(member: M, result: R): Editor<K, Put<V, VariantsWith<V, M>, "methods", M, Method<MethodAt<V, M>["args"], R>>, C | [VariantsWith<V, M>, M, "result"]>;
-	method<M extends MemberNames<V, "methods">, A extends TSchema, R extends TSchema>(member: M, args: A, result: R): Editor<K, Put<V, VariantsWith<V, M>, "methods", M, Method<A, R>>, C | [VariantsWith<V, M>, M, "args" | "result"]>;
+	args<M extends MemberNames<V, "methods">, A extends TSchema>(
+		member: M,
+		args: A,
+	): Editor<
+		K,
+		Put<V, VariantsWith<V, M>, "methods", M, Method<A, MethodAt<V, M>["result"]>>,
+		C | [VariantsWith<V, M>, M, "args"]
+	>;
+	result<M extends MemberNames<V, "methods">, R extends TSchema>(
+		member: M,
+		result: R,
+	): Editor<
+		K,
+		Put<V, VariantsWith<V, M>, "methods", M, Method<MethodAt<V, M>["args"], R>>,
+		C | [VariantsWith<V, M>, M, "result"]
+	>;
+	method<M extends MemberNames<V, "methods">, A extends TSchema, R extends TSchema>(
+		member: M,
+		args: A,
+		result: R,
+	): Editor<K, Put<V, VariantsWith<V, M>, "methods", M, Method<A, R>>, C | [VariantsWith<V, M>, M, "args" | "result"]>;
 	removeMethod<M extends MemberNames<V, "methods">>(member: M): Editor<K, Drop<V, keyof V, "methods", M>, C>;
 }
 interface RemoteEditor<V extends Variants, C extends Change> extends Methods<"remote", V, C> {
@@ -142,11 +172,21 @@ interface LocalEditor<V extends Variants, C extends Change> extends Methods<"loc
 	): LocalEditor<PutKeyed<V, M, HostKeyed<S, HostKind<N, P>>>, C | [typeof LOCAL, M, "keyed"]>;
 	removeKeyed<M extends KeyedNames<V>>(member: M): LocalEditor<DropKeyed<V, M>, C>;
 }
-type Editor<K extends Kind, V extends Variants, C extends Change> = K extends "local" ? LocalEditor<V, C> : RemoteEditor<V, C>;
+type Editor<K extends Kind, V extends Variants, C extends Change> = K extends "local"
+	? LocalEditor<V, C>
+	: RemoteEditor<V, C>;
 type Next<S extends ContractShape, E extends Methods<S["kind"], Variants, Change>> = {
-	kind: S["kind"]; name: S["name"]; params: S["params"];
-	history: [...S["history"], { version: Increment<CurrentStep<S["history"]>["version"]>;
-		variants: NonNullable<E["~variants"]>; changes: NonNullable<E["~changes"]> }];
+	kind: S["kind"];
+	name: S["name"];
+	params: S["params"];
+	history: [
+		...S["history"],
+		{
+			version: Increment<CurrentStep<S["history"]>["version"]>;
+			variants: NonNullable<E["~variants"]>;
+			changes: NonNullable<E["~changes"]>;
+		},
+	];
 };
 export function editWith<E>(editor: E, edit: (editor: E) => unknown, what: string): void {
 	if (edit(editor) !== editor) throw new Error(`${what} must return the editor it was given`);
@@ -155,7 +195,9 @@ export function evolve<C extends Contract, E extends Methods<ShapeOf<C>["kind"],
 	previous: C,
 	edit: (editor: Editor<ShapeOf<C>["kind"], CurrentVariants<C>, never>) => E,
 ): Contract<Next<ShapeOf<C>, E>> {
-	const data = contractData(previous), latest = data.versions.at(-1)!, version = latest.version + 1;
+	const data = contractData(previous),
+		latest = data.versions.at(-1)!,
+		version = latest.version + 1;
 	const path = `${data.name} v${version}`;
 	const variants = new Map(
 		[...latest.variants].map(([name, value]) => [
@@ -168,7 +210,8 @@ export function evolve<C extends Contract, E extends Methods<ShapeOf<C>["kind"],
 			},
 		]),
 	);
-	const kinds = new Map(data.kinds), changes: Change[] = [];
+	const kinds = new Map(data.kinds),
+		changes: Change[] = [];
 	let editor: object;
 	const at = (variant: string, member: string, kind: MemberKind) => memberPath(path, data.kind, variant, member, kind);
 	const variantAt = (variant: string) => {
@@ -176,7 +219,10 @@ export function evolve<C extends Contract, E extends Methods<ShapeOf<C>["kind"],
 		if (!value) throw new Error(`${path}.${variant}: unknown variant (the variant set never changes)`);
 		return value;
 	};
-	const checked = () => { checkMembers(variants, kinds, at); return editor; };
+	const checked = () => {
+		checkMembers(variants, kinds, at);
+		return editor;
+	};
 	const ensureNew = (variant: string, member: string, kind: MemberKind) => {
 		const value = variantAt(variant);
 		if (value.state.has(member) || value.methods.has(member) || value.keyed.has(member) || value.events.has(member))
@@ -191,7 +237,8 @@ export function evolve<C extends Contract, E extends Methods<ShapeOf<C>["kind"],
 		return checked();
 	};
 	const removeState = (variant: string, member: string) => {
-		if (!variantAt(variant).state.delete(member)) throw new Error(`${at(variant, member, "state")}: no such state member`);
+		if (!variantAt(variant).state.delete(member))
+			throw new Error(`${at(variant, member, "state")}: no such state member`);
 		return editor;
 	};
 	const keyed = (adding: boolean, member: string, schema: TSchema, key?: KindShape) => {
@@ -225,11 +272,13 @@ export function evolve<C extends Contract, E extends Methods<ShapeOf<C>["kind"],
 		return names;
 	};
 	const method = (member: string, args?: TSchema, result?: TSchema) => {
-		const names = methodVariants(member), label = at(names[0]!, member, "method");
+		const names = methodVariants(member),
+			label = at(names[0]!, member, "method");
 		const input = args === undefined ? undefined : snapshotArguments(args, `${label}.args`);
 		const output = result === undefined ? undefined : snapshotSchema(result, `${label}.result`);
 		for (const name of names) {
-			const methods = variants.get(name)!.methods, old = methods.get(member)!;
+			const methods = variants.get(name)!.methods,
+				old = methods.get(member)!;
 			methods.set(member, { args: input ?? old.args, result: output ?? old.result });
 			if (input !== undefined) changes.push([name, member, "args"]);
 			if (output !== undefined) changes.push([name, member, "result"]);

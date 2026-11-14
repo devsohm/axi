@@ -26,8 +26,7 @@ it("keeps positional envelopes, opaque compressed parts and byte segments across
 	).toBe('["s",[[0,[],[],[2]]]]');
 });
 it("rejects malformed framing while leaving envelope types to the channel", () => {
-	const decode = (value: string) =>
-		textCodec.decode(new TextEncoder().encode(value));
+	const decode = (value: string) => textCodec.decode(new TextEncoder().encode(value));
 	for (const value of [
 		'["R",1,2]',
 		'["s",[[0]]]',
@@ -44,13 +43,20 @@ it("rejects malformed framing while leaving envelope types to the channel", () =
 		call: 0,
 		error: { kind: "invalid" },
 	});
-	expect(() =>
-		checkMessage(decode('["e",0,{"kind":"invalid"}]'), context),
-	).toThrow("message schema");
+	expect(() => checkMessage(decode('["e",0,{"kind":"invalid"}]'), context)).toThrow("message schema");
 	expect(decode('["c",1,0,0,null,null,{"traceparent":"value"}]')).toEqual({
-		kind: "call", call: 1, hold: 0, method: 0, trace: { traceparent: "value" },
+		kind: "call",
+		call: 1,
+		hold: 0,
+		method: 0,
+		trace: { traceparent: "value" },
 	});
 	expect(decode('["c",1,0,0,[0,7],null,{"traceparent":"value"}]')).toEqual({
-		kind: "call", call: 1, hold: 0, method: 0, args: "7", trace: { traceparent: "value" },
+		kind: "call",
+		call: 1,
+		hold: 0,
+		method: 0,
+		args: "7",
+		trace: { traceparent: "value" },
 	});
 });

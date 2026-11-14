@@ -41,12 +41,21 @@ it("round-trips application rows, server data and finished files and removes an 
 		const accounts = await host.get(users.Users, {}, context);
 		await accounts.update({ id: "user", profile: { name: "Ari" } }, context);
 		accounts.release();
-		await writeFile(server, await bytes(encodeJsonl(host.exportHostData({ ...manifest.address, params: { name: "one" } }, context))));
+		await writeFile(
+			server,
+			await bytes(encodeJsonl(host.exportHostData({ ...manifest.address, params: { name: "one" } }, context))),
+		);
 		await packStore(store, files, manifest, server, archive, context);
 		await expect(unpackStaging(archive, dir, () => {}, { bytes: 1 }, context)).rejects.toThrow("more than 1 bytes");
 		expect(await readdir(dir)).not.toContain("restored");
 		expect((await readdir(dir)).some((name) => name.startsWith(".objects-import-"))).toBe(false);
-		const { staging: target, server: serverPart } = await unpackStaging(archive, dir, (value) => expect(value).toEqual(manifest), {}, context);
+		const { staging: target, server: serverPart } = await unpackStaging(
+			archive,
+			dir,
+			(value) => expect(value).toEqual(manifest),
+			{},
+			context,
+		);
 		expect(await readFile(serverPart, "utf8")).toBe(await readFile(server, "utf8"));
 		expect(await readdir(join(target, "files"))).toEqual(["saved.txt"]);
 		expect(await readFile(join(target, "files/saved.txt"), "utf8")).toBe("retained file");

@@ -77,7 +77,10 @@ export class RemoteObject implements Target {
 		this.label = checked.key ? `${contract.name}(${checked.key})` : contract.name;
 		if (!untraced(host.telemetry)) {
 			this.#holding = new OpenSpan(host.telemetry, "objects.hold", {
-				"objects.host": host.spanHost, type: contract.name, object: this.label.slice(0, 256), "address.kind": address.kind,
+				"objects.host": host.spanHost,
+				type: contract.name,
+				object: this.label.slice(0, 256),
+				"address.kind": address.kind,
 			});
 			if (!untraced(context.telemetry)) this.#holding.span.addLink({ context: context.telemetry });
 			this.#firstHold = carrierOf(this.#holding.span);
@@ -101,15 +104,22 @@ export class RemoteObject implements Target {
 	get attachable(): Bound | undefined {
 		return this.#snapshot;
 	}
-	stateFor(_version: number, _fingerprint: string): RefState { return this.state; }
-	get span(): TelemetrySpan | undefined { return this.#holding?.span; }
+	stateFor(_version: number, _fingerprint: string): RefState {
+		return this.state;
+	}
+	get span(): TelemetrySpan | undefined {
+		return this.#holding?.span;
+	}
 	holdTrace(): TelemetryCarrier | undefined {
 		if (this.#holds++ === 0) return this.#firstHold;
 		const adapter = this.#host.telemetry;
 		if (!this.#firstHold || untraced(adapter)) return;
 		this.#held("ended");
 		this.#holding = new OpenSpan(adapter, "objects.hold", {
-			"objects.host": this.#host.spanHost, type: this.contract.name, object: this.label.slice(0, 256), "address.kind": this.request.address.kind,
+			"objects.host": this.#host.spanHost,
+			type: this.contract.name,
+			object: this.label.slice(0, 256),
+			"address.kind": this.request.address.kind,
 		});
 		this.#holding.span.addLink({ context: parentOf(this.#firstHold, adapter) });
 		return carrierOf(this.#holding.span);
@@ -145,14 +155,20 @@ export class RemoteObject implements Target {
 			for (const variant of currentVariants(this.contract).values())
 				for (const member of variant.state.keys()) {
 					const replica = snapshot.replicas.get(member);
-					if (this.#status.kind !== "live" || !snapshot.names.state.includes(member) || replica?.start().kind !== "value")
+					if (
+						this.#status.kind !== "live" ||
+						!snapshot.names.state.includes(member) ||
+						replica?.start().kind !== "value"
+					)
 						unseen.set(member, replica?.generation ?? 0);
 				}
 			binding.joined(unseen);
 		}
 		this.#references.add(binding);
 	}
-	generationOf(member: string): number | undefined { return this.#snapshot?.replicas.get(member)?.generation; }
+	generationOf(member: string): number | undefined {
+		return this.#snapshot?.replicas.get(member)?.generation;
+	}
 	unhold(binding: Binding): void {
 		if (!this.#references.delete(binding)) return;
 		if (this.#references.size) {
@@ -170,7 +186,10 @@ export class RemoteObject implements Target {
 		unindex?.();
 	}
 	attach(link: HostLink): void {
-		this.#connection = { side: link.consumer, id: link.consumer.attach(this, this.#dependent?.activationChain(), this.holdTrace()) };
+		this.#connection = {
+			side: link.consumer,
+			id: link.consumer.attach(this, this.#dependent?.activationChain(), this.holdTrace()),
+		};
 		this.#dependent?.dependencyMoved();
 	}
 	dropped(_error: ObjectsError): void {
@@ -189,24 +208,45 @@ export class RemoteObject implements Target {
 			method = snapshot.methods.get(name);
 		if (!method) throw invalid("member", `${this.label} (variant ${snapshot.variant}) has no method "${name}"`);
 		const parent = context.telemetry;
-		if (untraced(parent)) return this.#connection!.side.call(this.#connection!.id, snapshot.names.methods.indexOf(name), method, args, binding, context);
-		return parent.startSpan({ name: "objects.call", attributes: {
-			"objects.host": this.#host.spanHost, type: this.contract.name, member: name, object: this.label.slice(0, 256),
-			"address.kind": this.request.address.kind, ...this.#host.principalAttributes(this.caller.principal, context),
-		} }, async (span) => {
-		try {
-		const value = await this.#connection!.side.call(
-			this.#connection!.id,
-			snapshot.names.methods.indexOf(name),
-			method,
-			args,
-			binding,
-			withTelemetry(span, context),
+		if (untraced(parent))
+			return this.#connection!.side.call(
+				this.#connection!.id,
+				snapshot.names.methods.indexOf(name),
+				method,
+				args,
+				binding,
+				context,
+			);
+		return parent.startSpan(
+			{
+				name: "objects.call",
+				attributes: {
+					"objects.host": this.#host.spanHost,
+					type: this.contract.name,
+					member: name,
+					object: this.label.slice(0, 256),
+					"address.kind": this.request.address.kind,
+					...this.#host.principalAttributes(this.caller.principal, context),
+				},
+			},
+			async (span) => {
+				try {
+					const value = await this.#connection!.side.call(
+						this.#connection!.id,
+						snapshot.names.methods.indexOf(name),
+						method,
+						args,
+						binding,
+						withTelemetry(span, context),
+					);
+					span.setAttributes({ outcome: "ok" });
+					return value;
+				} catch (error) {
+					span.setAttributes({ outcome: ended(span, "call_failed", error, context.abortSignal) });
+					throw error;
+				}
+			},
 		);
-		span.setAttributes({ outcome: "ok" });
-		return value;
-		} catch (error) { span.setAttributes({ outcome: ended(span, "call_failed", error, context.abortSignal) }); throw error; }
-		});
 	}
 	member(name: string): DeriveSource {
 		const snapshot = this.#snapshot;
@@ -227,15 +267,22 @@ export class RemoteObject implements Target {
 			if (operation.hops > 0) this.#connection?.side.retry(this.#connection.id, operation);
 			return;
 		}
-		const own = new RemoteObject(this.#host, this.contract, this.#params, this.request.address, this.caller,
-			this.#host.unplaced, this.#dependent);
+		const own = new RemoteObject(
+			this.#host,
+			this.contract,
+			this.#params,
+			this.request.address,
+			this.caller,
+			this.#host.unplaced,
+			this.#dependent,
+		);
 		const snapshot = this.#snapshot;
 		if (snapshot) {
-			const nodes = new Map(snapshot.names.events.map(name => [name, new EventNode()]));
+			const nodes = new Map(snapshot.names.events.map((name) => [name, new EventNode()]));
 			own.#snapshot = {
 				...snapshot,
 				replicas: new Map([...snapshot.replicas].map(([name, value]) => [name, value.fork(this.#host.batch)])),
-				eventNode: name => nodes.get(name),
+				eventNode: (name) => nodes.get(name),
 			};
 		}
 		this.#host.unplaced.attach(own);
@@ -409,8 +456,10 @@ export class RemoteObject implements Target {
 		if (state.kind === "failed" && state.cause.kind === "broken") this.#unpublish();
 		this.#status = state;
 		const references = [...this.#references];
-		const retarget = () => { for (const reference of references) reference.retarget(); };
-		if (references.some(reference => reference.following)) this.#host.batch.within(retarget, BACKGROUND_CONTEXT);
+		const retarget = () => {
+			for (const reference of references) reference.retarget();
+		};
+		if (references.some((reference) => reference.following)) this.#host.batch.within(retarget, BACKGROUND_CONTEXT);
 		else retarget();
 		for (const reference of references) if (this.#references.has(reference)) reference.moved();
 	}

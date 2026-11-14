@@ -6,7 +6,7 @@ import { StdioTransport } from "../src/transports/stdio.ts";
 const { spawn, terminateTree } = vi.hoisted(() => ({ spawn: vi.fn(), terminateTree: vi.fn() }));
 vi.mock("cross-spawn", () => ({ default: spawn }));
 vi.mock("node:child_process", async (original) => ({
-	...await original<typeof import("node:child_process")>(),
+	...(await original<typeof import("node:child_process")>()),
 	spawn: terminateTree,
 }));
 
@@ -93,34 +93,43 @@ test("stdio events preserve messages and errors while shutdown suppresses child 
 	expect(transport.pid).toBeUndefined();
 });
 
-test.skipIf(process.platform !== "win32")("closing an already-exited Windows peer sends EOF without terminating its tree", async () => {
-	const child = peer(new PassThrough(), 0);
-	const transport = new StdioTransport({ command: "controlled-peer" });
-	const closed = vi.fn();
-	transport.onClose(closed);
-	terminateTree.mockClear();
-	await transport.start();
-	await transport.close();
-	expect(child.stdin.writableEnded).toBe(true);
-	expect(terminateTree).not.toHaveBeenCalled();
-	child.emit("close", 0, null);
-	expect(closed).toHaveBeenCalledTimes(1);
-});
+test.skipIf(process.platform !== "win32")(
+	"closing an already-exited Windows peer sends EOF without terminating its tree",
+	async () => {
+		const child = peer(new PassThrough(), 0);
+		const transport = new StdioTransport({ command: "controlled-peer" });
+		const closed = vi.fn();
+		transport.onClose(closed);
+		terminateTree.mockClear();
+		await transport.start();
+		await transport.close();
+		expect(child.stdin.writableEnded).toBe(true);
+		expect(terminateTree).not.toHaveBeenCalled();
+		child.emit("close", 0, null);
+		expect(closed).toHaveBeenCalledTimes(1);
+	},
+);
 
-test.skipIf(process.platform !== "win32")("a failed Windows tree terminator does not prevent transport cleanup", async () => {
-	const child = peer(new PassThrough());
-	Object.assign(child, { pid: 12345 });
-	const transport = new StdioTransport({ command: "controlled-peer" });
-	const errors: Error[] = [];
-	transport.onError((error) => errors.push(error));
-	terminateTree.mockImplementationOnce(() => {
-		const process = new ChildProcess();
-		queueMicrotask(() => process.emit("error", new Error("taskkill unavailable")));
-		return process;
-	});
-	await transport.start();
-	await close(transport, child);
-	await new Promise<void>((resolve) => setImmediate(resolve));
-	expect(terminateTree).toHaveBeenCalledWith("taskkill", ["/pid", "12345", "/T", "/F"], { stdio: "ignore", windowsHide: true });
-	expect(errors).toEqual([]);
-});
+test.skipIf(process.platform !== "win32")(
+	"a failed Windows tree terminator does not prevent transport cleanup",
+	async () => {
+		const child = peer(new PassThrough());
+		Object.assign(child, { pid: 12345 });
+		const transport = new StdioTransport({ command: "controlled-peer" });
+		const errors: Error[] = [];
+		transport.onError((error) => errors.push(error));
+		terminateTree.mockImplementationOnce(() => {
+			const process = new ChildProcess();
+			queueMicrotask(() => process.emit("error", new Error("taskkill unavailable")));
+			return process;
+		});
+		await transport.start();
+		await close(transport, child);
+		await new Promise<void>((resolve) => setImmediate(resolve));
+		expect(terminateTree).toHaveBeenCalledWith("taskkill", ["/pid", "12345", "/T", "/F"], {
+			stdio: "ignore",
+			windowsHide: true,
+		});
+		expect(errors).toEqual([]);
+	},
+);

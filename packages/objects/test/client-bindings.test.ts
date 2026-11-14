@@ -5,7 +5,14 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { expect, expectTypeOf, it, vi } from "vitest";
 import { BACKGROUND_CONTEXT as context } from "../src/context/index.ts";
-import { constant, createHost, createLanguage, defineMessages, FALLBACK_THEMES, hostLanguage, hostKind,
+import {
+	constant,
+	createHost,
+	createLanguage,
+	defineMessages,
+	FALLBACK_THEMES,
+	hostLanguage,
+	hostKind,
 } from "../src/index.ts";
 import { HostProvider, useMessages, usePageState, watchStore } from "../src/react/index.ts";
 import { NO_TRANSLATIONS } from "../src/surfaces/translations.ts";
@@ -193,7 +200,10 @@ it("publishes a content-addressed browser bundle through real HTTP routing", asy
 it("returns separate failed surface outcomes while sharing the original build error", async () => {
 	const directory = await mkdtemp(join(tmpdir(), "axi-surface-failure-")),
 		host = createHost({ onError() {} }),
-		plugins = createPlugins({ roots: [], kinds: { web: { platform: "browser", hostPackages: [] } }, onError() {} }, context);
+		plugins = createPlugins(
+			{ roots: [], kinds: { web: { platform: "browser", hostPackages: [] } }, onError() {} },
+			context,
+		);
 	try {
 		const surface = webSurface(host, { plugins, entry: join(directory, "absent.ts"), page: () => "" });
 		expect(surface.built).toBeUndefined();

@@ -6,9 +6,15 @@ import type { TelemetryBatch, TelemetryRecorder } from "./recorder.ts";
 
 export type TelemetrySender = { send(partial: boolean): Promise<void>; stop(): void };
 
-function queue(recorder: TelemetryRecorder, limit: number, pending: (partial: boolean) => boolean,
-	release: () => void, deliver: (batch: TelemetryBatch) => Promise<unknown> | undefined): TelemetrySender {
-	let tail = Promise.resolve(), stopped = false;
+function queue(
+	recorder: TelemetryRecorder,
+	limit: number,
+	pending: (partial: boolean) => boolean,
+	release: () => void,
+	deliver: (batch: TelemetryBatch) => Promise<unknown> | undefined,
+): TelemetrySender {
+	let tail = Promise.resolve(),
+		stopped = false;
 	return {
 		send(partial) {
 			if (stopped) return Promise.resolve();
@@ -21,22 +27,50 @@ function queue(recorder: TelemetryRecorder, limit: number, pending: (partial: bo
 					recorder.ingest(batch);
 					return;
 				}
-				try { await sent; } catch {} finally { recorder.release(); }
+				try {
+					await sent;
+				} catch {
+				} finally {
+					recorder.release();
+				}
 			});
 			return tail;
 		},
-		stop() { stopped = true; release(); },
+		stop() {
+			stopped = true;
+			release();
+		},
 	};
 }
 
-export function sendPageTelemetry<P extends Principal>(host: Host<P>, recorder: TelemetryRecorder, context: Context): TelemetrySender {
+export function sendPageTelemetry<P extends Principal>(
+	host: Host<P>,
+	recorder: TelemetryRecorder,
+	context: Context,
+): TelemetrySender {
 	const held = host.hold(PageTelemetry, {}, context);
-	return queue(recorder, PAGE_BATCH_SPANS, () => recorder.queuedSpans > 0, () => held.release(), (batch) =>
-		held.state.value.kind === "live" ? held.ingest({ spans: batch.spans }, BACKGROUND_CONTEXT) : undefined);
+	return queue(
+		recorder,
+		PAGE_BATCH_SPANS,
+		() => recorder.queuedSpans > 0,
+		() => held.release(),
+		(batch) => (held.state.value.kind === "live" ? held.ingest({ spans: batch.spans }, BACKGROUND_CONTEXT) : undefined),
+	);
 }
-export function sendWorkerTelemetry<P extends Principal>(host: Host<P>, recorder: TelemetryRecorder, context: Context): TelemetrySender {
+export function sendWorkerTelemetry<P extends Principal>(
+	host: Host<P>,
+	recorder: TelemetryRecorder,
+	context: Context,
+): TelemetrySender {
 	const held = host.hold(WorkerTelemetry, {}, context);
-	return queue(recorder, WORKER_BATCH_ROWS, (partial) => recorder.pending(partial), () => held.release(), (batch) =>
-		held.state.value.kind === "live" && held.variant === "worker"
-			? held.ingest({ spans: batch.spans, metrics: batch.metrics.slice(0, WORKER_BATCH_ROWS) }, BACKGROUND_CONTEXT) : undefined);
+	return queue(
+		recorder,
+		WORKER_BATCH_ROWS,
+		(partial) => recorder.pending(partial),
+		() => held.release(),
+		(batch) =>
+			held.state.value.kind === "live" && held.variant === "worker"
+				? held.ingest({ spans: batch.spans, metrics: batch.metrics.slice(0, WORKER_BATCH_ROWS) }, BACKGROUND_CONTEXT)
+				: undefined,
+	);
 }

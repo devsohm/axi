@@ -48,25 +48,46 @@ export async function buildWorkerBase(entry: string, execArgv: readonly string[]
 		plugins: [workerSources(inputs), recordedSources(inputs)],
 	});
 	return new Snapshot(
-		result.outputFiles.map(output => ({ name: basename(output.path), bytes: output.contents })),
+		result.outputFiles.map((output) => ({ name: basename(output.path), bytes: output.contents })),
 		inputs,
 		dir,
 	);
 }
 
 export async function nodeBaseInputs(entry: string, conditions: readonly string[]): Promise<BaseInputs> {
-	const inputs = new Map<string, string>(), resolving = Symbol("static-import");
+	const inputs = new Map<string, string>(),
+		resolving = Symbol("static-import");
 	await build({
-		entryPoints: [entry], bundle: true, write: false, format: "esm", platform: "node",
-		mainFields: ["main"], conditions: [...conditions], tsconfigRaw: "{}", ignoreAnnotations: true, logLevel: "silent",
-		plugins: [{ name: "axi-static-inputs", setup(build) {
-			build.onResolve({ filter: /.*/ }, async args => {
-				if (args.kind === "entry-point" || args.pluginData === resolving || isBuiltin(args.path)) return;
-				const found = await build.resolve(args.path, { kind: args.kind, importer: args.importer, resolveDir: args.resolveDir, pluginData: resolving });
-				return found.errors.length || found.external || found.path.split(sep).includes("node_modules")
-					? { path: args.path, external: true } : found;
-			});
-		} }, recordedSources(inputs)],
+		entryPoints: [entry],
+		bundle: true,
+		write: false,
+		format: "esm",
+		platform: "node",
+		mainFields: ["main"],
+		conditions: [...conditions],
+		tsconfigRaw: "{}",
+		ignoreAnnotations: true,
+		logLevel: "silent",
+		plugins: [
+			{
+				name: "axi-static-inputs",
+				setup(build) {
+					build.onResolve({ filter: /.*/ }, async (args) => {
+						if (args.kind === "entry-point" || args.pluginData === resolving || isBuiltin(args.path)) return;
+						const found = await build.resolve(args.path, {
+							kind: args.kind,
+							importer: args.importer,
+							resolveDir: args.resolveDir,
+							pluginData: resolving,
+						});
+						return found.errors.length || found.external || found.path.split(sep).includes("node_modules")
+							? { path: args.path, external: true }
+							: found;
+					});
+				},
+			},
+			recordedSources(inputs),
+		],
 	});
 	return inputs;
 }
@@ -101,8 +122,10 @@ function workerSources(inputs: Map<string, string>): Plugin {
 			});
 			builder.onLoad({ filter: /\.(?:[cm]?[jt]s|[jt]sx)$/ }, async ({ path, namespace }) => {
 				if (namespace !== "file") return;
-				const bytes = await readRecorded(path, inputs), source = bytes.toString("utf8");
-				if (!/import\.meta|__dirname|__filename/.test(source)) return { contents: bytes, loader: loaders[extname(path)]! };
+				const bytes = await readRecorded(path, inputs),
+					source = bytes.toString("utf8");
+				if (!/import\.meta|__dirname|__filename/.test(source))
+					return { contents: bytes, loader: loaders[extname(path)]! };
 				const declarations = `var __axiSourceURL=${JSON.stringify(pathToFileURL(path).href)},__axiSourceDir=${JSON.stringify(dirname(path))},__axiSourceFile=${JSON.stringify(path)};`;
 				return { contents: declarations + source, loader: loaders[extname(path)]! };
 			});

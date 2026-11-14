@@ -114,13 +114,7 @@ export async function importInto(
 					if (missing.length) return { kind: "activate", owners: new Set(missing.map(ownerOf)) } as const;
 					const owners = await hostDataOwners(site.store, target, archive, context);
 					const counts = await coordinated(site, owners, target, context, (commit) =>
-						importHostData(
-							site.store,
-							archive,
-							{ target, existing, histories },
-							commit,
-							context,
-						),
+						importHostData(site.store, archive, { target, existing, histories }, commit, context),
 					);
 					return { kind: "done", counts } as const;
 				});

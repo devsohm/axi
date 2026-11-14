@@ -74,7 +74,10 @@ test("structured results become JSON only when a tool returned no content blocks
 test("HTTP authentication and session errors retain their public status when no body was supplied", () => {
 	const challenge = 'Bearer realm="private"';
 	expect(new McpAuthRequiredError(new Response(null, { headers: { "www-authenticate": challenge } }))).toMatchObject({
-		name: "McpAuthRequiredError", status: 401, body: "", wwwAuthenticate: challenge,
+		name: "McpAuthRequiredError",
+		status: 401,
+		body: "",
+		wwwAuthenticate: challenge,
 	});
 	expect(new McpSessionExpiredError()).toMatchObject({ name: "McpSessionExpiredError", status: 404, body: "" });
 });

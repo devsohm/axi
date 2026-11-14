@@ -57,7 +57,10 @@ export class Route {
 		if (!entry) {
 			const made: Entry = {
 				address,
-				path: new Path((event) => this.#changed(made, event), () => made.suspended),
+				path: new Path(
+					(event) => this.#changed(made, event),
+					() => made.suspended,
+				),
 				resolving: false,
 				suspended: false,
 				failure: undefined,
@@ -112,7 +115,13 @@ export class Route {
 	async #connect(entry: Entry, trigger?: TelemetrySpan): Promise<void> {
 		entry.resolving = true;
 		const adapter = this.#host.telemetry;
-		const span = untraced(adapter) ? undefined : new OpenSpan(adapter, "objects.resolve", { "objects.host": this.#host.spanHost, kind: this.kind, address: entry.address.key.slice(0, 256) });
+		const span = untraced(adapter)
+			? undefined
+			: new OpenSpan(adapter, "objects.resolve", {
+					"objects.host": this.#host.spanHost,
+					kind: this.kind,
+					address: entry.address.key.slice(0, 256),
+				});
 		entry.span = span;
 		if (span && trigger) {
 			span.span.addLink({ context: trigger });
@@ -127,7 +136,10 @@ export class Route {
 		};
 		let result: Awaited<ReturnType<RouteOptions<Principal, KindShape>["resolve"]>>;
 		try {
-			result = await this.#options.resolve(entry.address, span ? withTelemetry(span.span, this.#context) : this.#context);
+			result = await this.#options.resolve(
+				entry.address,
+				span ? withTelemetry(span.span, this.#context) : this.#context,
+			);
 		} catch (error) {
 			finish(error);
 			entry.resolving = false;

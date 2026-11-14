@@ -92,7 +92,7 @@ it("keeps equivalent owners' credentials and revokes only the file credential wh
 		next = await start(nextOwner);
 	const replacement = (await readFile(next.ownerTokenFile, "utf8")).trim();
 	expect(replacement).not.toBe(token);
-	 if (process.platform !== "win32") expect((await stat(next.ownerTokenFile)).mode & 0o777).toBe(0o600);
+	if (process.platform !== "win32") expect((await stat(next.ownerTokenFile)).mode & 0o777).toBe(0o600);
 	await next.host.root(async (ctx) => {
 		const sessions = await ctx.get(SignIns, {});
 		expect(await sessions.verify(token, ctx)).toBeNull();

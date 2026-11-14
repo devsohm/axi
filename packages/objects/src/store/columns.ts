@@ -25,11 +25,7 @@ export type ColumnTypeOf<S> = S extends TOptional<infer Inner>
 					: S extends TBoolean
 						? "bool"
 						: "json";
-export type ValueOf<S> = S extends TOptional<infer Inner>
-	? ValueOf<Inner>
-	: S extends TSchema
-		? Static<S>
-		: never;
+export type ValueOf<S> = S extends TOptional<infer Inner> ? ValueOf<Inner> : S extends TSchema ? Static<S> : never;
 type Required<C extends Columns> = {
 	[K in keyof C]: C[K] extends TOptional<TSchema> ? never : K;
 }[keyof C];
@@ -78,26 +74,19 @@ export type ColumnRecord = {
 };
 export const COLUMN_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
 export function checkColumnName(name: string, what: string): void {
-	if (!COLUMN_NAME.test(name))
-		throw new Error(
-			`${what}: column "${name}": expected [A-Za-z_][A-Za-z0-9_]*`,
-		);
+	if (!COLUMN_NAME.test(name)) throw new Error(`${what}: column "${name}": expected [A-Za-z_][A-Za-z0-9_]*`);
 }
 export function describeColumns(columns: Columns, table: string): Column[] {
 	const seen = new Set<string>();
 	return Object.entries(columns).map(([name, schema]) => {
 		checkColumnName(name, table);
 		const folded = name.toLowerCase();
-		if (seen.has(folded))
-			throw new Error(
-				`${table}: column "${name}" differs from another only in case`,
-			);
+		if (seen.has(folded)) throw new Error(`${table}: column "${name}" differs from another only in case`);
 		seen.add(folded);
 		const what = `${table}: column "${name}"`;
 		const optional = Object.hasOwn(schema, "~optional");
 		const json: unknown = Reflect.get(schema, "json");
-		if (json instanceof JsonColumn)
-			return { name, type: "json", optional, json };
+		if (json instanceof JsonColumn) return { name, type: "json", optional, json };
 		const host: unknown = Reflect.get(schema, "host");
 		if (host instanceof HostColumn) {
 			if (optional) throw new Error(`${what}: a host(...) column is not opt(...)`);
@@ -105,32 +94,21 @@ export function describeColumns(columns: Columns, table: string): Column[] {
 		}
 		const type = scalarType(Reflect.get(schema, "type"), what);
 		for (const key of Object.keys(schema))
-			if (key !== "type" && key !== "default")
-				throw new Error(`${what}: "${key}" is not supported in a table column`);
+			if (key !== "type" && key !== "default") throw new Error(`${what}: "${key}" is not supported in a table column`);
 		const value: unknown = Reflect.get(schema, "default");
-		if (value === undefined)
-			return { name, type, optional, default: undefined };
+		if (value === undefined) return { name, type, optional, default: undefined };
 		if (optional) throw new Error(`${what}: an opt(...) column has no default`);
 		if (
-			(typeof value === "string" &&
-				type === "str" &&
-				storedText(value, what) === value) ||
-			(type === "int" &&
-				typeof value === "number" &&
-				Number.isSafeInteger(value)) ||
+			(typeof value === "string" && type === "str" && storedText(value, what) === value) ||
+			(type === "int" && typeof value === "number" && Number.isSafeInteger(value)) ||
 			(type === "num" && typeof value === "number" && Number.isFinite(value)) ||
 			(type === "bool" && typeof value === "boolean")
 		)
 			return { name, type, optional, default: value };
-		throw new Error(
-			`${what}: the default ${JSON.stringify(value)} is not a ${type} value`,
-		);
+		throw new Error(`${what}: the default ${JSON.stringify(value)} is not a ${type} value`);
 	});
 }
-function scalarType(
-	value: unknown,
-	what: string,
-): "str" | "int" | "num" | "bool" {
+function scalarType(value: unknown, what: string): "str" | "int" | "num" | "bool" {
 	switch (String(value)) {
 		case "string":
 			return "str";
@@ -141,9 +119,7 @@ function scalarType(
 		case "boolean":
 			return "bool";
 		default:
-			throw new Error(
-				`${what}: expected str(), int(), num(), bool(), opt(...) or json(...)`,
-			);
+			throw new Error(`${what}: expected str(), int(), num(), bool(), opt(...) or json(...)`);
 	}
 }
 export function columnRecord(column: Column): ColumnRecord {

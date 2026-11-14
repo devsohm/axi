@@ -20,6 +20,13 @@ export function validateIndividualCatalog(catalog: unknown): void {
 	assertExactModelIds(
 		"qwen-token-plan-individual",
 		individualModels,
-		Object.keys(models).filter((id) => individualModels.has(id) && record(models[id]) && record(models[id].capabilities) && record(models[id].capabilities.tools) && models[id].capabilities.tools.supported === true),
+		Object.keys(models).filter(
+			(id) =>
+				individualModels.has(id) &&
+				record(models[id]) &&
+				record(models[id].capabilities) &&
+				record(models[id].capabilities.tools) &&
+				models[id].capabilities.tools.supported === true,
+		),
 	);
 }

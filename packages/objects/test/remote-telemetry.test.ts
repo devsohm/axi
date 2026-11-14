@@ -87,7 +87,7 @@ test.each([
 				const pending = reference.wait(withAbortSignal(controller.signal, context));
 				await entered.promise;
 				controller.abort();
-					await expect(pending).rejects.toBe(controller.signal.reason);
+				await expect(pending).rejects.toBe(controller.signal.reason);
 			} finally {
 				reference.release();
 			}

@@ -5,22 +5,10 @@ export interface WebSocketLike {
 	binaryType: string;
 	send(data: Uint8Array<ArrayBuffer>): void;
 	close(): void;
-	addEventListener(
-		type: "open" | "close" | "error",
-		listener: () => void,
-	): void;
-	addEventListener(
-		type: "message",
-		listener: (event: { readonly data: unknown }) => void,
-	): void;
-	removeEventListener(
-		type: "open" | "close" | "error",
-		listener: () => void,
-	): void;
-	removeEventListener(
-		type: "message",
-		listener: (event: { readonly data: unknown }) => void,
-	): void;
+	addEventListener(type: "open" | "close" | "error", listener: () => void): void;
+	addEventListener(type: "message", listener: (event: { readonly data: unknown }) => void): void;
+	removeEventListener(type: "open" | "close" | "error", listener: () => void): void;
+	removeEventListener(type: "message", listener: (event: { readonly data: unknown }) => void): void;
 }
 
 class WebSocketEnd extends LinkEnd {
@@ -32,8 +20,7 @@ class WebSocketEnd extends LinkEnd {
 		for (const message of pending) this.send(message);
 	};
 	readonly #received = (event: { readonly data: unknown }): void => {
-		if (event.data instanceof ArrayBuffer)
-			this.deliver(new Uint8Array(event.data));
+		if (event.data instanceof ArrayBuffer) this.deliver(new Uint8Array(event.data));
 		else this.close();
 	};
 	readonly #failed = (): void => this.#detach();

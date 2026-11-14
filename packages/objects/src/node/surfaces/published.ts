@@ -85,7 +85,10 @@ export class PublishedScripts<P extends Principal> {
 			encoder = new TextEncoder();
 		for (const [name, item] of this.#current) {
 			const stem = `${this.#prefix}plugin/${name.replace("/", "~")}.${item.digest}`;
-			const css = item.css === undefined ? undefined : `${stem}.${createHash("sha256").update(item.css).digest("hex").slice(0, 16)}.css`;
+			const css =
+				item.css === undefined
+					? undefined
+					: `${stem}.${createHash("sha256").update(item.css).digest("hex").slice(0, 16)}.css`;
 			files.set(stem + ".js", { mime: JAVASCRIPT, bytes: encoder.encode(item.text) });
 			if (css !== undefined) files.set(css, { mime: CSS, bytes: encoder.encode(item.css!) });
 			plugins.push({

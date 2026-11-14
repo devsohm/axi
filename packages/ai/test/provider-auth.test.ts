@@ -108,16 +108,21 @@ test("Anthropic selects stored credentials before bearer, OAuth and API-key envi
 	const auth = required(anthropicProvider().auth.apiKey);
 	const env = { ANTHROPIC_AUTH_TOKEN: "bearer", ANTHROPIC_OAUTH_TOKEN: "oauth", ANTHROPIC_API_KEY: "key" };
 	expect(await auth.resolve(input(env, { type: "api_key", key: "stored", env: { region: "local" } }))).toEqual({
-		auth: { apiKey: "stored" }, env: { region: "local" }, source: "stored credential",
+		auth: { apiKey: "stored" },
+		env: { region: "local" },
+		source: "stored credential",
 	});
 	expect(await auth.resolve(input(env))).toEqual({
-		auth: { headers: { Authorization: "Bearer bearer" } }, source: "ANTHROPIC_AUTH_TOKEN",
+		auth: { headers: { Authorization: "Bearer bearer" } },
+		source: "ANTHROPIC_AUTH_TOKEN",
 	});
 	expect(await auth.resolve(input({ ...env, ANTHROPIC_AUTH_TOKEN: "" }))).toEqual({
-		auth: { apiKey: "oauth" }, source: "ANTHROPIC_OAUTH_TOKEN",
+		auth: { apiKey: "oauth" },
+		source: "ANTHROPIC_OAUTH_TOKEN",
 	});
 	expect(await auth.resolve(input({ ANTHROPIC_API_KEY: "key" }))).toEqual({
-		auth: { apiKey: "key" }, source: "ANTHROPIC_API_KEY",
+		auth: { apiKey: "key" },
+		source: "ANTHROPIC_API_KEY",
 	});
 });
 
@@ -133,16 +138,26 @@ test("Anthropic federation requires its identity settings and preserves optional
 		delete incomplete[field];
 		expect(await auth.resolve(input(incomplete))).toBeUndefined();
 	}
-	for (const configured of [env, { ...env, ANTHROPIC_SERVICE_ACCOUNT_ID: "service", ANTHROPIC_WORKSPACE_ID: "workspace" }])
+	for (const configured of [
+		env,
+		{ ...env, ANTHROPIC_SERVICE_ACCOUNT_ID: "service", ANTHROPIC_WORKSPACE_ID: "workspace" },
+	])
 		expect(await auth.resolve(input(configured))).toEqual({
-			auth: {}, env: configured, source: "workload identity federation",
+			auth: {},
+			env: configured,
+			source: "workload identity federation",
 		});
 });
 
 test.each([
-	"ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_OAUTH_TOKEN", "ANTHROPIC_API_KEY",
-	"ANTHROPIC_FEDERATION_RULE_ID", "ANTHROPIC_ORGANIZATION_ID", "ANTHROPIC_IDENTITY_TOKEN_FILE",
-	"ANTHROPIC_SERVICE_ACCOUNT_ID", "ANTHROPIC_WORKSPACE_ID",
+	"ANTHROPIC_AUTH_TOKEN",
+	"ANTHROPIC_OAUTH_TOKEN",
+	"ANTHROPIC_API_KEY",
+	"ANTHROPIC_FEDERATION_RULE_ID",
+	"ANTHROPIC_ORGANIZATION_ID",
+	"ANTHROPIC_IDENTITY_TOKEN_FILE",
+	"ANTHROPIC_SERVICE_ACCOUNT_ID",
+	"ANTHROPIC_WORKSPACE_ID",
 ])("Anthropic cancellation during %s lookup prevents credentials being adopted", async (field) => {
 	const auth = required(anthropicProvider().auth.apiKey);
 	const controller = new AbortController();
@@ -153,16 +168,18 @@ test.each([
 		ANTHROPIC_IDENTITY_TOKEN_FILE: "/synthetic-identity",
 		[field]: "value",
 	};
-	await expect(auth.resolve({
-		signal: controller.signal,
-		ctx: {
-			env: async (name) => {
-				if (name === field) controller.abort(reason);
-				return env[name];
+	await expect(
+		auth.resolve({
+			signal: controller.signal,
+			ctx: {
+				env: async (name) => {
+					if (name === field) controller.abort(reason);
+					return env[name];
+				},
+				fileExists: async () => false,
 			},
-			fileExists: async () => false,
-		},
-	})).rejects.toBe(reason);
+		}),
+	).rejects.toBe(reason);
 });
 
 test("Vertex supports keys, ADC and service-account setup with cancellation during environment lookup", async () => {

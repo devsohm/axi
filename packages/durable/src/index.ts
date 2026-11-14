@@ -143,4 +143,10 @@ export {
 	type CompactionFailure,
 } from "./harness/live.ts";
 
-export { ConversationTranscript, type TranscriptItem, type TranscriptView, type EntryLoader, type ConversationTranscriptOptions } from "./harness/transcript.ts";
+export {
+	ConversationTranscript,
+	type TranscriptItem,
+	type TranscriptView,
+	type EntryLoader,
+	type ConversationTranscriptOptions,
+} from "./harness/transcript.ts";

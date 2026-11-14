@@ -35,10 +35,7 @@ export type WebSurface<P extends Principal> = {
 	pageAssets(): Promise<PageAssets | undefined>;
 	base(): Promise<string | undefined>;
 };
-export function webSurface<P extends Principal>(
-	server: Host<P>,
-	options: WebSurfaceOptions,
-): WebSurface<P> {
+export function webSurface<P extends Principal>(server: Host<P>, options: WebSurfaceOptions): WebSurface<P> {
 	const building = new SurfaceBuild(
 		"web",
 		"browser",
@@ -109,21 +106,20 @@ function assetsFor(base: BaseBundle, set: ScriptSet): PageAssets {
 		plugins: set.combined,
 		styles: [
 			...(base.style === undefined ? [] : [base.style]),
-			...set.plugins.flatMap((entry) => entry.css === undefined ? [] : [entry.css]),
+			...set.plugins.flatMap((entry) => (entry.css === undefined ? [] : [entry.css])),
 		],
 	};
 }
 export function pageScripts(assets: PageAssets, nonce: string): string {
 	return [
-			`<script nonce="${nonce}">${assets.bootstrap}</script>`,
-			...assets.styles.map((href) => `<link rel="stylesheet" href="${href}">`),
-			`<script defer src="${assets.plugins}"></script>`,
-			`<script defer src="${assets.script}"></script>`,
-		]
-		.join("\n");
+		`<script nonce="${nonce}">${assets.bootstrap}</script>`,
+		...assets.styles.map((href) => `<link rel="stylesheet" href="${href}">`),
+		`<script defer src="${assets.plugins}"></script>`,
+		`<script defer src="${assets.script}"></script>`,
+	].join("\n");
 }
 export function pageBootstrap(base: string, set: ScriptSet): string {
-	const styles = Object.fromEntries(set.plugins.flatMap(({ name, css }) => css === undefined ? [] : [[name, css]]));
+	const styles = Object.fromEntries(set.plugins.flatMap(({ name, css }) => (css === undefined ? [] : [[name, css]])));
 	const data = JSON.stringify({ base, styles, links: {}, queued: [] }).replaceAll("<", "\\u003c");
 	return `globalThis.objectsPage=${data};objectsPage.watching=function(event){const link=event.target;if(link&&link.tagName==="LINK")objectsPage.links[link.getAttribute("href")]=event.type};document.addEventListener("load",objectsPage.watching,true);document.addEventListener("error",objectsPage.watching,true);globalThis.${REGISTER}=function(p,d,f){objectsPage.queued.push([p,d,f])};`;
 }

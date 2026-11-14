@@ -7,7 +7,12 @@ const turn = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 test("normal watch endings reuse their metadata across JSON and native handles", async () => {
 	for (const kind of ["stopped", "aborted", "ended"] as const) {
 		const watches = [Watch, Watch, NativeWatch].map(
-			(Constructor) => new Constructor(null, () => {}, () => {}),
+			(Constructor) =>
+				new Constructor(
+					null,
+					() => {},
+					() => {},
+				),
 		);
 		for (const watch of watches) {
 			if (kind === "stopped") void watch.stop();

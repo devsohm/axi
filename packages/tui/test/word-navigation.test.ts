@@ -48,7 +48,9 @@ it("word navigation handles empty input, whitespace-only input and punctuation r
 });
 
 it("custom word segments retain ASCII punctuation boundaries and permit atomic markers", () => {
-	const segment: WordNavigationOptions["segment"] = (text) => [{ segment: text, input: text, index: 0, isWordLike: true }];
+	const segment: WordNavigationOptions["segment"] = (text) => [
+		{ segment: text, input: text, index: 0, isWordLike: true },
+	];
 	expect(findWordForward("alpha.beta", 0, { segment })).toBe(5);
 	expect(findWordBackward("alpha.beta", 10, { segment })).toBe(6);
 	const atomic = { segment, isAtomicSegment: (part: string) => part === "[paste]" };

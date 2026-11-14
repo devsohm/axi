@@ -75,9 +75,12 @@ test.each(bedrockSources)("Bedrock ambient source %j signals authentication with
 });
 
 test("an incomplete Bedrock key pair does not report authentication", () => {
-	const incomplete: Record<string, string>[] = [{}, { AWS_ACCESS_KEY_ID: "access" }, { AWS_SECRET_ACCESS_KEY: "secret" }];
-	for (const env of incomplete)
-		expect(getEnvApiKey("amazon-bedrock", env)).toBeUndefined();
+	const incomplete: Record<string, string>[] = [
+		{},
+		{ AWS_ACCESS_KEY_ID: "access" },
+		{ AWS_SECRET_ACCESS_KEY: "secret" },
+	];
+	for (const env of incomplete) expect(getEnvApiKey("amazon-bedrock", env)).toBeUndefined();
 });
 
 test("Vertex needs an existing credential path, project and location unless an API key is supplied", async () => {

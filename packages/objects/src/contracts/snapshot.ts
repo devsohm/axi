@@ -3,16 +3,24 @@ import type { TSchema } from "./schema.ts";
 
 export type Snapshot = { readonly schema: TSchema; readonly normal: JsonValue; readonly bytes: boolean };
 const annotations = new Set(["title", "description", "examples", "$comment", "deprecated"]);
-const dataKeywords = new Set(("const default $ref $id pattern format minLength maxLength minimum maximum exclusiveMinimum exclusiveMaximum " +
-	"multipleOf minItems maxItems uniqueItems minProperties maxProperties readOnly writeOnly").split(" "));
+const dataKeywords = new Set(
+	(
+		"const default $ref $id pattern format minLength maxLength minimum maximum exclusiveMinimum exclusiveMaximum " +
+		"multipleOf minItems maxItems uniqueItems minProperties maxProperties readOnly writeOnly"
+	).split(" "),
+);
 const schemaKeywords = new Set(["additionalProperties", "additionalItems"]);
 const listKeywords = new Set(["anyOf", "allOf", "prefixItems"]);
 const mapKeywords = new Set(["properties", "patternProperties", "$defs"]);
 const types = new Set(["null", "boolean", "number", "integer", "string", "array", "object", "bytes"]);
 type Pair = readonly [schema: unknown, normal: JsonValue, bytes: boolean];
 function plain(value: unknown): value is Record<string, unknown> {
-	return value !== null && typeof value === "object" && !Array.isArray(value) &&
-		[null, Object.prototype].includes(Object.getPrototypeOf(value));
+	return (
+		value !== null &&
+		typeof value === "object" &&
+		!Array.isArray(value) &&
+		[null, Object.prototype].includes(Object.getPrototypeOf(value))
+	);
 }
 function entries(value: object, path: string): [string, unknown][] {
 	const result: [string, unknown][] = [];
@@ -27,12 +35,17 @@ function entries(value: object, path: string): [string, unknown][] {
 		}
 		result.push([key, descriptor.value]);
 	}
-	return result.sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0);
+	return result.sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
 }
 function sortedData(value: JsonValue): JsonValue {
 	if (!value || typeof value !== "object") return value;
-	return Array.isArray(value) ? value.map(sortedData)
-		: Object.fromEntries(Object.keys(value).sort().map((key) => [key, sortedData(value[key]!)]));
+	return Array.isArray(value)
+		? value.map(sortedData)
+		: Object.fromEntries(
+				Object.keys(value)
+					.sort()
+					.map((key) => [key, sortedData(value[key]!)]),
+			);
 }
 function copyData(raw: unknown, path: string): Pair {
 	if (!isJsonValue(raw)) throw new Error(`${path}: expected JSON data (finite numbers, plain objects and arrays)`);
@@ -48,7 +61,8 @@ function snapshot(source: unknown, path: string, closed: boolean): Snapshot {
 		if (ancestors.has(raw)) throw new Error(`${at}: cyclic schema; use $defs and $ref for recursion`);
 		const bytes = raw.type === "bytes";
 		ancestors.add(raw);
-		const owned: [string, unknown][] = [], normal: [string, JsonValue][] = [];
+		const owned: [string, unknown][] = [],
+			normal: [string, JsonValue][] = [];
 		let containsBytes = bytes;
 		for (const [key, value] of entries(raw, at)) {
 			if (bytes && !annotations.has(key) && !["type", "minLength", "maxLength"].includes(key))
@@ -63,11 +77,17 @@ function snapshot(source: unknown, path: string, closed: boolean): Snapshot {
 			} else if (key === "items") copied = node(value, next);
 			else if (mapKeywords.has(key)) {
 				if (!plain(value)) throw new Error(`${next}: expected an object of schemas`);
-			const fields = entries(value, next).map(([name, child]) => [name, node(child, `${next}.${name}`, key === "properties")] as const);
-				copied = [Object.fromEntries(fields.map(([name, result]) => [name, result[0]])),
-					Object.fromEntries(fields.map(([name, result]) => [name, result[1]])), fields.some(([, result]) => result[2])];
+				const fields = entries(value, next).map(
+					([name, child]) => [name, node(child, `${next}.${name}`, key === "properties")] as const,
+				);
+				copied = [
+					Object.fromEntries(fields.map(([name, result]) => [name, result[0]])),
+					Object.fromEntries(fields.map(([name, result]) => [name, result[1]])),
+					fields.some(([, result]) => result[2]),
+				];
 			} else if (key === "type") {
-				if (typeof value !== "string" || !types.has(value)) throw new Error(`${next}: unsupported type ${JSON.stringify(value)}`);
+				if (typeof value !== "string" || !types.has(value))
+					throw new Error(`${next}: unsupported type ${JSON.stringify(value)}`);
 				copied = [value, value, false];
 			} else if (key === "required") {
 				if (!Array.isArray(value) || !value.every((name) => typeof name === "string"))
@@ -77,7 +97,9 @@ function snapshot(source: unknown, path: string, closed: boolean): Snapshot {
 			} else if (key === "enum") {
 				const [, data] = copyData(value, next);
 				if (!Array.isArray(data)) throw new Error(`${next}: expected an array`);
-				data.sort((a, b) => JSON.stringify(a) < JSON.stringify(b) ? -1 : JSON.stringify(a) > JSON.stringify(b) ? 1 : 0);
+				data.sort((a, b) =>
+					JSON.stringify(a) < JSON.stringify(b) ? -1 : JSON.stringify(a) > JSON.stringify(b) ? 1 : 0,
+				);
 				copied = [data, data, false];
 			} else if (dataKeywords.has(key) || annotations.has(key)) copied = copyData(value, next);
 			else throw new Error(`${at}: unsupported keyword "${key}"`);
@@ -87,8 +109,12 @@ function snapshot(source: unknown, path: string, closed: boolean): Snapshot {
 		}
 		ancestors.delete(raw);
 		const schema = Object.fromEntries(owned);
-		if (closed && (schema.type === "object" || "properties" in schema) &&
-			!("patternProperties" in schema && !("properties" in schema)) && schema.additionalProperties !== false)
+		if (
+			closed &&
+			(schema.type === "object" || "properties" in schema) &&
+			!("patternProperties" in schema && !("properties" in schema)) &&
+			schema.additionalProperties !== false
+		)
 			throw new Error(`${at}: argument objects must be closed (additionalProperties: false)`);
 		if (bytes) {
 			for (const value of [schema.minLength, schema.maxLength])
@@ -100,5 +126,9 @@ function snapshot(source: unknown, path: string, closed: boolean): Snapshot {
 	const [schema, normal, bytes] = node(source, path);
 	return { schema: schema as TSchema, normal, bytes };
 }
-export function snapshotSchema(source: unknown, path: string): Snapshot { return snapshot(source, path, false); }
-export function snapshotArguments(source: unknown, path: string): Snapshot { return snapshot(source, path, true); }
+export function snapshotSchema(source: unknown, path: string): Snapshot {
+	return snapshot(source, path, false);
+}
+export function snapshotArguments(source: unknown, path: string): Snapshot {
+	return snapshot(source, path, true);
+}

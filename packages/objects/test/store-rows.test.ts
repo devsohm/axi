@@ -9,9 +9,18 @@ import { RowCodec } from "../src/store/rows.ts";
 describe("stored rows", () => {
 	it("preserves thrown migration causes and leaves an absent cause absent", () => {
 		for (const cause of [undefined, null, false, 0, "bad", new Error("migration failed")]) {
-			const column = json(str(), { version: 2, migrate() { throw cause } });
+			const column = json(str(), {
+				version: 2,
+				migrate() {
+					throw cause;
+				},
+			});
 			let failure: unknown;
-			try { column.json.read('"old"', 1, "notes.title", context) } catch (error) { failure = error }
+			try {
+				column.json.read('"old"', 1, "notes.title", context);
+			} catch (error) {
+				failure = error;
+			}
 			expect(failure).toMatchObject({ code: "unavailable", message: "notes.title: migrate from version 1 threw" });
 			if (!(failure instanceof Error)) throw new Error("Expected a migration error");
 			expect(Object.hasOwn(failure, "cause")).toBe(cause !== undefined);
@@ -56,27 +65,17 @@ describe("stored rows", () => {
 	});
 	it("rejects malformed writes during staging, without schema-walking valid JSON cells", () => {
 		const rows = new RowCodec(
-			describeColumns(
-				{ id: str(), meta: json(obj({ n: int() }), { version: 1 }) },
-				"items",
-			),
+			describeColumns({ id: str(), meta: json(obj({ n: int() }), { version: 1 }) }, "items"),
 			["id"],
 			"items",
 		);
-		expect(() => rows.put({ id: "a", meta: {}, extra: 1 }, 1)).toThrow(
-			'unknown column "extra"',
-		);
+		expect(() => rows.put({ id: "a", meta: {}, extra: 1 }, 1)).toThrow('unknown column "extra"');
 		expect(() => rows.put({ id: "a\0", meta: {} }, 1)).toThrow("NUL");
 		expect(() => rows.key({}, "get")).toThrow("is missing");
 		expect(() => rows.put({ id: "a", meta: { n: 1n } }, 1)).toThrow(
 			expect.objectContaining({ code: "invalid", reason: "args" }),
 		);
-		expect(rows.put({ id: "a", meta: {} }, 1).params).toEqual([
-			"a",
-			"{}",
-			1,
-			1,
-		]);
+		expect(rows.put({ id: "a", meta: {} }, 1).params).toEqual(["a", "{}", 1, 1]);
 	});
 	it("claims tables and document namespaces by owner and releases all of one owner's claims", () => {
 		const claims = new Claims();
@@ -88,9 +87,7 @@ describe("stored rows", () => {
 		claims.release(one);
 		claims.table("app:items", two);
 		const unlock = claims.lock();
-		expect(() => claims.documents("app", "session", two)).toThrow(
-			"while a batch applies",
-		);
+		expect(() => claims.documents("app", "session", two)).toThrow("while a batch applies");
 		unlock();
 		claims.release(two);
 		expect(claims.held).toBe(false);

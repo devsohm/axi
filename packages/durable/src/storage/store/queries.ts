@@ -8,30 +8,20 @@ type RecordRow = {
 	readonly record$v?: number;
 	readonly commit_seq?: number;
 };
-export type Condition = readonly [
-	string,
-	"eq" | "gt" | "lt" | "gte" | "lte",
-	SqliteValue,
-];
+export type Condition = readonly [string, "eq" | "gt" | "lt" | "gte" | "lte", SqliteValue];
 export class TableQueries {
 	readonly #table: OwnerTable;
-	readonly #read:
-		| ((text: string, version: number, context: Context) => unknown)
-		| undefined;
+	readonly #read: ((text: string, version: number, context: Context) => unknown) | undefined;
 	readonly #columns: readonly string[];
 	readonly #byId: string;
 	readonly #compiled = new Map<string, string>();
 	constructor(table: OwnerTable, byIdExtra: readonly string[] = []) {
 		this.#table = table;
-		this.#read =
-			table.jsonVersion("record") > 1 ? table.reader("record") : undefined;
+		this.#read = table.jsonVersion("record") > 1 ? table.reader("record") : undefined;
 		this.#columns = this.#read ? ["record", "record$v"] : ["record"];
 		this.#byId = table.prepareGet([...this.#columns, ...byIdExtra]);
 	}
-	byId(
-		executor: Pick<SqliteExecutor, "get">,
-		id: number,
-	): Promise<RecordRow | undefined> {
+	byId(executor: Pick<SqliteExecutor, "get">, id: number): Promise<RecordRow | undefined> {
 		return executor.get<RecordRow>(this.#byId, id);
 	}
 	select(
@@ -57,26 +47,13 @@ export class TableQueries {
 		);
 	}
 	record<T>(row: RecordRow, context: Context): T {
-		return (
-			this.#read
-				? this.#read(row.record, row.record$v!, context)
-				: JSON.parse(row.record)
-		) as T;
+		return (this.#read ? this.#read(row.record, row.record$v!, context) : JSON.parse(row.record)) as T;
 	}
 	records<T>(rows: readonly RecordRow[], into: T[], context: Context): void {
 		const read = this.#read;
-		for (const row of rows)
-			into.push(
-				(read
-					? read(row.record, row.record$v!, context)
-					: JSON.parse(row.record)) as T,
-			);
+		for (const row of rows) into.push((read ? read(row.record, row.record$v!, context) : JSON.parse(row.record)) as T);
 	}
-	#sql(
-		conditions: readonly Condition[],
-		direction: "ascending" | "descending",
-		first: boolean,
-	): string {
+	#sql(conditions: readonly Condition[], direction: "ascending" | "descending", first: boolean): string {
 		const key = `${first ? "first" : "many"} ${direction}${conditions.map(([name, op]) => ` ${name} ${op}`).join("")}`;
 		const cached = this.#compiled.get(key);
 		if (cached !== undefined) return cached;
@@ -94,9 +71,7 @@ export class TableQueries {
 					return { lte: [name, 0] };
 			}
 		});
-		const where: WhereNode | undefined = nodes.length
-				? { and: nodes }
-				: undefined,
+		const where: WhereNode | undefined = nodes.length ? { and: nodes } : undefined,
 			order: Order = {
 				columns: ["id"],
 				direction: direction === "ascending" ? "asc" : "desc",
@@ -123,11 +98,7 @@ export function storageQueries(tables: CommitTables): StorageQueries {
 		tasks: new TableQueries(tables.tasks),
 		submissions: new TableQueries(tables.submissions),
 		latestHead: {
-			any: tables.entryHeads.prepareFirst(
-				["id"],
-				{ eq: ["conversation_id", 0] },
-				descending,
-			),
+			any: tables.entryHeads.prepareFirst(["id"], { eq: ["conversation_id", 0] }, descending),
 			atOrBefore: tables.entryHeads.prepareFirst(
 				["id"],
 				{ and: [{ eq: ["conversation_id", 0] }, { lte: ["id", 0] }] },

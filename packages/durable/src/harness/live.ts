@@ -106,12 +106,17 @@ export const LiveDoc = defineDoc<LiveState>({
 	history: "latest",
 	fork: "initial",
 	initial: () => ({}),
-	migrate: value => {
+	migrate: (value) => {
 		const state = value as LiveState;
-		const renamed = <T>(item: T): T => Object.fromEntries(Object.entries(item as object).map(([key, entry]) => [key === "reason" ? "trigger" : key, entry])) as T;
+		const renamed = <T>(item: T): T =>
+			Object.fromEntries(
+				Object.entries(item as object).map(([key, entry]) => [key === "reason" ? "trigger" : key, entry]),
+			) as T;
 		return {
 			...state,
-			...(state.run === undefined ? {} : { run: { ...state.run, turns: typeof state.run.turns === "number" ? state.run.turns : 0 } }),
+			...(state.run === undefined
+				? {}
+				: { run: { ...state.run, turns: typeof state.run.turns === "number" ? state.run.turns : 0 } }),
 			...(state.compactions === undefined ? {} : { compactions: state.compactions.map(renamed) }),
 			...(state.compactionFailure === undefined ? {} : { compactionFailure: renamed(state.compactionFailure) }),
 		};
@@ -128,9 +133,19 @@ export function endRun(tx: Tx, live: Draft<LiveState>, taskId: TaskId, end: RunE
 			for (const input of run.inputs) tx.settleSubmission(input, { status: "done", answer: end.answer });
 		} else if (run.afterRun === undefined) {
 			const { reason, detail } = end;
-			const settlement = end.settlement ?? { status: "unanswered", reason, ...(detail === undefined ? {} : { detail }) };
+			const settlement = end.settlement ?? {
+				status: "unanswered",
+				reason,
+				...(detail === undefined ? {} : { detail }),
+			};
 			for (const input of run.inputs) tx.settleSubmission(input, settlement);
-			live.runFailure = { taskId, inputs: [...run.inputs], reason, ...(detail === undefined ? {} : { detail }), ...(run.first === undefined ? {} : { first: run.first }) };
+			live.runFailure = {
+				taskId,
+				inputs: [...run.inputs],
+				reason,
+				...(detail === undefined ? {} : { detail }),
+				...(run.first === undefined ? {} : { first: run.first }),
+			};
 		}
 		delete live.run;
 	}
@@ -235,7 +250,8 @@ export async function settleSchedulerOutcome(
 			return;
 		}
 		const detail = outcome.status === "faulted" ? outcome.error.detail : undefined;
-		const cutOff = detail !== null && typeof detail === "object" && "reason" in detail && detail.reason === "restart_limit";
+		const cutOff =
+			detail !== null && typeof detail === "object" && "reason" in detail && detail.reason === "restart_limit";
 		if (!cutOff) await convertPartial(tx, live, record.conversationId);
 		endRun(
 			tx,
@@ -243,18 +259,29 @@ export async function settleSchedulerOutcome(
 			record.id,
 			outcome.status === "faulted"
 				? { status: "unanswered", reason: cutOff ? "aborted" : "faulted", detail: outcome.error.message }
-				: { status: "unanswered", reason: "orphaned", detail: outcome.reason, settlement: { status: "unanswered", reason: outcome.reason } },
+				: {
+						status: "unanswered",
+						reason: "orphaned",
+						detail: outcome.reason,
+						settlement: { status: "unanswered", reason: outcome.reason },
+					},
 		);
 	}
 }
 
 export const LIMITS_RESTARTS: ReadonlySet<string> = new Set(["axi.generation", "axi.tool", "axi.compaction"]);
-export function cutOffTooOften(task: { readonly restarts?: number }, runtime: { readonly settings: { readonly restartLimit: number } }): boolean {
+export function cutOffTooOften(
+	task: { readonly restarts?: number },
+	runtime: { readonly settings: { readonly restartLimit: number } },
+): boolean {
 	return task.restarts !== undefined && task.restarts >= runtime.settings.restartLimit;
 }
 export function cutOffCount(task: { readonly restarts?: number }): string {
 	return task.restarts === 1 ? "once" : `${task.restarts ?? 0} times in a row`;
 }
-export function salvageable(task: { readonly restarts?: number }, runtime: { readonly settings: { readonly restartLimit: number } }): boolean {
+export function salvageable(
+	task: { readonly restarts?: number },
+	runtime: { readonly settings: { readonly restartLimit: number } },
+): boolean {
 	return (task.restarts ?? 0) <= runtime.settings.restartLimit;
 }

@@ -28,27 +28,38 @@ async function fixture(): Promise<string> {
 	return path;
 }
 
-it.each(["default", "empty", "dynamic"] as const)("preserves a relative base working directory with a %s override", async (mode) => {
-	const cwd = relative(process.cwd(), join(await fixture(), "missing"));
-	const cause = await access(cwd).catch((error: unknown) => error);
-	if (!(cause instanceof Error)) throw new Error("The missing directory must fail the native access check");
-	const env = new NodeExecutionEnv({ cwd: mode === "dynamic" ? process.cwd() : cwd });
-	const options = mode === "dynamic"
-		? { get timeout() { env.cwd = cwd; return undefined; } }
-		: mode === "empty" ? { cwd: "" } : undefined;
-	try {
-		expect(await env.exec([process.execPath, "-e", ""], options, BACKGROUND_CONTEXT)).toMatchObject({
-			ok: false,
-			error: {
-				code: "spawn_error",
-				message: `Working directory does not exist: ${cwd}\nCannot execute bash commands.`,
-				cause: { ...cause, message: cause.message },
-			},
-		});
-	} finally {
-		await env.cleanup(BACKGROUND_CONTEXT);
-	}
-});
+it.each(["default", "empty", "dynamic"] as const)(
+	"preserves a relative base working directory with a %s override",
+	async (mode) => {
+		const cwd = relative(process.cwd(), join(await fixture(), "missing"));
+		const cause = await access(cwd).catch((error: unknown) => error);
+		if (!(cause instanceof Error)) throw new Error("The missing directory must fail the native access check");
+		const env = new NodeExecutionEnv({ cwd: mode === "dynamic" ? process.cwd() : cwd });
+		const options =
+			mode === "dynamic"
+				? {
+						get timeout() {
+							env.cwd = cwd;
+							return undefined;
+						},
+					}
+				: mode === "empty"
+					? { cwd: "" }
+					: undefined;
+		try {
+			expect(await env.exec([process.execPath, "-e", ""], options, BACKGROUND_CONTEXT)).toMatchObject({
+				ok: false,
+				error: {
+					code: "spawn_error",
+					message: `Working directory does not exist: ${cwd}\nCannot execute bash commands.`,
+					cause: { ...cause, message: cause.message },
+				},
+			});
+		} finally {
+			await env.cleanup(BACKGROUND_CONTEXT);
+		}
+	},
+);
 
 it("completes an empty directory page when cancellation arrives with its final read", async () => {
 	const cwd = await fixture();
@@ -482,20 +493,21 @@ it("reads bounded text lines through file URLs and resolves home paths independe
 	expect(getOrThrow(await env.absolutePath("~/notes", BACKGROUND_CONTEXT))).toBe(join(homedir(), "notes"));
 	expect(getOrThrow(await env.absolutePath(url, BACKGROUND_CONTEXT))).toBe(path);
 	expect(getOrThrow(await env.readTextLines(url, { maxLines: 1 }, BACKGROUND_CONTEXT))).toEqual(["first\r"]);
-	expect(getOrThrow(await env.readTextLines(url, undefined, BACKGROUND_CONTEXT))).toEqual([
-		"first\r", "界🙂", "last",
-	]);
+	expect(getOrThrow(await env.readTextLines(url, undefined, BACKGROUND_CONTEXT))).toEqual(["first\r", "界🙂", "last"]);
 	expect(getOrThrow(await env.readTextLines("absent", { maxLines: 0 }, BACKGROUND_CONTEXT))).toEqual([]);
 	expect(await env.readTextLines("absent", undefined, BACKGROUND_CONTEXT)).toMatchObject({
-		ok: false, error: { code: "not_found", path: join(cwd, "absent") },
+		ok: false,
+		error: { code: "not_found", path: join(cwd, "absent") },
 	});
 	const cancelled = withAbortSignal(AbortSignal.abort(), BACKGROUND_CONTEXT);
 	expect(await env.readTextLines(url, undefined, cancelled)).toMatchObject({
-		ok: false, error: { code: "aborted", path },
+		ok: false,
+		error: { code: "aborted", path },
 	});
 	if (process.platform !== "win32") {
 		expect(await env.readTextLines(".", undefined, BACKGROUND_CONTEXT)).toMatchObject({
-			ok: false, error: { code: "is_directory" },
+			ok: false,
+			error: { code: "is_directory" },
 		});
 	}
 });
@@ -512,7 +524,8 @@ it("truncates by bytes, zero fills growth and leaves missing paths absent", asyn
 	getOrThrow(await env.truncateFile("bytes", 0, BACKGROUND_CONTEXT));
 	expect((await readFile(path)).byteLength).toBe(0);
 	expect(await env.truncateFile("absent", 0, BACKGROUND_CONTEXT)).toMatchObject({
-		ok: false, error: { code: "not_found", path: join(cwd, "absent") },
+		ok: false,
+		error: { code: "not_found", path: join(cwd, "absent") },
 	});
 	expect(getOrThrow(await env.exists("absent", BACKGROUND_CONTEXT))).toBe(false);
 });
@@ -522,13 +535,22 @@ it("rejects a watcher when cancellation arrives during target capture", async ()
 	const env = new NodeExecutionEnv({ cwd, watch: { mode: "polling", pollIntervalMs: 10 } });
 	const controller = new AbortController();
 	const changes: unknown[] = [];
-	expect(await env.watch([{
-		get path() {
-			controller.abort();
-			return ".";
-		},
-	}], (change) => changes.push(change), withAbortSignal(controller.signal, BACKGROUND_CONTEXT))).toMatchObject({
-		ok: false, error: { code: "aborted", path: undefined },
+	expect(
+		await env.watch(
+			[
+				{
+					get path() {
+						controller.abort();
+						return ".";
+					},
+				},
+			],
+			(change) => changes.push(change),
+			withAbortSignal(controller.signal, BACKGROUND_CONTEXT),
+		),
+	).toMatchObject({
+		ok: false,
+		error: { code: "aborted", path: undefined },
 	});
 	expect(changes).toEqual([]);
 });

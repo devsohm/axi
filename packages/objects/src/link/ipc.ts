@@ -4,10 +4,7 @@ export interface IpcPort {
 	send(message: Uint8Array, callback: (error: Error | null) => void): boolean;
 	on(event: "message", listener: (message: unknown) => void): unknown;
 	on(event: "disconnect", listener: () => void): unknown;
-	removeListener(
-		event: "message",
-		listener: (message: unknown) => void,
-	): unknown;
+	removeListener(event: "message", listener: (message: unknown) => void): unknown;
 	removeListener(event: "disconnect", listener: () => void): unknown;
 	disconnect(): void;
 	readonly connected: boolean;

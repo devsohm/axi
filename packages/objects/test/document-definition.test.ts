@@ -7,8 +7,12 @@ import { SealToken } from "../src/documents/fence.ts";
 it("retains the keyed option selected when declaring a document", () => {
 	let reads = 0;
 	const Progress = defineState("selected.keyed", {
-		schema: obj({ count: int() }), version: 1, initial: () => ({ count: 0 }),
-		get keyed() { return ++reads !== 1 },
+		schema: obj({ count: int() }),
+		version: 1,
+		initial: () => ({ count: 0 }),
+		get keyed() {
+			return ++reads !== 1;
+		},
 	});
 	expect(Progress.keyed).toBe(false);
 	expect(reads).toBe(1);
@@ -31,11 +35,7 @@ it("creates independent values, upgrades old state, and applies the configured c
 		count: 1,
 		text: "restored",
 	});
-	expect(
-		[2, 3].map((n) =>
-			Progress.checkpointWhen(first, [], { deltasSinceBase: n }),
-		),
-	).toEqual([false, true]);
+	expect([2, 3].map((n) => Progress.checkpointWhen(first, [], { deltasSinceBase: n }))).toEqual([false, true]);
 });
 
 it("hands queued operations to one holder at a time and keeps sealed work sealed", async () => {

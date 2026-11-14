@@ -1,8 +1,4 @@
-import {
-	applySqliteMigrations,
-	type SqliteDatabase,
-	type SqliteMigration,
-} from "../sqlite/index.ts";
+import { applySqliteMigrations, type SqliteDatabase, type SqliteMigration } from "../sqlite/index.ts";
 
 export const TABLES = {
 	meta: "objects_meta",
@@ -69,9 +65,7 @@ export async function applyStoreSchema(db: SqliteDatabase): Promise<MetaRow> {
 	}
 	const encoding = await db.get<{ encoding: string }>("PRAGMA encoding");
 	if (encoding?.encoding !== "UTF-8")
-		throw new Error(
-			`store: the database encoding is ${encoding?.encoding}, not UTF-8`,
-		);
+		throw new Error(`store: the database encoding is ${encoding?.encoding}, not UTF-8`);
 	await applySqliteMigrations(db, migrations, {
 		table: "objects_store_schema",
 	});

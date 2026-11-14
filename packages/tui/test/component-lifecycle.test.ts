@@ -50,18 +50,18 @@ test("empty text and a padded single-line label preserve their reserved space", 
 });
 
 test("direct horizontal rendering centers a short child beside three lines", () => {
-	const row = new HStack([
-		{ component: new Text("x", 0, 0), basis: 1, shrink: 0 },
-		{ component: new Text("one\ntwo\nend", 0, 0), basis: 3, shrink: 0 },
-	], { align: "center", gap: 1 });
+	const row = new HStack(
+		[
+			{ component: new Text("x", 0, 0), basis: 1, shrink: 0 },
+			{ component: new Text("one\ntwo\nend", 0, 0), basis: 3, shrink: 0 },
+		],
+		{ align: "center", gap: 1 },
+	);
 	expect(row.render(5).map(stripTerminalSequences)).toEqual(["  one", "x two", "  end"]);
 });
 
 test("direct vertical rendering reserves child height separately from the gap", () => {
-	const column = new VStack([
-		{ component: new Text("one", 0, 0), basis: 3 },
-		new Text("two", 0, 0),
-	], { gap: 2 });
+	const column = new VStack([{ component: new Text("one", 0, 0), basis: 3 }, new Text("two", 0, 0)], { gap: 2 });
 	expect(column.render(5)).toEqual(["one  ", "", "", "", "", "two  "]);
 });
 

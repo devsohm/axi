@@ -35,7 +35,9 @@ export class MemberSource extends Source implements Dependent {
 		this.#state = { kind: "following", source };
 		this.#connect(source);
 	}
-	unseen(seen: () => boolean): void { this.#seen = seen; }
+	unseen(seen: () => boolean): void {
+		this.#seen = seen;
+	}
 	#startOf(source: DeriveSource): WatchStart {
 		const start = source instanceof Source ? source.start() : { kind: "value" as const, value: source.value };
 		if (this.#seen === undefined || start.kind === "value") return start;

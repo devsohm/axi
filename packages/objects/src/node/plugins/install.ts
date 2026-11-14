@@ -6,8 +6,13 @@ import { isPluginName } from "../../host/staging.ts";
 import { discoverPackage, discoverPlugins, type Plugin, type PluginRoot } from "./discover.ts";
 
 export type InstallOptions = { readonly npmCommand?: readonly string[] };
-export type InstallPluginOptions = InstallOptions & { readonly kinds?: readonly string[]; readonly roots?: readonly PluginRoot[] };
-export type PluginSource = { readonly git: string; readonly ref: string } | { readonly npm: string; readonly version: string };
+export type InstallPluginOptions = InstallOptions & {
+	readonly kinds?: readonly string[];
+	readonly roots?: readonly PluginRoot[];
+};
+export type PluginSource =
+	| { readonly git: string; readonly ref: string }
+	| { readonly npm: string; readonly version: string };
 const installArgs = ["install", "--omit=dev", "--legacy-peer-deps", "--ignore-scripts", "--no-audit", "--no-fund"];
 export async function installDependencies(
 	plugin: Plugin,
@@ -17,18 +22,40 @@ export async function installDependencies(
 	if (plugin.layout === "file") throw new Error(`plugin "${plugin.name}": a single-file plugin has no package.json`);
 	const command = options.npmCommand ?? ["npm"];
 	if (command.length === 0) throw new Error("npmCommand is empty");
-	await run(command[0], [...command.slice(1), ...installArgs], plugin.dir, context, `plugin "${plugin.name}": ${command[0]} install`);
+	await run(
+		command[0],
+		[...command.slice(1), ...installArgs],
+		plugin.dir,
+		context,
+		`plugin "${plugin.name}": ${command[0]} install`,
+	);
 }
 
-export async function installPlugin(source: PluginSource, root: string, context: Context, options: InstallPluginOptions = {}): Promise<readonly string[]> {
-	const inputs = "git" in source
-		? [["repository", source.git], ["ref", source.ref]]
-		: [["package", source.npm], ["version", source.version]];
+export async function installPlugin(
+	source: PluginSource,
+	root: string,
+	context: Context,
+	options: InstallPluginOptions = {},
+): Promise<readonly string[]> {
+	const inputs =
+		"git" in source
+			? [
+					["repository", source.git],
+					["ref", source.ref],
+				]
+			: [
+					["package", source.npm],
+					["version", source.version],
+				];
 	for (const [field, input] of inputs)
 		if (input === "" || input.startsWith("-")) throw new Error(`installPlugin: ${field} "${input}" is refused`);
 	const name = "git" in source ? basename(source.git.replace(/\/+$/, "")).replace(/\.git$/, "") : source.npm;
 	if ("git" in source ? !name || name.startsWith(".") || name.startsWith("-") : !isPluginName(name))
-		throw new Error("git" in source ? `installPlugin: "${source.git}" names no repository directory` : `installPlugin: "${name}" is not an npm package name`);
+		throw new Error(
+			"git" in source
+				? `installPlugin: "${source.git}" names no repository directory`
+				: `installPlugin: "${name}" is not an npm package name`,
+		);
 	const prefix = ".objects-install-";
 	for (const entry of await readdir(root).catch(() => [])) {
 		if (!entry.startsWith(prefix)) continue;
@@ -39,11 +66,16 @@ export async function installPlugin(source: PluginSource, root: string, context:
 	const target = join(root, name);
 	let scope: string | undefined;
 	if (name.startsWith("@")) {
-		try { await mkdir(dirname(target)); scope = dirname(target); }
-		catch (error) { if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error; }
+		try {
+			await mkdir(dirname(target));
+			scope = dirname(target);
+		} catch (error) {
+			if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+		}
 	}
-	try { await mkdir(target); }
-	catch (error) {
+	try {
+		await mkdir(target);
+	} catch (error) {
 		if (scope) await rmdir(scope).catch(() => {});
 		if ((error as NodeJS.ErrnoException).code === "EEXIST") throw new Error(`installPlugin: ${target} exists already`);
 		throw error;
@@ -57,7 +89,13 @@ export async function installPlugin(source: PluginSource, root: string, context:
 			const label = `git clone of ${source.git} at ${source.ref}`;
 			await run("git", ["init", "--quiet"], payload, context, label);
 			await run("git", ["fetch", "--quiet", "--depth", "1", "--", source.git, source.ref], payload, context, label);
-			await run("git", ["-c", "advice.detachedHead=false", "checkout", "--quiet", "FETCH_HEAD", "--"], payload, context, label);
+			await run(
+				"git",
+				["-c", "advice.detachedHead=false", "checkout", "--quiet", "FETCH_HEAD", "--"],
+				payload,
+				context,
+				label,
+			);
 		} else {
 			const command = options.npmCommand ?? ["npm"];
 			if (!command.length) throw new Error("npmCommand is empty");
@@ -92,7 +130,10 @@ export async function installPlugin(source: PluginSource, root: string, context:
 		}
 		const at = { root, required: false, kinds: options.kinds ?? [] };
 		const discovery = await discoverPackage(payload, at, context);
-		if (discovery.problems[0]) throw new Error(`installPlugin: ${discovery.problems[0].path.replace(payload, target)}: ${discovery.problems[0].error}`);
+		if (discovery.problems[0])
+			throw new Error(
+				`installPlugin: ${discovery.problems[0].path.replace(payload, target)}: ${discovery.problems[0].error}`,
+			);
 		if (!discovery.plugins.length) throw new Error(`installPlugin: ${target} holds no plugin`);
 		const existing = await discoverPlugins(options.roots ?? [root], { kinds: at.kinds }, context);
 		for (const plugin of discovery.plugins) {
@@ -113,19 +154,30 @@ export async function installPlugin(source: PluginSource, root: string, context:
 	}
 }
 
-async function run(command: string, args: readonly string[], cwd: string, context: Context, label: string): Promise<string> {
+async function run(
+	command: string,
+	args: readonly string[],
+	cwd: string,
+	context: Context,
+	label: string,
+): Promise<string> {
 	context.abortSignal?.throwIfAborted();
 	return new Promise<string>((resolve, reject) => {
-		const child = spawn(
-			command, args,
-			{ cwd, signal: context.abortSignal, stdio: ["ignore", "pipe", "pipe"], env: { ...process.env, GIT_TERMINAL_PROMPT: "0" } },
-		);
+		const child = spawn(command, args, {
+			cwd,
+			signal: context.abortSignal,
+			stdio: ["ignore", "pipe", "pipe"],
+			env: { ...process.env, GIT_TERMINAL_PROMPT: "0" },
+		});
 		let output = "";
 		let stdout = "";
 		const collect = (chunk: Buffer): void => {
 			output += chunk.toString();
 		};
-		child.stdout.on("data", (chunk: Buffer) => { collect(chunk); stdout += chunk.toString(); });
+		child.stdout.on("data", (chunk: Buffer) => {
+			collect(chunk);
+			stdout += chunk.toString();
+		});
 		child.stderr.on("data", collect);
 		child.once("error", reject);
 		child.once("close", (code) => {

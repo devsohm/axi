@@ -21,26 +21,40 @@ test("an auth provider retains its state store when the caller changes the optio
 });
 
 test("refresh keeps the redirect URI selected when the auth provider was created", async () => {
-	const serverUrl = "https://mcp.example.test", seen: string[] = [];
+	const serverUrl = "https://mcp.example.test",
+		seen: string[] = [];
 	const store: McpOAuthServerStore = {
 		load: () => ({ serverUrl, tokens: { access_token: "old", refresh_token: "rotate", token_type: "Bearer" } }),
 		save() {},
 		withRefreshLock: async (fn) => fn(),
 	};
 	const options = {
-		serverUrl, clientName: "test", store, settings: () => ({}), onChallenge() {},
+		serverUrl,
+		clientName: "test",
+		store,
+		settings: () => ({}),
+		onChallenge() {},
 		redirectUrl: "https://app.example.test/original",
 		clientMetadataDocuments: {
 			baseUrl: "https://app.example.test",
-			listsRedirectUrl(url: string) { seen.push(url); return false; },
+			listsRedirectUrl(url: string) {
+				seen.push(url);
+				return false;
+			},
 		},
 	};
 	const provider = createMcpAuthProvider(options);
 	options.redirectUrl = "https://app.example.test/replacement";
-	await expect(provider.onUnauthorized?.({
-		response: new Response(null, { status: 401 }), serverUrl: new URL(serverUrl), token: "old",
-		fetch: async () => { throw new Error("No network in this test"); },
-	})).rejects.toThrow();
+	await expect(
+		provider.onUnauthorized?.({
+			response: new Response(null, { status: 401 }),
+			serverUrl: new URL(serverUrl),
+			token: "old",
+			fetch: async () => {
+				throw new Error("No network in this test");
+			},
+		}),
+	).rejects.toThrow();
 	expect(seen[0]).toBe("https://app.example.test/original");
 	await provider.settled();
 });

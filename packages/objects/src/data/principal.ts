@@ -15,9 +15,13 @@ export function principalJson(principal: Principal, context: Context): string {
 	serialized.set(principal, value);
 	return value;
 }
-export function principalKey<P extends Principal>(principal: P, context: Context, customKey?: PrincipalKeyFunction<P>): string {
+export function principalKey<P extends Principal>(
+	principal: P,
+	context: Context,
+	customKey?: PrincipalKeyFunction<P>,
+): string {
 	let cached = keys.get(principal);
-	if (!cached) keys.set(principal, cached = new WeakMap());
+	if (!cached) keys.set(principal, (cached = new WeakMap()));
 	const identity = customKey ?? defaultKey;
 	let key = cached.get(identity);
 	if (key === undefined) {
@@ -33,12 +37,19 @@ export function samePrincipal(principal: Principal | undefined, other: Principal
 export function canonicalJson(value: JsonValue, context: Context): string {
 	objectsMetrics(context.telemetry.metrics).counter("objects.data.walks").add(1);
 	type Work = { value: JsonValue } | { text: string };
-	const stack: Work[] = [{ value }], output: string[] = [];
+	const stack: Work[] = [{ value }],
+		output: string[] = [];
 	while (stack.length) {
 		const item = stack.pop()!;
-		if ("text" in item) { output.push(item.text); continue; }
+		if ("text" in item) {
+			output.push(item.text);
+			continue;
+		}
 		const current = item.value;
-		if (current === null || typeof current !== "object") { output.push(JSON.stringify(current)); continue; }
+		if (current === null || typeof current !== "object") {
+			output.push(JSON.stringify(current));
+			continue;
+		}
 		const array = Array.isArray(current);
 		output.push(array ? "[" : "{");
 		stack.push({ text: array ? "]" : "}" });

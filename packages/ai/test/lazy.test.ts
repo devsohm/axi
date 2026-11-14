@@ -10,13 +10,22 @@ import { loadOpenAICodexOAuth, registerBundledOAuthFlowLoaders } from "../src/au
 import type { OAuthAuth } from "../src/auth/types.ts";
 
 it("defers an overridden Bedrock loader until a request", async () => {
-	const loader = vi.fn(async () => { throw new Error("lazy chunk boundary"); });
+	const loader = vi.fn(async () => {
+		throw new Error("lazy chunk boundary");
+	});
 	setBedrockProviderLoader(loader);
 	const api = bedrockConverseStreamApi();
 	expect(loader).not.toHaveBeenCalled();
 	const model: Model<"bedrock-converse-stream"> = {
-		id: "deferred", name: "Deferred", api: "bedrock-converse-stream", provider: "test", baseUrl: "",
-		reasoning: false, input: ["text"], contextWindow: 10, maxTokens: 1,
+		id: "deferred",
+		name: "Deferred",
+		api: "bedrock-converse-stream",
+		provider: "test",
+		baseUrl: "",
+		reasoning: false,
+		input: ["text"],
+		contextWindow: 10,
+		maxTokens: 1,
 		cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
 	};
 	const result = await api.stream(model, normalizeContext({ messages: [] })).result();
@@ -27,12 +36,26 @@ it("defers an overridden Bedrock loader until a request", async () => {
 it("uses the registered Node OAuth loader without opening a login flow", async () => {
 	const auth: OAuthAuth = {
 		name: "Bundled test",
-		async login() { throw new Error("login must not run"); },
-		async refresh() { throw new Error("refresh must not run"); },
-		async toAuth() { throw new Error("auth must not run"); },
+		async login() {
+			throw new Error("login must not run");
+		},
+		async refresh() {
+			throw new Error("refresh must not run");
+		},
+		async toAuth() {
+			throw new Error("auth must not run");
+		},
 	};
 	const loader = vi.fn(() => auth);
-	registerBundledOAuthFlowLoaders({ anthropic: loader, openaiCodex: loader, githubCopilot: loader, openrouter: loader, kimiCoding: loader, meta: loader, xai: loader });
+	registerBundledOAuthFlowLoaders({
+		anthropic: loader,
+		openaiCodex: loader,
+		githubCopilot: loader,
+		openrouter: loader,
+		kimiCoding: loader,
+		meta: loader,
+		xai: loader,
+	});
 	expect(loader).not.toHaveBeenCalled();
 	expect(await loadOpenAICodexOAuth()).toBe(auth);
 	expect(loader).toHaveBeenCalledTimes(1);

@@ -66,7 +66,10 @@ export class RegistryRecord {
 		return this.#contributions.length ? Math.max(...this.#contributions.map(({ version }) => version)) : undefined;
 	}
 	reportUndeclared(): void {
-		if (this.#provider) { this.#undeclared = undefined; return; }
+		if (this.#provider) {
+			this.#undeclared = undefined;
+			return;
+		}
 		if (!this.#contributions.length) return;
 		const plugins = [...new Set(this.#contributions.map(({ contributor }) => contributor.plugin))];
 		const key = plugins.join("\0");

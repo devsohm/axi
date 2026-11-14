@@ -31,7 +31,11 @@ export type Boundary = {
 	readonly followUpMode: QueueMode;
 	head: EntryId | undefined;
 };
-export type BoundaryResult = { readonly users: SubmissionId[]; readonly reset: boolean; readonly first: EntryId | undefined };
+export type BoundaryResult = {
+	readonly users: SubmissionId[];
+	readonly reset: boolean;
+	readonly first: EntryId | undefined;
+};
 
 export async function prepareBoundary(tx: Tx, conversationId: ConversationId, modes: QueueModes): Promise<Boundary> {
 	const head = (await tx.latestHeadMarker(conversationId))?.head;

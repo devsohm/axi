@@ -48,11 +48,7 @@ export class Singleton implements SingletonHandle<JsonObject> {
 		return this.slot.openWatch(context) as Watch<JsonObject>;
 	}
 	change<R>(fn: (draft: Draft<JsonObject>) => R, context: Context): Promise<R> {
-		return this.slot.owner.tx(
-			async (tx) => fn(await tx.draft(this)),
-			this.token,
-			context,
-		);
+		return this.slot.owner.tx(async (tx) => fn(await tx.draft(this)), this.token, context);
 	}
 	retire(context: Context): Promise<void> {
 		return this.slot.owner.tx((tx) => tx.retire(this), this.token, context);
@@ -63,12 +59,7 @@ export class Keyed implements KeyedHandle<JsonObject, unknown> {
 	readonly token: SealToken;
 	readonly version: number;
 	readonly #declarer: KeyDeclarer;
-	constructor(
-		slot: KeyedSlot,
-		token: SealToken,
-		version: number,
-		declarer: KeyDeclarer,
-	) {
+	constructor(slot: KeyedSlot, token: SealToken, version: number, declarer: KeyDeclarer) {
 		this.slot = slot;
 		this.token = token;
 		this.version = version;
@@ -94,10 +85,6 @@ export class Keyed implements KeyedHandle<JsonObject, unknown> {
 		return this.slot.owner.tx(async (tx) => fn(await tx.draft(this, key)), this.token, context);
 	}
 	retire(key: unknown, context: Context): Promise<void> {
-		return this.slot.owner.tx(
-			(tx) => tx.retire(this, key),
-			this.token,
-			context,
-		);
+		return this.slot.owner.tx((tx) => tx.retire(this, key), this.token, context);
 	}
 }

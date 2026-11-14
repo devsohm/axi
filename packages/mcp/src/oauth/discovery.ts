@@ -14,12 +14,7 @@ const discard = (response: Response): void => {
 };
 const miss = (status: number): boolean => status === 502 || (status >= 400 && status < 500);
 const suffix = (path: string): string => (path.endsWith("/") ? path.slice(0, -1) : path);
-function fetchMetadata(
-	url: URL,
-	fetch: McpFetch,
-	version: string,
-	signal?: AbortSignal,
-): Promise<Response> {
+function fetchMetadata(url: URL, fetch: McpFetch, version: string, signal?: AbortSignal): Promise<Response> {
 	return fetch(url, { headers: { Accept: "application/json", "MCP-Protocol-Version": version }, signal });
 }
 function challengeField(header: string, name: string): string | undefined {

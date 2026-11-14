@@ -13,7 +13,15 @@ import type { NativeWatchable, Watchable, WatchEnd } from "../watch.ts";
 import type { Contract, EventSource, Implementation, ParamsOf } from "../contracts/index.ts";
 import { contractData, type ShapeOf } from "../contracts/internal.ts";
 import { ObjectsError, type FailureCause, type Principal } from "../data/index.ts";
-import { asObjectsError, checkArgs, checkParams, invalid, openFailure, type Provider, type Value } from "../data/internal.ts";
+import {
+	asObjectsError,
+	checkArgs,
+	checkParams,
+	invalid,
+	openFailure,
+	type Provider,
+	type Value,
+} from "../data/internal.ts";
 import type { HandleOf, JsonObject, KeyedBy, StateDefinition, Tx } from "../documents/index.ts";
 import {
 	SealToken,
@@ -108,7 +116,11 @@ export interface Self<P extends Principal = Principal> extends RoutineDeclaratio
 export interface StoreSelf<P extends Principal = Principal> extends Self<P> {
 	state<D extends StateDefinition<JsonObject, KeyedBy, boolean>>(definition: D): HandleOf<D>;
 	table<C extends Columns, K extends readonly string[]>(definition: TableDefinition<C, K>): Table<C, K>;
-	query<C extends Columns, K extends readonly string[]>(table: Table<C, K>, query: Query<C, K>, limit: number): Watchable<RowOf<C>[]>;
+	query<C extends Columns, K extends readonly string[]>(
+		table: Table<C, K>,
+		query: Query<C, K>,
+		limit: number,
+	): Watchable<RowOf<C>[]>;
 	contribute<C>(registry: Registry<C, unknown>, value: Contribution<C>): void;
 }
 export type Factory<C extends Contract, P extends Principal = Principal> = ShapeOf<C>["kind"] extends "local"
@@ -135,7 +147,12 @@ export type AttemptHost = Acquirer & {
 	bind(binding: Binding, type: Contract, params: CheckedParams, context: Context): void;
 	registryRecord(name: string): RegistryRecord;
 };
-type ServingBase = { readonly contract: Contract; readonly provider: Provider<Contract>; readonly plugin: string; readonly traced?: boolean };
+type ServingBase = {
+	readonly contract: Contract;
+	readonly provider: Provider<Contract>;
+	readonly plugin: string;
+	readonly traced?: boolean;
+};
 export type AttemptServing = ServingBase &
 	(
 		| {
@@ -229,7 +246,14 @@ export class Attempt implements StoreSelf, KeyDeclarer, RegistryWaiter {
 	#registry: RegistryDeclarations | undefined;
 	#sourceOwner: SourceOwner | undefined;
 	#eventSources: OwnEventSource[] | undefined;
-	constructor(object: AttemptObject, context: Context, trace: { readonly attempt: number; readonly trigger: TelemetryContext } = { attempt: 1, trigger: context.telemetry }) {
+	constructor(
+		object: AttemptObject,
+		context: Context,
+		trace: { readonly attempt: number; readonly trigger: TelemetryContext } = {
+			attempt: 1,
+			trigger: context.telemetry,
+		},
+	) {
 		this.#object = object;
 		this.#served = object.served;
 		this.#context = context;
@@ -270,16 +294,27 @@ export class Attempt implements StoreSelf, KeyDeclarer, RegistryWaiter {
 		this.#tables.set(name, handle);
 		return handle as unknown as Table<C, K>;
 	}
-	query<C extends Columns, K extends readonly string[]>(table: Table<C, K>, query: Query<C, K>, limit: number): Watchable<RowOf<C>[]> {
+	query<C extends Columns, K extends readonly string[]>(
+		table: Table<C, K>,
+		query: Query<C, K>,
+		limit: number,
+	): Watchable<RowOf<C>[]> {
 		this.#declaringOnly("query");
 		const handle: unknown = table;
 		const { label, host } = this.#object;
 		if (!(handle instanceof TableHandle) || this.#tables.get(handle.definition.name) !== handle)
 			throw new Error(`${label}: self.query: the table is not one this factory declared`);
 		checkLiveQuery(handle.definition, query as unknown as Query, limit, label);
-		const live = new LiveQuery(handle, query as unknown as Query, limit, {
-			label, report: (error) => host.report({ kind: "query_failed", object: label, table: handle.definition.name, error }),
-		}, host.batch);
+		const live = new LiveQuery(
+			handle,
+			query as unknown as Query,
+			limit,
+			{
+				label,
+				report: (error) => host.report({ kind: "query_failed", object: label, table: handle.definition.name, error }),
+			},
+			host.batch,
+		);
 		handle.owner.queries.add(live);
 		this.#queries.push(live);
 		return live as unknown as Watchable<RowOf<C>[]>;
@@ -463,18 +498,22 @@ export class Attempt implements StoreSelf, KeyDeclarer, RegistryWaiter {
 		if (own === undefined && version === this.#served.contract.version) throw this.#missingMethod(method);
 		const checked = checkArgs(this.#served.provider, method, args, version, context),
 			replacement = checked.kind === "call" ? checked.call : undefined,
-			handler =
-				replacement !== undefined
-					? (value: unknown, ctx: Context) => replacement(value as Value, ctx)
-					: own;
+			handler = replacement !== undefined ? (value: unknown, ctx: Context) => replacement(value as Value, ctx) : own;
 		if (!handler) throw this.#missingMethod(method);
 		const linked = withLinkedAbortSignal(this.#abort.signal, context);
-		const acting = this.#served.kind === "remote" ? caller : { principal: host.principal, incarnation: host.incarnation };
-		const span = this.#served.traced !== false && !untraced(parent) ? new OpenSpan(parent, "objects.method", {
-			"objects.host": host.spanHost, type: this.#served.contract.name, member: method, object: object.label.slice(0, 256),
-			"principal.kind": (acting.principal?.kind ?? "none").slice(0, 256),
-			...host.principalAttributes?.(acting.principal, context),
-		}) : undefined;
+		const acting =
+			this.#served.kind === "remote" ? caller : { principal: host.principal, incarnation: host.incarnation };
+		const span =
+			this.#served.traced !== false && !untraced(parent)
+				? new OpenSpan(parent, "objects.method", {
+						"objects.host": host.spanHost,
+						type: this.#served.contract.name,
+						member: method,
+						object: object.label.slice(0, 256),
+						"principal.kind": (acting.principal?.kind ?? "none").slice(0, 256),
+						...host.principalAttributes?.(acting.principal, context),
+					})
+				: undefined;
 		const ctx = new CallContext(span ? withTelemetry(span.span, linked.context) : linked.context, acting, host, this);
 		const running = Promise.withResolvers<unknown>();
 		const inFlight = objectsMetrics(host.telemetry?.metrics).upDownCounter("objects.calls.in_flight");
@@ -556,7 +595,9 @@ export class Attempt implements StoreSelf, KeyDeclarer, RegistryWaiter {
 			this.#checked.resolve(undefined);
 		}
 	}
-	get activationSpan(): TelemetrySpan | undefined { return this.#activation?.span; }
+	get activationSpan(): TelemetrySpan | undefined {
+		return this.#activation?.span;
+	}
 	activated(outcome: Activation, retryAt?: number): void {
 		if (!this.#activation) return;
 		if (this.#activation.ended) {
@@ -575,7 +616,10 @@ export class Attempt implements StoreSelf, KeyDeclarer, RegistryWaiter {
 		const { host, label } = this.#object;
 		if (!host.telemetry || untraced(host.telemetry)) return;
 		this.#activation = new OpenSpan(host.telemetry, "objects.activate", {
-			"objects.host": host.spanHost, type: this.#served.contract.name, object: label.slice(0, 256), attempt: this.#trace.attempt,
+			"objects.host": host.spanHost,
+			type: this.#served.contract.name,
+			object: label.slice(0, 256),
+			attempt: this.#trace.attempt,
 		});
 		if (!untraced(trigger)) this.#activation.span.addLink({ context: trigger });
 		this.#opening = withTelemetry(this.#activation.span, this.#opening);
@@ -583,13 +627,17 @@ export class Attempt implements StoreSelf, KeyDeclarer, RegistryWaiter {
 	#parkSpan(shown: RefState): void {
 		this.#parkedAt ??= performance.now();
 		if (!this.#activation || this.#activation.ended) return;
-		this.#activation.span.addEvent("objects.park", { cause: shown.kind === "failed" ? shown.cause.error.message.slice(0, 500) : "loading" });
+		this.#activation.span.addEvent("objects.park", {
+			cause: shown.kind === "failed" ? shown.cause.error.message.slice(0, 500) : "loading",
+		});
 		this.#activation.span.setAttributes({ outcome: "parked" });
 		this.#activation.end();
 	}
 	#leavePark(): void {
 		if (this.#parkedAt === undefined) return;
-		objectsMetrics(this.#object.host.telemetry?.metrics).histogram("objects.park.duration").record(performance.now() - this.#parkedAt);
+		objectsMetrics(this.#object.host.telemetry?.metrics)
+			.histogram("objects.park.duration")
+			.record(performance.now() - this.#parkedAt);
 		this.#parkedAt = undefined;
 	}
 	abandon(outcome: NotLive): void {
@@ -653,19 +701,25 @@ export class Attempt implements StoreSelf, KeyDeclarer, RegistryWaiter {
 		for (const job of this.#jobs.values()) job.seal(error, reason);
 	}
 	stopRoutines(): void {
-		this.#routineAbort.abort(new ObjectsError({ code: "released", reason: "ended", message: `${this.#object.label}: reloaded` }));
+		this.#routineAbort.abort(
+			new ObjectsError({ code: "released", reason: "ended", message: `${this.#object.label}: reloaded` }),
+		);
 	}
 	beginDrain(): void {
 		this.#callsDrained = true;
 		this.#object.host.oldWork.open();
 	}
-	get draining(): boolean { return this.#callsDrained && this.#abandoned === undefined; }
-	get served(): AttemptServing { return this.#served; }
+	get draining(): boolean {
+		return this.#callsDrained && this.#abandoned === undefined;
+	}
+	get served(): AttemptServing {
+		return this.#served;
+	}
 	async drainCalls(due: number): Promise<void> {
 		while (this.#running.size || this.#routineCalls.size) {
 			const calls = [...this.#running.keys(), ...this.#routineCalls];
 			const left = due - Date.now();
-			if (left <= 0 || await drained(calls, calls.length, left) === "timeout") {
+			if (left <= 0 || (await drained(calls, calls.length, left)) === "timeout") {
 				this.#object.host.report({ kind: "drain_timeout", object: this.#object.label });
 				return;
 			}
@@ -674,13 +728,7 @@ export class Attempt implements StoreSelf, KeyDeclarer, RegistryWaiter {
 	async close(reason: NativeCloseReason): Promise<CloseFailed[]> {
 		const calls = this.#callsDrained ? [] : [...this.#running.keys()];
 		const pending = [...calls, ...this.#routineCalls, ...this.#runs.keys()];
-		if (
-			(await drained(
-				pending,
-				pending.length,
-				this.#object.host.timeouts.close,
-			)) === "timeout"
-		)
+		if ((await drained(pending, pending.length, this.#object.host.timeouts.close)) === "timeout")
 			this.#object.host.report({ kind: "drain_timeout", object: this.#object.label });
 		for (const job of this.#jobs.values()) await job.writeAtClose(this.#context);
 		for (const [work, cleanup] of this.#running) {
@@ -747,19 +795,19 @@ export class Attempt implements StoreSelf, KeyDeclarer, RegistryWaiter {
 				const loading = object.documents.load(this.#opening);
 				if (loading) await loading;
 				if (this.#tables.size) {
-				const tables = [...this.#tables.values()];
-				deadline.pause();
-				try {
-					await prepareTables(
-						tables.map((handle) => ({ definition: handle.definition, table: handle.sql.table })),
-						tables[0]!.store,
-						{ admit: () => !this.#token.sealed && !this.#abandoned, adopt() {} },
-						object.label,
-						this.#opening,
-					);
-				} finally {
-					deadline.resume();
-				}
+					const tables = [...this.#tables.values()];
+					deadline.pause();
+					try {
+						await prepareTables(
+							tables.map((handle) => ({ definition: handle.definition, table: handle.sql.table })),
+							tables[0]!.store,
+							{ admit: () => !this.#token.sealed && !this.#abandoned, adopt() {} },
+							object.label,
+							this.#opening,
+						);
+					} finally {
+						deadline.resume();
+					}
 				}
 				for (const query of this.#queries) await query.load(this.#opening);
 			} finally {

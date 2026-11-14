@@ -1,10 +1,6 @@
 import { expect, it } from "vitest";
 import { IdAllocator } from "../src/store/allocator.ts";
-import {
-	readCatalog,
-	writeCatalog,
-	type TableRecord,
-} from "../src/store/catalog.ts";
+import { readCatalog, writeCatalog, type TableRecord } from "../src/store/catalog.ts";
 import {
 	changeDocument,
 	createDocument,
@@ -56,50 +52,35 @@ it("selects live host-owned records without mistaking a matching string key for 
 		const [owned, plain] = created.created;
 		expect((await readDocument(db, owned!))?.host).toBe("worker|one");
 		expect(await readDocument(db, plain!)).not.toHaveProperty("host");
-		expect((await listHostRecords(db, "worker|one", 0, 10)).map(record => record.id)).toEqual([owned]);
+		expect((await listHostRecords(db, "worker|one", 0, 10)).map((record) => record.id)).toEqual([owned]);
 		expect(await listHostRecords(db, "worker|one", owned!, 10)).toEqual([]);
 		await commit([retireDocument(owned!, 1)]);
 		expect(await listHostRecords(db, "worker|one", 0, 10)).toEqual([]);
-	} finally { await db.close(); }
+	} finally {
+		await db.close();
+	}
 });
 it("applies deltas atomically, refuses stale revisions, and frees a retired live address", async () => {
 	const { db, commit } = await fixture();
 	try {
 		const made = await commit([
-			createDocument(
-				address,
-				{ version: 1, fingerprint: "one", value: { n: 0 } },
-				'{"n":0}',
-			),
+			createDocument(address, { version: 1, fingerprint: "one", value: { n: 0 } }, '{"n":0}'),
 		]);
 		const id = made.created[0]!;
-		await commit([
-			changeDocument(
-				id,
-				1,
-				{ kind: "delta", version: 1, ops: [["s", ["n"], 7]] },
-				'[["s",["n"],7]]',
-			),
-		]);
+		await commit([changeDocument(id, 1, { kind: "delta", version: 1, ops: [["s", ["n"], 7]] }, '[["s",["n"],7]]')]);
 		expect(await loadContent(db, id, "current")).toEqual({
 			value: { n: 7 },
 			version: 1,
 			deltasSinceBase: 1,
 		});
-		await expect(
-			commit([
-				changeDocument(id, 1, { kind: "delta", version: 1, ops: [] }, "[]"),
-			]),
-		).rejects.toThrow("not live at revision 1");
+		await expect(commit([changeDocument(id, 1, { kind: "delta", version: 1, ops: [] }, "[]")])).rejects.toThrow(
+			"not live at revision 1",
+		);
 		expect((await readDocument(db, id))?.revision).toBe(2);
 		expect(await listDocumentKeys(db, address, undefined, 10)).toEqual([""]);
 		await commit([
 			retireDocument(id, 2),
-			createDocument(
-				address,
-				{ version: 2, fingerprint: "two", value: { ready: true } },
-				'{"ready":true}',
-			),
+			createDocument(address, { version: 2, fingerprint: "two", value: { ready: true } }, '{"ready":true}'),
 		]);
 		expect(await readDocument(db, id)).toBeUndefined();
 		expect((await findDocument(db, address))?.version).toBe(2);
@@ -147,18 +128,12 @@ it("keeps rewindable content at each point and excludes the retirement boundary"
 				),
 			),
 		]);
-		await commit([
-			stage(async (step) =>
-				retireRecord(step, (await readDocument(step, 10))!),
-			),
-		]);
+		await commit([stage(async (step) => retireRecord(step, (await readDocument(step, 10))!))]);
 		expect((await findDocument(db, address, 2))?.id).toBe(10);
 		expect(await findDocument(db, address, 3)).toBeUndefined();
 		expect((await loadContent(db, 10, 1)).value).toEqual({ n: 1 });
 		expect((await loadContent(db, 10, 2)).value).toEqual({ n: 2 });
-		expect(await listDocumentEntries(db, address, "current", 0, 10)).toEqual(
-			[],
-		);
+		expect(await listDocumentEntries(db, address, "current", 0, 10)).toEqual([]);
 		expect(await readCatalog(db)).toEqual(new Map());
 	} finally {
 		await db.close();

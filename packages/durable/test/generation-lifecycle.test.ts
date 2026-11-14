@@ -281,7 +281,9 @@ test("aborting a deferred generation cancels the provider receipt and clears the
 			{ provider: f.model.provider, modelId: f.model.modelId },
 		]);
 		expect(f.provider.state.deferredFetchCount).toBe(0);
-		expect(await harness.snapshot(LiveDoc, conversation.id, context)).toEqual({ runFailure: { taskId: expect.any(Number), inputs: [submission.id], reason: "aborted", first: expect.any(Number) } });
+		expect(await harness.snapshot(LiveDoc, conversation.id, context)).toEqual({
+			runFailure: { taskId: expect.any(Number), inputs: [submission.id], reason: "aborted", first: expect.any(Number) },
+		});
 	} finally {
 		await harness.close(context);
 	}

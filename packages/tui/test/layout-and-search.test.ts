@@ -35,10 +35,13 @@ test("a fixed dock stays below a growing, scrollable transcript", () => {
 });
 
 test("a horizontal row inside a scroller uses the tallest intrinsic child", () => {
-	const row = new HStack([
-		{ component: new Text("one\ntwo\nthree", 0, 0), basis: 5, shrink: 0 },
-		{ component: new Text("side", 0, 0), basis: 4, shrink: 0 },
-	], { gap: 1, align: "end" });
+	const row = new HStack(
+		[
+			{ component: new Text("one\ntwo\nthree", 0, 0), basis: 5, shrink: 0 },
+			{ component: new Text("side", 0, 0), basis: 4, shrink: 0 },
+		],
+		{ gap: 1, align: "end" },
+	);
 	const scroll = new ScrollView(row);
 	const render = () => renderLayoutFrame(scroll, 12, 2, () => {});
 	const initial = render();

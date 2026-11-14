@@ -1,4 +1,20 @@
-import { createTypedMetrics, createTypedSpanStarter, defineTelemetrySchema, NOOP_TELEMETRY_CONTEXT, NOOP_TELEMETRY_METRICS, type SpanAttributes, type TelemetryCarrier, type TelemetryContext, type TelemetrySpan, type TelemetryMetrics, type TypedTelemetryMetrics, type TypedSpanStarter, type TelemetrySpanDefinition, type TelemetryStartAttributeDefinition, type TelemetryAttributeDefinition } from "@axi/telemetry";
+import {
+	createTypedMetrics,
+	createTypedSpanStarter,
+	defineTelemetrySchema,
+	NOOP_TELEMETRY_CONTEXT,
+	NOOP_TELEMETRY_METRICS,
+	type SpanAttributes,
+	type TelemetryCarrier,
+	type TelemetryContext,
+	type TelemetrySpan,
+	type TelemetryMetrics,
+	type TypedTelemetryMetrics,
+	type TypedSpanStarter,
+	type TelemetrySpanDefinition,
+	type TelemetryStartAttributeDefinition,
+	type TelemetryAttributeDefinition,
+} from "@axi/telemetry";
 import type { Address } from "./contracts/index.ts";
 import { isObjectsError } from "./data/index.ts";
 
@@ -10,11 +26,23 @@ const caller = { ...text, required: false, cardinality: "high" } as const;
 const common = { "objects.host": host, type: text, object };
 const outcome = { type: "string", description: "Operation outcome.", values: ["ok", "error", "aborted"] } as const;
 const resultNumber = { type: "number", description: "A numeric result." } as const;
-const status = { default: "ok", errorWhen: "Failed operations record a bounded error category and message; cancellation remains ok." } as const;
-const commit = { description: "An adopted transaction.", attributes: { documents: number, ops: number, rows: number, duration: number } } as const;
+const status = {
+	default: "ok",
+	errorWhen: "Failed operations record a bounded error category and message; cancellation remains ok.",
+} as const;
+const commit = {
+	description: "An adopted transaction.",
+	attributes: { documents: number, ops: number, rows: number, duration: number },
+} as const;
 const retry = { description: "Delay before retry.", attributes: { backoff: number } } as const;
-const span = <const A extends Record<string, TelemetryStartAttributeDefinition>, const E extends Record<string, TelemetryAttributeDefinition>>(
-	description: string, parents: TelemetrySpanDefinition["parents"], startAttributes: A, endAttributes: E,
+const span = <
+	const A extends Record<string, TelemetryStartAttributeDefinition>,
+	const E extends Record<string, TelemetryAttributeDefinition>,
+>(
+	description: string,
+	parents: TelemetrySpanDefinition["parents"],
+	startAttributes: A,
+	endAttributes: E,
 ) => ({ description, parents, startAttributes, endAttributes, status });
 const any = { kind: "any" } as const;
 const root = { kind: "root_or_external" } as const;
@@ -24,20 +52,128 @@ const duration = (description: string) => ({ kind: "histogram", description, uni
 export const OBJECTS_TELEMETRY_SCHEMA = defineTelemetrySchema({
 	version: 1,
 	spans: {
-		"objects.call": span("Remote method invocation by a consumer.", any, { ...common, member: text, "address.kind": text, "objects.principal": caller }, { outcome }),
-		"objects.method": { ...span("Method execution by a provider.", any, { ...common, member: text, "principal.kind": text, "objects.principal": caller }, { outcome }), events: { "objects.commit": commit } },
-		"objects.relay": span("Forwarded hold or method invocation.", root, { "objects.host": host, type: text, member: text, "upstream.kind": text }, { outcome }),
-		"objects.hold": span("Hold acquisition until a first answer.", any, { ...common, "address.kind": text }, { outcome: { ...outcome, values: ["bound", "failed", "ended"] } }),
-		"objects.activate": { ...span("One activation or resumed activation.", root, { ...common, attempt: number }, { outcome: { ...outcome, values: ["live", "failed", "parked", "ended"] } }), events: { "objects.park": { description: "Activation waiting on a dependency.", attributes: { cause: text } }, "objects.retry": retry } },
-		"objects.open": span("Opening an object's native resource.", { kind: "spans", spans: ["objects.activate"] }, { "objects.host": host, type: text, native: number }, {}),
-		"objects.close": span("Closing an object's native resource.", root, { "objects.host": host, type: text, native: number, reason: { ...text, values: ["end", "close", "reload"] } }, {}),
-		"objects.load": span("Initial facet publication.", any, { "objects.host": host, plugins: number }, { failed: { type: "number", description: "Rejected facets." } }),
-		"objects.reload": { ...span("Facet replacement and affected objects.", any, { "objects.host": host, plugins: number }, { added: resultNumber, changed: resultNumber, removed: resultNumber, failed: resultNumber, fates: resultNumber }), events: { "objects.reload.fate": { description: "An affected object's result.", attributes: { object, fate: { ...text, values: ["restarted", "ended", "parked", "retried"] } } } } },
-		"objects.resolve": span("Resolving a routed host address.", root, { "objects.host": host, kind: text, address: object }, { outcome: { ...outcome, values: ["linked", "failed"] } }),
-		"objects.revoke": span("Revoking principals and their work.", any, { "objects.host": host }, { count: resultNumber }),
-		"objects.routine": { ...span("A source-triggered routine invocation.", root, { ...common, routine: { ...text, values: ["on", "onLive"] }, position: number }, { outcome }), events: { "objects.commit": commit, "objects.retry": retry } },
-		"objects.job": { ...span("One job intent, execution or finish phase.", any, { "objects.host": host, object, job: text, phase: { ...text, values: ["intent", "run", "finish"] }, "job.id": { ...caller } }, { outcome, "job.id": { type: "string", cardinality: "high", description: "Persisted run identifier." } }), events: { "objects.commit": commit, "objects.retry": retry } },
-		"objects.http": { ...span("A routed HTTP request.", root, { "objects.host": host, method: text, route: text }, { status: { type: "number", description: "Response status." } }), events: { "objects.commit": commit } },
+		"objects.call": span(
+			"Remote method invocation by a consumer.",
+			any,
+			{ ...common, member: text, "address.kind": text, "objects.principal": caller },
+			{ outcome },
+		),
+		"objects.method": {
+			...span(
+				"Method execution by a provider.",
+				any,
+				{ ...common, member: text, "principal.kind": text, "objects.principal": caller },
+				{ outcome },
+			),
+			events: { "objects.commit": commit },
+		},
+		"objects.relay": span(
+			"Forwarded hold or method invocation.",
+			root,
+			{ "objects.host": host, type: text, member: text, "upstream.kind": text },
+			{ outcome },
+		),
+		"objects.hold": span(
+			"Hold acquisition until a first answer.",
+			any,
+			{ ...common, "address.kind": text },
+			{ outcome: { ...outcome, values: ["bound", "failed", "ended"] } },
+		),
+		"objects.activate": {
+			...span(
+				"One activation or resumed activation.",
+				root,
+				{ ...common, attempt: number },
+				{ outcome: { ...outcome, values: ["live", "failed", "parked", "ended"] } },
+			),
+			events: {
+				"objects.park": { description: "Activation waiting on a dependency.", attributes: { cause: text } },
+				"objects.retry": retry,
+			},
+		},
+		"objects.open": span(
+			"Opening an object's native resource.",
+			{ kind: "spans", spans: ["objects.activate"] },
+			{ "objects.host": host, type: text, native: number },
+			{},
+		),
+		"objects.close": span(
+			"Closing an object's native resource.",
+			root,
+			{ "objects.host": host, type: text, native: number, reason: { ...text, values: ["end", "close", "reload"] } },
+			{},
+		),
+		"objects.load": span(
+			"Initial facet publication.",
+			any,
+			{ "objects.host": host, plugins: number },
+			{ failed: { type: "number", description: "Rejected facets." } },
+		),
+		"objects.reload": {
+			...span(
+				"Facet replacement and affected objects.",
+				any,
+				{ "objects.host": host, plugins: number },
+				{
+					added: resultNumber,
+					changed: resultNumber,
+					removed: resultNumber,
+					failed: resultNumber,
+					fates: resultNumber,
+				},
+			),
+			events: {
+				"objects.reload.fate": {
+					description: "An affected object's result.",
+					attributes: { object, fate: { ...text, values: ["restarted", "ended", "parked", "retried"] } },
+				},
+			},
+		},
+		"objects.resolve": span(
+			"Resolving a routed host address.",
+			root,
+			{ "objects.host": host, kind: text, address: object },
+			{ outcome: { ...outcome, values: ["linked", "failed"] } },
+		),
+		"objects.revoke": span(
+			"Revoking principals and their work.",
+			any,
+			{ "objects.host": host },
+			{ count: resultNumber },
+		),
+		"objects.routine": {
+			...span(
+				"A source-triggered routine invocation.",
+				root,
+				{ ...common, routine: { ...text, values: ["on", "onLive"] }, position: number },
+				{ outcome },
+			),
+			events: { "objects.commit": commit, "objects.retry": retry },
+		},
+		"objects.job": {
+			...span(
+				"One job intent, execution or finish phase.",
+				any,
+				{
+					"objects.host": host,
+					object,
+					job: text,
+					phase: { ...text, values: ["intent", "run", "finish"] },
+					"job.id": { ...caller },
+				},
+				{ outcome, "job.id": { type: "string", cardinality: "high", description: "Persisted run identifier." } },
+			),
+			events: { "objects.commit": commit, "objects.retry": retry },
+		},
+		"objects.http": {
+			...span(
+				"A routed HTTP request.",
+				root,
+				{ "objects.host": host, method: text, route: text },
+				{ status: { type: "number", description: "Response status." } },
+			),
+			events: { "objects.commit": commit },
+		},
 	},
 	metrics: {
 		"objects.events.emitted": counter("Emitted event values."),
@@ -65,7 +201,12 @@ export const OBJECTS_TELEMETRY_SCHEMA = defineTelemetrySchema({
 		"objects.registry.adapts": counter("Adapted registry values."),
 		"objects.contract.adapts": counter("Adapted contract state."),
 		"objects.link.state_messages": counter("Outgoing local state messages."),
-		"objects.link.bytes": { kind: "counter", unit: "By", description: "Encoded link bytes.", attributes: { direction: { ...text, values: ["sent", "received"] } } },
+		"objects.link.bytes": {
+			kind: "counter",
+			unit: "By",
+			description: "Encoded link bytes.",
+			attributes: { direction: { ...text, values: ["sent", "received"] } },
+		},
 		"objects.commit.duration": duration("Transaction adoption latency."),
 		"objects.calls.in_flight": gauge("Active method invocations."),
 		"objects.holds.active": gauge("Holds placed on this host."),
@@ -76,7 +217,9 @@ export const OBJECTS_TELEMETRY_SCHEMA = defineTelemetrySchema({
 });
 export type ObjectsSpanName = keyof typeof OBJECTS_TELEMETRY_SCHEMA.spans;
 export type ObjectsMetrics = TypedTelemetryMetrics<readonly [typeof OBJECTS_TELEMETRY_SCHEMA]>;
-export function objectsSpans(parent: TelemetryContext): TypedSpanStarter<readonly [typeof OBJECTS_TELEMETRY_SCHEMA]> { return createTypedSpanStarter(parent, [OBJECTS_TELEMETRY_SCHEMA]); }
+export function objectsSpans(parent: TelemetryContext): TypedSpanStarter<readonly [typeof OBJECTS_TELEMETRY_SCHEMA]> {
+	return createTypedSpanStarter(parent, [OBJECTS_TELEMETRY_SCHEMA]);
+}
 const instruments = new WeakMap<TelemetryMetrics, ObjectsMetrics>();
 export function objectsMetrics(source: TelemetryMetrics | undefined): ObjectsMetrics {
 	const metrics = source ?? NOOP_TELEMETRY_METRICS;
@@ -86,17 +229,28 @@ export function objectsMetrics(source: TelemetryMetrics | undefined): ObjectsMet
 		const cache = new Map<string, unknown>();
 		const get = (kind: "counter" | "upDownCounter" | "histogram", name: string): unknown => {
 			let value = cache.get(name);
-			if (!value) { value = (typed[kind] as (name: string) => unknown)(name); cache.set(name, value); }
+			if (!value) {
+				value = (typed[kind] as (name: string) => unknown)(name);
+				cache.set(name, value);
+			}
 			return value;
 		};
-		cached = { counter: (name) => get("counter", name), upDownCounter: (name) => get("upDownCounter", name), histogram: (name) => get("histogram", name) } as ObjectsMetrics;
+		cached = {
+			counter: (name) => get("counter", name),
+			upDownCounter: (name) => get("upDownCounter", name),
+			histogram: (name) => get("histogram", name),
+		} as ObjectsMetrics;
 		instruments.set(metrics, cached);
 	}
 	return cached;
 }
-export function countingOnly(metrics: TelemetryMetrics): TelemetrySpan { return { ...NOOP_TELEMETRY_CONTEXT, metrics }; }
+export function countingOnly(metrics: TelemetryMetrics): TelemetrySpan {
+	return { ...NOOP_TELEMETRY_CONTEXT, metrics };
+}
 export const MAX_MESSAGE = 500;
-export function capped(text: string): string { return text.slice(0, 256); }
+export function capped(text: string): string {
+	return text.slice(0, 256);
+}
 
 export function untraced(context: TelemetryContext): boolean {
 	return context.startSpan === NOOP_TELEMETRY_CONTEXT.startSpan;
@@ -105,9 +259,17 @@ export function hostAttribute(address: Address | undefined): string {
 	return (address?.key ?? "client").slice(0, 256);
 }
 export function spanFailed(span: TelemetrySpan, name: string, error: unknown): void {
-	span.setStatus({ status: "error", error: { name, message: (error instanceof Error ? error.message : String(error)).slice(0, 500) } });
+	span.setStatus({
+		status: "error",
+		error: { name, message: (error instanceof Error ? error.message : String(error)).slice(0, 500) },
+	});
 }
-export function ended(span: TelemetrySpan, category: string, error: unknown, signal?: AbortSignal): "aborted" | "error" {
+export function ended(
+	span: TelemetrySpan,
+	category: string,
+	error: unknown,
+	signal?: AbortSignal,
+): "aborted" | "error" {
 	if (signal?.aborted || isObjectsError(error, "aborted")) {
 		span.setStatus({ status: "ok" });
 		return "aborted";
@@ -116,7 +278,7 @@ export function ended(span: TelemetrySpan, category: string, error: unknown, sig
 	return "error";
 }
 export function parentOf(carrier: TelemetryCarrier | undefined, adapter: TelemetryContext): TelemetryContext {
-	return untraced(adapter) ? adapter : adapter.propagation?.extract(carrier) ?? adapter;
+	return untraced(adapter) ? adapter : (adapter.propagation?.extract(carrier) ?? adapter);
 }
 export function carrierOf(context: TelemetryContext): TelemetryCarrier | undefined {
 	return untraced(context) ? undefined : context.propagation?.inject(context);
@@ -131,8 +293,12 @@ export class OpenSpan {
 			return this.#completion.promise;
 		});
 	}
-	get span(): TelemetrySpan { return this.#span; }
-	get ended(): boolean { return this.#ended; }
+	get span(): TelemetrySpan {
+		return this.#span;
+	}
+	get ended(): boolean {
+		return this.#ended;
+	}
 	end(): void {
 		if (this.#ended) return;
 		this.#ended = true;
@@ -140,8 +306,14 @@ export class OpenSpan {
 	}
 	endWhen(work: Promise<unknown>, category: string, signal?: AbortSignal): void {
 		void work.then(
-			() => { this.#span.setAttributes({ outcome: "ok" }); this.end(); },
-			(error) => { this.#span.setAttributes({ outcome: ended(this.#span, category, error, signal) }); this.end(); },
+			() => {
+				this.#span.setAttributes({ outcome: "ok" });
+				this.end();
+			},
+			(error) => {
+				this.#span.setAttributes({ outcome: ended(this.#span, category, error, signal) });
+				this.end();
+			},
 		);
 	}
 }

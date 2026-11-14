@@ -80,7 +80,10 @@ try {
 		const namespace = await mf.getDurableObjectNamespace("SANDBOX");
 		const sandbox = namespace.get(namespace.idFromName("test"));
 		const contexts = new Map();
-		for (const fetchCoverage of [() => mf.dispatchFetch("https://check/coverage"), () => sandbox.fetch("https://sandbox/coverage")]) {
+		for (const fetchCoverage of [
+			() => mf.dispatchFetch("https://check/coverage"),
+			() => sandbox.fetch("https://sandbox/coverage"),
+		]) {
 			const response = await fetchCoverage();
 			assert.equal(response.status, 200);
 			const report = await response.json();

@@ -91,9 +91,16 @@ export class RelayedHold {
 			this.#trace = carrierOf(this.#relaying.span) ?? this.#trace;
 		}
 	}
-	get span(): TelemetrySpan | undefined { return this.#relaying?.span; }
+	get span(): TelemetrySpan | undefined {
+		return this.#relaying?.span;
+	}
 	#attributes(member: string) {
-		return { "objects.host": this.#provider.link.host.spanHost, type: this.#request.type.slice(0, 256), member, "upstream.kind": this.#request.address.kind.slice(0, 256) };
+		return {
+			"objects.host": this.#provider.link.host.spanHost,
+			type: this.#request.type.slice(0, 256),
+			member,
+			"upstream.kind": this.#request.address.kind.slice(0, 256),
+		};
 	}
 	#relayed(error?: ObjectsError): void {
 		if (!this.#relaying) return;
@@ -121,7 +128,14 @@ export class RelayedHold {
 			again.span.setAttributes({ outcome: "ok" });
 			again.end();
 		}
-		link.send({ kind: "hold", origin, hold: this.id, ...this.#request, ...(trace === undefined ? {} : { trace }), ...actingFor(link, this.caller) });
+		link.send({
+			kind: "hold",
+			origin,
+			hold: this.id,
+			...this.#request,
+			...(trace === undefined ? {} : { trace }),
+			...actingFor(link, this.caller),
+		});
 		this.#relayed();
 	}
 	dropped(error: ObjectsError): void {
@@ -161,8 +175,14 @@ export class RelayedHold {
 			const { link, origin } = this.#connection;
 			const { old, ...unmarked } = message;
 			const forwarded = old && !this.#provider.link.trusted ? unmarked : message;
-			const span = untraced(link.host.telemetry) ? undefined : new OpenSpan(parentOf(message.trace, link.host.telemetry), "objects.relay", this.#attributes(`#${message.method}`));
-			const trace = span ? carrierOf(span.span) ?? message.trace : message.trace;
+			const span = untraced(link.host.telemetry)
+				? undefined
+				: new OpenSpan(
+						parentOf(message.trace, link.host.telemetry),
+						"objects.relay",
+						this.#attributes(`#${message.method}`),
+					);
+			const trace = span ? (carrierOf(span.span) ?? message.trace) : message.trace;
 			link.send({ ...forwarded, origin, ...(trace === undefined ? {} : { trace }) });
 			return span;
 		} else
@@ -186,7 +206,11 @@ export class RelayedHold {
 		connection?.link.send({ kind: "release", origin: connection.origin, hold: this.id });
 	}
 	drop(): void {
-		if (this.#relaying) { this.#relaying.span.setAttributes({ outcome: "aborted" }); this.#relaying.end(); this.#relaying = undefined; }
+		if (this.#relaying) {
+			this.#relaying.span.setAttributes({ outcome: "aborted" });
+			this.#relaying.end();
+			this.#relaying = undefined;
+		}
 		this.#connection = undefined;
 		this.#path.detach(this);
 	}

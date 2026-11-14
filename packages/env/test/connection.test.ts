@@ -111,10 +111,12 @@ it("reports an actual spawn failure and can start a later daemon on the same con
 
 it("normalizes a non-Error command-factory failure and can retry startup", async () => {
 	let launches = 0;
-	const connection = new Connection({ command: async () => {
-		if (++launches === 1) throw "Cannot deploy daemon";
-		return command;
-	} });
+	const connection = new Connection({
+		command: async () => {
+			if (++launches === 1) throw "Cannot deploy daemon";
+			return command;
+		},
+	});
 	try {
 		await expect(connection.info()).rejects.toMatchObject({ code: "spawn_error", message: "Cannot deploy daemon" });
 		expect((await connection.request("echo", { value: "reconnected" })).json.value).toBe("reconnected");
@@ -142,7 +144,8 @@ it("closing as shared startup completes rejects another caller waiting to send",
 	try {
 		const closing = connection.session().then(() => connection.close());
 		const request = expect(connection.request("hold", {})).rejects.toMatchObject({
-			code: "unknown", message: "Connection closed",
+			code: "unknown",
+			message: "Connection closed",
 		});
 		await Promise.all([closing, request]);
 		await expect(connection.info()).rejects.toMatchObject({ message: "Connection closed" });
@@ -158,7 +161,9 @@ it("closing a ready connection rejects a caller that has not yet sent its frame"
 		const pending = connection.request("hold", {});
 		connection.close();
 		await expect(pending).rejects.toMatchObject({ code: "unknown", fields: { lost: true } });
-	} finally { connection.close(); }
+	} finally {
+		connection.close();
+	}
 });
 
 it("cancelling during request admission keeps the shared connection usable", async () => {
@@ -166,10 +171,16 @@ it("cancelling during request admission keeps the shared connection usable", asy
 	const controller = new AbortController();
 	try {
 		await connection.info();
-		await expect(connection.request("hold", {}, {
-			signal: controller.signal,
-			onStart: () => controller.abort(),
-		})).rejects.toMatchObject({ code: "aborted" });
+		await expect(
+			connection.request(
+				"hold",
+				{},
+				{
+					signal: controller.signal,
+					onStart: () => controller.abort(),
+				},
+			),
+		).rejects.toMatchObject({ code: "aborted" });
 		expect((await connection.request("echo", { value: "not cancelled" })).json.value).toBe("not cancelled");
 	} finally {
 		connection.close();

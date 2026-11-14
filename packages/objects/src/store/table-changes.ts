@@ -1,12 +1,7 @@
 import type { Context } from "../context/index.ts";
 import { invalid } from "../data/internal.ts";
 import { applySet, type EvaluatedRow } from "./evaluate.ts";
-import {
-	compileSet,
-	compileWhere,
-	type SetNode,
-	type WhereNode,
-} from "./expression.ts";
+import { compileSet, compileWhere, type SetNode, type WhereNode } from "./expression.ts";
 import type { StagedWrite } from "./step.ts";
 import type { TableHandle } from "./table-handle.ts";
 import {
@@ -35,9 +30,7 @@ export class TableChanges {
 	put(row: unknown): void {
 		const { definition, sql } = this.handle,
 			encoded = definition.rows.put(row, definition.version);
-		this.#staged.push(
-			stagePut(sql.put, sql.table, encoded, definition.version),
-		);
+		this.#staged.push(stagePut(sql.put, sql.table, encoded, definition.version));
 		this.#record(encoded.id, { kind: "put", row: encoded.row });
 	}
 	update(key: unknown, set: unknown): void {
@@ -59,13 +52,7 @@ export class TableChanges {
 	delete(key: unknown): void {
 		const { definition, sql } = this.handle,
 			encoded = definition.rows.key(key, "delete");
-		this.#staged.push(
-			stageDelete(
-				{ sql: sql.delete, params: [...encoded.params] },
-				sql.table,
-				encoded.key,
-			),
-		);
+		this.#staged.push(stageDelete({ sql: sql.delete, params: [...encoded.params] }, sql.table, encoded.key));
 		this.#record(encoded.id, { kind: "delete" });
 	}
 	updateWhere(where: unknown, set: unknown): void {
@@ -87,18 +74,13 @@ export class TableChanges {
 	deleteWhere(where: unknown): void {
 		const condition = this.#where(where, "deleteWhere"),
 			{ sql } = this.handle;
-		this.#staged.push(
-			stageDeleteWhere(sql.deleteWhere(condition), sql.table, condition),
-		);
+		this.#staged.push(stageDeleteWhere(sql.deleteWhere(condition), sql.table, condition));
 		this.#bulk = true;
 	}
 	async get(key: unknown, context: Context): Promise<EvaluatedRow | undefined> {
 		const { definition } = this.handle;
 		if (this.#bulk)
-			throw invalid(
-				"read_after_bulk",
-				`${definition.name}: tx.get after an updateWhere or deleteWhere on the table`,
-			);
+			throw invalid("read_after_bulk", `${definition.name}: tx.get after an updateWhere or deleteWhere on the table`);
 		const encoded = definition.rows.key(key, "get"),
 			writes = this.#keys.get(encoded.id) ?? [];
 		let index = writes.length - 1;
@@ -113,8 +95,7 @@ export class TableChanges {
 					: undefined;
 		for (index++; index < writes.length; index++) {
 			const change = writes[index]!;
-			if (row !== undefined && change.kind === "update")
-				row = applySet(change.set, row, definition.name);
+			if (row !== undefined && change.kind === "update") row = applySet(change.set, row, definition.name);
 		}
 		return row === undefined ? undefined : definition.rows.addressed(row);
 	}
@@ -125,9 +106,7 @@ export class TableChanges {
 		return compileWhere(this.handle.definition, this.#input(input), what);
 	}
 	#input(input: unknown): unknown {
-		return typeof input === "function"
-			? input(this.handle.definition.refs)
-			: input;
+		return typeof input === "function" ? input(this.handle.definition.refs) : input;
 	}
 	#record(key: string, change: Change): void {
 		const prior = this.#keys.get(key);

@@ -8,14 +8,30 @@ import type { FollowObserver } from "../src/host/follow.ts";
 
 it("reports each expired drain when a routine ignores cancellation during reload", async () => {
 	const Value = local("routine.draining", { version: 1, params: {}, members: { value: int() } });
-	const started = Promise.withResolvers<void>(), gate = Promise.withResolvers<void>(), errors: HostError[] = [];
-	const host = createHost({ closeTimeout: 15, reloadDrainTimeout: 15, onError(error) { errors.push(error); } });
-	const plugin = (n: number) => ({ name: "value", facet: defineFacet((h) => h.serve(Value, (_, self) => {
-		self.onLive(async () => {
-			if (n === 1) { started.resolve(); await gate.promise; }
-		});
-		return { value: constant(n) };
-	})) });
+	const started = Promise.withResolvers<void>(),
+		gate = Promise.withResolvers<void>(),
+		errors: HostError[] = [];
+	const host = createHost({
+		closeTimeout: 15,
+		reloadDrainTimeout: 15,
+		onError(error) {
+			errors.push(error);
+		},
+	});
+	const plugin = (n: number) => ({
+		name: "value",
+		facet: defineFacet((h) =>
+			h.serve(Value, (_, self) => {
+				self.onLive(async () => {
+					if (n === 1) {
+						started.resolve();
+						await gate.promise;
+					}
+				});
+				return { value: constant(n) };
+			}),
+		),
+	});
 	try {
 		await host.load([plugin(1)], context);
 		const ref = await host.get(Value, {}, context);
@@ -30,37 +46,54 @@ it("reports each expired drain when a routine ignores cancellation during reload
 	}
 });
 
-it.each(["reload", "failure"] as const)("preserves the cancellation cause when a routine stops after %s", async (mode) => {
-	const Value = local("routine.cause", { version: 1, params: {}, members: { value: int() } });
-	const started = Promise.withResolvers<Context>(), attached = Promise.withResolvers<FollowObserver<unknown>>();
-	const plugin = () => ({ name: "value", facet: defineFacet((h) => h.serve(Value, (_, self) => {
-		const value = self.follow(async (observer) => {
-			attached.resolve(observer);
-			return { value: 1, detach() {} };
+it.each(["reload", "failure"] as const)(
+	"preserves the cancellation cause when a routine stops after %s",
+	async (mode) => {
+		const Value = local("routine.cause", { version: 1, params: {}, members: { value: int() } });
+		const started = Promise.withResolvers<Context>(),
+			attached = Promise.withResolvers<FollowObserver<unknown>>();
+		const plugin = () => ({
+			name: "value",
+			facet: defineFacet((h) =>
+				h.serve(Value, (_, self) => {
+					const value = self.follow(async (observer) => {
+						attached.resolve(observer);
+						return { value: 1, detach() {} };
+					});
+					self.onLive(
+						(ctx) =>
+							new Promise<void>((resolve) => {
+								started.resolve(ctx);
+								ctx.abortSignal?.addEventListener("abort", () => resolve(), { once: true });
+							}),
+					);
+					return { value };
+				}),
+			),
 		});
-		self.onLive((ctx) => new Promise<void>((resolve) => {
-			started.resolve(ctx);
-			ctx.abortSignal?.addEventListener("abort", () => resolve(), { once: true });
-		}));
-		return { value };
-	})) });
-	const host = createHost({ onError() {} });
-	try {
-		await host.load([plugin()], context);
-		const ref = await host.get(Value, {}, context), ctx = await started.promise;
-		if (mode === "reload") {
-			await host.reload([plugin()], context);
-			expect(ctx.abortSignal?.reason).toMatchObject({ code: "released", reason: "ended", message: "routine.cause: reloaded" });
-		} else {
-			const failure = new ObjectsError({ code: "unavailable", message: "runtime disconnected" });
-			(await attached.promise).end({ kind: "failed", error: failure });
-			expect(ctx.abortSignal?.reason).toBe(failure);
+		const host = createHost({ onError() {} });
+		try {
+			await host.load([plugin()], context);
+			const ref = await host.get(Value, {}, context),
+				ctx = await started.promise;
+			if (mode === "reload") {
+				await host.reload([plugin()], context);
+				expect(ctx.abortSignal?.reason).toMatchObject({
+					code: "released",
+					reason: "ended",
+					message: "routine.cause: reloaded",
+				});
+			} else {
+				const failure = new ObjectsError({ code: "unavailable", message: "runtime disconnected" });
+				(await attached.promise).end({ kind: "failed", error: failure });
+				expect(ctx.abortSignal?.reason).toBe(failure);
+			}
+			ref.release();
+		} finally {
+			await host.close(context);
 		}
-		ref.release();
-	} finally {
-		await host.close(context);
-	}
-});
+	},
+);
 
 class Values extends Source {
 	#n = 0;

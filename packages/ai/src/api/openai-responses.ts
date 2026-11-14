@@ -90,7 +90,10 @@ function request(
 		input,
 		stream: true,
 		store: false,
-		prompt_cache_key: retention === "none" || compat.promptCacheKeyMode === "disabled" ? undefined : clampOpenAIPromptCacheKey(options.sessionId),
+		prompt_cache_key:
+			retention === "none" || compat.promptCacheKeyMode === "disabled"
+				? undefined
+				: clampOpenAIPromptCacheKey(options.sessionId),
 		prompt_cache_retention:
 			retention === "long" && compat.supportsLongCacheRetention && !compat.supportsExplicitPromptCacheMode
 				? "24h"

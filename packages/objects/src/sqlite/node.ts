@@ -5,7 +5,11 @@ import type { SqliteDatabase, SqliteExecutor, SqliteValue } from "./database.ts"
 import { OperationQueue } from "./queue.ts";
 
 export type NodeSqliteMode = "read-write" | "read-only";
-export type NodeSqliteDatabaseOptions = { readonly mode?: NodeSqliteMode; readonly walAutoCheckpointPages?: number; readonly busyTimeoutMs?: number };
+export type NodeSqliteDatabaseOptions = {
+	readonly mode?: NodeSqliteMode;
+	readonly walAutoCheckpointPages?: number;
+	readonly busyTimeoutMs?: number;
+};
 type TransactionScope = { active: boolean };
 
 abstract class Statements implements SqliteExecutor {
@@ -123,7 +127,8 @@ export async function openNodeSqliteDatabase(
 ): Promise<NodeSqliteDatabase> {
 	const checkpoint = options.walAutoCheckpointPages ?? 1000;
 	const timeout = options.busyTimeoutMs ?? 5000;
-	if (options.mode === "read-only") return new NodeSqliteDatabase(new DatabaseSync(path, { timeout, readOnly: true }), "read-only");
+	if (options.mode === "read-only")
+		return new NodeSqliteDatabase(new DatabaseSync(path, { timeout, readOnly: true }), "read-only");
 	if (path !== ":memory:") await mkdir(dirname(path), { recursive: true });
 	const adapter = new NodeSqliteDatabase(new DatabaseSync(path, { timeout }));
 	try {

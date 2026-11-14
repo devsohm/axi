@@ -283,7 +283,13 @@ try {
 		const files = await fileHost.get(Files, {}, context);
 		const folder = await fileHost.get(FilesFolder, { space: "installed", folder: "" }, context);
 		try {
-			const data = { space: "installed", path: "note", mime: "text/plain", source: "installed", bytes: new Uint8Array([1, 2]) };
+			const data = {
+				space: "installed",
+				path: "note",
+				mime: "text/plain",
+				source: "installed",
+				bytes: new Uint8Array([1, 2]),
+			};
 			const original = await files.put(data, context);
 			const latest = await files.put(data, context);
 			assert.equal(latest.version, 2);

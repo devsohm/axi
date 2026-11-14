@@ -3,11 +3,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, it } from "vitest";
-import {
-	BACKGROUND_CONTEXT as context,
-	withCancel,
-	type Context,
-} from "../src/context/index.ts";
+import { BACKGROUND_CONTEXT as context, withCancel, type Context } from "../src/context/index.ts";
 import { sqliteBackend } from "../src/store/backend.ts";
 import { createDocument, loadContent } from "../src/store/engine.ts";
 import { openStore, type ObjectsStore } from "../src/store/store.ts";
@@ -48,13 +44,15 @@ it("uses the selected cancellation signal to classify a failed read", async () =
 			return ++reads === 1 ? cancelled : undefined;
 		},
 		telemetry: context.telemetry,
-		value: key => context.value(key),
+		value: (key) => context.value(key),
 		toString: () => "cancelled store read",
 	};
 	try {
-		await expect(store.read(async () => {
-			throw new Error("Read interrupted");
-		}, caller)).rejects.toMatchObject({
+		await expect(
+			store.read(async () => {
+				throw new Error("Read interrupted");
+			}, caller),
+		).rejects.toMatchObject({
 			code: "aborted",
 			cause: cancelled.reason,
 		});
@@ -67,7 +65,15 @@ it("uses the selected cancellation signal to classify a failed read", async () =
 it("counts rows during composite writes and adopts the total once", async () => {
 	const store = (await openStore(sqliteBackend(await openNodeSqliteDatabase(":memory:")), context)) as ObjectsStore;
 	const definition = defineTable("notes", { version: 1, columns: { id: str(), text: str() }, key: ["id"] });
-	const owner = { label: "app", scope: {}, queries: new LiveQueries(), assertLive() {}, fail(error: Error) { throw error; } };
+	const owner = {
+		label: "app",
+		scope: {},
+		queries: new LiveQueries(),
+		assertLive() {},
+		fail(error: Error) {
+			throw error;
+		},
+	};
 	try {
 		await prepareTables([{ definition, table: "app:notes" }], store, fence, "app", context);
 		const writes: StagedWrite[] = [];
@@ -80,20 +86,26 @@ it("counts rows during composite writes and adopts the total once", async () => 
 		changes.deleteWhere(and());
 		changes.delete({ id: "absent" });
 		const counts: number[] = [];
-		await store.commit([{
-			order: "write",
-			async apply(step) {
-				const recorded: StoreWrite[] = [];
-				for (const write of writes) {
-					recorded.push(...await write.apply(step));
-					counts.push(step.rows);
-				}
-				return recorded;
+		await store.commit(
+			[
+				{
+					order: "write",
+					async apply(step) {
+						const recorded: StoreWrite[] = [];
+						for (const write of writes) {
+							recorded.push(...(await write.apply(step)));
+							counts.push(step.rows);
+						}
+						return recorded;
+					},
+				},
+			],
+			{
+				admit: () => true,
+				adopt: (_seq, _ids, rows) => expect(rows).toBe(6),
 			},
-		}], {
-			admit: () => true,
-			adopt: (_seq, _ids, rows) => expect(rows).toBe(6),
-		}, context);
+			context,
+		);
 		expect(counts).toEqual([1, 2, 3, 4, 5, 6, 6]);
 	} finally {
 		await store.close(context);
@@ -103,8 +115,16 @@ it("counts rows during composite writes and adopts the total once", async () => 
 it("preserves rows through a column rename and refuses obsolete table handles", async () => {
 	const store = (await openStore(sqliteBackend(await openNodeSqliteDatabase(":memory:")), context)) as ObjectsStore;
 	const first = defineTable("messages", { version: 1, columns: { id: str(), text: str() }, key: ["id"] });
-	const second = evolveTable(first, table => table.rename("text", "body"));
-	const owner = { label: "workspace", scope: {}, queries: new LiveQueries(), assertLive() {}, fail(error: Error) { throw error; } };
+	const second = evolveTable(first, (table) => table.rename("text", "body"));
+	const owner = {
+		label: "workspace",
+		scope: {},
+		queries: new LiveQueries(),
+		assertLive() {},
+		fail(error: Error) {
+			throw error;
+		},
+	};
 	try {
 		await prepareTables([{ definition: first, table: "workspace:messages" }], store, fence, "workspace", context);
 		const old = new TableHandle(first, "workspace:messages", store, owner);
@@ -127,10 +147,7 @@ const create = (key: string) =>
 		JSON.stringify({ key }),
 	);
 it("announces grouped commits only after adoption and removes failing observers without undoing storage", async () => {
-	const store = (await openStore(
-		sqliteBackend(await openNodeSqliteDatabase(":memory:")),
-		context,
-	)) as ObjectsStore;
+	const store = (await openStore(sqliteBackend(await openNodeSqliteDatabase(":memory:")), context)) as ObjectsStore;
 	const adopted: number[] = [],
 		seen: number[] = [],
 		errors: unknown[] = [];
@@ -177,10 +194,7 @@ it("announces grouped commits only after adoption and removes failing observers 
 });
 
 it("leaves commit observers quiet for empty work and a rolled-back write", async () => {
-	const store = (await openStore(
-		sqliteBackend(await openNodeSqliteDatabase(":memory:")),
-		context,
-	)) as ObjectsStore;
+	const store = (await openStore(sqliteBackend(await openNodeSqliteDatabase(":memory:")), context)) as ObjectsStore;
 	const seen: number[] = [];
 	store.onCommitted(
 		(seq) => {
@@ -216,11 +230,12 @@ it("leaves commit observers quiet for empty work and a rolled-back write", async
 it("lets an admitted outbox trim finish while close waits for it", async () => {
 	const db = await openNodeSqliteDatabase(":memory:");
 	const store = (await openStore(sqliteBackend(db), context, { outbox: true })) as ObjectsStore;
-	const entered = Promise.withResolvers<void>(), release = Promise.withResolvers<void>();
+	const entered = Promise.withResolvers<void>(),
+		release = Promise.withResolvers<void>();
 	try {
 		await store.commit([create("a")], fence, context);
 		const transaction = db.transaction.bind(db);
-		db.transaction = async work => {
+		db.transaction = async (work) => {
 			const result = await transaction(work);
 			entered.resolve();
 			await release.promise;
@@ -241,38 +256,20 @@ it("lets an admitted outbox trim finish while close waits for it", async () => {
 it("reopens the committed sequence and allocator, and keeps outbox reads consistent with concurrent trims", async () => {
 	const directory = await mkdtemp(join(tmpdir(), "axi-store-"));
 	const file = join(directory, "state.sqlite");
-	let store = (await openStore(
-		sqliteBackend(await openNodeSqliteDatabase(file)),
-		context,
-		{ outbox: true },
-	)) as ObjectsStore;
+	let store = (await openStore(sqliteBackend(await openNodeSqliteDatabase(file)), context, {
+		outbox: true,
+	})) as ObjectsStore;
 	try {
-		await Promise.all([
-			store.commit([create("a")], fence, context),
-			store.commit([create("b")], fence, context),
-		]);
-		expect(
-			(await store.outbox!.read(0, 10, context)).map((commit) => [
-				commit.seq,
-				commit.nextId,
-			]),
-		).toEqual([
+		await Promise.all([store.commit([create("a")], fence, context), store.commit([create("b")], fence, context)]);
+		expect((await store.outbox!.read(0, 10, context)).map((commit) => [commit.seq, commit.nextId])).toEqual([
 			[1, 3],
 			[2, 4],
 		]);
 		await store.close(context);
-		store = (await openStore(
-			sqliteBackend(await openNodeSqliteDatabase(file)),
-			context,
-		)) as ObjectsStore;
+		store = (await openStore(sqliteBackend(await openNodeSqliteDatabase(file)), context)) as ObjectsStore;
 		expect([store.lastSeq, store.mintId()]).toEqual([2, 4]);
-		expect(
-			(await store.read((db) => loadContent(db, 2, "current"), context)).value,
-		).toEqual({ key: "a" });
-		await Promise.all([
-			store.outbox!.trim(2, context),
-			store.outbox!.trim(1, context),
-		]);
+		expect((await store.read((db) => loadContent(db, 2, "current"), context)).value).toEqual({ key: "a" });
+		await Promise.all([store.outbox!.trim(2, context), store.outbox!.trim(1, context)]);
 		expect(store.outbox!.floor).toBe(2);
 		await expect(store.outbox!.read(1, 10, context)).rejects.toMatchObject({
 			code: "invalid",
@@ -284,10 +281,7 @@ it("reopens the committed sequence and allocator, and keeps outbox reads consist
 	}
 });
 it("releases an export's commit lock immediately on cancellation", async () => {
-	const store = (await openStore(
-		sqliteBackend(await openNodeSqliteDatabase(":memory:")),
-		context,
-	)) as ObjectsStore;
+	const store = (await openStore(sqliteBackend(await openNodeSqliteDatabase(":memory:")), context)) as ObjectsStore;
 	try {
 		await store.commit([create("a")], fence, context);
 		const cancel = withCancel(context),
@@ -341,9 +335,10 @@ it("continues after a rolled-back refusal and stops after an uncertain commit ou
 			await transaction(work);
 			throw new Error("lost commit acknowledgement");
 		};
-		await expect(
-			store.commit([create("b")], fence, context),
-		).rejects.toMatchObject({ code: "unavailable", reason: "storage_failed" });
+		await expect(store.commit([create("b")], fence, context)).rejects.toMatchObject({
+			code: "unavailable",
+			reason: "storage_failed",
+		});
 		await expect(store.read(async () => 1, context)).rejects.toMatchObject({
 			reason: "storage_failed",
 		});

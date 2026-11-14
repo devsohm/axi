@@ -139,18 +139,34 @@ export class CallContext implements Ctx, CallNode {
 }
 
 type TraceScope = Ctx & { readonly spanHost: string; traced(span: TelemetrySpan): Ctx };
-async function traceScope<T>(scope: TraceScope, name: string, attributes: SpanAttributes, fn: (ctx: Ctx) => Promise<T>): Promise<T> {
+async function traceScope<T>(
+	scope: TraceScope,
+	name: string,
+	attributes: SpanAttributes,
+	fn: (ctx: Ctx) => Promise<T>,
+): Promise<T> {
 	if (scope.telemetry.startSpan === NOOP_TELEMETRY_CONTEXT.startSpan) return fn(scope);
-	return scope.telemetry.startSpan({ name, attributes: { "objects.host": scope.spanHost, ...attributes } }, async (span) => {
-		try {
-			return await fn(scope.traced(span));
-		} catch (error) {
-			span.setStatus(scope.abortSignal?.aborted || isObjectsError(error, "aborted")
-				? { status: "ok" }
-				: { status: "error", error: { name: "trace_failed", message: (error instanceof Error ? error.message : String(error)).slice(0, 500) } });
-			throw error;
-		}
-	});
+	return scope.telemetry.startSpan(
+		{ name, attributes: { "objects.host": scope.spanHost, ...attributes } },
+		async (span) => {
+			try {
+				return await fn(scope.traced(span));
+			} catch (error) {
+				span.setStatus(
+					scope.abortSignal?.aborted || isObjectsError(error, "aborted")
+						? { status: "ok" }
+						: {
+								status: "error",
+								error: {
+									name: "trace_failed",
+									message: (error instanceof Error ? error.message : String(error)).slice(0, 500),
+								},
+							},
+				);
+				throw error;
+			}
+		},
+	);
 }
 export class SpanCtx implements TraceScope {
 	readonly #parent: TraceScope;
@@ -159,18 +175,34 @@ export class SpanCtx implements TraceScope {
 		this.#parent = parent;
 		this.#context = withTelemetry(span, parent);
 	}
-	get spanHost(): string { return this.#parent.spanHost; }
-	get principal(): Principal | undefined { return this.#parent.principal; }
-	get incarnation(): string { return this.#parent.incarnation; }
-	get abortSignal(): AbortSignal | undefined { return this.#parent.abortSignal; }
-	get telemetry(): TelemetrySpan { return this.#context.telemetry; }
-	value<T>(key: ContextKey<T>): T | undefined { return this.#context.value(key); }
-	toString(): string { return `${this.#parent}.Trace`; }
+	get spanHost(): string {
+		return this.#parent.spanHost;
+	}
+	get principal(): Principal | undefined {
+		return this.#parent.principal;
+	}
+	get incarnation(): string {
+		return this.#parent.incarnation;
+	}
+	get abortSignal(): AbortSignal | undefined {
+		return this.#parent.abortSignal;
+	}
+	get telemetry(): TelemetrySpan {
+		return this.#context.telemetry;
+	}
+	value<T>(key: ContextKey<T>): T | undefined {
+		return this.#context.value(key);
+	}
+	toString(): string {
+		return `${this.#parent}.Trace`;
+	}
 	get<C extends Contract>(type: C, params: ParamsOf<C>, options?: GetOptions): Promise<Reference<C>> {
 		return this.#parent.get(type, params, options);
 	}
 	trace<T>(name: string, attributes: SpanAttributes, fn: (ctx: Ctx) => Promise<T>): Promise<T> {
 		return traceScope(this, name, attributes, fn);
 	}
-	traced(span: TelemetrySpan): Ctx { return new SpanCtx(this, span); }
+	traced(span: TelemetrySpan): Ctx {
+		return new SpanCtx(this, span);
+	}
 }

@@ -58,10 +58,7 @@ export function checkReadable(
 		throw new Error(
 			`${definition.name}: stored at version ${stored.version}, newer than the code's ${definition.version}`,
 		);
-	if (
-		stored.version === definition.version &&
-		stored.fingerprint !== definition.fingerprint
-	)
+	if (stored.version === definition.version && stored.fingerprint !== definition.fingerprint)
 		throw new Error(
 			`${definition.name}: stored with another schema at version ${definition.version} (a schema changed without a bump)`,
 		);
@@ -90,33 +87,22 @@ export class Persistence {
 	at(key: string): DocumentAddress {
 		return key ? { ...this.#scope, key } : this.#scope;
 	}
-	async read(
-		key: string,
-		context: Context,
-	): Promise<StoredDocument | undefined> {
+	async read(key: string, context: Context): Promise<StoredDocument | undefined> {
 		const document = await this.store.read(async (db) => {
 			const record = await findDocument(db, this.at(key));
 			return record === undefined ? undefined : loadDocument(db, record);
 		}, context);
-		if (document)
-			objectsMetrics(context.telemetry.metrics).counter("objects.store.loads").add(1);
+		if (document) objectsMetrics(context.telemetry.metrics).counter("objects.store.loads").add(1);
 		return document;
 	}
-	decode(
-		document: StoredDocument,
-		definition: Definition,
-		context: Context,
-	): Loaded {
+	decode(document: StoredDocument, definition: Definition, context: Context): Loaded {
 		const { record, deltasSinceBase } = document;
 		this.checkHost(record.host, definition);
 		checkReadable(record, definition);
 		// These records contain the JSON object accepted when the document was written.
 		const previous = document.value as JsonObject;
 		return {
-			value:
-				record.version === definition.version
-					? previous
-					: definition.migrate(previous, record.version, context),
+			value: record.version === definition.version ? previous : definition.migrate(previous, record.version, context),
 			stored: {
 				id: record.id,
 				revision: record.revision,
@@ -131,14 +117,8 @@ export class Persistence {
 		const declared = this.#host === undefined ? "string keys" : `addresses of ${this.#host.kind}`;
 		throw new Error(`${definition.name}: stored with ${stored}, declared with ${declared} (convert it explicitly)`);
 	}
-	async find(
-		key: string,
-		context: Context,
-	): Promise<FoundDocument | undefined> {
-		const record = await this.store.read(
-			(db) => findDocument(db, this.at(key)),
-			context,
-		);
+	async find(key: string, context: Context): Promise<FoundDocument | undefined> {
+		const record = await this.store.read((db) => findDocument(db, this.at(key)), context);
 		return record === undefined
 			? undefined
 			: {
@@ -152,15 +132,8 @@ export class Persistence {
 					host: record.host,
 				};
 	}
-	keys(
-		after: string | undefined,
-		limit: number,
-		context: Context,
-	): Promise<string[]> {
-		return this.store.read(
-			(db) => listDocumentKeys(db, this.#scope, after, limit),
-			context,
-		);
+	keys(after: string | undefined, limit: number, context: Context): Promise<string[]> {
+		return this.store.read((db) => listDocumentKeys(db, this.#scope, after, limit), context);
 	}
 	stage(
 		key: string,
@@ -170,8 +143,7 @@ export class Persistence {
 		writes: StagedWrite[],
 		held?: Held,
 	): StoredChange {
-		if (change.retires && stored)
-			writes.push(retireDocument(stored.id, stored.revision));
+		if (change.retires && stored) writes.push(retireDocument(stored.id, stored.revision));
 		const prepared = change.prepared;
 		if (!prepared) return { kind: "retire" };
 		const { version, fingerprint } = definition;
@@ -200,14 +172,7 @@ export class Persistence {
 		const content: DocumentContent = checkpoint
 			? { kind: "base", value: prepared.value, version, fingerprint }
 			: { kind: "delta", version, ops };
-		writes.push(
-			changeDocument(
-				stored.id,
-				stored.revision,
-				content,
-				JSON.stringify(checkpoint ? prepared.value : ops),
-			),
-		);
+		writes.push(changeDocument(stored.id, stored.revision, content, JSON.stringify(checkpoint ? prepared.value : ops)));
 		return {
 			kind: "change",
 			stored: {

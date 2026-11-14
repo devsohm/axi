@@ -82,7 +82,9 @@ export class ObjectsObject implements LocalTarget {
 	readonly chain: readonly string[];
 	readonly documents: Documents;
 	#liveQueries?: LiveQueries;
-	get liveQueries(): LiveQueries { return this.#liveQueries ??= new LiveQueries(); }
+	get liveQueries(): LiveQueries {
+		return (this.#liveQueries ??= new LiveQueries());
+	}
 	readonly #context: Context;
 	#trigger: TelemetryContext;
 	#attempts = 0;
@@ -162,14 +164,19 @@ export class ObjectsObject implements LocalTarget {
 	get instance(): Attempt | undefined {
 		return this.#status.kind === "live" ? this.#exposed : this.openOldAttempt;
 	}
-	get openOldAttempt(): Attempt | undefined { return this.#old?.draining ? this.#old : undefined; }
+	get openOldAttempt(): Attempt | undefined {
+		return this.#old?.draining ? this.#old : undefined;
+	}
 	oldServes(version: number, fingerprint: string): boolean {
 		const old = this.openOldAttempt;
 		return old !== undefined && binds(old.served.provider, version, fingerprint);
 	}
 	stateFor(version: number, fingerprint: string): RefState {
-		return this.#status.kind === "activating" && this.#status.shown.kind !== "failed" && this.oldServes(version, fingerprint)
-			? LIVE : this.state;
+		return this.#status.kind === "activating" &&
+			this.#status.shown.kind !== "failed" &&
+			this.oldServes(version, fingerprint)
+			? LIVE
+			: this.state;
 	}
 	contractFor(version: number, fingerprint: string): Contract {
 		return this.oldServes(version, fingerprint) ? this.openOldAttempt!.served.contract : this.served.contract;
@@ -181,7 +188,9 @@ export class ObjectsObject implements LocalTarget {
 		return !this.#passed;
 	}
 	get activating(): boolean {
-		return this.#status.kind === "waiting" || this.#status.kind === "activating" && this.#status.shown.kind === "loading";
+		return (
+			this.#status.kind === "waiting" || (this.#status.kind === "activating" && this.#status.shown.kind === "loading")
+		);
 	}
 	get heldOnLink(): false {
 		return false;
@@ -238,7 +247,9 @@ export class ObjectsObject implements LocalTarget {
 	call(method: string, args: unknown, binding: Binding, context: Context): Promise<unknown> {
 		return this.callAs(method, args, context, binding.caller, binding.version);
 	}
-	generationOf(): undefined { return undefined; }
+	generationOf(): undefined {
+		return undefined;
+	}
 	async callAs(
 		method: string,
 		args: unknown,
@@ -260,10 +271,12 @@ export class ObjectsObject implements LocalTarget {
 		const waits = this.#gateWaits;
 		waits.add(target);
 		this.host.reloadCycles.recheck();
-		return () => { waits.delete(target); };
+		return () => {
+			waits.delete(target);
+		};
 	}
 	waitEdges(): ObjectsObject[] {
-		const edges = [...this.#gateWaits ?? []];
+		const edges = [...(this.#gateWaits ?? [])];
 		for (const dependency of this.#waiting) {
 			const target = dependency.kind === "reference" ? dependency.binding.target : undefined;
 			if (target instanceof ObjectsObject) edges.push(target);
@@ -272,20 +285,31 @@ export class ObjectsObject implements LocalTarget {
 	}
 	async waitFor<T>(waiting: Promise<T>, context: Context): Promise<T> {
 		const release = context.value(OPENING)?.waitAt(this);
-		try { return await this.host.waitAsOldWork(waiting, this, this.served.contract, context); }
-		finally { release?.(); }
+		try {
+			return await this.host.waitAsOldWork(waiting, this, this.served.contract, context);
+		} finally {
+			release?.();
+		}
 	}
 	async #gate(context: Context): Promise<void> {
 		const due = Date.now() + this.host.timeouts.ready;
 		while (this.#status.kind === "activating") {
 			if (this.#status.shown.kind === "failed") throw this.#status.shown.cause.error;
 			const remaining = due - Date.now();
-			if (remaining <= 0) throw new ObjectsError({ code: "unavailable", reason: "park_timeout", message: `${this.label}: a call waited ${this.host.timeouts.ready} ms for its object to go live` });
+			if (remaining <= 0)
+				throw new ObjectsError({
+					code: "unavailable",
+					reason: "park_timeout",
+					message: `${this.label}: a call waited ${this.host.timeouts.ready} ms for its object to go live`,
+				});
 			this.#changed ??= Promise.withResolvers<void>();
 			const elapsed = Promise.withResolvers<void>();
 			const timer = setTimeout(elapsed.resolve, remaining);
-			try { await awaitWithContext(Promise.race([this.#changed.promise, elapsed.promise]), context); }
-			finally { clearTimeout(timer); }
+			try {
+				await awaitWithContext(Promise.race([this.#changed.promise, elapsed.promise]), context);
+			} finally {
+				clearTimeout(timer);
+			}
 		}
 	}
 	member(name: string, version = this.served.contract.version): DeriveSource {
@@ -459,7 +483,9 @@ export class ObjectsObject implements LocalTarget {
 	unparked(attempt: Attempt): void {
 		this.parked(attempt, LOADING, false);
 	}
-	reloadFate(): "restart" | "retry" { return this.#status.kind === "live" ? "restart" : "retry"; }
+	reloadFate(): "restart" | "retry" {
+		return this.#status.kind === "live" ? "restart" : "retry";
+	}
 	reload(served: Served, _fate: "restart" | "retry", requests: readonly Request[]): Attempt {
 		this.served = served;
 		const state = this.#status;
@@ -471,15 +497,26 @@ export class ObjectsObject implements LocalTarget {
 			if (!old.opensNatives) this.#kept = old;
 			this.#instance = uuidv7();
 			const attempt = this.#replace();
-			const caller = { principal: served.kind === "remote" ? this.principal : this.host.principal, incarnation: this.host.incarnation };
-			const readiness = new Readiness(this.host, caller, requests, (cause) => this.#readinessShown(attempt, cause), this.#context);
+			const caller = {
+				principal: served.kind === "remote" ? this.principal : this.host.principal,
+				incarnation: this.host.incarnation,
+			};
+			const readiness = new Readiness(
+				this.host,
+				caller,
+				requests,
+				(cause) => this.#readinessShown(attempt, cause),
+				this.#context,
+			);
 			this.#readiness = readiness;
 			const ended = this.#endOld(old, readiness, Date.now() + this.host.timeouts.reload);
 			this.host.ending(this.identity, this.#reportClose(ended));
 			const ending = this.host.endingOf(this.identity);
 			this.#startSuccessor = () => {
 				this.#showsReadiness = attempt;
-				void ended.then(() => { if (this.#showsReadiness === attempt) this.#showsReadiness = undefined; });
+				void ended.then(() => {
+					if (this.#showsReadiness === attempt) this.#showsReadiness = undefined;
+				});
 				readiness.start();
 				void this.#activate(attempt, ending);
 				void Promise.all([ended, attempt.checked]).then(() => {
@@ -491,14 +528,17 @@ export class ObjectsObject implements LocalTarget {
 			return attempt;
 		}
 		if (state.kind === "activating") {
-			const old = state.attempt, parked = old.isParked, previous = this.host.endingOf(this.identity);
+			const old = state.attempt,
+				parked = old.isParked,
+				previous = this.host.endingOf(this.identity);
 			old.seal(this.#reloaded(), "reload");
 			const attempt = this.#replace();
 			if (parked) void this.#activate(attempt, previous);
 			const closing = (async () => {
 				if (parked) await attempt.checked;
 				const failures = await old.close({ kind: "reload" });
-				old.detach(); old.releaseReferences();
+				old.detach();
+				old.releaseReferences();
 				return failures;
 			})();
 			this.host.ending(this.identity, this.#reportClose(closing));
@@ -527,9 +567,12 @@ export class ObjectsObject implements LocalTarget {
 		this.#startSuccessor = undefined;
 		start?.();
 	}
-	get readinessCause(): FailureCause | undefined { return this.#readiness?.cause; }
+	get readinessCause(): FailureCause | undefined {
+		return this.#readiness?.cause;
+	}
 	#readinessShown(attempt: Attempt, cause: FailureCause | undefined): void {
-		if (this.#showsReadiness !== attempt || this.#status.kind !== "activating" || this.#status.attempt !== attempt) return;
+		if (this.#showsReadiness !== attempt || this.#status.kind !== "activating" || this.#status.attempt !== attempt)
+			return;
 		const shown: RefState = cause ? { kind: "failed", cause, retryAt: undefined } : LOADING;
 		this.#status = { kind: "activating", attempt, shown };
 		if (cause) this.#lastFailure = cause.error;
@@ -698,7 +741,7 @@ export class ObjectsObject implements LocalTarget {
 		const retarget = (): void => {
 			for (const holder of holders) holder.retarget?.();
 		};
-		if (holders.some(holder => holder.following)) this.host.batch.within(retarget, this.#context);
+		if (holders.some((holder) => holder.following)) this.host.batch.within(retarget, this.#context);
 		else retarget();
 		for (const holder of holders) holder.moved();
 	}

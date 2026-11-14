@@ -12,12 +12,8 @@ import { ObjectsStore } from "../src/store/store.ts";
 import { openNodeSqliteDatabase } from "../src/sqlite/node.ts";
 
 it("reloads persisted job records and retires incompatible state without decoding it", async () => {
-	const store = await openStore(
-		sqliteBackend(await openNodeSqliteDatabase(":memory:")),
-		context,
-	);
-	if (!(store instanceof ObjectsStore))
-		throw new Error("Unexpected Store implementation");
+	const store = await openStore(sqliteBackend(await openNodeSqliteDatabase(":memory:")), context);
+	if (!(store instanceof ObjectsStore)) throw new Error("Unexpected Store implementation");
 	const records = new Persistence(store, "app", "jobs", "job"),
 		states = new Persistence(store, "app", "states", "job");
 	try {
@@ -26,11 +22,7 @@ it("reloads persisted job records and retires incompatible state without decodin
 				traceparent: "test",
 			});
 		const writes: StagedWrite[] = [],
-			adopt = persisted.stage(
-				run.id,
-				storedRun(run),
-				writes,
-			);
+			adopt = persisted.stage(run.id, storedRun(run), writes);
 		writes.push(
 			createDocument(
 				states.at(run.id),
@@ -41,9 +33,7 @@ it("reloads persisted job records and retires incompatible state without decodin
 		await store.commit(writes, { admit: () => true, adopt }, context);
 		const reopened = new PersistedRuns(records, states),
 			loaded = await reopened.load(context);
-		expect(
-			loaded.map(({ id, record, stored }) => [id, record, stored.revision]),
-		).toEqual([
+		expect(loaded.map(({ id, record, stored }) => [id, record, stored.revision])).toEqual([
 			[
 				"one",
 				{
@@ -77,11 +67,7 @@ it("reloads persisted job records and retires incompatible state without decodin
 		await reopened.findBlockedState(run.id, context);
 		const removals: StagedWrite[] = [],
 			removed = reopened.stageRetire(run.id, removals);
-		await store.commit(
-			removals,
-			{ admit: () => true, adopt: removed },
-			context,
-		);
+		await store.commit(removals, { admit: () => true, adopt: removed }, context);
 		expect(await reopened.load(context)).toEqual([]);
 		expect(await states.find(run.id, context)).toBeUndefined();
 	} finally {
@@ -114,12 +100,7 @@ it("round-trips a failed job's plugin error without its stack or private cause",
 			},
 		},
 	});
-	const restored = outcomeOf(
-		JSON.parse(JSON.stringify(record.outcome)),
-		run.id,
-		run.args,
-		{ n: 3 },
-	);
+	const restored = outcomeOf(JSON.parse(JSON.stringify(record.outcome)), run.id, run.args, { n: 3 });
 	expect(restored).toMatchObject({
 		id: "one",
 		state: { n: 3 },

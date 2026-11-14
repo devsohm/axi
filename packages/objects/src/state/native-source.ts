@@ -16,14 +16,27 @@ const abortedEnd: WatchEnd = { kind: "aborted" };
 export abstract class NativeSource<T = unknown> implements NativeWatchable<T> {
 	readonly dependents = new Set<Dependent>();
 	#batch: Batch | undefined;
-	constructor(batch: Batch | undefined) { this.#batch = batch }
+	constructor(batch: Batch | undefined) {
+		this.#batch = batch;
+	}
 	abstract get value(): T;
 	abstract watch(context: Context): Promise<NativeWatchHandle<T>>;
-	start(): NativeStart<T> { return { kind: "value", value: this.value } }
-	current(): T { return this.value }
-	protected get batch(): Batch | undefined { return this.#batch }
-	protected changed(): void { for (const dependent of this.dependents) dependent.invalidate() }
-	protected end(): void { this.#batch = undefined; this.dependents.clear() }
+	start(): NativeStart<T> {
+		return { kind: "value", value: this.value };
+	}
+	current(): T {
+		return this.value;
+	}
+	protected get batch(): Batch | undefined {
+		return this.#batch;
+	}
+	protected changed(): void {
+		for (const dependent of this.dependents) dependent.invalidate();
+	}
+	protected end(): void {
+		this.#batch = undefined;
+		this.dependents.clear();
+	}
 }
 
 export abstract class FollowedSource<T = unknown> extends NativeSource<T> {
@@ -31,8 +44,12 @@ export abstract class FollowedSource<T = unknown> extends NativeSource<T> {
 	readonly #observers = new Map<NativeObserver<T>, () => void>();
 	#shown: Shown<T> | undefined;
 	#listed = false;
-	get watched(): boolean { return this.#watches.size > 0 || this.#observers.size > 0 }
-	async watch(context: Context): Promise<NativeWatch<T>> { return this.openWatch(context) }
+	get watched(): boolean {
+		return this.#watches.size > 0 || this.#observers.size > 0;
+	}
+	async watch(context: Context): Promise<NativeWatch<T>> {
+		return this.openWatch(context);
+	}
 	openWatch(context: Context): NativeWatch<T> {
 		const batch = this.batch;
 		if (!batch) {
@@ -44,10 +61,14 @@ export abstract class FollowedSource<T = unknown> extends NativeSource<T> {
 		const initial = this.start();
 		const value = this.#valueOf(initial);
 		this.#follow(initial);
-		const watch = new NativeWatch(value, () => {
-			this.#watches.delete(watch);
-			this.#idle();
-		}, batch.reportListener);
+		const watch = new NativeWatch(
+			value,
+			() => {
+				this.#watches.delete(watch);
+				this.#idle();
+			},
+			batch.reportListener,
+		);
 		this.#watches.add(watch);
 		if (context.abortSignal) watch.observeAbort(context.abortSignal);
 		if (initial.kind === "failed") watch.fail(handedOut(initial.error), context);
@@ -96,16 +117,21 @@ export abstract class FollowedSource<T = unknown> extends NativeSource<T> {
 		if (next.kind === "value" && (previous.kind !== "value" || previous.value !== next.value)) {
 			this.#shown = next;
 			for (const watch of this.#watches) watch.advance(next.value, context);
-			for (const observer of [...this.#observers.keys()]) observer.advance({ kind: "value", value: next.value }, context);
+			for (const observer of [...this.#observers.keys()])
+				observer.advance({ kind: "value", value: next.value }, context);
 		} else if (next.kind === "failed" && previous.kind === "value") {
 			this.#shown = { kind: "failed" };
 			const call = { kind: "failed", error: handedOut(next.error) } as const;
 			for (const watch of this.#watches) watch.fail(call.error, context);
-			for (const observer of [...this.#observers.keys()]) observer.advance({ kind: "failed", error: call.error }, context);
+			for (const observer of [...this.#observers.keys()])
+				observer.advance({ kind: "failed", error: call.error }, context);
 		}
 		this.#idle();
 	}
-	protected override changed(): void { super.changed(); this.list() }
+	protected override changed(): void {
+		super.changed();
+		this.list();
+	}
 	protected list(): void {
 		if (this.#listed || !this.watched || !this.batch) return;
 		this.#listed = true;
@@ -119,7 +145,10 @@ export abstract class FollowedSource<T = unknown> extends NativeSource<T> {
 		for (const watch of this.#watches) watch.end(ended);
 		const observers = [...this.#observers];
 		this.#observers.clear();
-		for (const [observer, cleanup] of observers) { cleanup(); observer.end(ended) }
+		for (const [observer, cleanup] of observers) {
+			cleanup();
+			observer.end(ended);
+		}
 	}
 	#valueOf(initial: NativeStart<T>): T {
 		if (initial.kind === "value") return initial.value;

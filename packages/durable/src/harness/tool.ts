@@ -620,10 +620,14 @@ async function createAttempt(
 		},
 		commit: async (change, ctx, options) => {
 			let value: Awaited<ReturnType<typeof change>> | undefined;
-			await runtime.commit(async (tx) => {
-				value = await change(tx);
-				return undefined;
-			}, ctx, options);
+			await runtime.commit(
+				async (tx) => {
+					value = await change(tx);
+					return undefined;
+				},
+				ctx,
+				options,
+			);
 			return value as Awaited<ReturnType<typeof change>>;
 		},
 		memo: runtime.memo,
@@ -881,11 +885,12 @@ function outputError(tool: ToolRegistration, result: ToolExecutionResult): strin
 	}
 	if (validator.Check(output)) return;
 	const first = validator.Errors(output)[0],
-		path = first?.instancePath
-			.slice(1)
-			.split("/")
-			.map((part) => part.replace(/~[01]/g, (escape) => escape === "~1" ? "/" : "~"))
-			.join(".") || "root";
+		path =
+			first?.instancePath
+				.slice(1)
+				.split("/")
+				.map((part) => part.replace(/~[01]/g, (escape) => (escape === "~1" ? "/" : "~")))
+				.join(".") || "root";
 	return `Tool ${tool.name} returned structuredOutput that does not match its schema: ${path}: ${first?.message ?? "invalid"}`;
 }
 async function prepareResult(

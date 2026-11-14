@@ -110,13 +110,23 @@ it("defaults message threads from the endpoint for provider aliases and honors e
 		["https://gateway.invalid", undefined, false],
 		["https://gateway.invalid", true, true],
 	] as const) {
-		const selected: Model<"anthropic-messages"> = { ...model, id: "served-model", provider: "company-alias", baseUrl,
-			...(override === undefined ? {} : { compat: { supportsMessageThreads: override } }) };
-		const bodies: unknown[] = [], messages: Message[] = [{ role: "user", content: "first", timestamp: 1 }];
-		const options = { apiKey: "test", sessionId: `endpoint-${baseUrl}-${override}`, fetch: async (_url: unknown, init?: RequestInit) => {
-			bodies.push(JSON.parse(String(init?.body)));
-			return answer();
-		} };
+		const selected: Model<"anthropic-messages"> = {
+			...model,
+			id: "served-model",
+			provider: "company-alias",
+			baseUrl,
+			...(override === undefined ? {} : { compat: { supportsMessageThreads: override } }),
+		};
+		const bodies: unknown[] = [],
+			messages: Message[] = [{ role: "user", content: "first", timestamp: 1 }];
+		const options = {
+			apiKey: "test",
+			sessionId: `endpoint-${baseUrl}-${override}`,
+			fetch: async (_url: unknown, init?: RequestInit) => {
+				bodies.push(JSON.parse(String(init?.body)));
+				return answer();
+			},
+		};
 		try {
 			messages.push(await stream(selected, normalizeContext({ messages }), options).result());
 			messages.push({ role: "user", content: "next", timestamp: 2 });
@@ -125,7 +135,9 @@ it("defaults message threads from the endpoint for provider aliases and honors e
 				expect(bodies[0]).toMatchObject({ thread: { type: "create" } });
 				expect(bodies[1]).toMatchObject({ thread: { type: "continue", previous_message_id: "response-1" } });
 			} else for (const body of bodies) expect(body).not.toHaveProperty("thread");
-		} finally { cleanupSessionResources(options.sessionId); }
+		} finally {
+			cleanupSessionResources(options.sessionId);
+		}
 	}
 });
 
@@ -189,15 +201,28 @@ it("retains local definitions referenced by non-strict tools", async () => {
 });
 it.each([false, true, Type.Number(), undefined])("retains the non-strict extra-argument policy %j", async (policy) => {
 	let payload: unknown;
-	const parameters = Type.Object({ value: Type.String() }, policy === undefined ? {} : { additionalProperties: policy });
-	const result = await stream(model, normalizeContext({
-		messages: [{ role: "user", content: "check the tool", timestamp: 1 }],
-		tools: [{ name: "check", description: "Check the value", parameters }],
-	}), {
-		apiKey: "test", onPayload(body) { payload = body; }, fetch: async () => answer(),
-	}).result();
+	const parameters = Type.Object(
+		{ value: Type.String() },
+		policy === undefined ? {} : { additionalProperties: policy },
+	);
+	const result = await stream(
+		model,
+		normalizeContext({
+			messages: [{ role: "user", content: "check the tool", timestamp: 1 }],
+			tools: [{ name: "check", description: "Check the value", parameters }],
+		}),
+		{
+			apiKey: "test",
+			onPayload(body) {
+				payload = body;
+			},
+			fetch: async () => answer(),
+		},
+	).result();
 	expect(result.stopReason).toBe("stop");
-	expect(payload).toMatchObject({ tools: [{ input_schema: { type: "object", properties: { value: { type: "string" } }, required: ["value"] } }] });
+	expect(payload).toMatchObject({
+		tools: [{ input_schema: { type: "object", properties: { value: { type: "string" } }, required: ["value"] } }],
+	});
 	if (policy === undefined) expect(payload).not.toHaveProperty("tools.0.input_schema.additionalProperties");
 	else expect(payload).toHaveProperty("tools.0.input_schema.additionalProperties", policy);
 });

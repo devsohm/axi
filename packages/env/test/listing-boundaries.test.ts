@@ -118,7 +118,11 @@ test("local listing preserves a path-resolution error without contacting the dae
 	try {
 		expect(await env.listFiles("private", undefined, context)).toBe(failed);
 		expect(request).not.toHaveBeenCalled();
-	} finally { resolve.mockRestore(); request.mockRestore(); connection.close(); }
+	} finally {
+		resolve.mockRestore();
+		request.mockRestore();
+		connection.close();
+	}
 });
 
 test.each([false, true])("process environment inheritance is explicit: %s", async (inheritEnv) => {

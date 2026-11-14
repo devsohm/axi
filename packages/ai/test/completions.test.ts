@@ -70,7 +70,11 @@ describe("Chat Completions", () => {
 	it.each([
 		{ usage: { prompt_tokens: 7, cached_tokens: 4 }, input: 3, cacheRead: 4 },
 		{ usage: { prompt_tokens: 7, cached_tokens: 4, prompt_cache_hit_tokens: 5 }, input: 2, cacheRead: 5 },
-		{ usage: { prompt_tokens: 7, prompt_cache_hit_tokens: 5, prompt_tokens_details: { cached_tokens: 0 } }, input: 7, cacheRead: 0 },
+		{
+			usage: { prompt_tokens: 7, prompt_cache_hit_tokens: 5, prompt_tokens_details: { cached_tokens: 0 } },
+			input: 7,
+			cacheRead: 0,
+		},
 		{ usage: { cached_tokens: 10 }, input: 0, cacheRead: 10 },
 	])("cache accounting preserves provider field precedence: $usage", async ({ usage, input, cacheRead }) => {
 		const result = await stream(model, context, {
@@ -78,21 +82,41 @@ describe("Chat Completions", () => {
 			fetch: async () => response([{ ...chunk({ content: "answer" }, "stop"), usage }]),
 		}).result();
 		expect(result.stopReason).toBe("stop");
-		expect(result.usage).toMatchObject({ input, output: 0, cacheRead, cacheWrite: 0, reasoning: 0, totalTokens: input + cacheRead });
+		expect(result.usage).toMatchObject({
+			input,
+			output: 0,
+			cacheRead,
+			cacheWrite: 0,
+			reasoning: 0,
+			totalTokens: input + cacheRead,
+		});
 	});
 
 	it("streamed reasoning fragments retain their metadata and join adjacent text and summaries", async () => {
 		const result = await stream(model, context, {
 			apiKey: "offline",
-			fetch: async () => response([
-				chunk({ reasoning_details: [{ type: "reasoning.text", text: "a", signature: "", id: null, index: 0 }] }),
-				chunk({ reasoning_details: [{ type: "reasoning.text", text: "b", signature: "signed", id: "text", index: 1, format: "wire" }] }),
-				chunk({ reasoning_details: [{ type: "reasoning.text", text: "c", signature: "replacement", id: "other", format: "other" }] }),
-				chunk({ reasoning_details: [{ type: "reasoning.summary", summary: "first " }] }),
-				chunk({ reasoning_details: [{ type: "reasoning.summary", summary: "second", id: "summary", index: 2, format: "summary-wire" }] }),
-				chunk({ reasoning_details: [{ type: "reasoning.encrypted", data: "opaque" }] }),
-				chunk({ content: "answer" }, "stop"),
-			]),
+			fetch: async () =>
+				response([
+					chunk({ reasoning_details: [{ type: "reasoning.text", text: "a", signature: "", id: null, index: 0 }] }),
+					chunk({
+						reasoning_details: [
+							{ type: "reasoning.text", text: "b", signature: "signed", id: "text", index: 1, format: "wire" },
+						],
+					}),
+					chunk({
+						reasoning_details: [
+							{ type: "reasoning.text", text: "c", signature: "replacement", id: "other", format: "other" },
+						],
+					}),
+					chunk({ reasoning_details: [{ type: "reasoning.summary", summary: "first " }] }),
+					chunk({
+						reasoning_details: [
+							{ type: "reasoning.summary", summary: "second", id: "summary", index: 2, format: "summary-wire" },
+						],
+					}),
+					chunk({ reasoning_details: [{ type: "reasoning.encrypted", data: "opaque" }] }),
+					chunk({ content: "answer" }, "stop"),
+				]),
 		}).result();
 		expect(result.stopReason).toBe("stop");
 		const thinking = result.content.find((item) => item.type === "thinking");

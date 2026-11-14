@@ -45,7 +45,9 @@ type RawUsage = {
 	reasoning_tokens?: number;
 };
 type StreamingTool = ToolCall;
-type ToolInput = { kind: "json"; arguments: ToolCallArgumentsStream } | { kind: "custom"; property: string; jsonBuffer: GrammarToolInputJsonBuffer };
+type ToolInput =
+	| { kind: "json"; arguments: ToolCallArgumentsStream }
+	| { kind: "custom"; property: string; jsonBuffer: GrammarToolInputJsonBuffer };
 type ToolState = { streamIndex?: number; input: ToolInput };
 function apiKey(model: Model<"openai-completions">, options: OpenAICompletionsOptions): string {
 	const key = options.apiKey;
@@ -270,7 +272,13 @@ export const stream: StreamFunction<"openai-completions", OpenAICompletionsOptio
 							name,
 							arguments: property === undefined ? {} : { [property]: "" },
 						};
-						states.set(block, { streamIndex: index, input: property === undefined ? { kind: "json", arguments: new ToolCallArgumentsStream() } : { kind: "custom", property, jsonBuffer: { input: "", started: false, closed: false } } });
+						states.set(block, {
+							streamIndex: index,
+							input:
+								property === undefined
+									? { kind: "json", arguments: new ToolCallArgumentsStream() }
+									: { kind: "custom", property, jsonBuffer: { input: "", started: false, closed: false } },
+						});
 						if (index !== undefined) byIndex.set(index, block);
 						if (call.id) byId.set(call.id, block);
 						blocks.push(block);
@@ -289,7 +297,8 @@ export const stream: StreamFunction<"openai-completions", OpenAICompletionsOptio
 					if (call.custom && !call.function && state.input.kind !== "custom") {
 						const property = grammar.get(block.name) ?? "input";
 						state.input = {
-							kind: "custom", property,
+							kind: "custom",
+							property,
 							jsonBuffer: { input: "", started: false, closed: false },
 						};
 						block.arguments = { [property]: "" };

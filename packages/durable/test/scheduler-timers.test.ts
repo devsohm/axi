@@ -71,68 +71,75 @@ test("refused sleep deadlines roll back the whole commit and leave the task able
 	}
 });
 
-test.each([false, true])("a delivered signal clears its old wake deadline, keeping another sleep: %s", async (otherSleep) => {
-	let executions = 0;
-	const reply = defineSignal({ name: "wake-reply", version: 1, schema: { type: "string" } });
-	const task = defineTask<null, { phase: "read" }, null>({
-		name: "wake-signal",
-		version: 1,
-		initial: () => ({ phase: "read" }),
-		phases: {
-			async read() {
-				executions++;
+test.each([false, true])(
+	"a delivered signal clears its old wake deadline, keeping another sleep: %s",
+	async (otherSleep) => {
+		let executions = 0;
+		const reply = defineSignal({ name: "wake-reply", version: 1, schema: { type: "string" } });
+		const task = defineTask<null, { phase: "read" }, null>({
+			name: "wake-signal",
+			version: 1,
+			initial: () => ({ phase: "read" }),
+			phases: {
+				async read() {
+					executions++;
+				},
 			},
-		},
-		async abort() {},
-	});
-	const storage = new MemoryStorage();
-	const id = await storage.mintId<TaskId<null>>();
-	const writes: StorageWrite[] = [
-		{ type: "conversation", value: { id: ROOT_CONVERSATION_ID } },
-		{
-			type: "task",
-			value: {
-				id,
-				conversationId: ROOT_CONVERSATION_ID,
-				kind: task.definition.name,
-				version: 1,
-				input: null,
-				background: false,
-				abortRequested: false,
-				state: { status: "sleeping", checkpoint: { phase: "read" }, until: 2000, signals: [reply.key("ready")] },
-			},
-		},
-	];
-	if (otherSleep) {
-		const otherId = await storage.mintId<TaskId<null>>();
-		writes.push({
-			type: "task",
-			value: {
-				id: otherId,
-				conversationId: ROOT_CONVERSATION_ID,
-				kind: task.definition.name,
-				version: 1,
-				input: null,
-				background: false,
-				abortRequested: false,
-				state: { status: "sleeping", checkpoint: { phase: "read" }, until: 3000 },
-			},
+			async abort() {},
 		});
-	}
-	await commitWrites(storage, writes, context);
-	const registry = createRegistry();
-	registry.install(defineExtension({ name: "wake-signal", tasks: [task] }));
-	const harness = await Harness.open(storage, { models: createModels(), registry, now: () => 1000, onWake() {} }, context);
-	try {
-		await vi.waitFor(() => expect(harness.wake()).toEqual({ active: false, at: 2000 }));
-		expect(await harness.commit((tx) => tx.signal(id, reply, "ready", "answer"), context)).toBe("delivered");
-		expect(harness.wake()).toEqual(otherSleep ? { active: true, at: 3000 } : { active: true });
-		expect((await harness.inspect(context)).scheduling).toBe("paused");
-		expect(executions).toBe(0);
-	} finally {
-		await harness.close(context);
-	}
-});
+		const storage = new MemoryStorage();
+		const id = await storage.mintId<TaskId<null>>();
+		const writes: StorageWrite[] = [
+			{ type: "conversation", value: { id: ROOT_CONVERSATION_ID } },
+			{
+				type: "task",
+				value: {
+					id,
+					conversationId: ROOT_CONVERSATION_ID,
+					kind: task.definition.name,
+					version: 1,
+					input: null,
+					background: false,
+					abortRequested: false,
+					state: { status: "sleeping", checkpoint: { phase: "read" }, until: 2000, signals: [reply.key("ready")] },
+				},
+			},
+		];
+		if (otherSleep) {
+			const otherId = await storage.mintId<TaskId<null>>();
+			writes.push({
+				type: "task",
+				value: {
+					id: otherId,
+					conversationId: ROOT_CONVERSATION_ID,
+					kind: task.definition.name,
+					version: 1,
+					input: null,
+					background: false,
+					abortRequested: false,
+					state: { status: "sleeping", checkpoint: { phase: "read" }, until: 3000 },
+				},
+			});
+		}
+		await commitWrites(storage, writes, context);
+		const registry = createRegistry();
+		registry.install(defineExtension({ name: "wake-signal", tasks: [task] }));
+		const harness = await Harness.open(
+			storage,
+			{ models: createModels(), registry, now: () => 1000, onWake() {} },
+			context,
+		);
+		try {
+			await vi.waitFor(() => expect(harness.wake()).toEqual({ active: false, at: 2000 }));
+			expect(await harness.commit((tx) => tx.signal(id, reply, "ready", "answer"), context)).toBe("delivered");
+			expect(harness.wake()).toEqual(otherSleep ? { active: true, at: 3000 } : { active: true });
+			expect((await harness.inspect(context)).scheduling).toBe("paused");
+			expect(executions).toBe(0);
+		} finally {
+			await harness.close(context);
+		}
+	},
+);
 
 test.each(["advance", "close"])("sleeping work owns a foreground wake timer until %s", async (action) => {
 	let now = 1000,

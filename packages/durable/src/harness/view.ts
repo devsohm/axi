@@ -3,7 +3,13 @@ import { type JsonValue } from "@axi/objects/json";
 import { Watch, type WatchCall, type WatchEnd } from "@axi/objects/watch";
 import { withoutAbortSignal } from "@axi/objects/context";
 import { applyImmutable, type NonEmptyPath, type Op, type Path } from "@axi/objects/delta";
-import { contained, NORMAL_END, sessionObserverEnd, type ObservedCommit, type SessionImpl } from "../session/session.ts";
+import {
+	contained,
+	NORMAL_END,
+	sessionObserverEnd,
+	type ObservedCommit,
+	type SessionImpl,
+} from "../session/session.ts";
 import { GuardedObserver } from "../session/observer.ts";
 import { idFromNumber } from "../ids.ts";
 import type {

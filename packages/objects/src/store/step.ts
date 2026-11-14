@@ -17,12 +17,7 @@ export class Step {
 	readonly #catalog: ReadonlyMap<string, TableRecord>;
 	statements = 0;
 	rows = 0;
-	constructor(
-		executor: SqliteExecutor,
-		seq: number,
-		ids: IdAllocator,
-		catalog: ReadonlyMap<string, TableRecord>,
-	) {
+	constructor(executor: SqliteExecutor, seq: number, ids: IdAllocator, catalog: ReadonlyMap<string, TableRecord>) {
 		this.executor = executor;
 		this.seq = seq;
 		this.ids = ids;
@@ -42,10 +37,7 @@ export class Step {
 		this.statements += 1;
 		return this.executor.runCounted(sql, ...params);
 	}
-	get<T extends object>(
-		sql: string,
-		...params: SqliteValue[]
-	): Promise<T | undefined> {
+	get<T extends object>(sql: string, ...params: SqliteValue[]): Promise<T | undefined> {
 		this.statements += 1;
 		return this.executor.get<T>(sql, ...params);
 	}

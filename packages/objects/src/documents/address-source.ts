@@ -15,11 +15,7 @@ export abstract class AddressSource extends Source {
 		this.#retired = false;
 	}
 	written(before: JsonObject, prepared: Prepared<JsonObject>): void {
-		if (this.watched)
-			this.#ops =
-				!this.#retired && before === prepared.base
-					? prepared.ops
-					: [["r", prepared.value]];
+		if (this.watched) this.#ops = !this.#retired && before === prepared.base ? prepared.ops : [["r", prepared.value]];
 		this.changed();
 	}
 	retired(initial: JsonObject): void {

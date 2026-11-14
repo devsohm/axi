@@ -384,13 +384,20 @@ function omitOptionalNulls(value: unknown, schema: Schema, root: SchemaNode): un
 	return objectMembers(value, schema, visit);
 }
 function location(pointer: string): string {
-	return pointer ? pointer.slice(1).split("/").map(key => key.replaceAll("~1", "/").replaceAll("~0", "~")).join(".") : "root";
+	return pointer
+		? pointer
+				.slice(1)
+				.split("/")
+				.map((key) => key.replaceAll("~1", "/").replaceAll("~0", "~"))
+				.join(".")
+		: "root";
 }
 function receivedType(value: unknown): string {
 	if (value === null) return "null";
 	if (Array.isArray(value)) return "array";
 	if (value instanceof Uint8Array) return "bytes";
-	if (typeof value === "number") return Number.isInteger(value) ? "integer" : Number.isFinite(value) ? "number" : String(value);
+	if (typeof value === "number")
+		return Number.isInteger(value) ? "integer" : Number.isFinite(value) ? "number" : String(value);
 	return typeof value;
 }
 function diagnostic(error: TLocalizedValidationError, value: unknown, root: SchemaNode): string[] {
@@ -467,13 +474,53 @@ function diagnostic(error: TLocalizedValidationError, value: unknown, root: Sche
 	return [`  - ${location(error.instancePath)}: ${message}`];
 }
 
-const errorKeywords = ["type", "enum", "const", "minLength", "maxLength", "pattern", "format", "minimum", "maximum",
-	"exclusiveMinimum", "exclusiveMaximum", "multipleOf", "required", "properties", "patternProperties", "additionalProperties",
-	"minProperties", "maxProperties", "items", "prefixItems", "additionalItems", "minItems", "maxItems", "uniqueItems",
-	"contains", "allOf", "anyOf", "oneOf", "not", "if", "then", "else", "$ref", "unevaluatedProperties", "unevaluatedItems"];
+const errorKeywords = [
+	"type",
+	"enum",
+	"const",
+	"minLength",
+	"maxLength",
+	"pattern",
+	"format",
+	"minimum",
+	"maximum",
+	"exclusiveMinimum",
+	"exclusiveMaximum",
+	"multipleOf",
+	"required",
+	"properties",
+	"patternProperties",
+	"additionalProperties",
+	"minProperties",
+	"maxProperties",
+	"items",
+	"prefixItems",
+	"additionalItems",
+	"minItems",
+	"maxItems",
+	"uniqueItems",
+	"contains",
+	"allOf",
+	"anyOf",
+	"oneOf",
+	"not",
+	"if",
+	"then",
+	"else",
+	"$ref",
+	"unevaluatedProperties",
+	"unevaluatedItems",
+];
 function errorSchema(root: SchemaNode, pointer: string): unknown {
-	let node: unknown = root, scope = root;
-	const keys = pointer === "#" ? [] : pointer.slice(2).split("/").map(key => key.replaceAll("~1", "/").replaceAll("~0", "~"));
+	let node: unknown = root,
+		scope = root;
+	const keys =
+		pointer === "#"
+			? []
+			: pointer
+					.slice(2)
+					.split("/")
+					.map((key) => key.replaceAll("~1", "/").replaceAll("~0", "~"));
 	for (const key of [...keys, undefined]) {
 		if (typeof node === "object" && node !== null && !Array.isArray(node)) {
 			const schema = node as SchemaNode;
@@ -485,10 +532,16 @@ function errorSchema(root: SchemaNode, pointer: string): unknown {
 	}
 }
 function errorPosition(error: TLocalizedValidationError, schema: SchemaNode): number[] {
-	const segments = error.schemaPath === "#" ? [] : error.schemaPath.slice(2).split("/").map(key => key.replaceAll("~1", "/").replaceAll("~0", "~"));
+	const segments =
+		error.schemaPath === "#"
+			? []
+			: error.schemaPath
+					.slice(2)
+					.split("/")
+					.map((key) => key.replaceAll("~1", "/").replaceAll("~0", "~"));
 	let fields = false;
 	return [...segments, error.keyword].map((key, index) => {
-		const prefix = segments.slice(0, index).map(segment => segment.replaceAll("~", "~0").replaceAll("/", "~1"));
+		const prefix = segments.slice(0, index).map((segment) => segment.replaceAll("~", "~0").replaceAll("/", "~1"));
 		const node = errorSchema(schema, index ? `#/${prefix.join("/")}` : "#");
 		const keys = typeof node === "object" && node !== null ? Object.keys(node) : [];
 		const position = Array.isArray(node) ? Number(key) : fields ? keys.indexOf(key) : errorKeywords.indexOf(key);
@@ -500,17 +553,25 @@ function comparePosition(a: number[], b: number[]): number {
 	for (let i = 0; i < Math.min(a.length, b.length); i++) if (a[i] !== b[i]) return a[i] - b[i];
 	return a.length - b.length;
 }
-function unionTag(branches: Schema[], input: unknown, root: SchemaNode): { key: string; values: unknown[]; index: number } | undefined {
+function unionTag(
+	branches: Schema[],
+	input: unknown,
+	root: SchemaNode,
+): { key: string; values: unknown[]; index: number } | undefined {
 	if (typeof input !== "object" || input === null || Array.isArray(input)) return;
-	const members = branches.map(branch => typeof branch === "object" ? resolve(branch, root) : branch);
+	const members = branches.map((branch) => (typeof branch === "object" ? resolve(branch, root) : branch));
 	const first = members[0];
 	if (typeof first !== "object") return;
 	for (const key of Object.keys(first.properties ?? {})) {
-		const values = members.map(member => {
+		const values = members.map((member) => {
 			const field = typeof member === "object" ? member.properties?.[key] : undefined;
 			return typeof field === "object" && Object.hasOwn(field, "const") ? field.const : undefined;
 		});
-		if (values.some(value => value === undefined || value !== null && typeof value === "object") || new Set(values).size !== values.length) continue;
+		if (
+			values.some((value) => value === undefined || (value !== null && typeof value === "object")) ||
+			new Set(values).size !== values.length
+		)
+			continue;
 		return { key, values, index: values.indexOf(Reflect.get(input, key)) };
 	}
 }

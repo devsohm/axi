@@ -4,21 +4,11 @@ import { ObjectsError } from "../data/index.ts";
 import { invalid } from "../data/internal.ts";
 import { IdAllocator } from "./allocator.ts";
 import { applyWrite } from "./applier.ts";
-import {
-	ARCHIVE_FORMAT,
-	checkPart,
-	type ArchiveManifest,
-	type ArchivePart,
-} from "./archive.ts";
+import { ARCHIVE_FORMAT, checkPart, type ArchiveManifest, type ArchivePart } from "./archive.ts";
 import type { Backend } from "./backend.ts";
 import { readCatalog, writeCatalog } from "./catalog.ts";
 import type { DocumentRecord } from "./engine.ts";
-import {
-	applyStoreSchema,
-	STORE_SCHEMA,
-	TABLES,
-	type MetaRow,
-} from "./schema.ts";
+import { applyStoreSchema, STORE_SCHEMA, TABLES, type MetaRow } from "./schema.ts";
 import { Step } from "./step.ts";
 import { ObjectsStore, type Store, type StoreOptions } from "./store.ts";
 import { storedText } from "./text.ts";
@@ -32,9 +22,7 @@ export async function importStore(
 	const { db } = backend;
 	try {
 		context.abortSignal?.throwIfAborted();
-		if (
-			await db.get("SELECT name FROM sqlite_master WHERE name = ?", TABLES.meta)
-		)
+		if (await db.get("SELECT name FROM sqlite_master WHERE name = ?", TABLES.meta))
 			throw invalid("args", "import: the backend holds a store already");
 		const meta = await db.transaction(async (executor) => {
 			const metadata = await applyStoreSchema(inTransaction(executor)),
@@ -98,35 +86,24 @@ class ImportArchive {
 		};
 		if (this.#phase.kind === "ended") refuse("after the end");
 		if (!this.#step || part.kind === "manifest") {
-			if (part.kind !== "manifest" || this.#step)
-				return refuse("the manifest comes first, once");
-			if (part.format !== ARCHIVE_FORMAT)
-				refuse(`format ${part.format} is not ${ARCHIVE_FORMAT}`);
-			if (part.schema > STORE_SCHEMA)
-				refuse(`schema ${part.schema} is newer than ${STORE_SCHEMA}`);
+			if (part.kind !== "manifest" || this.#step) return refuse("the manifest comes first, once");
+			if (part.format !== ARCHIVE_FORMAT) refuse(`format ${part.format} is not ${ARCHIVE_FORMAT}`);
+			if (part.schema > STORE_SCHEMA) refuse(`schema ${part.schema} is newer than ${STORE_SCHEMA}`);
 			if (part.host !== undefined) refuse(`a host's data archive (${part.host}); import it with importHostData`);
 			this.#manifest = part;
-			this.#step = new Step(
-				this.#executor,
-				part.lastSeq,
-				new IdAllocator(part.nextId),
-				new Map(),
-			);
+			this.#step = new Step(this.#executor, part.lastSeq, new IdAllocator(part.nextId), new Map());
 			return;
 		}
 		if (part.kind === "end") {
-			if (part.writes !== this.#writes)
-				refuse(`counts ${part.writes} writes, the archive has ${this.#writes}`);
+			if (part.writes !== this.#writes) refuse(`counts ${part.writes} writes, the archive has ${this.#writes}`);
 			this.#finishDocument(what);
 			this.#phase = { kind: "ended" };
 			return;
 		}
 		switch (part.kind) {
 			case "table":
-				if (this.#phase.kind === "documents")
-					refuse("tables come before the documents");
-				if (this.#tables.has(part.table))
-					refuse(`table ${part.table} occurs twice`);
+				if (this.#phase.kind === "documents") refuse("tables come before the documents");
+				if (this.#tables.has(part.table)) refuse(`table ${part.table} occurs twice`);
 				this.#tables.add(part.table);
 				this.#phase = { kind: "puts", table: part.table };
 				break;
@@ -135,10 +112,7 @@ class ImportArchive {
 					refuse("a put follows its table's table write, before its indexes");
 				break;
 			case "index":
-				if (
-					(this.#phase.kind !== "puts" && this.#phase.kind !== "indexes") ||
-					this.#phase.table !== part.table
-				)
+				if ((this.#phase.kind !== "puts" && this.#phase.kind !== "indexes") || this.#phase.table !== part.table)
 					refuse("an index follows its table's table write and puts");
 				this.#phase = { kind: "indexes", table: part.table };
 				break;
@@ -160,17 +134,12 @@ class ImportArchive {
 			throw invalid("args", `${what}: ${message}`);
 		};
 		const manifest = this.#manifest!;
-		if (
-			record.id >= manifest.nextId &&
-			!(record.id === Number.MAX_SAFE_INTEGER && record.id === manifest.nextId)
-		)
+		if (record.id >= manifest.nextId && !(record.id === Number.MAX_SAFE_INTEGER && record.id === manifest.nextId))
 			refuse(`id ${record.id} is not below ${manifest.nextId}`);
 		if (this.#ids.has(record.id)) refuse(`id ${record.id} occurs twice`);
 		if (
 			record.createdAt > manifest.lastSeq ||
-			(record.retiredAt !== undefined &&
-				(record.retiredAt < record.createdAt ||
-					record.retiredAt > manifest.lastSeq))
+			(record.retiredAt !== undefined && (record.retiredAt < record.createdAt || record.retiredAt > manifest.lastSeq))
 		)
 			refuse("a lifetime outside the manifest's lastSeq");
 		for (const text of [
@@ -180,19 +149,10 @@ class ImportArchive {
 			record.key ?? "",
 			...(record.host === undefined ? [] : [record.host]),
 		])
-			if (storedText(text, what) !== text)
-				refuse("an address is not well-formed text");
-		if (
-			record.meta !== undefined &&
-			storedText(record.meta, what) !== record.meta
-		)
+			if (storedText(text, what) !== text) refuse("an address is not well-formed text");
+		if (record.meta !== undefined && storedText(record.meta, what) !== record.meta)
 			refuse("the meta is not well-formed text");
-		const address = JSON.stringify([
-				record.owner,
-				record.namespace,
-				record.kind,
-				record.key ?? "",
-			]),
+		const address = JSON.stringify([record.owner, record.namespace, record.kind, record.key ?? ""]),
 			past = this.#lives.get(address) ?? [];
 		const from = record.createdAt,
 			to = record.retiredAt ?? Infinity;
@@ -203,16 +163,12 @@ class ImportArchive {
 		this.#ids.add(record.id);
 		this.#document = { record, lastSeq: 0, base: undefined };
 	}
-	#revision(
-		part: Extract<ArchivePart, { readonly kind: "document.revision" }>,
-		what: string,
-	): void {
+	#revision(part: Extract<ArchivePart, { readonly kind: "document.revision" }>, what: string): void {
 		const document = this.#document;
 		const refuse = (message: string): never => {
 			throw invalid("args", `${what}: ${message}`);
 		};
-		if (!document || document.record.id !== part.id)
-			return refuse("a revision follows its record's create");
+		if (!document || document.record.id !== part.id) return refuse("a revision follows its record's create");
 		const { record } = document;
 		if (record.retiredAt !== undefined && record.history !== "rewindable")
 			refuse(`a retired ${record.history} record keeps no revisions`);
@@ -223,26 +179,16 @@ class ImportArchive {
 		)
 			refuse("a revision out of seq order or outside its lifetime");
 		if (part.content.kind === "base") document.base = part.content.version;
-		else if (document.base !== part.content.version)
-			refuse("a delta without a base at its version");
+		else if (document.base !== part.content.version) refuse("a delta without a base at its version");
 		document.lastSeq = part.seq;
 	}
 	#finishDocument(what: string): void {
 		const document = this.#document;
 		this.#document = undefined;
 		if (!document) return;
-		const contentless =
-			document.record.history === "latest" &&
-			document.record.retiredAt !== undefined;
-		if (
-			document.base === undefined
-				? !contentless
-				: document.base !== document.record.version
-		)
-			throw invalid(
-				"args",
-				`${what}: record ${document.record.id} has no base at its version`,
-			);
+		const contentless = document.record.history === "latest" && document.record.retiredAt !== undefined;
+		if (document.base === undefined ? !contentless : document.base !== document.record.version)
+			throw invalid("args", `${what}: record ${document.record.id} has no base at its version`);
 	}
 	async finish(meta: MetaRow, outbox: boolean): Promise<MetaRow> {
 		if (this.#phase.kind !== "ended" || !this.#step || !this.#manifest)
@@ -270,19 +216,13 @@ export async function each(
 	context: Context,
 	take: (part: unknown) => Promise<void>,
 ): Promise<void> {
-	const iterator =
-		Symbol.asyncIterator in parts
-			? parts[Symbol.asyncIterator]()
-			: parts[Symbol.iterator]();
+	const iterator = Symbol.asyncIterator in parts ? parts[Symbol.asyncIterator]() : parts[Symbol.iterator]();
 	let complete = false;
 	try {
 		for (;;) {
 			let item: IteratorResult<unknown>;
 			try {
-				item = await awaitWithContext(
-					Promise.resolve(iterator.next()),
-					context,
-				);
+				item = await awaitWithContext(Promise.resolve(iterator.next()), context);
 			} catch (error) {
 				if (context.abortSignal?.aborted)
 					throw new ObjectsError(

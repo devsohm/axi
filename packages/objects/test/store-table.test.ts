@@ -1,14 +1,6 @@
 import { expect, it } from "vitest";
 import { int, opt, str } from "../src/contracts/index.ts";
-import {
-	add,
-	coalesce,
-	ColumnRef,
-	compileSet,
-	compileWhere,
-	eq,
-	prefix,
-} from "../src/store/expression.ts";
+import { add, coalesce, ColumnRef, compileSet, compileWhere, eq, prefix } from "../src/store/expression.ts";
 import { defineTable } from "../src/store/table.ts";
 
 it("normalizes a row and keeps table fingerprints independent of declaration order", () => {
@@ -42,9 +34,7 @@ it("retains the table version that passed declaration validation", () => {
 		key: ["id"],
 	});
 	expect(table.version).toBe(1);
-	expect(table.rows.put({ id: "first" }, table.version).params).toEqual([
-		"first", 1,
-	]);
+	expect(table.rows.put({ id: "first" }, table.version).params).toEqual(["first", 1]);
 });
 it("uses one column declaration for its schemas, row codec and fingerprint", () => {
 	const columns = { id: str(), count: int({ default: 7 }) };
@@ -58,12 +48,8 @@ it("uses one column declaration for its schemas, row codec and fingerprint", () 
 		key: ["id"],
 	});
 	expect(table.schemas).toBe(columns);
-	expect(table.rows.put({ id: "first" }, table.version).params).toEqual([
-		"first", 7, 1,
-	]);
-	expect(table.fingerprint).toBe(
-		defineTable("captured-columns", { version: 1, columns, key: ["id"] }).fingerprint,
-	);
+	expect(table.rows.put({ id: "first" }, table.version).params).toEqual(["first", 7, 1]);
+	expect(table.fingerprint).toBe(defineTable("captured-columns", { version: 1, columns, key: ["id"] }).fingerprint);
 });
 it("compiles nullable arithmetic only after a fallback and protects primary keys", () => {
 	const table = defineTable("counters", {
@@ -72,15 +58,11 @@ it("compiles nullable arithmetic only after a fallback and protects primary keys
 		key: ["id"],
 	});
 	const previous = new ColumnRef<number, "int">("previous");
-	expect(
-		compileSet(table, { n: add(coalesce(previous, 0), 2) }, "update"),
-	).toEqual({ n: { add: [{ coalesce: [{ col: "previous" }, 0] }, 2] } });
-	expect(() => compileSet(table, { n: table.refs.previous }, "update")).toThrow(
-		"may be NULL",
-	);
-	expect(() => compileSet(table, { id: "other" }, "update")).toThrow(
-		"cannot change",
-	);
+	expect(compileSet(table, { n: add(coalesce(previous, 0), 2) }, "update")).toEqual({
+		n: { add: [{ coalesce: [{ col: "previous" }, 0] }, 2] },
+	});
+	expect(() => compileSet(table, { n: table.refs.previous }, "update")).toThrow("may be NULL");
+	expect(() => compileSet(table, { id: "other" }, "update")).toThrow("cannot change");
 });
 it("rejects null query operands and repairs surrogate text at the staging boundary", () => {
 	const table = defineTable("paths", {
@@ -92,7 +74,5 @@ it("rejects null query operands and repairs surrogate text at the staging bounda
 	expect(compileWhere(table, eq(id, "a\uD800"), "where")).toEqual({
 		eq: ["id", "a\uFFFD"],
 	});
-	expect(() => compileWhere(table, prefix(id, null as never), "where")).toThrow(
-		"ask with isNull",
-	);
+	expect(() => compileWhere(table, prefix(id, null as never), "where")).toThrow("ask with isNull");
 });

@@ -5,7 +5,11 @@ import type { Contribution, Registry, RegistryProvider } from "../registries/ind
 import type { Factory } from "./attempt.ts";
 import type { Presence } from "./presence.ts";
 
-export type ServeOptions<C extends Contract = Contract> = { readonly linger?: number; readonly accepts?: AcceptsTable<C>; readonly untraced?: true };
+export type ServeOptions<C extends Contract = Contract> = {
+	readonly linger?: number;
+	readonly accepts?: AcceptsTable<C>;
+	readonly untraced?: true;
+};
 export interface FacetHost<P extends Principal = Principal> {
 	serve<C extends Contract>(type: C, factory: Factory<C, P>, options?: ServeOptions<C>): void;
 	serve<C, V>(registry: Registry<C, V>, provider: RegistryProvider<C, V>): void;

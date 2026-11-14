@@ -49,7 +49,12 @@ describe("experimental registries", () => {
 	it("registers waiters without running composition until a read", () => {
 		const { registry } = setup();
 		let composed = 0;
-		registry.serve(1, { compose() { composed++; return 10; } });
+		registry.serve(1, {
+			compose() {
+				composed++;
+				return 10;
+			},
+		});
 		const value = registry.value(1);
 		const release = value.wait({ dependencyMoved() {}, closed() {} });
 		try {
@@ -63,8 +68,10 @@ describe("experimental registries", () => {
 	});
 	it("recomputes a contribution when its provider changes the adapter", () => {
 		const { registry } = setup();
-		const contribution = new RegistryContribution(registry, { plugin: "old", type: undefined }, 1,
-			{ kind: "plain", value: 5 });
+		const contribution = new RegistryContribution(registry, { plugin: "old", type: undefined }, 1, {
+			kind: "plain",
+			value: 5,
+		});
 		const twice = { compose: () => 0, accepts: { 1: { contribution: (old: never) => Number(old) * 2 } } };
 		const triple = { compose: () => 0, accepts: { 1: { contribution: (old: never) => Number(old) * 3 } } };
 		expect(contribution.entry(2, twice)?.value).toBe(10);
@@ -74,22 +81,32 @@ describe("experimental registries", () => {
 		const { registry } = setup();
 		const provider = { compose: () => 7, accepts: { 1: { value: (value: unknown) => Number(value) } } };
 		registry.serve(2, provider);
-		const value = registry.value(1), release = value.read();
+		const value = registry.value(1),
+			release = value.read();
 		try {
 			expect(value.value).toBe(7);
 			provider.accepts[1].value = (raw) => Number(raw) + 1;
 			expect(value.value).toBe(8);
-			provider.accepts[1].value = () => { throw new Error("mapping stopped"); };
+			provider.accepts[1].value = () => {
+				throw new Error("mapping stopped");
+			};
 			expect(() => value.current()).toThrow("mapping stopped");
 			expect(value.value).toBe(8);
 			provider.accepts[1].value = (raw) => Number(raw) + 2;
 			expect(value.current()).toBe(9);
-		} finally { release(); }
+		} finally {
+			release();
+		}
 	});
 	it("sorts contributors and composes lazily once per changed table", () => {
 		const { registry, batch, add } = setup();
 		let composed = 0;
-		registry.serve(1, { compose(table) { composed++; return table.map((entry) => `${entry.plugin}:${entry.type ?? ""}:${entry.value}`) } });
+		registry.serve(1, {
+			compose(table) {
+				composed++;
+				return table.map((entry) => `${entry.plugin}:${entry.type ?? ""}:${entry.value}`);
+			},
+		});
 		add("z", { kind: "plain", value: 3 });
 		add("a", { kind: "plain", value: 2 }, 1, "child");
 		add("a", { kind: "plain", value: 1 });
@@ -105,9 +122,17 @@ describe("experimental registries", () => {
 		const { registry, batch, errors, add, owner } = setup();
 		const writable = new WritableSource(3, owner, batch);
 		let adapted = 0;
-		registry.serve(2, { compose: (table) => table.map((entry) => entry.value), accepts: {
-			1: { contribution: (old: number) => { adapted++; return old * 2 } },
-		} });
+		registry.serve(2, {
+			compose: (table) => table.map((entry) => entry.value),
+			accepts: {
+				1: {
+					contribution: (old: number) => {
+						adapted++;
+						return old * 2;
+					},
+				},
+			},
+		});
 		add("old", { kind: "native", source: writable });
 		add("new", { kind: "plain", value: 0 }, 3);
 		const value = registry.value(2);
@@ -123,15 +148,25 @@ describe("experimental registries", () => {
 	it("recomposes synchronously for observers and keeps the last good value through a compose failure", () => {
 		const { registry, batch, errors, add, owner } = setup();
 		const source = new WritableSource(1, owner, batch);
-		registry.serve(1, { compose(table) {
-			const sum = table.reduce((sum, entry) => sum + Number(entry.value), 0);
-			if (sum < 0) throw new Error("negative");
-			return sum;
-		} });
+		registry.serve(1, {
+			compose(table) {
+				const sum = table.reduce((sum, entry) => sum + Number(entry.value), 0);
+				if (sum < 0) throw new Error("negative");
+				return sum;
+			},
+		});
 		add("source", { kind: "native", source });
 		const value = registry.value(1);
 		const calls: unknown[] = [];
-		const observation = value.observe({ advance(call) { calls.push(call) }, end() {} }, context);
+		const observation = value.observe(
+			{
+				advance(call) {
+					calls.push(call);
+				},
+				end() {},
+			},
+			context,
+		);
 		expect(observation.value).toBe(1);
 		source.set(-1);
 		expect(calls).toMatchObject([{ kind: "failed", error: { message: "negative" } }]);
@@ -145,7 +180,12 @@ describe("experimental registries", () => {
 	});
 	it("drops stale native values when a contributor leaves and the next composition fails", () => {
 		const { registry, batch, add } = setup();
-		registry.serve(1, { compose(table) { if (!table.length) throw new Error("empty"); return table[0]!.value } });
+		registry.serve(1, {
+			compose(table) {
+				if (!table.length) throw new Error("empty");
+				return table[0]!.value;
+			},
+		});
 		const contribution = add("one", { kind: "plain", value: { native: "open" } });
 		const value = registry.value(1);
 		expect(value.value).toEqual({ native: "open" });
@@ -156,9 +196,17 @@ describe("experimental registries", () => {
 		const { registry, batch, add, owner } = setup();
 		const source = new WritableSource(4, owner, batch);
 		let mapped = 0;
-		registry.serve(2, { compose: (table) => Number(table[0]?.value ?? 0), accepts: {
-			1: { value: (current) => { mapped++; return { old: Number(current) } } },
-		} });
+		registry.serve(2, {
+			compose: (table) => Number(table[0]?.value ?? 0),
+			accepts: {
+				1: {
+					value: (current) => {
+						mapped++;
+						return { old: Number(current) };
+					},
+				},
+			},
+		});
 		add("source", { kind: "native", source }, 2);
 		const old = registry.value(1);
 		const release = old.read();
@@ -176,7 +224,14 @@ describe("experimental registries", () => {
 		const { registry, batch } = setup();
 		const value = registry.value(1);
 		const calls: unknown[] = [];
-		value.wait({ dependencyMoved() { calls.push("moved") }, closed(error) { calls.push(error.code) } });
+		value.wait({
+			dependencyMoved() {
+				calls.push("moved");
+			},
+			closed(error) {
+				calls.push(error.code);
+			},
+		});
 		expect(() => value.value).toThrow(expect.objectContaining({ code: "unavailable", reason: "undeclared" }));
 		registry.serve(1, { compose: () => 10 });
 		batch.commit(() => registry.composeServed(), context);
@@ -193,19 +248,35 @@ describe("experimental registries", () => {
 		const errors: HostError[] = [];
 		const host = createHost({ onError: (error) => errors.push(error), readyTimeout: 100 });
 		try {
-			await host.load([{ name: "registrations", facet: defineFacet((h) => {
-				h.serve(first, { compose: (table) => table.length });
-				h.serve(second, { compose: (table) => table.length });
-				h.serve(owner, (_, self) => {
-					self.contribute(first, self.registry(second));
-					self.contribute(second, self.registry(first));
-					return {};
-				});
-			}) }], context);
+			await host.load(
+				[
+					{
+						name: "registrations",
+						facet: defineFacet((h) => {
+							h.serve(first, { compose: (table) => table.length });
+							h.serve(second, { compose: (table) => table.length });
+							h.serve(owner, (_, self) => {
+								self.contribute(first, self.registry(second));
+								self.contribute(second, self.registry(first));
+								return {};
+							});
+						}),
+					},
+				],
+				context,
+			);
 			expect((await host.get(owner, {}, context)).state.value).toEqual({ kind: "live" });
-			expect([(await host.registry(first, context)).value, (await host.registry(second, context)).value]).toEqual([1, 0]);
-			expect(errors).toMatchObject([{ kind: "contribution_failed", registry: "app.second",
-				type: "app.contributor", error: { code: "invalid", reason: "cycle" } }]);
+			expect([(await host.registry(first, context)).value, (await host.registry(second, context)).value]).toEqual([
+				1, 0,
+			]);
+			expect(errors).toMatchObject([
+				{
+					kind: "contribution_failed",
+					registry: "app.second",
+					type: "app.contributor",
+					error: { code: "invalid", reason: "cycle" },
+				},
+			]);
 		} finally {
 			await host.close(context);
 		}
@@ -213,10 +284,13 @@ describe("experimental registries", () => {
 	it("reports a conflict once per episode and maps an undefined composition", () => {
 		const { registry, batch, errors, add, owner } = setup();
 		const source = new WritableSource(1, owner, batch);
-		registry.serve(2, { compose(table, context) {
-			if (Number(table[0]?.value ?? 0) > 0) context.report({ message: "duplicate", plugins: ["a", "b"] });
-			return undefined;
-		}, accepts: { 1: { value: () => "empty" } } });
+		registry.serve(2, {
+			compose(table, context) {
+				if (Number(table[0]?.value ?? 0) > 0) context.report({ message: "duplicate", plugins: ["a", "b"] });
+				return undefined;
+			},
+			accepts: { 1: { value: () => "empty" } },
+		});
 		add("source", { kind: "native", source }, 2);
 		const value = registry.value(2);
 		void value.value;

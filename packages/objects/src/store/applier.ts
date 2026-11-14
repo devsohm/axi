@@ -16,49 +16,30 @@ import { checkScalar, toSqlite, versionColumn, ROW_VERSION } from "./rows.ts";
 import { recordedPut, TableSql, type Statement } from "./sql.ts";
 import type { Step } from "./step.ts";
 import { INDEX_NAME } from "./table.ts";
-import {
-	applyAlter,
-	applyDropIndex,
-	applyIndex,
-	applyTable,
-	type TableWrite,
-	type StoredKey,
-} from "./table-writes.ts";
+import { applyAlter, applyDropIndex, applyIndex, applyTable, type TableWrite, type StoredKey } from "./table-writes.ts";
 import type { StoreWrite } from "./writes.ts";
 
 export class Diverged extends Error {}
-type Updating = Extract<
-	TableWrite,
-	{ readonly kind: "update" | "updateWhere" }
->;
-export async function applyWrite(
-	step: Step,
-	write: StoreWrite,
-	what: string,
-): Promise<void> {
+type Updating = Extract<TableWrite, { readonly kind: "update" | "updateWhere" }>;
+export async function applyWrite(step: Step, write: StoreWrite, what: string): Promise<void> {
 	const refused = (message: string): never => {
 		throw invalid("args", `${what}: ${message}`);
 	};
 	switch (write.kind) {
 		case "table": {
 			const parts = write.table.split(":");
-			if (parts.length !== 2)
-				refused(`table ${JSON.stringify(write.table)}: not owner:table`);
+			if (parts.length !== 2) refused(`table ${JSON.stringify(write.table)}: not owner:table`);
 			try {
 				for (const part of parts) checkName(part, `${what}: table name part`);
 			} catch (error) {
-				throw invalid(
-					"args",
-					error instanceof Error ? error.message : String(error),
-				);
+				throw invalid("args", error instanceof Error ? error.message : String(error));
 			}
 			const seen = new Set<string>();
 			if (Object.values(write.columns).filter((column) => column.host !== undefined).length > 1)
 				refused("more than one host column");
 			for (const [name, column] of Object.entries(write.columns)) {
 				const at = `${what}: column ${JSON.stringify(name)}`;
-				if (!COLUMN_NAME.test(name) || seen.has(name.toLowerCase()))
-					throw invalid("args", `${at}: not a column name`);
+				if (!COLUMN_NAME.test(name) || seen.has(name.toLowerCase())) throw invalid("args", `${at}: not a column name`);
 				seen.add(name.toLowerCase());
 				checkColumn(column, at);
 			}
@@ -69,10 +50,7 @@ export async function applyWrite(
 		}
 		case "index": {
 			const record = table(step, write.table, what);
-			if (
-				!INDEX_NAME.test(write.name) ||
-				Object.hasOwn(record.indexes, write.name)
-			)
+			if (!INDEX_NAME.test(write.name) || Object.hasOwn(record.indexes, write.name))
 				refused(`index ${JSON.stringify(write.name)}: not a new index name`);
 			checkOrder(record.columns, write.columns, `${what}: index ${write.name}`);
 			await applyIndex(step, write);
@@ -90,18 +68,11 @@ export async function applyWrite(
 		case "put": {
 			const record = table(step, write.table, what),
 				statement = recordedPut(write.table, record.columns);
-			await step.run(
-				statement.sql,
-				...putValues(record, write, statement.physical, what),
-			);
+			await step.run(statement.sql, ...putValues(record, write, statement.physical, what));
 			return;
 		}
 		case "document.create":
-			await insertDocument(
-				step,
-				write.record,
-				write.base === undefined ? undefined : json(write.base.value, what),
-			);
+			await insertDocument(step, write.record, write.base === undefined ? undefined : json(write.base.value, what));
 			return;
 		case "document.revision":
 			await insertRevision(
@@ -110,12 +81,7 @@ export async function applyWrite(
 				write.seq,
 				write.content.kind,
 				write.content.version,
-				json(
-					write.content.kind === "base"
-						? write.content.value
-						: write.content.ops,
-					what,
-				),
+				json(write.content.kind === "base" ? write.content.value : write.content.ops, what),
 			);
 			return;
 		case "document.change": {
@@ -132,10 +98,7 @@ export async function applyWrite(
 			return;
 		}
 		case "document.retire":
-			await retireRecord(
-				step,
-				await live(step, write.id, write.revision, what),
-			);
+			await retireRecord(step, await live(step, write.id, write.revision, what));
 			return;
 		default: {
 			const record = table(step, write.table, what),
@@ -160,41 +123,23 @@ export async function applyWrite(
 				checkWhere(record, write.where, what);
 				statement =
 					write.kind === "updateWhere"
-						? sql.updateWhere(
-								write.where,
-								setOf(record, write, what),
-								versions(record, write, what),
-							)
+						? sql.updateWhere(write.where, setOf(record, write, what), versions(record, write, what))
 						: sql.deleteWhere(write.where);
 			}
 			const changed = await step.runCounted(statement.sql, ...statement.params);
-			if (changed !== write.count)
-				throw new Diverged(
-					`${what}: changed ${changed} rows, recorded ${write.count}`,
-				);
+			if (changed !== write.count) throw new Diverged(`${what}: changed ${changed} rows, recorded ${write.count}`);
 		}
 	}
 }
-async function live(
-	step: Step,
-	id: number,
-	revision: number,
-	what: string,
-): Promise<DocumentRecord> {
+async function live(step: Step, id: number, revision: number, what: string): Promise<DocumentRecord> {
 	const record = await readDocument(step, id);
 	if (!record || record.retiredAt !== undefined || record.revision !== revision)
-		throw new Diverged(
-			`${what}: document ${id} is not live at revision ${revision}`,
-		);
+		throw new Diverged(`${what}: document ${id} is not live at revision ${revision}`);
 	return record;
 }
 function table(step: Step, name: string, what: string): TableRecord {
 	const record = step.table(name);
-	if (!record)
-		throw invalid(
-			"args",
-			`${what}: table ${JSON.stringify(name)} is not recorded`,
-		);
+	if (!record) throw invalid("args", `${what}: table ${JSON.stringify(name)} is not recorded`);
 	return record;
 }
 function json(value: unknown, what: string): string {
@@ -218,58 +163,27 @@ function checkColumn(column: ColumnRecord, what: string): void {
 		}
 	}
 	const isJson = column.type === "json";
-	if (
-		isJson !== (column.version !== undefined) ||
-		isJson !== (column.fingerprint !== undefined)
-	)
-		throw invalid(
-			"args",
-			`${what}: a json(...) column has a version and a fingerprint, no other column has`,
-		);
+	if (isJson !== (column.version !== undefined) || isJson !== (column.fingerprint !== undefined))
+		throw invalid("args", `${what}: a json(...) column has a version and a fingerprint, no other column has`);
 	if (column.default === undefined) return;
-	if (isJson || column.optional)
-		throw invalid(
-			"args",
-			`${what}: only a non-opt scalar column has a default`,
-		);
+	if (isJson || column.optional) throw invalid("args", `${what}: only a non-opt scalar column has a default`);
 	checkScalar(column.type, column.default, `${what}: the default`);
 }
-function checkOrder(
-	columns: Readonly<Record<string, ColumnRecord>>,
-	names: readonly string[],
-	what: string,
-): void {
-	if (new Set(names).size !== names.length)
-		throw invalid("args", `${what}: a column occurs twice`);
+function checkOrder(columns: Readonly<Record<string, ColumnRecord>>, names: readonly string[], what: string): void {
+	if (new Set(names).size !== names.length) throw invalid("args", `${what}: a column occurs twice`);
 	for (const name of names) {
 		const column = Object.hasOwn(columns, name) ? columns[name] : undefined;
-		if (
-			!column ||
-			column.optional ||
-			(column.type !== "str" && column.type !== "int")
-		)
-			throw invalid(
-				"args",
-				`${what}: ${JSON.stringify(name)} is not a non-opt str or int column`,
-			);
+		if (!column || column.optional || (column.type !== "str" && column.type !== "int"))
+			throw invalid("args", `${what}: ${JSON.stringify(name)} is not a non-opt str or int column`);
 	}
 }
-function checkAlter(
-	record: TableRecord,
-	write: Extract<TableWrite, { readonly kind: "alter" }>,
-	what: string,
-): void {
+function checkAlter(record: TableRecord, write: Extract<TableWrite, { readonly kind: "alter" }>, what: string): void {
 	if (write.version !== record.version && write.version !== record.version + 1)
-		throw invalid(
-			"args",
-			`${what}: an edit of version ${write.version} on version ${record.version}`,
-		);
+		throw invalid("args", `${what}: an edit of version ${write.version} on version ${record.version}`);
 	const has = (name: string): boolean => Object.hasOwn(record.columns, name);
 	const fresh = (name: string): boolean =>
 		COLUMN_NAME.test(name) &&
-		!Object.keys(record.columns).some(
-			(present) => present.toLowerCase() === name.toLowerCase(),
-		);
+		!Object.keys(record.columns).some((present) => present.toLowerCase() === name.toLowerCase());
 	const { edit } = write;
 	let valid: boolean;
 	switch (edit.kind) {
@@ -277,9 +191,7 @@ function checkAlter(
 			valid = has(edit.from) && fresh(edit.to);
 			break;
 		case "add":
-			valid =
-				fresh(edit.name) &&
-				(edit.column.optional === true || edit.column.default !== undefined);
+			valid = fresh(edit.name) && (edit.column.optional === true || edit.column.default !== undefined);
 			break;
 		case "drop":
 			valid =
@@ -288,108 +200,57 @@ function checkAlter(
 				!Object.values(record.indexes).some((on) => on.includes(edit.name));
 			break;
 		case "json":
-			valid =
-				has(edit.name) &&
-				record.columns[edit.name]!.type === "json" &&
-				edit.column.type === "json";
+			valid = has(edit.name) && record.columns[edit.name]!.type === "json" && edit.column.type === "json";
 			break;
 	}
-	if (!valid)
-		throw invalid(
-			"args",
-			`${what}: an ${edit.kind} edit the table cannot take`,
-		);
+	if (!valid) throw invalid("args", `${what}: an ${edit.kind} edit the table cannot take`);
 	if (edit.kind === "add" || edit.kind === "json")
 		checkColumn(edit.column, `${what}: column ${JSON.stringify(edit.name)}`);
 }
-function keyValues(
-	record: TableRecord,
-	key: StoredKey,
-	what: string,
-): SqliteValue[] {
-	if (Object.keys(key).length !== record.key.length)
-		throw invalid("args", `${what}: not a key of ${record.table}`);
+function keyValues(record: TableRecord, key: StoredKey, what: string): SqliteValue[] {
+	if (Object.keys(key).length !== record.key.length) throw invalid("args", `${what}: not a key of ${record.table}`);
 	return record.key.map((name) => {
-		if (!Object.hasOwn(key, name))
-			throw invalid(
-				"args",
-				`${what}: key column ${JSON.stringify(name)} is missing`,
-			);
+		if (!Object.hasOwn(key, name)) throw invalid("args", `${what}: key column ${JSON.stringify(name)} is missing`);
 		const column = record.columns[name]!;
-		return toSqlite(
-			checkScalar(
-				column.type === "json" ? "str" : column.type,
-				key[name],
-				`${what}: key`,
-			),
-		);
+		return toSqlite(checkScalar(column.type === "json" ? "str" : column.type, key[name], `${what}: key`));
 	});
 }
 function setOf(record: TableRecord, write: Updating, what: string): SetNode {
-	if (
-		typeof write.set !== "object" ||
-		write.set === null ||
-		!Object.keys(write.set).length
-	)
+	if (typeof write.set !== "object" || write.set === null || !Object.keys(write.set).length)
 		throw invalid("args", `${what}: an empty or malformed set`);
 	for (const [name, node] of Object.entries(write.set)) {
 		if (!Object.hasOwn(record.columns, name) || record.key.includes(name))
-			throw invalid(
-				"args",
-				`${what}: set writes ${JSON.stringify(name)}, no non-key column`,
-			);
+			throw invalid("args", `${what}: set writes ${JSON.stringify(name)}, no non-key column`);
 		checkExpr(record, node, what);
 	}
-	return write.version === undefined
-		? write.set
-		: { ...write.set, [ROW_VERSION]: write.version };
+	return write.version === undefined ? write.set : { ...write.set, [ROW_VERSION]: write.version };
 }
-function versions(
-	record: TableRecord,
-	write: Updating,
-	what: string,
-): Map<string, number> {
+function versions(record: TableRecord, write: Updating, what: string): Map<string, number> {
 	const result = new Map<string, number>();
 	for (const [name, column] of Object.entries(record.columns))
 		if (column.type === "json" && Object.hasOwn(write.set, name)) {
 			const version = write.columns[name] ?? column.version!;
-			if (
-				!Number.isSafeInteger(version) ||
-				version < 1 ||
-				version > column.version!
-			)
-				throw invalid(
-					"args",
-					`${what}: no readable version for ${JSON.stringify(name)}`,
-				);
+			if (!Number.isSafeInteger(version) || version < 1 || version > column.version!)
+				throw invalid("args", `${what}: no readable version for ${JSON.stringify(name)}`);
 			result.set(name, version);
 		}
 	return result;
 }
 function scalar(value: unknown): boolean {
 	return (
-		typeof value === "string" ||
-		typeof value === "boolean" ||
-		(typeof value === "number" && Number.isFinite(value))
+		typeof value === "string" || typeof value === "boolean" || (typeof value === "number" && Number.isFinite(value))
 	);
 }
-function checkWhere(
-	record: TableRecord,
-	node: unknown,
-	what: string,
-): asserts node is WhereNode {
+function checkWhere(record: TableRecord, node: unknown, what: string): asserts node is WhereNode {
 	const refuse = (): never => {
 		throw invalid("args", `${what}: a malformed condition`);
 	};
-	if (!node || typeof node !== "object" || Object.keys(node).length !== 1)
-		return refuse();
+	if (!node || typeof node !== "object" || Object.keys(node).length !== 1) return refuse();
 	const [op, value] = Object.entries(node)[0]!;
 	const column = (name: unknown): void => {
 		if (
 			name !== ROW_VERSION &&
-			(typeof name !== "string" ||
-				record.columns[name] === undefined ||
-				record.columns[name]!.type === "json")
+			(typeof name !== "string" || record.columns[name] === undefined || record.columns[name]!.type === "json")
 		)
 			refuse();
 	};
@@ -409,37 +270,22 @@ function checkWhere(
 	column(value[0]);
 	const values: unknown = op === "inArray" ? value[1] : [value[1]];
 	if (!Array.isArray(values)) return refuse();
-	if (
-		values.some(
-			(item: unknown) =>
-				!scalar(item) || (op === "prefix" && typeof item !== "string"),
-		)
-	)
-		refuse();
+	if (values.some((item: unknown) => !scalar(item) || (op === "prefix" && typeof item !== "string"))) refuse();
 }
-function checkExpr(
-	record: TableRecord,
-	node: unknown,
-	what: string,
-): asserts node is ExprNode {
+function checkExpr(record: TableRecord, node: unknown, what: string): asserts node is ExprNode {
 	if (node === null || scalar(node)) return;
 	const refuse = (): never => {
 		throw invalid("args", `${what}: a malformed expression`);
 	};
-	if (typeof node !== "object" || Object.keys(node).length !== 1)
-		return refuse();
+	if (typeof node !== "object" || Object.keys(node).length !== 1) return refuse();
 	const [op, value] = Object.entries(node)[0]!;
 	if (op === "json") return;
 	if (op === "col") {
-		if (typeof value !== "string" || !Object.hasOwn(record.columns, value))
-			refuse();
+		if (typeof value !== "string" || !Object.hasOwn(record.columns, value)) refuse();
 		return;
 	}
 	if (!Array.isArray(value)) return refuse();
-	if (
-		["add", "sub", "max", "min", "concat", "coalesce"].includes(op) &&
-		value.length === 2
-	) {
+	if (["add", "sub", "max", "min", "concat", "coalesce"].includes(op) && value.length === 2) {
 		for (const part of value) checkExpr(record, part, what);
 		return;
 	}
@@ -463,44 +309,26 @@ function putValues(
 	what: string,
 ): SqliteValue[] {
 	for (const name of Object.keys(write.row))
-		if (!Object.hasOwn(record.columns, name))
-			throw invalid("args", `${what}: unknown column ${JSON.stringify(name)}`);
+		if (!Object.hasOwn(record.columns, name)) throw invalid("args", `${what}: unknown column ${JSON.stringify(name)}`);
 	for (const name of Object.keys(write.columns))
-		if (
-			record.columns[name]?.type !== "json" ||
-			!Object.hasOwn(write.row, name)
-		)
-			throw invalid(
-				"args",
-				`${what}: a version for ${JSON.stringify(name)}, which is no json(...) cell of the row`,
-			);
+		if (record.columns[name]?.type !== "json" || !Object.hasOwn(write.row, name))
+			throw invalid("args", `${what}: a version for ${JSON.stringify(name)}, which is no json(...) cell of the row`);
 	if (write.version > record.version)
-		throw invalid(
-			"args",
-			`${what}: version ${write.version} is newer than the table's version ${record.version}`,
-		);
+		throw invalid("args", `${what}: version ${write.version} is newer than the table's version ${record.version}`);
 	const values = new Map<string, SqliteValue>();
 	for (const [name, column] of Object.entries(record.columns)) {
 		const value = write.row[name],
 			label = `${what}: column ${JSON.stringify(name)}`;
-		if (
-			column.type === "json"
-				? !Object.hasOwn(write.row, name)
-				: value === undefined
-		) {
+		if (column.type === "json" ? !Object.hasOwn(write.row, name) : value === undefined) {
 			if (!column.optional) throw invalid("args", `${label} is missing`);
 			values.set(name, null);
-		} else if (column.type !== "json")
-			values.set(name, toSqlite(checkScalar(column.type, value, label)));
+		} else if (column.type !== "json") values.set(name, toSqlite(checkScalar(column.type, value, label)));
 		else {
 			const version = write.columns[name];
-			if (version === undefined || version > column.version!)
-				throw invalid("args", `${label}: no readable version`);
+			if (version === undefined || version > column.version!) throw invalid("args", `${label}: no readable version`);
 			values.set(name, json(value, label));
 			values.set(versionColumn(name), version);
 		}
 	}
-	return physical.map((name) =>
-		name === ROW_VERSION ? write.version : (values.get(name) ?? null),
-	);
+	return physical.map((name) => (name === ROW_VERSION ? write.version : (values.get(name) ?? null)));
 }

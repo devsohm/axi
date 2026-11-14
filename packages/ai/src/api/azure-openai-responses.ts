@@ -32,7 +32,8 @@ function request(
 		model: deployment,
 		stream: true,
 		store: false,
-		prompt_cache_key: model.compat?.promptCacheKeyMode === "disabled" ? undefined : clampOpenAIPromptCacheKey(options.sessionId),
+		prompt_cache_key:
+			model.compat?.promptCacheKeyMode === "disabled" ? undefined : clampOpenAIPromptCacheKey(options.sessionId),
 		input: convertResponsesMessages(model, transcript, toolProviders, {
 			grammarToolInputProperties: grammar,
 			supportsMidConvoSystemMessages: model.compat?.supportsMidConvoSystemMessages ?? false,

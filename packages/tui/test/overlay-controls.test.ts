@@ -111,8 +111,12 @@ test("a temporary focus blocker can resume either its dialog or an explicitly ch
 
 test("temporary focus moves through nested mounted inputs before returning to its overlay", () => {
 	const { ui, terminal } = setup();
-	const outer = new Container(), inner = new Container();
-	const draft = new Input(), first = new Input(), second = new Input(), dialog = new Input();
+	const outer = new Container(),
+		inner = new Container();
+	const draft = new Input(),
+		first = new Input(),
+		second = new Input(),
+		dialog = new Input();
 	outer.addChild(inner);
 	for (const input of [draft, first, second]) inner.addChild(input);
 	ui.addChild(outer);

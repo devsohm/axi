@@ -124,7 +124,8 @@ describe("concurrent session commits", () => {
 					return { stored: 1, refused: failure };
 				}
 			}
-			const storage = new Storage(), session = new SessionImpl(storage);
+			const storage = new Storage(),
+				session = new SessionImpl(storage);
 			const ids = await session.commit(async (tx) => {
 				const ids = [];
 				for (let index = 0; index < 3; index++)
@@ -161,7 +162,10 @@ describe("concurrent session commits", () => {
 					expect(three.reason).toBeInstanceOf(SessionFailed);
 					expect(three.reason.cause).toBe(two.reason);
 				}
-				await expect(session.commit(() => {}, context)).rejects.toMatchObject({ name: "SessionFailed", cause: two.reason });
+				await expect(session.commit(() => {}, context)).rejects.toMatchObject({
+					name: "SessionFailed",
+					cause: two.reason,
+				});
 				expect(published).toEqual(mode === "stored-then-rejected" ? ["first", "durable"] : ["first"]);
 				await session.close(context);
 				expect(await session.closed).toEqual({ kind: "failed", error: two.reason });

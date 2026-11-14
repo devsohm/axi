@@ -275,7 +275,10 @@ test("reading committed signal state does not wait on the lookup context", async
 	const harness = await Harness.open(new MemoryStorage(), { models: createModels(), registry }, context);
 	try {
 		const conversation = await harness.root(context);
-		const id = await conversation.commit((tx) => tx.createTask(task, null, { ownership: { kind: "conversation" } }), context);
+		const id = await conversation.commit(
+			(tx) => tx.createTask(task, null, { ownership: { kind: "conversation" } }),
+			context,
+		);
 		expect((await harness.waitForTask(id, context)).state.outcome).toEqual({ status: "completed", result: true });
 	} finally {
 		await harness.close(context);

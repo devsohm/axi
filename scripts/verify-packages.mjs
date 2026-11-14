@@ -17,22 +17,17 @@ import { fileURLToPath } from "node:url";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
 const directory = path.resolve(process.argv[2] ?? "");
-const manifest = JSON.parse(
-	readFileSync(path.join(directory, "package.json"), "utf8"),
-);
+const manifest = JSON.parse(readFileSync(path.join(directory, "package.json"), "utf8"));
 const npm = process.env.npm_execpath;
 if (!npm) throw new Error("Run this script with npm run verify:packages.");
 const consumer = mkdtempSync(path.join(tmpdir(), "axi-packages-"));
 function run(args, cwd) {
 	const result = spawnSync(process.execPath, args, { cwd, stdio: "inherit" });
 	if (result.error) throw result.error;
-	if (result.status !== 0)
-		throw new Error(`Verification failed with exit code ${result.status}.`);
+	if (result.status !== 0) throw new Error(`Verification failed with exit code ${result.status}.`);
 }
 try {
-	for (const line of readFileSync(path.join(directory, "SHA256SUMS"), "utf8")
-		.trim()
-		.split("\n")) {
+	for (const line of readFileSync(path.join(directory, "SHA256SUMS"), "utf8").trim().split("\n")) {
 		const [expected, filename] = line.split("  ");
 		assert.equal(
 			createHash("sha256")
@@ -48,8 +43,7 @@ try {
 			"file:" + path.resolve(directory, file.slice(5)),
 		]),
 	);
-	const nodeTypes = JSON.parse(readFileSync(path.join(root, "package.json")))
-		.devDependencies["@types/node"];
+	const nodeTypes = JSON.parse(readFileSync(path.join(root, "package.json"))).devDependencies["@types/node"];
 	writeFileSync(
 		path.join(consumer, "package.json"),
 		JSON.stringify({
@@ -59,38 +53,16 @@ try {
 			devDependencies: { "@types/node": nodeTypes },
 		}),
 	);
-	run(
-		[npm, "install", "--ignore-scripts", "--no-audit", "--no-fund"],
-		consumer,
-	);
-	for (const workspace of JSON.parse(
-		readFileSync(path.join(root, "package.json")),
-	).workspaces) {
-		const pkg = JSON.parse(
-			readFileSync(path.join(root, workspace, "package.json")),
-		);
+	run([npm, "install", "--ignore-scripts", "--no-audit", "--no-fund"], consumer);
+	for (const workspace of JSON.parse(readFileSync(path.join(root, "package.json"))).workspaces) {
+		const pkg = JSON.parse(readFileSync(path.join(root, workspace, "package.json")));
 		const installed = path.join(consumer, "node_modules", pkg.name);
-		assert.ok(
-			realpathSync(installed).startsWith(realpathSync(consumer) + path.sep),
-		);
-		const entrypoints = JSON.parse(
-			readFileSync(path.join(installed, "package.json")),
-		);
-		assert.deepEqual(
-			entrypoints.exports,
-			pkg.exports,
-			`${pkg.name}: package exports changed`,
-		);
+		assert.ok(realpathSync(installed).startsWith(realpathSync(consumer) + path.sep));
+		const entrypoints = JSON.parse(readFileSync(path.join(installed, "package.json")));
+		assert.deepEqual(entrypoints.exports, pkg.exports, `${pkg.name}: package exports changed`);
 		for (const field of ["main", "types"]) {
-			assert.equal(
-				typeof entrypoints[field],
-				"string",
-				`${pkg.name}: missing ${field} entrypoint`,
-			);
-			assert.ok(
-				existsSync(path.resolve(installed, entrypoints[field])),
-				`${pkg.name}: missing ${field} file`,
-			);
+			assert.equal(typeof entrypoints[field], "string", `${pkg.name}: missing ${field} entrypoint`);
+			assert.ok(existsSync(path.resolve(installed, entrypoints[field])), `${pkg.name}: missing ${field} file`);
 		}
 		for (const file of readdirSync(path.join(root, workspace, "dist"), {
 			recursive: true,
@@ -127,63 +99,49 @@ try {
 			}
 		}
 		for (const file of readdirSync(installed, { recursive: true })) {
-			if (
-				!file.endsWith(".md") ||
-				(file !== "README.md" &&
-					!["docs", "examples"].includes(file.split(path.sep)[0]))
-			)
+			if (!file.endsWith(".md") || (file !== "README.md" && !["docs", "examples"].includes(file.split(path.sep)[0])))
 				continue;
 			const markdown = readFileSync(path.join(installed, file), "utf8");
-			for (const [, target] of markdown.matchAll(
-				/\[[^\]]*\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g,
-			)) {
-				if (target.startsWith("#") || /^[a-z][a-z\d+.-]*:/i.test(target))
-					continue;
-				const destination = path.resolve(
-					installed,
-					path.dirname(file),
-					target.split("#")[0],
-				);
-				assert.ok(
-					existsSync(destination),
-					`${pkg.name}/${file}: missing linked file ${target}`,
-				);
+			for (const [, target] of markdown.matchAll(/\[[^\]]*\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g)) {
+				if (target.startsWith("#") || /^[a-z][a-z\d+.-]*:/i.test(target)) continue;
+				const destination = path.resolve(installed, path.dirname(file), target.split("#")[0]);
+				assert.ok(existsSync(destination), `${pkg.name}/${file}: missing linked file ${target}`);
 			}
 		}
 	}
-	copyFileSync(
-		path.join(root, "scripts/package-smoke.mjs"),
-		path.join(consumer, "smoke.mjs"),
-	);
+	copyFileSync(path.join(root, "scripts/package-smoke.mjs"), path.join(consumer, "smoke.mjs"));
 	run([path.join(consumer, "smoke.mjs")], consumer);
 	const compiler = JSON.parse(readFileSync(path.join(root, "packages/objects/package.json"))).peerDependencies.esbuild;
 	const react = JSON.parse(readFileSync(path.join(root, "packages/objects/package.json"))).peerDependencies.react;
 	const reactTypes = JSON.parse(readFileSync(path.join(root, "package.json"))).devDependencies["@types/react"];
-	run([npm, "install", "--ignore-scripts", "--no-audit", "--no-fund", `esbuild@${compiler}`, `react@${react}`, `@types/react@${reactTypes}`], consumer);
+	run(
+		[
+			npm,
+			"install",
+			"--ignore-scripts",
+			"--no-audit",
+			"--no-fund",
+			`esbuild@${compiler}`,
+			`react@${react}`,
+			`@types/react@${reactTypes}`,
+		],
+		consumer,
+	);
 	copyFileSync(path.join(root, "scripts/package-plugins-smoke.mjs"), path.join(consumer, "plugins-smoke.mjs"));
 	run([path.join(consumer, "plugins-smoke.mjs")], consumer);
 	copyFileSync(path.join(root, "scripts/package-host-smoke.mjs"), path.join(consumer, "host-smoke.mjs"));
 	run([path.join(consumer, "host-smoke.mjs")], consumer);
 	const objectsDocs = path.join(consumer, "node_modules/@axi/objects/docs");
-	assert.ok(
-		readFileSync(path.join(objectsDocs, "guide.md"), "utf8").length > 0,
-	);
+	assert.ok(readFileSync(path.join(objectsDocs, "guide.md"), "utf8").length > 0);
 	const tutorial = readFileSync(path.join(objectsDocs, "tutorial.md"), "utf8");
 	const examples = [...tutorial.matchAll(/```ts\n([\s\S]*?)\n```/g)];
 	assert.ok(examples.length > 0);
-	writeFileSync(
-		path.join(consumer, "tutorial.ts"),
-		examples.map((example) => example[1]).join("\n\n"),
-	);
+	writeFileSync(path.join(consumer, "tutorial.ts"), examples.map((example) => example[1]).join("\n\n"));
 	run([path.join(consumer, "tutorial.ts")], consumer);
-	const cli = spawnSync(
-		process.execPath,
-		[path.join(consumer, "node_modules/@axi/ai/dist/cli.js"), "--help"],
-		{
-			cwd: consumer,
-			encoding: "utf8",
-		},
-	);
+	const cli = spawnSync(process.execPath, [path.join(consumer, "node_modules/@axi/ai/dist/cli.js"), "--help"], {
+		cwd: consumer,
+		encoding: "utf8",
+	});
 	assert.equal(cli.status, 0, cli.stderr);
 	assert.match(cli.stdout, /Usage: axi-ai/);
 	assert.match(cli.stdout, /openai-codex/);
@@ -233,17 +191,14 @@ export const ingest = (options: TelemetryIngestOptions<{kind: "user"}>) => telem
 	);
 	writeFileSync(
 		path.join(consumer, "conversation-types.ts"),
-		readFileSync(path.join(root, "packages/durable/test/conversation-types.test-d.ts"), "utf8")
-			.replace('"../src/index.ts"', '"@axi/durable"'),
+		readFileSync(path.join(root, "packages/durable/test/conversation-types.test-d.ts"), "utf8").replace(
+			'"../src/index.ts"',
+			'"@axi/durable"',
+		),
 	);
 	run(
 		[
-			path.join(
-				path.dirname(
-					fileURLToPath(import.meta.resolve("typescript/package.json")),
-				),
-				"bin/tsc",
-			),
+			path.join(path.dirname(fileURLToPath(import.meta.resolve("typescript/package.json"))), "bin/tsc"),
 			"--noEmit",
 			"--strict",
 			"--skipLibCheck",
@@ -260,16 +215,9 @@ export const ingest = (options: TelemetryIngestOptions<{kind: "user"}>) => telem
 		],
 		consumer,
 	);
-	run(
-		[npm, "uninstall", ...Object.keys(dependencies), "--no-audit", "--no-fund"],
-		consumer,
-	);
+	run([npm, "uninstall", ...Object.keys(dependencies), "--no-audit", "--no-fund"], consumer);
 	for (const name of Object.keys(dependencies))
-		assert.equal(
-			existsSync(path.join(consumer, "node_modules", name)),
-			false,
-			name,
-		);
+		assert.equal(existsSync(path.join(consumer, "node_modules", name)), false, name);
 } finally {
 	rmSync(consumer, { recursive: true, force: true });
 }

@@ -22,14 +22,10 @@ export const ROW_VERSION = "$v";
 export function versionColumn(column: string): string {
 	return `${column}$v`;
 }
-export function physicalColumns(
-	columns: readonly { readonly name: string; readonly type: ColumnType }[],
-): string[] {
+export function physicalColumns(columns: readonly { readonly name: string; readonly type: ColumnType }[]): string[] {
 	return [
 		...columns.map((column) => column.name),
-		...columns
-			.filter((column) => column.type === "json")
-			.map((column) => versionColumn(column.name)),
+		...columns.filter((column) => column.type === "json").map((column) => versionColumn(column.name)),
 		ROW_VERSION,
 	];
 }
@@ -47,22 +43,14 @@ export class RowCodec {
 	readonly #keyNames: ReadonlySet<string>;
 	readonly #keyPositions: readonly number[];
 	readonly #table: string;
-	constructor(
-		columns: readonly Column[],
-		key: readonly string[],
-		table: string,
-	) {
+	constructor(columns: readonly Column[], key: readonly string[], table: string) {
 		this.#columns = columns;
-		this.#keys = key.map(
-			(name) => columns.find((column) => column.name === name)!,
-		);
+		this.#keys = key.map((name) => columns.find((column) => column.name === name)!);
 		this.#json = columns.filter((column) => column.type === "json");
 		this.#host = columns.find((column): column is HostColumnOf => column.type === "str" && column.host !== undefined);
 		this.#names = new Set(columns.map((column) => column.name));
 		this.#keyNames = new Set(key);
-		this.#keyPositions = key.map((name) =>
-			columns.findIndex((column) => column.name === name),
-		);
+		this.#keyPositions = key.map((name) => columns.findIndex((column) => column.name === name));
 		this.#table = table;
 		this.physical = physicalColumns(columns);
 	}
@@ -74,18 +62,12 @@ export class RowCodec {
 		const versions: Record<string, number> = {};
 		for (const column of this.#columns) {
 			const input: unknown = Reflect.get(fields, column.name);
-			const value =
-				input === undefined && column.type !== "json" ? column.default : input;
+			const value = input === undefined && column.type !== "json" ? column.default : input;
 			if (value === undefined) {
-				if (!column.optional)
-					throw invalid("args", `${what}: column "${column.name}" is missing`);
+				if (!column.optional) throw invalid("args", `${what}: column "${column.name}" is missing`);
 				params.push(null);
 			} else {
-				const encoded = encodeCell(
-					column,
-					value,
-					`${what}: column "${column.name}"`,
-				);
+				const encoded = encodeCell(column, value, `${what}: column "${column.name}"`);
 				stored[column.name] = encoded.stored;
 				params.push(encoded.param);
 			}
@@ -101,17 +83,11 @@ export class RowCodec {
 			params,
 			row: stored,
 			columns: versions,
-			id: JSON.stringify(
-				this.#keyPositions.map((position) => params[position]),
-			),
+			id: JSON.stringify(this.#keyPositions.map((position) => params[position])),
 		};
 	}
 	key(key: unknown, operation: string): EncodedKey {
-		const fields = closed(
-			key,
-			this.#keyNames,
-			`${this.#table}: ${operation}: the key`,
-		);
+		const fields = closed(key, this.#keyNames, `${this.#table}: ${operation}: the key`);
 		const params: SqliteValue[] = [];
 		const stored: Record<string, Scalar> = {};
 		for (const column of this.#keys) {
@@ -126,10 +102,7 @@ export class RowCodec {
 		}
 		return { params, key: stored, id: JSON.stringify(params) };
 	}
-	decode(
-		stored: Readonly<Record<string, SqliteValue>>,
-		context: Context,
-	): Record<string, unknown> {
+	decode(stored: Readonly<Record<string, SqliteValue>>, context: Context): Record<string, unknown> {
 		const row: Record<string, unknown> = {};
 		for (const column of this.#columns) {
 			const value = stored[column.name];
@@ -161,16 +134,11 @@ export class RowCodec {
 	}
 }
 
-function closed(
-	value: unknown,
-	allowed: ReadonlySet<string>,
-	what: string,
-): object {
+function closed(value: unknown, allowed: ReadonlySet<string>, what: string): object {
 	if (typeof value !== "object" || value === null || Array.isArray(value))
 		throw invalid("args", `${what}: expected an object`);
 	for (const name of Object.keys(value))
-		if (!allowed.has(name))
-			throw invalid("args", `${what}: unknown column "${name}"`);
+		if (!allowed.has(name)) throw invalid("args", `${what}: unknown column "${name}"`);
 	return value;
 }
 export function encodeCell(
@@ -190,43 +158,23 @@ export function encodeCell(
 	try {
 		encoded = JSON.stringify(value);
 	} catch (error) {
-		throw invalid(
-			"args",
-			`${what}: not JSON (${error instanceof Error ? error.message : String(error)})`,
-		);
+		throw invalid("args", `${what}: not JSON (${error instanceof Error ? error.message : String(error)})`);
 	}
 	if (encoded === undefined) throw invalid("args", `${what}: not JSON`);
 	// Serialization is the boundary; same-host values remain immutable by convention.
 	return { param: encoded, stored: value as JsonValue };
 }
 export function checkScalar(type: "str", value: unknown, what: string): string;
-export function checkScalar(
-	type: "int" | "num",
-	value: unknown,
-	what: string,
-): number;
-export function checkScalar(
-	type: "bool",
-	value: unknown,
-	what: string,
-): boolean;
-export function checkScalar(
-	type: "str" | "int" | "num" | "bool",
-	value: unknown,
-	what: string,
-): Scalar;
-export function checkScalar(
-	type: "str" | "int" | "num" | "bool",
-	value: unknown,
-	what: string,
-): Scalar {
+export function checkScalar(type: "int" | "num", value: unknown, what: string): number;
+export function checkScalar(type: "bool", value: unknown, what: string): boolean;
+export function checkScalar(type: "str" | "int" | "num" | "bool", value: unknown, what: string): Scalar;
+export function checkScalar(type: "str" | "int" | "num" | "bool", value: unknown, what: string): Scalar {
 	switch (type) {
 		case "str":
 			if (typeof value === "string") return storedText(value, what);
 			break;
 		case "int":
-			if (typeof value === "number" && Number.isSafeInteger(value))
-				return value;
+			if (typeof value === "number" && Number.isSafeInteger(value)) return value;
 			break;
 		case "num":
 			if (typeof value === "number" && Number.isFinite(value)) return value;
@@ -235,8 +183,5 @@ export function checkScalar(
 			if (typeof value === "boolean") return value;
 			break;
 	}
-	throw invalid(
-		"args",
-		`${what}: ${JSON.stringify(value) ?? String(value)} is not a ${type} value`,
-	);
+	throw invalid("args", `${what}: ${JSON.stringify(value) ?? String(value)} is not a ${type} value`);
 }

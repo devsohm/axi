@@ -49,13 +49,27 @@ type Declaration =
 			readonly at: Position;
 			readonly fn: OnLiveHandler;
 	  };
-type Result = ({ readonly kind: "done" } | { readonly kind: "failed"; readonly error: unknown }) & { readonly span?: OpenSpan };
+type Result = ({ readonly kind: "done" } | { readonly kind: "failed"; readonly error: unknown }) & {
+	readonly span?: OpenSpan;
+};
 
-function invoke(owner: RoutineOwner, at: Position, fn: (context: Ctx) => void | Promise<void>, trigger?: TelemetryContext): Promise<Result> {
+function invoke(
+	owner: RoutineOwner,
+	at: Position,
+	fn: (context: Ctx) => void | Promise<void>,
+	trigger?: TelemetryContext,
+): Promise<Result> {
 	const adapter = owner.host.telemetry;
-	const span = adapter && !untraced(adapter) ? new OpenSpan(adapter, "objects.routine", {
-		"objects.host": owner.host.spanHost, type: owner.type, object: owner.label.slice(0, 256), routine: at.kind, position: at.position,
-	}) : undefined;
+	const span =
+		adapter && !untraced(adapter)
+			? new OpenSpan(adapter, "objects.routine", {
+					"objects.host": owner.host.spanHost,
+					type: owner.type,
+					object: owner.label.slice(0, 256),
+					routine: at.kind,
+					position: at.position,
+				})
+			: undefined;
 	if (span && trigger && !untraced(trigger)) span.span.addLink({ context: trigger });
 	const ctx = new CallContext(span ? withTelemetry(span.span, owner.context) : owner.context, owner.caller, owner.host),
 		finished = Promise.withResolvers<Result>();
@@ -73,7 +87,8 @@ function invoke(owner: RoutineOwner, at: Position, fn: (context: Ctx) => void | 
 function complete(result: Result, owner: RoutineOwner, delay?: number): void {
 	const span = result.span;
 	if (!span) return;
-	const outcome = result.kind === "done" ? "ok" : ended(span.span, "routine_failed", result.error, owner.context.abortSignal);
+	const outcome =
+		result.kind === "done" ? "ok" : ended(span.span, "routine_failed", result.error, owner.context.abortSignal);
 	span.span.setAttributes({ outcome });
 	if (outcome === "error" && delay !== undefined) span.span.addEvent("objects.retry", { backoff: delay });
 	span.end();
@@ -118,7 +133,10 @@ export class Routines {
 		while (!owner.context.abortSignal?.aborted) {
 			const start = Date.now(),
 				result = await invoke(owner, declaration.at, declaration.fn);
-			if (result.kind === "done" || owner.context.abortSignal?.aborted) { complete(result, owner); return; }
+			if (result.kind === "done" || owner.context.abortSignal?.aborted) {
+				complete(result, owner);
+				return;
+			}
 			report(owner, declaration.at, result.error);
 			delay = nextDelay(Date.now() - start >= 60_000 ? undefined : delay);
 			complete(result, owner, delay);
@@ -276,10 +294,18 @@ class SourceRoutine {
 			this.#retired = false;
 		}
 		const fn = this.#declaration.fn as OnHandler<unknown> | OnNativeHandler<unknown>;
-		void invoke(this.#owner, this.#declaration.at, (ctx) => fn(call as WatchValueCall<unknown>, ctx), pending.trigger).then((result) => this.#settled(result));
+		void invoke(
+			this.#owner,
+			this.#declaration.at,
+			(ctx) => fn(call as WatchValueCall<unknown>, ctx),
+			pending.trigger,
+		).then((result) => this.#settled(result));
 	}
 	#settled(result: Result): void {
-		if (this.#phase.kind === "ended") { complete(result, this.#owner); return; }
+		if (this.#phase.kind === "ended") {
+			complete(result, this.#owner);
+			return;
+		}
 		if (result.kind === "done") {
 			complete(result, this.#owner);
 			this.#full = false;
@@ -287,7 +313,10 @@ class SourceRoutine {
 			this.#phase = this.#pending ? { kind: "settling", timer: setTimeout(() => this.#next(), 0) } : { kind: "idle" };
 			return;
 		}
-		if (this.#aborted()) { complete(result, this.#owner); return; }
+		if (this.#aborted()) {
+			complete(result, this.#owner);
+			return;
+		}
 		report(this.#owner, this.#declaration.at, result.error);
 		this.#full = true;
 		this.#retired ||= this.#lastRetired;

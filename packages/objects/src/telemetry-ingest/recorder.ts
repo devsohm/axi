@@ -205,23 +205,24 @@ export class TelemetryRecorder implements TelemetryContext {
 			throw error;
 		} finally {
 			settled = true;
-			if (!this.#stopped) this.ingest({
-				spans: [
-					{
-						id,
-						traceId: identity.traceId,
-						...(parent ? { parentId: parent.id } : {}),
-						name: options.name,
-						startedMs: started,
-						endedMs: rounded(started + performance.now() - clock),
-						attributes: values,
-						events,
-						links,
-						status,
-					},
-				],
-				metrics: [],
-			});
+			if (!this.#stopped)
+				this.ingest({
+					spans: [
+						{
+							id,
+							traceId: identity.traceId,
+							...(parent ? { parentId: parent.id } : {}),
+							name: options.name,
+							startedMs: started,
+							endedMs: rounded(started + performance.now() - clock),
+							attributes: values,
+							events,
+							links,
+							status,
+						},
+					],
+					metrics: [],
+				});
 		}
 	}
 	private measure(

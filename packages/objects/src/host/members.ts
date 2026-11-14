@@ -1,11 +1,7 @@
 import type { Context } from "../context/index.ts";
 import type { Contract } from "../contracts/index.ts";
 import { currentVariants, LOCAL, takesNoArgs } from "../contracts/internal.ts";
-import {
-	RegistryContribution,
-	type Contributor,
-	type RegistryRecord,
-} from "../registries/internal.ts";
+import { RegistryContribution, type Contributor, type RegistryRecord } from "../registries/internal.ts";
 import { NativeSource, type Derive, type DeriveSource } from "../state/internal.ts";
 import { resolveKeyed, resolveWatchable, type KeyedBinding } from "./reference.ts";
 import { OwnEventSource, type EventNode, type SourceOwner } from "./events.ts";

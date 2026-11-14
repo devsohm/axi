@@ -143,7 +143,11 @@ test("a malformed SSE message is reported while a later valid notification is de
 				? new Response(
 						new ReadableStream({
 							start(controller) {
-								controller.enqueue(new TextEncoder().encode(`event: heartbeat\ndata: {ignored\n\ndata:   \n\ndata: {broken\n\nevent: message\ndata: ${JSON.stringify(message)}\n\n`));
+								controller.enqueue(
+									new TextEncoder().encode(
+										`event: heartbeat\ndata: {ignored\n\ndata:   \n\ndata: {broken\n\nevent: message\ndata: ${JSON.stringify(message)}\n\n`,
+									),
+								);
 							},
 						}),
 						{ headers: { "content-type": "text/event-stream" } },

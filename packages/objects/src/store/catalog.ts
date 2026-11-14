@@ -12,15 +12,11 @@ export type TableRecord = {
 	readonly indexes: { readonly [name: string]: readonly string[] };
 };
 
-export async function readCatalog(
-	executor: SqliteExecutor,
-): Promise<Map<string, TableRecord>> {
+export async function readCatalog(executor: SqliteExecutor): Promise<Map<string, TableRecord>> {
 	const rows = await executor.all<{ name: string; definition: string }>(
 		`SELECT name, definition FROM ${TABLES.tables}`,
 	);
-	return new Map(
-		rows.map((row) => [row.name, JSON.parse(row.definition) as TableRecord]),
-	);
+	return new Map(rows.map((row) => [row.name, JSON.parse(row.definition) as TableRecord]));
 }
 export async function writeCatalog(
 	step: Pick<SqliteExecutor, "run"> & {

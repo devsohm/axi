@@ -10,17 +10,31 @@ import { constant, createHost, defineFacet, int, local } from "../src/index.ts";
 const turn = (): Promise<void> => new Promise((resolve) => setImmediate(resolve));
 it("shares the terminal record when references release their member watches", async () => {
 	const type = local("members.terminal", { version: 1, params: {}, members: { value: int() } });
-	const host = createHost({ onError(error) { throw error } });
+	const host = createHost({
+		onError(error) {
+			throw error;
+		},
+	});
 	try {
-		await host.load([{ name: "values", facet: defineFacet(h => h.serve(type, () => ({ value: constant(3) }))) }], context);
-		const first = await host.get(type, {}, context), second = await host.get(type, {}, context);
-		const watches = await Promise.all([first.value.watch(context), first.value.watch(context), second.value.watch(context)]);
+		await host.load(
+			[{ name: "values", facet: defineFacet((h) => h.serve(type, () => ({ value: constant(3) }))) }],
+			context,
+		);
+		const first = await host.get(type, {}, context),
+			second = await host.get(type, {}, context);
+		const watches = await Promise.all([
+			first.value.watch(context),
+			first.value.watch(context),
+			second.value.watch(context),
+		]);
 		first.release();
 		second.release();
-		const ends = await Promise.all(watches.map(watch => watch.closed));
+		const ends = await Promise.all(watches.map((watch) => watch.closed));
 		expect(ends[0]).toEqual({ kind: "ended" });
 		for (const end of ends) expect(end).toBe(ends[0]);
-	} finally { await host.close(context) }
+	} finally {
+		await host.close(context);
+	}
 });
 
 it("retains reference states in order and ends watches when the reference is released", async () => {

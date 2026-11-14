@@ -23,7 +23,7 @@ export class CallWindow<C extends QueuedCall<unknown> = QueuedCall> {
 		this.#queued.delete(call);
 	}
 	removeHold(hold: C["hold"]): C[] {
-		return this.removeWhere(call => call.hold === hold);
+		return this.removeWhere((call) => call.hold === hold);
 	}
 	removeWhere(matches: (call: C) => boolean): C[] {
 		const removed: C[] = [];

@@ -212,12 +212,11 @@ export class JobRecords {
 		const args = this.argsOf(run),
 			mapped = run.mapped!;
 		if (mapped.outcome) return mapped.outcome;
-		const result = outcome.kind === "done" ? this.definition.accepts[run.version]!.result(outcome.result as never) : undefined;
+		const result =
+			outcome.kind === "done" ? this.definition.accepts[run.version]!.result(outcome.result as never) : undefined;
 		const base = { id: outcome.id, args, state: this.#states?.migrated(run.id, context) ?? outcome.state };
 		return (mapped.outcome =
-			outcome.kind === "done"
-				? { ...base, kind: "done", result }
-				: { ...base, kind: "failed", error: outcome.error });
+			outcome.kind === "done" ? { ...base, kind: "done", result } : { ...base, kind: "failed", error: outcome.error });
 	}
 	#entry(run: JobRun): JsonValue {
 		let args = run.args;

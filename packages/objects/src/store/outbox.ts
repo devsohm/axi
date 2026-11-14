@@ -30,21 +30,12 @@ export class Outbox {
 		);
 		return result;
 	}
-	async read(
-		afterSeq: number,
-		limit: number,
-		context: Context,
-	): Promise<OutboxCommit[]> {
-		if (!Number.isSafeInteger(afterSeq))
-			throw invalid("args", `outbox: read after ${afterSeq}, not an integer`);
-		if (!Number.isSafeInteger(limit) || limit < 1)
-			throw invalid("args", "outbox: limit is a positive integer");
+	async read(afterSeq: number, limit: number, context: Context): Promise<OutboxCommit[]> {
+		if (!Number.isSafeInteger(afterSeq)) throw invalid("args", `outbox: read after ${afterSeq}, not an integer`);
+		if (!Number.isSafeInteger(limit) || limit < 1) throw invalid("args", "outbox: limit is a positive integer");
 		return this.#enqueue(async () => {
 			if (afterSeq < this.#floor || afterSeq > this.#store.lastSeq)
-				throw invalid(
-					"args",
-					`outbox: read after ${afterSeq}, outside ${this.#floor}..${this.#store.lastSeq}`,
-				);
+				throw invalid("args", `outbox: read after ${afterSeq}, outside ${this.#floor}..${this.#store.lastSeq}`);
 			const rows = await this.#store.read(
 				(executor) =>
 					executor.all<{
@@ -76,21 +67,12 @@ export class Outbox {
 	async trim(throughSeq: number, context: Context): Promise<void> {
 		context.abortSignal?.throwIfAborted();
 		if (!Number.isSafeInteger(throughSeq) || throughSeq > this.#store.lastSeq)
-			throw invalid(
-				"args",
-				`outbox: trim through ${throughSeq}, beyond ${this.#store.lastSeq}`,
-			);
+			throw invalid("args", `outbox: trim through ${throughSeq}, beyond ${this.#store.lastSeq}`);
 		return this.#enqueue(async () => {
 			if (throughSeq <= this.#floor) return;
 			await this.#store.maintain(async (executor) => {
-				await executor.run(
-					`DELETE FROM ${TABLES.outbox} WHERE seq <= ?`,
-					throughSeq,
-				);
-				await executor.run(
-					`UPDATE ${TABLES.meta} SET outbox_floor = ? WHERE singleton = 1`,
-					throughSeq,
-				);
+				await executor.run(`DELETE FROM ${TABLES.outbox} WHERE seq <= ?`, throughSeq);
+				await executor.run(`UPDATE ${TABLES.meta} SET outbox_floor = ? WHERE singleton = 1`, throughSeq);
 			});
 			this.#floor = throughSeq;
 		});

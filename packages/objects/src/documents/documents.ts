@@ -117,7 +117,8 @@ export class Documents {
 				const duration = performance.now() - start;
 				const { documents, ops, writes, rows } = transaction.committed();
 				if (documents || writes) {
-					if (!untraced(context.telemetry)) context.telemetry.addEvent("objects.commit", { documents, ops, rows, duration });
+					if (!untraced(context.telemetry))
+						context.telemetry.addEvent("objects.commit", { documents, ops, rows, duration });
 					objectsMetrics(adapter.metrics).histogram("objects.commit.duration").record(duration);
 				}
 			}
@@ -125,7 +126,8 @@ export class Documents {
 		} catch (error) {
 			transaction.discard();
 			const signal = context.abortSignal;
-			if (signal?.aborted) this.#owner.report?.({ kind: "transaction_cancelled", object: this.label, error: signal.reason });
+			if (signal?.aborted)
+				this.#owner.report?.({ kind: "transaction_cancelled", object: this.label, error: signal.reason });
 			throw error;
 		} finally {
 			if (this.#active === transaction) this.#active = undefined;

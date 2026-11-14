@@ -16,18 +16,12 @@ export async function applyBatch(
 ): Promise<void> {
 	const checked = commits.map((commit, index) => {
 		const label = `batch: commit ${index}`;
-		if (
-			!Number.isSafeInteger(commit.seq) ||
-			!Number.isSafeInteger(commit.nextId) ||
-			!Array.isArray(commit.writes)
-		)
+		if (!Number.isSafeInteger(commit.seq) || !Number.isSafeInteger(commit.nextId) || !Array.isArray(commit.writes))
 			throw invalid("args", `${label}: not an outbox commit`);
 		return {
 			seq: commit.seq,
 			nextId: commit.nextId,
-			writes: commit.writes.map((write, i) =>
-				checkWrite(write, `${label}: write ${i}`, context),
-			),
+			writes: commit.writes.map((write, i) => checkWrite(write, `${label}: write ${i}`, context)),
 		};
 	});
 	await store.replay(
@@ -38,33 +32,17 @@ export async function applyBatch(
 				nextId = store.nextId;
 			for (const [i, commit] of checked.entries()) {
 				const label = `batch: commit ${i} (seq ${commit.seq})`;
-				if (commit.seq !== lastSeq + 1)
-					throw invalid("args", `${label}: does not follow seq ${lastSeq}`);
-				if (commit.nextId < nextId)
-					throw invalid(
-						"args",
-						`${label}: its next id ${commit.nextId} is below ${nextId}`,
-					);
-				const step = new Step(
-					executor,
-					commit.seq,
-					new IdAllocator(commit.nextId),
-					known,
-				);
+				if (commit.seq !== lastSeq + 1) throw invalid("args", `${label}: does not follow seq ${lastSeq}`);
+				if (commit.nextId < nextId) throw invalid("args", `${label}: its next id ${commit.nextId} is below ${nextId}`);
+				const step = new Step(executor, commit.seq, new IdAllocator(commit.nextId), known);
 				for (const [j, write] of commit.writes.entries()) {
 					const at = `${label}: write ${j} (${write.kind})`;
 					if (
 						write.kind === "document.create" &&
 						write.record.id >= commit.nextId &&
-						!(
-							commit.nextId === Number.MAX_SAFE_INTEGER &&
-							write.record.id === commit.nextId
-						)
+						!(commit.nextId === Number.MAX_SAFE_INTEGER && write.record.id === commit.nextId)
 					)
-						throw invalid(
-							"args",
-							`${at}: id ${write.record.id} is not below the commit's next id ${commit.nextId}`,
-						);
+						throw invalid("args", `${at}: id ${write.record.id} is not below the commit's next id ${commit.nextId}`);
 					await applyWrite(step, write, at);
 				}
 				await writeCatalog(step);
@@ -83,11 +61,7 @@ export async function applyBatch(
 				lastSeq = commit.seq;
 				nextId = commit.nextId;
 			}
-			await executor.run(
-				`UPDATE ${TABLES.meta} SET last_seq = ?, next_id = ? WHERE singleton = 1`,
-				lastSeq,
-				nextId,
-			);
+			await executor.run(`UPDATE ${TABLES.meta} SET last_seq = ?, next_id = ? WHERE singleton = 1`, lastSeq, nextId);
 			return { lastSeq, nextId, tables: changed };
 		},
 		(error) => error instanceof Diverged,

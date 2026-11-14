@@ -177,7 +177,8 @@ export function recordFactory(object: ObjectsObject, served: Served, context: Co
 		},
 		query: (_table: unknown, query: Query, limit: unknown) => {
 			const table = tables.get(query.table.name);
-			if (table !== query.table) throw new Error(`${object.label}: self.query: the table is not one this factory declared`);
+			if (table !== query.table)
+				throw new Error(`${object.label}: self.query: the table is not one this factory declared`);
 			checkLiveQuery(table, query, limit, object.label);
 			return unused;
 		},

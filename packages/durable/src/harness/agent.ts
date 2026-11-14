@@ -30,7 +30,11 @@ export const DEFAULT_COMPACTION_POLICY: CompactionPolicy = {
 	keepRecentTokens: 20000,
 	backgroundTokens: 32768,
 };
-export const DEFAULT_PROGRESS_POLICY: ProgressPolicy = { partialIntervalMs: 100, outputIntervalMs: 100, persistWithinMs: 1000 };
+export const DEFAULT_PROGRESS_POLICY: ProgressPolicy = {
+	partialIntervalMs: 100,
+	outputIntervalMs: 100,
+	persistWithinMs: 1000,
+};
 export const DEFAULT_RESTART_LIMIT = 5;
 export const INSTRUCTIONS_KEY = "instructions";
 export const AgentDoc = defineDoc<AgentState>({
@@ -113,16 +117,18 @@ export async function configure(tx: Tx, id: ConversationId, change: AgentChange)
 	const maxTurns = change.maxTurns;
 	if (maxTurns === null) delete state.maxTurns;
 	else if (maxTurns !== undefined) {
-		if (!Number.isSafeInteger(maxTurns) || maxTurns < 1) throw new RangeError(`maxTurns must be an integer 1 or more, got ${String(maxTurns)}`);
+		if (!Number.isSafeInteger(maxTurns) || maxTurns < 1)
+			throw new RangeError(`maxTurns must be an integer 1 or more, got ${String(maxTurns)}`);
 		state.maxTurns = maxTurns;
 	}
 	const compaction = change.compaction;
 	if (compaction === null) delete state.compaction;
 	else if (compaction !== undefined) {
 		const { modelOverrides, ...policy } = compaction;
-		const overrides = modelOverrides === undefined
-			? undefined
-			: Object.fromEntries(Object.entries(modelOverrides).map(([key, value]) => [key, compactionFields(value)]));
+		const overrides =
+			modelOverrides === undefined
+				? undefined
+				: Object.fromEntries(Object.entries(modelOverrides).map(([key, value]) => [key, compactionFields(value)]));
 		state.compaction = {
 			...compactionFields(policy),
 			...(overrides === undefined ? {} : { modelOverrides: overrides }),

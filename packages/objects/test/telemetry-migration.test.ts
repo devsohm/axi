@@ -11,7 +11,15 @@ test("telemetry upgrades existing timestamps and preserves the first ingested sp
 		CREATE TABLE telemetry_metrics(interval_ms INTEGER, series_key TEXT, name TEXT, kind TEXT, unit TEXT,
 		attributes TEXT, count INTEGER, sum REAL, min REAL, max REAL, PRIMARY KEY(interval_ms, series_key));`);
 	const now = Date.now();
-	await db.run("INSERT INTO telemetry_spans VALUES(?, ?, NULL, ?, ?, ?, '{}', '[]', '[]', ?)", "first", "trace", "original", now + 0.125, now + 0.5, '{"status":"ok"}');
+	await db.run(
+		"INSERT INTO telemetry_spans VALUES(?, ?, NULL, ?, ?, ?, '{}', '[]', '[]', ?)",
+		"first",
+		"trace",
+		"original",
+		now + 0.125,
+		now + 0.5,
+		'{"status":"ok"}',
+	);
 	const recorder = await createSqliteTelemetry(db);
 	try {
 		const trace = await recorder.getTrace("trace");
@@ -21,5 +29,8 @@ test("telemetry upgrades existing timestamps and preserves the first ingested sp
 		expect(recorder.ingest({ spans: [{ ...trace!.spans[0]!, name: "replacement" }], metrics: [] })).toBe(1);
 		await recorder.flush();
 		expect((await recorder.getTrace("trace"))!.spans[0]!.name).toBe("original");
-	} finally { await recorder.close(); await db.close(); }
+	} finally {
+		await recorder.close();
+		await db.close();
+	}
 });

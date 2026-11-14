@@ -118,28 +118,44 @@ export async function buildFacet(
 	const shown = (file: string) => relative(plugin.dir, file).split(sep).join("/");
 	const kindOf = (file: string, top?: string): string | undefined => {
 		const parts = basename(file).split(".");
-		const label = parts.length > 2 ? parts.at(-2)
-			: parts.length === 2 && (dirname(file) === top || [plugin, ...peers].some((item) => item.layout === "directory" && item.dir === dirname(file)))
-				? parts[0] : undefined;
+		const label =
+			parts.length > 2
+				? parts.at(-2)
+				: parts.length === 2 &&
+						(dirname(file) === top ||
+							[plugin, ...peers].some((item) => item.layout === "directory" && item.dir === dirname(file)))
+					? parts[0]
+					: undefined;
 		return options.kinds?.find((item) => item.toLowerCase() === label?.toLowerCase());
 	};
 	const wrongKind = (file: string, specifier: string, top?: string): string | undefined => {
 		const actual = kindOf(file, top);
 		if (!actual || actual.toLowerCase() === kind.toLowerCase()) return;
-		const chain = [file], seen = new Set(chain);
-		for (let parent = imports.get(file); parent && !seen.has(parent); parent = imports.get(parent)) { seen.add(parent); chain.unshift(parent); }
+		const chain = [file],
+			seen = new Set(chain);
+		for (let parent = imports.get(file); parent && !seen.has(parent); parent = imports.get(parent)) {
+			seen.add(parent);
+			chain.unshift(parent);
+		}
 		return `"${specifier}": a ${actual} file, imported into a ${kind} facet (${chain.map(shown).join(" → ")})`;
 	};
 	const entryKind = kindOf(entry);
-	if (entryKind && entryKind.toLowerCase() !== kind.toLowerCase()) return failed([`${basename(namedEntry)}: links to a ${entryKind} file (${shown(entry)}), not a ${kind} facet`]);
+	if (entryKind && entryKind.toLowerCase() !== kind.toLowerCase())
+		return failed([`${basename(namedEntry)}: links to a ${entryKind} file (${shown(entry)}), not a ${kind} facet`]);
 	const manifests = new Map<string, Promise<"objects" | "plain" | "none">>();
 	const readManifest = (dir: string) => {
 		let read = manifests.get(dir);
 		if (!read) {
-			read = readFile(join(dir, "package.json"), "utf8").then((text): "objects" | "plain" => {
-				try { return (JSON.parse(text) as { objects?: unknown } | null)?.objects === undefined ? "plain" : "objects"; }
-				catch { return "plain"; }
-			}, (): "none" => "none");
+			read = readFile(join(dir, "package.json"), "utf8").then(
+				(text): "objects" | "plain" => {
+					try {
+						return (JSON.parse(text) as { objects?: unknown } | null)?.objects === undefined ? "plain" : "objects";
+					} catch {
+						return "plain";
+					}
+				},
+				(): "none" => "none",
+			);
 			manifests.set(dir, read);
 		}
 		return read;
@@ -154,8 +170,14 @@ export async function buildFacet(
 				nearest = dir;
 			} else {
 				if (manifest === "plain") return;
-				const discovered = await discoverPackage(dir, { root: dir, required: false, kinds: options.kinds ?? [] }, context);
-				return discovered.plugins.some((item) => item.dir === nearest) ? { top: nearest === dirname(file) ? nearest : undefined } : undefined;
+				const discovered = await discoverPackage(
+					dir,
+					{ root: dir, required: false, kinds: options.kinds ?? [] },
+					context,
+				);
+				return discovered.plugins.some((item) => item.dir === nearest)
+					? { top: nearest === dirname(file) ? nearest : undefined }
+					: undefined;
 			}
 		}
 	};
@@ -176,19 +198,27 @@ export async function buildFacet(
 				if (specifier === PLUGINS_SPECIFIER) return { path: specifier, external: true };
 				if (options.api) {
 					const api = options.api;
-					if (packageName(specifier) === "@axi/objects") return refuse(`"${specifier}": plugins import Objects through the app's API ("${api.name}/${api.versions[0]}"), never directly`);
+					if (packageName(specifier) === "@axi/objects")
+						return refuse(
+							`"${specifier}": plugins import Objects through the app's API ("${api.name}/${api.versions[0]}"), never directly`,
+						);
 					if (specifier === api.name || specifier.startsWith(`${api.name}/`)) {
 						const version = specifier.slice(api.name.length + 1).split("/")[0];
 						const provided = `this app provides ${api.versions.join(", ")}`;
 						if (!version) return refuse(`"${specifier}": import a version of the app's API (${provided})`);
-						if (!api.versions.includes(version)) return refuse(`"${specifier}": ${api.name}/${version} is not available: ${provided}`);
+						if (!api.versions.includes(version))
+							return refuse(`"${specifier}": ${api.name}/${version} is not available: ${provided}`);
 						if (!hosts.has(specifier)) return refuse(`"${specifier}": not available to ${kind} facets`);
 						if (!versions.has(version)) versions.set(version, args.importer);
 					}
 				}
 				if (hosts.has(specifier)) return { path: specifier, external: true };
-				if (plugin.layout === "file") return refuse(`"${specifier}": a single-file plugin imports only host packages (the app's API); make it a directory "${plugin.name}/" with a package.json`);
-				if (from && from !== plugin && from !== "package" && !specifier.startsWith(".") && !isAbsolute(specifier)) return refuse(`"${specifier}": ${copiedError(from)}`);
+				if (plugin.layout === "file")
+					return refuse(
+						`"${specifier}": a single-file plugin imports only host packages (the app's API); make it a directory "${plugin.name}/" with a package.json`,
+					);
+				if (from && from !== plugin && from !== "package" && !specifier.startsWith(".") && !isAbsolute(specifier))
+					return refuse(`"${specifier}": ${copiedError(from)}`);
 				if (isBuiltin(specifier))
 					return browser
 						? refuse(`"${specifier}": a Node builtin in a browser build`)
@@ -199,12 +229,15 @@ export async function buildFacet(
 				let packageImport = from === "package";
 				if (!asset) {
 					if (!packageImport && !specifier.startsWith(".") && !isAbsolute(specifier)) {
-							if (plugin.external.includes(packageName(specifier)))
-								return browser
-									? refuse(`"${specifier}": objects.external packages are for Node builds`)
-									: { path: specifier, external: true };
-							if (plugin.dependencies.includes(packageName(specifier))) packageImport = true;
-							else return refuse(`"${specifier}": neither a host package nor in the dependencies of plugin "${plugin.name}"`);
+						if (plugin.external.includes(packageName(specifier)))
+							return browser
+								? refuse(`"${specifier}": objects.external packages are for Node builds`)
+								: { path: specifier, external: true };
+						if (plugin.dependencies.includes(packageName(specifier))) packageImport = true;
+						else
+							return refuse(
+								`"${specifier}": neither a host package nor in the dependencies of plugin "${plugin.name}"`,
+							);
 					}
 				}
 				const found = await compiler.resolve(target, {
@@ -217,7 +250,8 @@ export async function buildFacet(
 				if (found.namespace !== "file") return found;
 				const to = location(found.path);
 				if (packageImport) {
-					if (to !== "package") return refuse(`"${specifier}": resolves outside the plugin's node_modules (${shown(found.path)})`);
+					if (to !== "package")
+						return refuse(`"${specifier}": resolves outside the plugin's node_modules (${shown(found.path)})`);
 					const code = await packageKind(found.path);
 					if (code) {
 						if (!imports.has(found.path)) imports.set(found.path, args.importer);
@@ -237,12 +271,18 @@ export async function buildFacet(
 					return { path: found.path, pluginData: asset ? assetImport : undefined };
 				}
 				if (from && from !== plugin && from !== "package") return refuse(`"${specifier}": ${copiedError(from)}`);
-				if (!to && inside(plugin.root, found.path)) return refuse(`"${specifier}": not a file of a plugin in this root`);
-				const base = options.api ? `the app's API ("${options.api.name}/${options.api.versions[0]}")` : "a host package";
-				return refuse(`"${specifier}": outside the plugin's root (base code is reached through ${base}, other repositories' plugins through dependencies)`);
+				if (!to && inside(plugin.root, found.path))
+					return refuse(`"${specifier}": not a file of a plugin in this root`);
+				const base = options.api
+					? `the app's API ("${options.api.name}/${options.api.versions[0]}")`
+					: "a host package";
+				return refuse(
+					`"${specifier}": outside the plugin's root (base code is reached through ${base}, other repositories' plugins through dependencies)`,
+				);
 			});
 			compiler.onLoad({ filter: /.*/ }, async (args) => {
-				if (args.namespace === "axi-scoped-css") return { contents: styles.get(args.path) ?? "", loader: "css", resolveDir: dirname(args.path) };
+				if (args.namespace === "axi-scoped-css")
+					return { contents: styles.get(args.path) ?? "", loader: "css", resolveDir: dirname(args.path) };
 				if (args.namespace !== "file" || location(args.path) === "package") return;
 				const loader = args.pluginData === assetImport ? "file" : loaders[extname(args.path)];
 				if (loader === undefined) return;
@@ -251,7 +291,11 @@ export async function buildFacet(
 				if (args.pluginData !== assetImport && args.path.endsWith(".module.css")) {
 					const scoped = await scopeCssModule(plugin.name, plugin.dir, args.path, contents.toString());
 					styles.set(args.path, scoped.css);
-					return { contents: `import ${JSON.stringify(`axi-scoped-css:${args.path}`)};export default ${JSON.stringify(scoped.classes)};`, loader: "js", resolveDir: dirname(args.path) };
+					return {
+						contents: `import ${JSON.stringify(`axi-scoped-css:${args.path}`)};export default ${JSON.stringify(scoped.classes)};`,
+						loader: "js",
+						resolveDir: dirname(args.path),
+					};
 				}
 				return { contents, loader, resolveDir: dirname(args.path) };
 			});
@@ -294,7 +338,13 @@ export async function buildFacet(
 		css = files.find((file) => file.path.endsWith(".css"));
 	const source = javascript.text,
 		errors = forbiddenGlobals(source);
-	if (versions.size > 1) errors.push(`one facet imports one version of ${options.api!.name}: this one imports ${[...versions].sort(([a], [b]) => a.localeCompare(b)).map(([version, importer]) => `${options.api!.name}/${version} (${shown(importer)})`).join(" and ")}`);
+	if (versions.size > 1)
+		errors.push(
+			`one facet imports one version of ${options.api!.name}: this one imports ${[...versions]
+				.sort(([a], [b]) => a.localeCompare(b))
+				.map(([version, importer]) => `${options.api!.name}/${version} (${shown(importer)})`)
+				.join(" and ")}`,
+		);
 	if (errors.length) return failed(errors);
 	return {
 		kind: "script",

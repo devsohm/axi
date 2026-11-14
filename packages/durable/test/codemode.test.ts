@@ -8,10 +8,16 @@ import { catalogCall } from "../src/codemode/models.ts";
 import { createRegistry, defineTool, Harness, MemoryStorage, ToolResultEntry } from "../src/index.ts";
 
 it("lists model metadata without evaluating non-enumerable credential headers", async () => {
-	const models = createModels(), provider = fauxProvider();
+	const models = createModels(),
+		provider = fauxProvider();
 	const model = provider.getModel();
 	let reads = 0;
-	Object.defineProperty(model, "headers", { get() { reads++; return { Authorization: "private" }; } });
+	Object.defineProperty(model, "headers", {
+		get() {
+			reads++;
+			return { Authorization: "private" };
+		},
+	});
 	models.setProvider(provider.provider);
 	for (const name of ["models.getModelsOfType", "models.getAvailableOfType", "models.getModelOfType"]) {
 		const value = await catalogCall(name, ["chat", model.provider, model.id], models, context);

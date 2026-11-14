@@ -18,7 +18,9 @@ import {
 test("registry declaration retains the version selected from its options", () => {
 	let reads = 0;
 	const registry = defineRegistry<number, number>("observed.version", {
-		get version() { return ++reads; },
+		get version() {
+			return ++reads;
+		},
 	});
 	expect(registry.version).toBe(1);
 	expect(reads).toBe(1);
@@ -54,10 +56,15 @@ test("registry observation retains the cancellation signal selected at attachmen
 				toString: () => "observation",
 			};
 			const ends: unknown[] = [];
-			const observation = observed.observe({
-				advance() {},
-				end(end) { ends.push(end); },
-			}, invocation);
+			const observation = observed.observe(
+				{
+					advance() {},
+					end(end) {
+						ends.push(end);
+					},
+				},
+				invocation,
+			);
 			try {
 				expect(observation.value).toBe(1);
 				first.abort();

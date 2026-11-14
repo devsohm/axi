@@ -192,7 +192,11 @@ registerStorageConformance({ describe, expect, it }, "storage driver checks", as
 });
 registerEnvConformance({ describe, expect, it }, "environment driver checks", async (use) => {
 	const cwd = await mkdtemp(join(tmpdir(), "axi-driver-"));
-	const env = new NodeExecutionEnv({ cwd, shellEnv: { MSYS: "winsymlinks:nativestrict" }, watch: { pollIntervalMs: 50 } });
+	const env = new NodeExecutionEnv({
+		cwd,
+		shellEnv: { MSYS: "winsymlinks:nativestrict" },
+		watch: { pollIntervalMs: 50 },
+	});
 	try {
 		await use(env);
 	} finally {

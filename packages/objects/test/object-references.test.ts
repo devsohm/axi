@@ -73,7 +73,9 @@ function provider() {
 		target,
 		move(next: RefState) {
 			state = next;
-			batch.within(() => { for (const holder of holders) holder.retarget() }, context);
+			batch.within(() => {
+				for (const holder of holders) holder.retarget();
+			}, context);
 			for (const holder of holders) holder.moved();
 		},
 	};
@@ -133,19 +135,27 @@ it("releases call-scoped references and rejects a get that resolves after its sc
 	expect(app.holders.size).toBe(0);
 });
 it("links the caller signal selected during setup", () => {
-	const selected = new AbortController(), other = new AbortController(), call = new AbortController();
+	const selected = new AbortController(),
+		other = new AbortController(),
+		call = new AbortController();
 	other.abort("other");
 	let reads = 0;
 	const linked = withLinkedAbortSignal(call.signal, {
-		get abortSignal() { return ++reads === 1 ? selected.signal : other.signal },
-		telemetry: context.telemetry, value: key => context.value(key), toString: () => "selected cancellation",
+		get abortSignal() {
+			return ++reads === 1 ? selected.signal : other.signal;
+		},
+		telemetry: context.telemetry,
+		value: (key) => context.value(key),
+		toString: () => "selected cancellation",
 	});
 	try {
 		expect(linked.context.abortSignal?.aborted).toBe(false);
 		selected.abort("selected");
 		expect(linked.context.abortSignal?.reason).toBe("selected");
 		expect(reads).toBe(1);
-	} finally { linked.release() }
+	} finally {
+		linked.release();
+	}
 });
 
 it("detaches linked cancellation listeners and closes root scopes around uncooperative work", async () => {

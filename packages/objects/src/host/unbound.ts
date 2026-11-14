@@ -9,8 +9,12 @@ export interface UnboundRequest {
 export class UnboundIndex {
 	readonly #names = new Map<string, Set<UnboundRequest>>();
 	readonly #clock: UnboundClock;
-	constructor(clock = new UnboundClock(() => {})) { this.#clock = clock; }
-	names(): string[] { return [...this.#names.keys()].sort(); }
+	constructor(clock = new UnboundClock(() => {})) {
+		this.#clock = clock;
+	}
+	names(): string[] {
+		return [...this.#names.keys()].sort();
+	}
 	add(name: string, request: UnboundRequest, cause?: FailureCause): void {
 		let entries = this.#names.get(name);
 		if (!entries) {
@@ -36,7 +40,10 @@ export class UnboundIndex {
 				pending.push(...entries);
 			}
 		}
-		for (const request of pending) { this.#clock.stop(request); request.wake(); }
+		for (const request of pending) {
+			this.#clock.stop(request);
+			request.wake();
+		}
 	}
 	wakeAll(): void {
 		const requests = this.#takeAll();

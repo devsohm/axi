@@ -29,10 +29,7 @@ export function linkLimits(trusted: boolean, limits: PartLimits = {}): Limits {
 	};
 }
 function byteLength(value: Part): number {
-	if (typeof value !== "string")
-		return value instanceof DeflatedPart
-			? value.bytes.byteLength
-			: value.byteLength;
+	if (typeof value !== "string") return value instanceof DeflatedPart ? value.bytes.byteLength : value.byteLength;
 	let count = 0;
 	for (const character of value) {
 		const point = character.codePointAt(0)!;
@@ -40,11 +37,7 @@ function byteLength(value: Part): number {
 	}
 	return count;
 }
-function overflow(
-	size: number | undefined,
-	limit: number,
-	measure: "wire" | "decoded",
-): ObjectsError {
+function overflow(size: number | undefined, limit: number, measure: "wire" | "decoded"): ObjectsError {
 	return new ObjectsError({
 		code: "too_large",
 		reason: "part",
@@ -56,19 +49,13 @@ export function oversized(part: Part, limit: number): ObjectsError | undefined {
 	const size = byteLength(part);
 	return size > limit ? overflow(size, limit, "wire") : undefined;
 }
-export function originPart(
-	json: string,
-	compression: Compression | undefined,
-	context: Context,
-): Part {
+export function originPart(json: string, compression: Compression | undefined, context: Context): Part {
 	if (!compression || json.length <= COMPRESS_ABOVE / 3) return json;
 	const bytes = utf8.encode(json);
 	if (bytes.byteLength <= COMPRESS_ABOVE) return bytes;
 	objectsMetrics(context.telemetry.metrics).counter("objects.link.deflates").add(1);
 	const compressed = compression.deflate(bytes);
-	return compressed.byteLength < bytes.byteLength
-		? new DeflatedPart(compressed)
-		: bytes;
+	return compressed.byteLength < bytes.byteLength ? new DeflatedPart(compressed) : bytes;
 }
 export function openPart(
 	part: Part,
@@ -81,21 +68,18 @@ export function openPart(
 	if (!(part instanceof DeflatedPart)) {
 		if (limits.decoded !== Infinity) {
 			const size = byteLength(part);
-			if (size > limits.decoded)
-				throw overflow(size, limits.decoded, "decoded");
+			if (size > limits.decoded) throw overflow(size, limits.decoded, "decoded");
 		}
 		return part;
 	}
 	let result = part.inflated;
 	if (!result) {
-		if (!compression)
-			throw new Error("part: a deflated part this host did not inflate");
+		if (!compression) throw new Error("part: a deflated part this host did not inflate");
 		objectsMetrics(context.telemetry.metrics).counter("objects.link.inflates").add(1);
 		result = compression.inflate(part.bytes, limits.decoded);
 	}
 	if (result.kind === "bytes") return result.bytes;
-	if (result.kind === "too_large")
-		throw overflow(undefined, limits.decoded, "decoded");
+	if (result.kind === "too_large") throw overflow(undefined, limits.decoded, "decoded");
 	throw new Error("part: no raw deflate stream", { cause: result.error });
 }
 export async function inflateAsync(

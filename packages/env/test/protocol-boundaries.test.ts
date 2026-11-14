@@ -19,17 +19,21 @@ test.each([
 	{ name: "oversized frame", packet: Buffer.from([1, 0, 0, 1]) },
 	{ name: "mismatched JSON length", packet: frame(2, "{}", 100) },
 	...["null", "[]", "3", "broken"].map((text) => ({ name: `invalid response body ${text}`, packet: frame(2, text) })),
-])("$name rejects the request and a fresh daemon remains usable", async ({ packet }) => {
-	const connection = new Connection({ command: peer });
-	try {
-		const first = (await connection.info()).pid;
-		await expect(connection.request("raw", {}, { payload: packet })).rejects.toSatisfy(isConnectionLost);
-		expect((await connection.request("echo", { value: "recovered" })).json).toEqual({ value: "recovered" });
-		expect((await connection.info()).pid).not.toBe(first);
-	} finally {
-		connection.close();
-	}
-}, 15000);
+])(
+	"$name rejects the request and a fresh daemon remains usable",
+	async ({ packet }) => {
+		const connection = new Connection({ command: peer });
+		try {
+			const first = (await connection.info()).pid;
+			await expect(connection.request("raw", {}, { payload: packet })).rejects.toSatisfy(isConnectionLost);
+			expect((await connection.request("echo", { value: "recovered" })).json).toEqual({ value: "recovered" });
+			expect((await connection.info()).pid).not.toBe(first);
+		} finally {
+			connection.close();
+		}
+	},
+	15000,
+);
 
 test("well-formed unknown frames and stale responses do not disturb the pending request", async () => {
 	const connection = new Connection({ command: peer });

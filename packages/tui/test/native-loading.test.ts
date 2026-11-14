@@ -56,7 +56,11 @@ test("standalone lookup survives a missing installed package", async () => {
 			moduleUrl: pathToFileURL(resolve("/application/entry.js")).href,
 			execPath: resolve("/runtime/axi"),
 		}),
-	).toEqual([resolve("/native/helper.node"), resolve("/application/native/helper.node"), resolve("/runtime/native/helper.node")]);
+	).toEqual([
+		resolve("/native/helper.node"),
+		resolve("/application/native/helper.node"),
+		resolve("/runtime/native/helper.node"),
+	]);
 });
 
 test.each(["darwin", "win32"])("%s accepts a valid helper after an unusable candidate and reuses it", async (os) => {

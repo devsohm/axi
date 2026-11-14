@@ -778,13 +778,22 @@ export function createProvider<A extends Api = Api>(input: CreateProviderOptions
 		return models;
 	};
 	const implementation = (model: Model<Api>) => single ?? byApi?.[model.api];
-	const dispatch = (model: Model<Api>, run: (api: ProviderStreams) => AssistantMessageEventStream, signal?: AbortSignal) => {
+	const dispatch = (
+		model: Model<Api>,
+		run: (api: ProviderStreams) => AssistantMessageEventStream,
+		signal?: AbortSignal,
+	) => {
 		const api = implementation(model);
 		return api
 			? run(api)
-			: lazyStream(model, async () => {
-					throw new ModelsError("stream", `Provider ${input.id} has no API implementation for "${model.api}"`);
-				}, undefined, signal);
+			: lazyStream(
+					model,
+					async () => {
+						throw new ModelsError("stream", `Provider ${input.id} has no API implementation for "${model.api}"`);
+					},
+					undefined,
+					signal,
+				);
 	};
 	const fetch = input.fetchModels;
 	const provider: Provider<A> = {
@@ -823,19 +832,25 @@ export function createProvider<A extends Api = Api>(input: CreateProviderOptions
 		filterModels: input.filterModels,
 		filterAllModels: input.filterAllModels,
 		stream: (model, context, options) => dispatch(model, (api) => api.stream(model, context, options), options?.signal),
-		streamSimple: (model, context, options) => dispatch(model, (api) => api.streamSimple(model, context, options), options?.signal),
+		streamSimple: (model, context, options) =>
+			dispatch(model, (api) => api.streamSimple(model, context, options), options?.signal),
 	};
 	if (streams.some((api) => api.fetchDeferred !== undefined))
 		provider.fetchDeferred = (model, handle, options) =>
-			lazyStream(model, async () => {
-				const api = implementation(model);
-				if (!api?.fetchDeferred)
-					throw new ModelsError(
-						"provider",
-						`Provider ${input.id} does not support deferred responses for "${model.api}"`,
-					);
-				return api.fetchDeferred(model, handle, options);
-			}, undefined, options?.signal);
+			lazyStream(
+				model,
+				async () => {
+					const api = implementation(model);
+					if (!api?.fetchDeferred)
+						throw new ModelsError(
+							"provider",
+							`Provider ${input.id} does not support deferred responses for "${model.api}"`,
+						);
+					return api.fetchDeferred(model, handle, options);
+				},
+				undefined,
+				options?.signal,
+			);
 	if (streams.some((api) => api.cancelDeferred !== undefined))
 		provider.cancelDeferred = async (model, handle, options) => {
 			const api = implementation(model);

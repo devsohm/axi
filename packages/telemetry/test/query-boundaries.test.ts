@@ -51,11 +51,13 @@ test("equal-time continuations sort opaque trace identities independently of the
 	vi.spyOn(Date, "now").mockReturnValue(1000);
 	const recorder = new InMemoryTelemetryContext();
 	for (const id of ["z-last", "a-first", "m-middle"])
-		await recorder.extract({
-			"axi-memory-scope": "remote-recorder",
-			"axi-memory-span": "parent",
-			"axi-memory-trace": id,
-		}).startSpan({ name: id }, () => {});
+		await recorder
+			.extract({
+				"axi-memory-scope": "remote-recorder",
+				"axi-memory-span": "parent",
+				"axi-memory-trace": id,
+			})
+			.startSpan({ name: id }, () => {});
 	const first = await recorder.findTraces({ limit: 2 });
 	expect(first.traces.map((trace) => trace.traceId)).toEqual(["a-first", "m-middle"]);
 	expect(first.cursor).toBeDefined();

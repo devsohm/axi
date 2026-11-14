@@ -1,8 +1,5 @@
 import { expect, it } from "vitest";
-import {
-	BACKGROUND_CONTEXT as context,
-	withCancel,
-} from "../src/context/index.ts";
+import { BACKGROUND_CONTEXT as context, withCancel } from "../src/context/index.ts";
 import { ObjectsError } from "../src/data/index.ts";
 import { JobRun } from "../src/jobs/run.ts";
 

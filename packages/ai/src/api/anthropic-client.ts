@@ -18,9 +18,7 @@ export function anthropicCompat(model: Model<"anthropic-messages">) {
 		supportsStrictTools: model.compat?.supportsStrictTools ?? false,
 		supportsMidConvoSystemMessages: model.compat?.supportsMidConvoSystemMessages ?? false,
 		supportsMidConvoToolChanges: model.compat?.supportsMidConvoToolChanges ?? false,
-		supportsMessageThreads:
-			model.compat?.supportsMessageThreads ??
-			model.baseUrl.includes("api.anthropic.com"),
+		supportsMessageThreads: model.compat?.supportsMessageThreads ?? model.baseUrl.includes("api.anthropic.com"),
 	};
 }
 export function anthropicRetention(options: AnthropicOptions): CacheRetention {

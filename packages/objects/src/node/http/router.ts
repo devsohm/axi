@@ -4,7 +4,12 @@ import { defineRegistry, type ComposeContext, type RegistryTable } from "../../r
 import type { HttpRequest } from "./request.ts";
 import type { HttpResponse } from "./response.ts";
 export type HttpRoute = (request: HttpRequest, ctx: Ctx) => Promise<HttpResponse>;
-export type HttpRouteOptions = { readonly handler: HttpRoute; readonly public?: true; readonly page?: true; readonly crossSite?: true };
+export type HttpRouteOptions = {
+	readonly handler: HttpRoute;
+	readonly public?: true;
+	readonly page?: true;
+	readonly crossSite?: true;
+};
 export type WrapPhase = "observe" | "headers" | "transform";
 export type HttpWrap = {
 	readonly name: string;

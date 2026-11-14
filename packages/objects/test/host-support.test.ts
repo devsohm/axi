@@ -1,8 +1,5 @@
 import { expect, it, vi } from "vitest";
-import {
-	BACKGROUND_CONTEXT as context,
-	withCancel,
-} from "../src/context/index.ts";
+import { BACKGROUND_CONTEXT as context, withCancel } from "../src/context/index.ts";
 import { Activity } from "../src/host/activity.ts";
 import { NativeHandle } from "../src/host/native.ts";
 import { ParkedCalls } from "../src/host/parked.ts";
@@ -13,8 +10,21 @@ import { Batch, type BatchError } from "../src/state/internal.ts";
 it("keeps a reindexed request for the next publication and leaves other names waiting", () => {
 	const index = new UnboundIndex();
 	const calls: string[] = [];
-	const note = { principal: undefined, end() {}, wake() { calls.push("note"); index.add("notes", note); } };
-	const task = { principal: undefined, end() {}, wake() { calls.push("task"); } };
+	const note = {
+		principal: undefined,
+		end() {},
+		wake() {
+			calls.push("note");
+			index.add("notes", note);
+		},
+	};
+	const task = {
+		principal: undefined,
+		end() {},
+		wake() {
+			calls.push("task");
+		},
+	};
 	index.add("notes", note);
 	index.add("tasks", task);
 	index.wake(["notes", "notes"]);
@@ -29,9 +39,7 @@ it("keeps a reindexed request for the next publication and leaves other names wa
 it("reports listener failures through a discriminated error type", () => {
 	const failure = new Error("listener failed"),
 		errors: unknown[] = [];
-	const record = (
-		error: Extract<BatchError, { readonly kind: "listener_error" }>,
-	): void => {
+	const record = (error: Extract<BatchError, { readonly kind: "listener_error" }>): void => {
 		errors.push(error.error);
 	};
 	const batch = new Batch((error) => {
@@ -85,8 +93,8 @@ it("reports a native close timeout, aborts its close context, and frees its time
 			10,
 			{
 				object: "app",
-			type: "app",
-			host: "client",
+				type: "app",
+				host: "client",
 				position: 1,
 				context,
 				report: (error) => reports.push(error),
@@ -175,11 +183,7 @@ it("computes revocation keys once per principal and compares canonical JSON", ()
 		return [{ group: principal.kind, id: 1 }];
 	});
 	const principal = { kind: "member" };
-	expect(keys.revokes(principal, '{"group":"member","id":1}', context)).toBe(
-		true,
-	);
-	expect(keys.revokes(principal, '{"group":"other","id":1}', context)).toBe(
-		false,
-	);
+	expect(keys.revokes(principal, '{"group":"member","id":1}', context)).toBe(true);
+	expect(keys.revokes(principal, '{"group":"other","id":1}', context)).toBe(false);
 	expect(read).toBe(1);
 });

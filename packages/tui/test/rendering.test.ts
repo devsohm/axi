@@ -6,7 +6,12 @@ import { ScrollView } from "../src/components/scroll-view.ts";
 import { TuiMainScreen } from "../src/tui-main-screen.ts";
 import { TuiAltScreen } from "../src/tui-alt-screen.ts";
 import { TestTerminal } from "./support/terminal.ts";
-import { encodeKitty, registerKittyImageMetadata, resetCapabilitiesCache, setCapabilities } from "../src/terminal-image.ts";
+import {
+	encodeKitty,
+	registerKittyImageMetadata,
+	resetCapabilitiesCache,
+	setCapabilities,
+} from "../src/terminal-image.ts";
 
 const resources: { ui: TuiMainScreen | TuiAltScreen; terminal: TestTerminal }[] = [];
 afterEach(() => {
@@ -20,7 +25,8 @@ test("fullscreen image placements follow clears and later writes on every termin
 	vi.stubEnv("WEZTERM_PANE", undefined);
 	vi.stubEnv("TERM_PROGRAM", "test-terminal");
 	setCapabilities({ images: "kitty", trueColor: true, hyperlinks: true });
-	const terminal = new TestTerminal(24, 6), writes: string[] = [];
+	const terminal = new TestTerminal(24, 6),
+		writes: string[] = [];
 	const write = terminal.write.bind(terminal);
 	terminal.write = (value) => {
 		writes.push(value);
@@ -31,7 +37,10 @@ test("fullscreen image placements follow clears and later writes on every termin
 	const lines = [
 		"heading",
 		encodeKitty("AQ==", { imageId, columns: 2, rows: 3, moveCursor: false }),
-		"", "", "", "footer",
+		"",
+		"",
+		"",
+		"footer",
 	];
 	const ui = new TuiAltScreen(terminal);
 	try {
@@ -51,7 +60,8 @@ test("fullscreen image placements follow clears and later writes on every termin
 		writes.length = 0;
 		terminal.resize(24, 8);
 		ui.renderNow();
-		const screen = await terminal.screen(), resized = writes.join("");
+		const screen = await terminal.screen(),
+			resized = writes.join("");
 		expect(resized).toContain("\x1b_Ga=p");
 		expect(resized).not.toContain("\x1b_Ga=T");
 		expect(resized).not.toContain("\x1b[2J");

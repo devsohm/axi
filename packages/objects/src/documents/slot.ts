@@ -3,21 +3,10 @@ import { track, type Prepared, type Tracker } from "../delta/index.ts";
 import { ObjectsError } from "../data/index.ts";
 import type { StagedWrite } from "../store/step.ts";
 import { AddressSource } from "./address-source.ts";
-import type {
-	CommitPersistence,
-	JsonObject,
-	KeyedBy,
-	StateDefinition,
-} from "./definition.ts";
+import type { CommitPersistence, JsonObject, KeyedBy, StateDefinition } from "./definition.ts";
 import type { Documents } from "./documents.ts";
 import type { SealToken } from "./fence.ts";
-import {
-	storedAfter,
-	type DocumentChange,
-	type Persistence,
-	type Stored,
-	type StoredChange,
-} from "./persistence.ts";
+import { storedAfter, type DocumentChange, type Persistence, type Stored, type StoredChange } from "./persistence.ts";
 
 export type AnyDefinition = StateDefinition<JsonObject, KeyedBy, boolean>;
 export interface DocumentSlot {
@@ -63,28 +52,19 @@ export class SlotDefinition {
 		const current = this.#definition,
 			name = current.name;
 		if (current.keyed !== next.keyed)
-			throw new Error(
-				`${name}: declared ${next.keyed ? "keyed" : "singleton"}, its documents are not`,
-			);
+			throw new Error(`${name}: declared ${next.keyed ? "keyed" : "singleton"}, its documents are not`);
 		if (current.host?.kind !== next.host?.kind) {
-			const keys = (kind: string | undefined) => kind === undefined ? "string keys" : `addresses of ${kind}`;
-			throw new Error(`${name}: declared with ${keys(next.host?.kind)}, its documents have ${keys(current.host?.kind)}`);
+			const keys = (kind: string | undefined) => (kind === undefined ? "string keys" : `addresses of ${kind}`);
+			throw new Error(
+				`${name}: declared with ${keys(next.host?.kind)}, its documents have ${keys(current.host?.kind)}`,
+			);
 		}
 		if (current.persist !== next.persist)
-			throw new Error(
-				`${name}: declared ${next.persist ? "persisted" : "in memory"}, its documents are not`,
-			);
+			throw new Error(`${name}: declared ${next.persist ? "persisted" : "in memory"}, its documents are not`);
 		if (next.version < current.version)
-			throw new Error(
-				`${name}: version ${next.version} is older than its documents' (${current.version})`,
-			);
-		if (
-			next.version === current.version &&
-			next.fingerprint !== current.fingerprint
-		)
-			throw new Error(
-				`${name}: the schema changed without a version bump (version ${current.version})`,
-			);
+			throw new Error(`${name}: version ${next.version} is older than its documents' (${current.version})`);
+		if (next.version === current.version && next.fingerprint !== current.fingerprint)
+			throw new Error(`${name}: the schema changed without a version bump (version ${current.version})`);
 	}
 	hydrate(definition: AnyDefinition): void {
 		this.#definition = definition;
@@ -102,10 +82,7 @@ export class SlotDefinition {
 		throw new ObjectsError({ code: "released", reason: "version", message });
 	}
 }
-export class SingletonSlot
-	extends AddressSource
-	implements DocumentSlot, PersistedSlot
-{
+export class SingletonSlot extends AddressSource implements DocumentSlot, PersistedSlot {
 	readonly owner: Documents;
 	readonly definition: SlotDefinition;
 	readonly persisted: PersistedSlot | undefined;
@@ -114,11 +91,7 @@ export class SingletonSlot
 	#tracker: Tracker<JsonObject> | undefined;
 	#stored: Stored | undefined;
 	#loaded: boolean;
-	constructor(
-		owner: Documents,
-		definition: AnyDefinition,
-		persistence: Persistence | undefined,
-	) {
+	constructor(owner: Documents, definition: AnyDefinition, persistence: Persistence | undefined) {
 		super(owner.batch);
 		this.owner = owner;
 		this.definition = new SlotDefinition(definition);
@@ -146,9 +119,7 @@ export class SingletonSlot
 		}
 		const before = previous && this.#loaded ? this.value : undefined;
 		const tracker =
-			this.#tracker && previous
-				? track(next.migrate(this.#tracker.value, previous.version, context))
-				: this.#tracker;
+			this.#tracker && previous ? track(next.migrate(this.#tracker.value, previous.version, context)) : this.#tracker;
 		this.#initial = next.initial(context);
 		this.#tracker = tracker;
 		this.definition.hydrate(next);
@@ -158,11 +129,7 @@ export class SingletonSlot
 		if (this.#loaded) return;
 		const document = await this.persistence.read("", context);
 		if (document) {
-			const loaded = this.persistence.decode(
-				document,
-				this.definition.current,
-				context,
-			);
+			const loaded = this.persistence.decode(document, this.definition.current, context);
 			this.#tracker = track(loaded.value);
 			this.#stored = loaded.stored;
 		}
@@ -183,19 +150,8 @@ export class SingletonSlot
 	stored(_key: string): Stored | undefined {
 		return this.#stored;
 	}
-	stage(
-		key: string,
-		change: DocumentChange,
-		was: Stored | undefined,
-		writes: StagedWrite[],
-	): StoredChange {
-		return this.persistence.stage(
-			key,
-			this.definition.current,
-			was,
-			change,
-			writes,
-		);
+	stage(key: string, change: DocumentChange, was: Stored | undefined, writes: StagedWrite[]): StoredChange {
+		return this.persistence.stage(key, this.definition.current, was, change, writes);
 	}
 	current(_key: string): Tracker<JsonObject> | undefined {
 		return this.#tracker;

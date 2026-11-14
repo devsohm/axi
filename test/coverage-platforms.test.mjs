@@ -31,7 +31,10 @@ async function fixture() {
 		process.platform === "win32" ? "junction" : "dir",
 	);
 	await json(join(directory, "package.json"), { workspaces: ["packages/sample"] });
-	await writeFile(join(directory, "vitest.config.ts"), 'export default { test: { coverage: { autoAttachSubprocess: true } } };');
+	await writeFile(
+		join(directory, "vitest.config.ts"),
+		"export default { test: { coverage: { autoAttachSubprocess: true } } };",
+	);
 	await mkdir(join(directory, source, ".."), { recursive: true });
 	await writeFile(join(directory, source), code);
 	for (const [index, target] of targets.entries()) {
@@ -163,10 +166,23 @@ test("coverage capture rejects a failed suite and records source identities only
 		await run(process.execPath, ["scripts/coverage-platforms.mjs", "capture"], { cwd: directory });
 		const record = JSON.parse(await readFile(join(directory, "coverage/coverage-platform.json")));
 		assert.equal(record.passed, 1);
-		assert.equal(record.instrumentation.transformer, JSON.parse(await readFile(join(root, "node_modules/esbuild/package.json"))).version);
+		assert.equal(
+			record.instrumentation.transformer,
+			JSON.parse(await readFile(join(root, "node_modules/esbuild/package.json"))).version,
+		);
 		assert.match(record.commit, /^[a-f\d]{40}$/);
-		assert.equal(record.instrumentation.configuration, createHash("sha256").update(await readFile(join(directory, "vitest.config.ts"))).digest("hex"));
-		assert.equal(record.instrumentation.collector, createHash("sha256").update(await readFile(join(directory, "scripts/coverage-provider.mjs"))).digest("hex"));
+		assert.equal(
+			record.instrumentation.configuration,
+			createHash("sha256")
+				.update(await readFile(join(directory, "vitest.config.ts")))
+				.digest("hex"),
+		);
+		assert.equal(
+			record.instrumentation.collector,
+			createHash("sha256")
+				.update(await readFile(join(directory, "scripts/coverage-provider.mjs")))
+				.digest("hex"),
+		);
 		assert.deepEqual(Object.keys(record.sources), [source]);
 		assert.deepEqual(Object.keys(JSON.parse(await readFile(join(directory, "coverage/coverage-portable.json")))), [
 			source,

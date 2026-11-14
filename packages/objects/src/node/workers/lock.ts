@@ -15,8 +15,7 @@ export async function clearStaleLock(name: string, context: Context): Promise<bo
 }
 async function lockAddress(name: string): Promise<LockAddress> {
 	const digest = createHash("sha256").update(name).digest("hex").slice(0, 32);
-	if (process.platform === "win32")
-		return { kind: "pipe", address: String.raw`\\.\pipe\objects-lock-${digest}` };
+	if (process.platform === "win32") return { kind: "pipe", address: String.raw`\\.\pipe\objects-lock-${digest}` };
 	if (process.platform === "linux" || process.platform === "android")
 		return { kind: "abstract", address: `\0objects-lock-${digest}` };
 	const file = `objects-lock-${digest}.sock`;
@@ -37,12 +36,22 @@ export async function clearStaleLockAt(lock: LockAddress, context: Context): Pro
 	if (lock.kind !== "file") return false;
 	const stale = await new Promise<boolean>((resolve) => {
 		const socket = connect(lock.address);
-		socket.once("connect", () => { socket.destroy(); resolve(false); });
-		socket.once("error", (error: NodeJS.ErrnoException) => resolve(error.code === "ECONNREFUSED" || error.code === "ENOTSOCK"));
+		socket.once("connect", () => {
+			socket.destroy();
+			resolve(false);
+		});
+		socket.once("error", (error: NodeJS.ErrnoException) =>
+			resolve(error.code === "ECONNREFUSED" || error.code === "ENOTSOCK"),
+		);
 	});
 	if (!stale) return false;
-	try { await unlink(lock.address); return true; }
-	catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return false; throw error; }
+	try {
+		await unlink(lock.address);
+		return true;
+	} catch (error) {
+		if ((error as NodeJS.ErrnoException).code === "ENOENT") return false;
+		throw error;
+	}
 }
 export async function lockAt(lock: LockAddress, context: Context): Promise<ProcessLock> {
 	const clients = new Set<Socket>();

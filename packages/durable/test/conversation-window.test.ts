@@ -19,34 +19,43 @@ test("keeps the remaining sparse-ID gap until its bounded page is loaded", async
 	const conversation: ConversationView["conversation"] = { id: 1 as ConversationView["conversation"]["id"] };
 	const docs = {};
 	let reads = 0;
-	const transcript = new ConversationTranscript(async query => {
+	const transcript = new ConversationTranscript(async (query) => {
 		reads++;
 		expect(query).toEqual({ minEntryId: 10, maxEntryId: 11, order: "ascending" });
 		return { items: [] };
 	});
-	const merge = (ids: number[], before?: number) => transcript.merge({
-		conversation, docs,
-		entries: ids.map(id => ({ id: id as EntryId, conversationId: conversation.id, kind: "note" })),
-		...(before === undefined ? {} : { before: before as EntryId }),
-	});
+	const merge = (ids: number[], before?: number) =>
+		transcript.merge({
+			conversation,
+			docs,
+			entries: ids.map((id) => ({ id: id as EntryId, conversationId: conversation.id, kind: "note" })),
+			...(before === undefined ? {} : { before: before as EntryId }),
+		});
 	merge([3]);
 	merge([12], 9);
 	const view = merge([6, 9], 3);
-	const gap = view.items.find(item => item.kind === "gap");
+	const gap = view.items.find((item) => item.kind === "gap");
 	if (!gap || gap.kind !== "gap") throw new Error("The unqueried interval is missing");
 	await expect(transcript.fillGap(gap, context)).resolves.toMatchObject({
-		items: [3, 6, 9, 12].map(id => ({ kind: "entry", entry: { id } })),
+		items: [3, 6, 9, 12].map((id) => ({ kind: "entry", entry: { id } })),
 	});
 	expect(reads).toBe(1);
 });
 
 test("keeps a bounded live window while the client loads missed and earlier transcript pages", async () => {
-	const harness = await Harness.open(new MemoryStorage(), { models: createModels(), registry: createRegistry() }, context);
+	const harness = await Harness.open(
+		new MemoryStorage(),
+		{ models: createModels(), registry: createRegistry() },
+		context,
+	);
 	try {
 		const conversation = await harness.root(context);
 		const append = (kind: string) => conversation.commit((tx) => tx.appendEntry(conversation.id, { kind }), context);
 		for (const kind of ["a", "b", "c", "d"]) await append(kind);
-		const transcript = new ConversationTranscript((query, limit, ctx) => conversation.entries(query, limit, undefined, ctx), { pageSize: 2 });
+		const transcript = new ConversationTranscript(
+			(query, limit, ctx) => conversation.entries(query, limit, undefined, ctx),
+			{ pageSize: 2 },
+		);
 		const first = await conversation.watch(context, { min: 2, max: 3 });
 		expect(first.value.entries.map((entry) => entry.kind)).toEqual(["c", "d"]);
 		transcript.merge(first.value);
@@ -59,7 +68,16 @@ test("keeps a bounded live window while the client loads missed and earlier tran
 		view = await transcript.fillGap(gap, context);
 		expect(view.items.some((item) => item.kind === "gap")).toBe(false);
 		view = await transcript.loadEarlier(context);
-		expect(view.items.flatMap((item) => item.kind === "entry" ? [item.entry.kind] : [])).toEqual(["a", "b", "c", "d", "e", "f", "g", "h"]);
+		expect(view.items.flatMap((item) => (item.kind === "entry" ? [item.entry.kind] : []))).toEqual([
+			"a",
+			"b",
+			"c",
+			"d",
+			"e",
+			"f",
+			"g",
+			"h",
+		]);
 		expect(view.items[0]?.kind).toBe("entry");
 		expect(transcript.merge(resumed.value).items).toBe(view.items);
 		await resumed.stop();
@@ -69,45 +87,74 @@ test("keeps a bounded live window while the client loads missed and earlier tran
 });
 
 test("keeps independent observer windows and replays document removal and replacement", async () => {
-	const harness = await Harness.open(new MemoryStorage(), { models: createModels(), registry: createRegistry() }, context);
+	const harness = await Harness.open(
+		new MemoryStorage(),
+		{ models: createModels(), registry: createRegistry() },
+		context,
+	);
 	try {
 		const conversation = await harness.root(context);
-		const append = (kind: string) => conversation.commit(tx => tx.appendEntry(conversation.id, { kind }), context);
+		const append = (kind: string) => conversation.commit((tx) => tx.appendEntry(conversation.id, { kind }), context);
 		const written = [];
 		for (const kind of ["opening", "context", "question", "answer"]) written.push(await append(kind));
-		const windows = [{ from: written[2]!.id, min: 2, max: 3 }, { min: 1, max: 2 }];
-		const subscriptions = await Promise.all(windows.map(async window => {
-			const frames: WatchCall<ConversationView>[] = [];
-			const observation = await harness.observeConversation(conversation.id, {
-				advance(call) { frames.push(call); }, end() {},
-			}, context, window);
-			return { observation, frames };
-		}));
+		const windows = [
+			{ from: written[2]!.id, min: 2, max: 3 },
+			{ min: 1, max: 2 },
+		];
+		const subscriptions = await Promise.all(
+			windows.map(async (window) => {
+				const frames: WatchCall<ConversationView>[] = [];
+				const observation = await harness.observeConversation(
+					conversation.id,
+					{
+						advance(call) {
+							frames.push(call);
+						},
+						end() {},
+					},
+					context,
+					window,
+				);
+				return { observation, frames };
+			}),
+		);
 		try {
-			expect(subscriptions.map(({ observation }) => observation.value.entries.map(entry => entry.kind))).toEqual([
-				["question", "answer"], ["answer"],
+			expect(subscriptions.map(({ observation }) => observation.value.entries.map((entry) => entry.kind))).toEqual([
+				["question", "answer"],
+				["answer"],
 			]);
 			expect(subscriptions[0]!.observation.value.before).toBe(written[1]!.id);
 			expect(subscriptions[0]!.observation.value.docs).toBe(subscriptions[1]!.observation.value.docs);
 			await append("follow-up");
-			const burst = await conversation.commit(async tx => {
+			const burst = await conversation.commit(async (tx) => {
 				const result = [];
 				for (const kind of ["tool", "result", "closing"]) result.push(await tx.appendEntry(conversation.id, { kind }));
 				return result;
 			}, context);
 			const windowFrame = subscriptions[0]!.frames[1];
 			if (windowFrame?.kind !== "value") throw new Error("Missing window update");
-			expect(windowFrame.value.entries.map(entry => entry.kind)).toEqual(["result", "closing"]);
+			expect(windowFrame.value.entries.map((entry) => entry.kind)).toEqual(["result", "closing"]);
 			expect(windowFrame.value.before).toBe(burst[0]!.id);
 			const shortFrame = subscriptions[1]!.frames[1];
 			if (shortFrame?.kind !== "value") throw new Error("Missing short-window update");
-			expect(shortFrame.value.entries.map(entry => entry.kind)).toEqual(["closing"]);
+			expect(shortFrame.value.entries.map((entry) => entry.kind)).toEqual(["closing"]);
 			expect(shortFrame.value.before).toBe(burst[1]!.id);
-			await conversation.commit(tx => tx.retireDoc(AgentDoc, conversation.id), context);
-			await conversation.commit(async tx => { (await tx.doc(AgentDoc, conversation.id)).instructions = "Replacement"; }, context);
-			const privateState = defineDoc({ kind: "private-view-state", version: 1, scope: "conversation",
-				history: "latest", fork: "initial", initial: () => ({ value: 0 }), checkpointWhen: () => false });
-			await conversation.commit(async tx => { (await tx.doc(privateState, conversation.id)).value++; }, context);
+			await conversation.commit((tx) => tx.retireDoc(AgentDoc, conversation.id), context);
+			await conversation.commit(async (tx) => {
+				(await tx.doc(AgentDoc, conversation.id)).instructions = "Replacement";
+			}, context);
+			const privateState = defineDoc({
+				kind: "private-view-state",
+				version: 1,
+				scope: "conversation",
+				history: "latest",
+				fork: "initial",
+				initial: () => ({ value: 0 }),
+				checkpointWhen: () => false,
+			});
+			await conversation.commit(async (tx) => {
+				(await tx.doc(privateState, conversation.id)).value++;
+			}, context);
 			for (const { observation, frames } of subscriptions) {
 				expect(frames).toHaveLength(4);
 				let replayed = observation.value;
@@ -123,24 +170,38 @@ test("keeps independent observer windows and replays document removal and replac
 				expect(replayed.docs[AgentDoc.definition.kind]).toEqual({ instructions: "Replacement" });
 				expect(replayed.docs).not.toHaveProperty(privateState.definition.kind);
 			}
-			expect(subscriptions[0]!.observation.value.entries.map(entry => entry.kind)).toEqual(["question", "answer"]);
+			expect(subscriptions[0]!.observation.value.entries.map((entry) => entry.kind)).toEqual(["question", "answer"]);
 		} finally {
 			for (const { observation } of subscriptions) observation.detach();
 		}
-	} finally { await harness.close(context); }
+	} finally {
+		await harness.close(context);
+	}
 });
 
 test("rejects invalid window bounds and still accepts a one-entry window", async () => {
-	const harness = await Harness.open(new MemoryStorage(), { models: createModels(), registry: createRegistry() }, context);
+	const harness = await Harness.open(
+		new MemoryStorage(),
+		{ models: createModels(), registry: createRegistry() },
+		context,
+	);
 	try {
 		const conversation = await harness.root(context);
 		for (const window of [{ min: 0 }, { min: 0.5 }, { min: NaN }, { min: 2, max: 1 }, { max: Infinity }]) {
 			await expect(conversation.watch(context, window)).rejects.toBeInstanceOf(RangeError);
-			await expect(harness.observeConversation(conversation.id, { advance() {}, end() {} }, context, window)).rejects.toBeInstanceOf(RangeError);
+			await expect(
+				harness.observeConversation(conversation.id, { advance() {}, end() {} }, context, window),
+			).rejects.toBeInstanceOf(RangeError);
 		}
 		const watch = await conversation.watch(context, { min: 1, max: 1 });
-		try { expect(watch.value.entries).toEqual([]); } finally { await watch.stop(); }
-	} finally { await harness.close(context); }
+		try {
+			expect(watch.value.entries).toEqual([]);
+		} finally {
+			await watch.stop();
+		}
+	} finally {
+		await harness.close(context);
+	}
 });
 
 test.each([undefined, "Continue with the approved plan"])(

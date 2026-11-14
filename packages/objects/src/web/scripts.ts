@@ -1,10 +1,5 @@
 /// <reference lib="dom" />
-import {
-	REGISTER,
-	type FacetFunction,
-	type RegisteredScript,
-	type ScriptEntry,
-} from "../surfaces/index.ts";
+import { REGISTER, type FacetFunction, type RegisteredScript, type ScriptEntry } from "../surfaces/index.ts";
 export type PageBootstrap = {
 	readonly base: string;
 	readonly styles: Readonly<Record<string, string>>;

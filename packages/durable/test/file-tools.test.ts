@@ -117,7 +117,14 @@ function bitmap(): Uint8Array {
 	const bytes = new Uint8Array(58);
 	const view = new DataView(bytes.buffer);
 	bytes.set([66, 77]);
-	for (const [offset, value] of [[2, 58], [10, 54], [14, 40], [18, 1], [22, 1], [34, 4]])
+	for (const [offset, value] of [
+		[2, 58],
+		[10, 54],
+		[14, 40],
+		[18, 1],
+		[22, 1],
+		[34, 4],
+	])
 		view.setUint32(offset, value, true);
 	view.setUint16(26, 1, true);
 	view.setUint16(28, 24, true);
@@ -170,7 +177,8 @@ test("read resizes a valid oversized image and reports its coordinate scale", as
 		{
 			severity: "info",
 			code: "image",
-			message: "Read image file [image/png]. Resized from 4000x2 to 2000x1. Multiply coordinates by 2.00 to map them to the original.",
+			message:
+				"Read image file [image/png]. Resized from 4000x2 to 2000x1. Multiply coordinates by 2.00 to map them to the original.",
 		},
 	]);
 	const image = result.message.content.find((block) => block.type === "image");

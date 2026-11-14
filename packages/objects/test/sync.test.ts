@@ -93,7 +93,17 @@ it("captures session metadata before asynchronous filesystem work starts", async
 it("rejects metadata serialization failures through its promise without publishing a session", async () => {
 	const { remote } = await fixture();
 	const failure = new Error("metadata unavailable");
-	await expect(remote.putMeta("shared", { toJSON() { throw failure; } }, context)).rejects.toBe(failure);
+	await expect(
+		remote.putMeta(
+			"shared",
+			{
+				toJSON() {
+					throw failure;
+				},
+			},
+			context,
+		),
+	).rejects.toBe(failure);
 	expect((await remote.sessions(undefined, context)).sessions).toEqual([]);
 });
 

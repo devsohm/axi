@@ -1,30 +1,28 @@
 import { describe, expect, it } from "vitest";
 import { openNodeSqliteDatabase } from "../src/sqlite/node.ts";
-import {
-	readCatalog,
-	writeCatalog,
-	type TableRecord,
-} from "../src/store/catalog.ts";
-import {
-	applyStoreSchema,
-	STORE_SCHEMA,
-	TABLES,
-} from "../src/store/schema.ts";
+import { readCatalog, writeCatalog, type TableRecord } from "../src/store/catalog.ts";
+import { applyStoreSchema, STORE_SCHEMA, TABLES } from "../src/store/schema.ts";
 
 describe("store schema", () => {
 	it("migrates a version-two database without changing its document contents", async () => {
 		const db = await openNodeSqliteDatabase(":memory:");
 		try {
 			await applyStoreSchema(db);
-			await db.exec(`DROP INDEX objects_documents_host; ALTER TABLE ${TABLES.documents} DROP COLUMN host; UPDATE objects_store_schema SET version = 2`);
-			await db.run(`INSERT INTO ${TABLES.documents} (id, owner, namespace, kind, key, history, created_at, revision, version, fingerprint) VALUES (2, 'app', 'notes', 'entry', 'old', 'none', 1, 1, 1, 'first')`);
+			await db.exec(
+				`DROP INDEX objects_documents_host; ALTER TABLE ${TABLES.documents} DROP COLUMN host; UPDATE objects_store_schema SET version = 2`,
+			);
+			await db.run(
+				`INSERT INTO ${TABLES.documents} (id, owner, namespace, kind, key, history, created_at, revision, version, fingerprint) VALUES (2, 'app', 'notes', 'entry', 'old', 'none', 1, 1, 1, 'first')`,
+			);
 			await db.run(`INSERT INTO ${TABLES.revisions} VALUES (2, 1, 'base', 1, ?)`, '{"value":7}');
 			await db.run(`UPDATE ${TABLES.meta} SET last_seq = 1, next_id = 3`);
 			expect(await applyStoreSchema(db)).toMatchObject({ last_seq: 1, next_id: 3 });
 			expect(await db.get(`SELECT id, key, host FROM ${TABLES.documents}`)).toEqual({ id: 2, key: "old", host: null });
 			expect(await db.get(`SELECT content FROM ${TABLES.revisions}`)).toEqual({ content: '{"value":7}' });
 			expect(await db.get("SELECT version FROM objects_store_schema")).toEqual({ version: 3 });
-		} finally { await db.close(); }
+		} finally {
+			await db.close();
+		}
 	});
 	it("initializes metadata and roundtrips table definitions through a real SQLite transaction", async () => {
 		const db = await openNodeSqliteDatabase(":memory:");
@@ -54,11 +52,7 @@ describe("store schema", () => {
 				}),
 			);
 			expect([...(await readCatalog(db))]).toEqual([[record.table, record]]);
-			await db.run(
-				`UPDATE ${TABLES.meta} SET last_seq = ?, next_id = ?`,
-				8,
-				10,
-			);
+			await db.run(`UPDATE ${TABLES.meta} SET last_seq = ?, next_id = ?`, 8, 10);
 			expect(await applyStoreSchema(db)).toEqual({
 				last_seq: 8,
 				next_id: 10,
@@ -80,13 +74,8 @@ describe("store schema", () => {
 		const newer = await openNodeSqliteDatabase(":memory:");
 		try {
 			await applyStoreSchema(newer);
-			await newer.run(
-				"UPDATE objects_store_schema SET version = ?",
-				STORE_SCHEMA + 1,
-			);
-			await expect(applyStoreSchema(newer)).rejects.toThrow(
-				"newer than supported",
-			);
+			await newer.run("UPDATE objects_store_schema SET version = ?", STORE_SCHEMA + 1);
+			await expect(applyStoreSchema(newer)).rejects.toThrow("newer than supported");
 		} finally {
 			await newer.close();
 		}

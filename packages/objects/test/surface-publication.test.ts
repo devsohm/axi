@@ -10,10 +10,14 @@ import { buildBase, pageBootstrap, pageScripts, WEB_PREFIX, webSurface } from ".
 
 it("collects base assets and exposes a surface without installing HTTP routes", async () => {
 	const directory = await mkdtemp(join(tmpdir(), "axi-surface-assets-"));
-	const root = join(directory, "plugins"), entry = join(directory, "main.ts");
+	const root = join(directory, "plugins"),
+		entry = join(directory, "main.ts");
 	await mkdir(root);
 	await writeFile(entry, 'import "./theme.css"; import wasm from "./module.wasm"; globalThis.moduleUrl = wasm;');
-	await writeFile(join(directory, "theme.css"), '@font-face{font-family:Local;src:url("./local.woff2")} .logo{background:url("./local.png")}');
+	await writeFile(
+		join(directory, "theme.css"),
+		'@font-face{font-family:Local;src:url("./local.woff2")} .logo{background:url("./local.png")}',
+	);
 	const assets = [
 		{ name: "local.woff2", mime: "font/woff2", bytes: Buffer.from("font payload") },
 		{ name: "local.png", mime: "image/png", bytes: Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]) },
@@ -21,7 +25,10 @@ it("collects base assets and exposes a surface without installing HTTP routes", 
 	];
 	for (const asset of assets) await writeFile(join(directory, asset.name), asset.bytes);
 	const host = createHost({ address: hostKind("server")(), principal: { kind: "server" }, onError() {} });
-	const plugins = createPlugins({ roots: [root], kinds: { web: { platform: "browser", hostPackages: [] } }, onError() {} }, context);
+	const plugins = createPlugins(
+		{ roots: [root], kinds: { web: { platform: "browser", hostPackages: [] } }, onError() {} },
+		context,
+	);
 	const http = createHttp(host, { onError() {} }, context);
 	try {
 		const base = await buildBase(entry, "browser", WEB_PREFIX, { conditions: [] });
@@ -35,12 +42,27 @@ it("collects base assets and exposes a surface without installing HTTP routes", 
 		const css = new TextDecoder().decode(base.files.get(base.style!)!.bytes);
 		for (const [path] of emitted.filter(([path]) => !path.endsWith(".wasm"))) expect(css).toContain(path);
 		const surface = webSurface(host, { plugins, entry, conditions: [], routes: false });
-		expect((await host.load([{ name: "http", facet: http.facet }, { name: "web", facet: surface.facet }], context)).failed).toEqual([]);
+		expect(
+			(
+				await host.load(
+					[
+						{ name: "http", facet: http.facet },
+						{ name: "web", facet: surface.facet },
+					],
+					context,
+				)
+			).failed,
+		).toEqual([]);
 		expect(await surface.base()).toBe(base.hash);
 		const scripts = await host.get(WebScripts, {}, context);
 		try {
 			const page = await surface.pageAssets();
-			expect(page).toEqual({ bootstrap: pageBootstrap(base.hash, scripts.set.value), script: base.script, plugins: scripts.set.value.combined, styles: [base.style] });
+			expect(page).toEqual({
+				bootstrap: pageBootstrap(base.hash, scripts.set.value),
+				script: base.script,
+				plugins: scripts.set.value.combined,
+				styles: [base.style],
+			});
 			const file = await surface.file(base.script);
 			expect(file.kind).toBe("bytes");
 			if (file.kind !== "bytes") throw new Error("Expected built JavaScript");
@@ -50,7 +72,10 @@ it("collects base assets and exposes a surface without installing HTTP routes", 
 			expect(await host.root((ctx) => file.read(0, expected.length, ctx), context)).toEqual(expected);
 			expect(await surface.file(`${WEB_PREFIX}missing.js`)).toEqual({ kind: "error", status: 404 });
 			for (const path of ["/", base.script, `${WEB_PREFIX}base`]) {
-				const response = await http.fetch(new Request(`http://127.0.0.1${path}`, { headers: { host: "127.0.0.1" } }), { localAddress: "127.0.0.1", localPort: 80 });
+				const response = await http.fetch(new Request(`http://127.0.0.1${path}`, { headers: { host: "127.0.0.1" } }), {
+					localAddress: "127.0.0.1",
+					localPort: 80,
+				});
 				expect(response.status).toBe(404);
 			}
 		} finally {

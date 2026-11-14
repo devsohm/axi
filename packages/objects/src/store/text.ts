@@ -12,8 +12,7 @@ export function compareText(a: string, b: string): number {
 	}
 }
 export function storedText(value: string, label: string): string {
-	if (value.includes("\0"))
-		throw invalid("args", `${label}: text may not contain NUL`);
+	if (value.includes("\0")) throw invalid("args", `${label}: text may not contain NUL`);
 	return value.isWellFormed() ? value : value.toWellFormed();
 }
 export function prefixUpperBound(prefix: string): string | undefined {
@@ -23,10 +22,7 @@ export function prefixUpperBound(prefix: string): string | undefined {
 		if (paired) end--;
 		const point = prefix.codePointAt(end)!;
 		if (point === 0x10ffff) continue;
-		return (
-			prefix.slice(0, end) +
-			String.fromCodePoint(point === 0xd7ff ? 0xe000 : point + 1)
-		);
+		return prefix.slice(0, end) + String.fromCodePoint(point === 0xd7ff ? 0xe000 : point + 1);
 	}
 	return undefined;
 }

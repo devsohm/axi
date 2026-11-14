@@ -76,18 +76,35 @@ it("keeps a pending key watch open through a failed first startup and retry", as
 	const host = createHost({ onError() {} });
 	let attempts = 0;
 	try {
-		await host.load([{ name: "starting", facet: defineFacet((h) => h.serve(type, (_, self) => {
-			self.open(async () => {
-				if (++attempts === 1) throw new Error("not ready");
-				return null;
-			}, () => {});
-			return { docs: self.state(document) };
-		})) }], context);
+		await host.load(
+			[
+				{
+					name: "starting",
+					facet: defineFacet((h) =>
+						h.serve(type, (_, self) => {
+							self.open(
+								async () => {
+									if (++attempts === 1) throw new Error("not ready");
+									return null;
+								},
+								() => {},
+							);
+							return { docs: self.state(document) };
+						}),
+					),
+				},
+			],
+			context,
+		);
 		const ref = host.hold(type, {}, context);
 		const settled: unknown[] = [];
 		const pending = ref.docs.watch("missing", context).then(
-			(watch) => { settled.push(watch); },
-			(error: unknown) => { settled.push(error); },
+			(watch) => {
+				settled.push(watch);
+			},
+			(error: unknown) => {
+				settled.push(error);
+			},
 		);
 		await vi.waitFor(() => expect(ref.state.value.kind).toBe("failed"));
 		expect(settled).toEqual([]);

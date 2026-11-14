@@ -24,7 +24,9 @@ export class Replica extends Source {
 		this.#status = state.kind === "value" ? state : { kind: "failed", error: handedOut(state.error), last: undefined };
 		this.#values = state.kind === "value" ? 1 : 0;
 	}
-	get generation(): number { return this.#values; }
+	get generation(): number {
+		return this.#values;
+	}
 	fork(batch: Batch): Replica {
 		const copy = new Replica(batch, { kind: "value", value: null });
 		copy.#status = this.#status;

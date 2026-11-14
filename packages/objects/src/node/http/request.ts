@@ -35,7 +35,12 @@ export class WebRequest implements HttpRequest {
 	readonly #search: string;
 	#query: URLSearchParams | undefined;
 	#consumed = false;
-	constructor(input: Incoming, admission: { readonly origin: string; readonly provenance: Provenance }, nonce: string, remoteAddress?: string) {
+	constructor(
+		input: Incoming,
+		admission: { readonly origin: string; readonly provenance: Provenance },
+		nonce: string,
+		remoteAddress?: string,
+	) {
 		this.#input = input;
 		this.method = input.method;
 		const url = splitUrl(input.url);

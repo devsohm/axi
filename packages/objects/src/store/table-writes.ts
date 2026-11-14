@@ -1,20 +1,8 @@
 import type { TableRecord } from "./catalog.ts";
 import type { ColumnRecord } from "./columns.ts";
 import type { SetNode, WhereNode } from "./expression.ts";
-import {
-	versionColumn,
-	type EncodedRow,
-	type Scalar,
-	type StoredRow,
-} from "./rows.ts";
-import {
-	columnSql,
-	createIndexSql,
-	createTableSql,
-	dropIndexSql,
-	quote,
-	type Statement,
-} from "./sql.ts";
+import { versionColumn, type EncodedRow, type Scalar, type StoredRow } from "./rows.ts";
+import { columnSql, createIndexSql, createTableSql, dropIndexSql, quote, type Statement } from "./sql.ts";
 import type { StagedWrite, Step } from "./step.ts";
 import type { TableDefinition } from "./table.ts";
 import type { AlterEdit, TableEdit } from "./table-history.ts";
@@ -85,14 +73,8 @@ export type TableWrite =
 			readonly where: WhereNode;
 			readonly count: number;
 	  };
-export type TableDefinitionWrite = Extract<
-	TableWrite,
-	{ readonly kind: "table" }
->;
-export function jsonVersions(
-	definition: TableDefinition,
-	set: SetNode,
-): ReadonlyMap<string, number> {
+export type TableDefinitionWrite = Extract<TableWrite, { readonly kind: "table" }>;
+export function jsonVersions(definition: TableDefinition, set: SetNode): ReadonlyMap<string, number> {
 	const result = new Map<string, number>();
 	for (const name of Object.keys(set)) {
 		const column = definition.byName.get(name)!;
@@ -100,13 +82,8 @@ export function jsonVersions(
 	}
 	return result;
 }
-export function recordedVersions(
-	set: SetNode,
-	versions: ReadonlyMap<string, number>,
-): ColumnVersions {
-	return Object.fromEntries(
-		[...versions].filter(([name]) => set[name] !== null),
-	);
+export function recordedVersions(set: SetNode, versions: ReadonlyMap<string, number>): ColumnVersions {
+	return Object.fromEntries([...versions].filter(([name]) => set[name] !== null));
 }
 export function stageTable(write: TableDefinitionWrite): StagedWrite {
 	return {
@@ -114,19 +91,13 @@ export function stageTable(write: TableDefinitionWrite): StagedWrite {
 		apply: async (step) => [await applyTable(step, write)],
 	};
 }
-export function stageIndex(
-	write: Extract<TableWrite, { readonly kind: "index" }>,
-): StagedWrite {
+export function stageIndex(write: Extract<TableWrite, { readonly kind: "index" }>): StagedWrite {
 	return {
 		order: "write",
 		apply: async (step) => [await applyIndex(step, write)],
 	};
 }
-export function stageEdit(
-	table: string,
-	version: number,
-	edit: TableEdit,
-): StagedWrite {
+export function stageEdit(table: string, version: number, edit: TableEdit): StagedWrite {
 	if (edit.kind === "index")
 		return stageIndex({
 			kind: "index",
@@ -147,32 +118,20 @@ export function stageEdit(
 		};
 	return {
 		order: "write",
-		apply: async (step) => [
-			await applyAlter(step, { kind: "alter", table, version, edit }),
-		],
+		apply: async (step) => [await applyAlter(step, { kind: "alter", table, version, edit })],
 	};
 }
-export function stagePut(
-	sql: string,
-	table: string,
-	row: EncodedRow,
-	version: number,
-): StagedWrite {
+export function stagePut(sql: string, table: string, row: EncodedRow, version: number): StagedWrite {
 	return {
 		order: "write",
 		async apply(step) {
 			await step.run(sql, ...row.params);
 			step.rows += 1;
-			return [
-				{ kind: "put", table, row: row.row, version, columns: row.columns },
-			];
+			return [{ kind: "put", table, row: row.row, version, columns: row.columns }];
 		},
 	};
 }
-function counted(
-	statement: Statement,
-	record: (count: number) => TableWrite,
-): StagedWrite {
+function counted(statement: Statement, record: (count: number) => TableWrite): StagedWrite {
 	return {
 		order: "write",
 		async apply(step) {
@@ -200,11 +159,7 @@ export function stageUpdate(
 		...(version === undefined ? {} : { version }),
 	}));
 }
-export function stageDelete(
-	statement: Statement,
-	table: string,
-	key: StoredKey,
-): StagedWrite {
+export function stageDelete(statement: Statement, table: string, key: StoredKey): StagedWrite {
 	return counted(statement, (count) => ({ kind: "delete", table, key, count }));
 }
 export function stageUpdateWhere(
@@ -225,11 +180,7 @@ export function stageUpdateWhere(
 		...(version === undefined ? {} : { version }),
 	}));
 }
-export function stageDeleteWhere(
-	statement: Statement,
-	table: string,
-	where: WhereNode,
-): StagedWrite {
+export function stageDeleteWhere(statement: Statement, table: string, where: WhereNode): StagedWrite {
 	return counted(statement, (count) => ({
 		kind: "deleteWhere",
 		table,
@@ -242,13 +193,9 @@ function recorded(step: Step, table: string): TableRecord {
 	if (!record) throw new Error(`table ${table}: not in the store`);
 	return record;
 }
-export async function applyTable(
-	step: Step,
-	write: TableDefinitionWrite,
-): Promise<TableWrite> {
+export async function applyTable(step: Step, write: TableDefinitionWrite): Promise<TableWrite> {
 	const previous = step.table(write.table);
-	if (!previous)
-		await step.run(createTableSql(write.table, write.columns, write.key));
+	if (!previous) await step.run(createTableSql(write.table, write.columns, write.key));
 	const { kind: _kind, ...definition } = write;
 	step.tables.set(write.table, {
 		...definition,
@@ -261,9 +208,7 @@ export async function applyIndex(
 	write: Extract<TableWrite, { readonly kind: "index" }>,
 ): Promise<TableWrite> {
 	const old = recorded(step, write.table);
-	await step.run(
-		createIndexSql(write.table, write.name, write.columns, old.key),
-	);
+	await step.run(createIndexSql(write.table, write.name, write.columns, old.key));
 	step.tables.set(write.table, {
 		...old,
 		indexes: { ...old.indexes, [write.name]: write.columns },
@@ -290,41 +235,26 @@ export async function applyAlter(
 		prefix = `ALTER TABLE ${quote(write.table)}`;
 	let next: TableRecord;
 	if (edit.kind === "rename") {
-		const rename = (name: string): string =>
-			name === edit.from ? edit.to : name;
-		await step.run(
-			`${prefix} RENAME COLUMN ${quote(edit.from)} TO ${quote(edit.to)}`,
-		);
+		const rename = (name: string): string => (name === edit.from ? edit.to : name);
+		await step.run(`${prefix} RENAME COLUMN ${quote(edit.from)} TO ${quote(edit.to)}`);
 		if (old.columns[edit.from]?.type === "json")
-			await step.run(
-				`${prefix} RENAME COLUMN ${quote(versionColumn(edit.from))} TO ${quote(versionColumn(edit.to))}`,
-			);
+			await step.run(`${prefix} RENAME COLUMN ${quote(versionColumn(edit.from))} TO ${quote(versionColumn(edit.to))}`);
 		next = {
 			...old,
-			columns: Object.fromEntries(
-				Object.entries(old.columns).map(([name, column]) => [
-					rename(name),
-					column,
-				]),
-			),
+			columns: Object.fromEntries(Object.entries(old.columns).map(([name, column]) => [rename(name), column])),
 			key: old.key.map(rename),
-			indexes: Object.fromEntries(
-				Object.entries(old.indexes).map(([name, on]) => [name, on.map(rename)]),
-			),
+			indexes: Object.fromEntries(Object.entries(old.indexes).map(([name, on]) => [name, on.map(rename)])),
 		};
 	} else if (edit.kind === "drop") {
 		await step.run(`${prefix} DROP COLUMN ${quote(edit.name)}`);
 		if (old.columns[edit.name]?.type === "json")
-			await step.run(
-				`${prefix} DROP COLUMN ${quote(versionColumn(edit.name))}`,
-			);
+			await step.run(`${prefix} DROP COLUMN ${quote(versionColumn(edit.name))}`);
 		const columns = { ...old.columns };
 		delete columns[edit.name];
 		next = { ...old, columns };
 	} else {
 		if (edit.kind === "add")
-			for (const column of columnSql(edit.name, edit.column))
-				await step.run(`${prefix} ADD COLUMN ${column}`);
+			for (const column of columnSql(edit.name, edit.column)) await step.run(`${prefix} ADD COLUMN ${column}`);
 		next = { ...old, columns: { ...old.columns, [edit.name]: edit.column } };
 	}
 	step.tables.set(write.table, next);

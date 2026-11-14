@@ -19,7 +19,9 @@ workerMain(
 					},
 					loseLink: async () => {
 						setTimeout(() => {
-							process.prependOnceListener("disconnect", () => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 20000));
+							process.prependOnceListener("disconnect", () =>
+								Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 20000),
+							);
 							process.disconnect?.();
 						}, 5);
 						return null;

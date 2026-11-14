@@ -28,10 +28,24 @@ import {
 	type RolloutResult,
 } from "../plugins/index.ts";
 import {
-	processConditions, tuiSurface, webSurface, WEB_PREFIX,
-	type TuiSurface, type TuiSurfaceOptions, type WebSurface, type WebSurfaceOptions, type WebRoutesOptions,
+	processConditions,
+	tuiSurface,
+	webSurface,
+	WEB_PREFIX,
+	type TuiSurface,
+	type TuiSurfaceOptions,
+	type WebSurface,
+	type WebSurfaceOptions,
+	type WebRoutesOptions,
 } from "../surfaces/index.ts";
-import { createWorkers, nodeBaseInputs, processLock, type ProcessLock, type Workers, type WorkersError } from "../workers/index.ts";
+import {
+	createWorkers,
+	nodeBaseInputs,
+	processLock,
+	type ProcessLock,
+	type Workers,
+	type WorkersError,
+} from "../workers/index.ts";
 import { ARCHIVE_FORMAT, exists, packData, unpackStaging, type ArchiveManifest } from "./archive.ts";
 import { addressParam, HostData } from "./data.ts";
 import { filesFacet, type FilesCaps } from "./files.ts";
@@ -70,7 +84,11 @@ export type AppLimits = {
 	readonly importBytes?: number;
 	readonly importEntries?: number;
 };
-export type AppTimeouts = { readonly closeTimeout?: number; readonly readyTimeout?: number; readonly reloadDrainTimeout?: number };
+export type AppTimeouts = {
+	readonly closeTimeout?: number;
+	readonly readyTimeout?: number;
+	readonly reloadDrainTimeout?: number;
+};
 export type AppWeb = Pick<WebSurfaceOptions, "entry" | "conditions"> & Omit<WebRoutesOptions, "routes">;
 export type AppOptions<P extends Principal> = {
 	readonly name: string;
@@ -145,7 +163,9 @@ function linkHost(host: string): string {
 
 export async function startServer<P extends Principal>(options: AppOptions<P>, context: Context): Promise<App<P>> {
 	if (!isJsonValue(options.principal.owner))
-		throw new Error("startServer: principal.owner must be strict JSON (no undefined fields, functions or class instances)");
+		throw new Error(
+			"startServer: principal.owner must be strict JSON (no undefined fields, functions or class instances)",
+		);
 	if (samePrincipal(options.principal.owner, options.principal.server, context))
 		throw new Error("startServer: principal.owner must not be the server's principal");
 	const dataDir = await openDataDir(resolve(options.dataDir ?? defaultDataDir(options.name))),
@@ -267,12 +287,23 @@ export async function startServer<P extends Principal>(options: AppOptions<P>, c
 		surfaces: ClientSurface<P>[] = [];
 	const core: PluginFacet<P>[] = [
 		{ name: "objects.http", facet: http.facet },
-		{ name: "objects.app.info", facet: appInfoFacet({ dataDir, name: options.name, version: api.versions[0] ?? "", owner: options.principal.owner }) },
+		{
+			name: "objects.app.info",
+			facet: appInfoFacet({
+				dataDir,
+				name: options.name,
+				version: api.versions[0] ?? "",
+				owner: options.principal.owner,
+			}),
+		},
 		{ name: "objects.app.sign-ins", facet: signIns.facet },
 		{ name: "objects.app.owner", facet: ownerFacet(owner, options.principal.owner) },
 		{
 			name: "objects.app.pairing",
-			facet: pairingFacet(new Pairings({ maxPending: limits.pendingPairings, perAddress: limits.pairingsPerAddress }), options.principal.owner),
+			facet: pairingFacet(
+				new Pairings({ maxPending: limits.pendingPairings, perAddress: limits.pairingsPerAddress }),
+				options.principal.owner,
+			),
 		},
 		{ name: "objects.app.files", facet: filesFacet(join(layout.server, "files"), options.files, limits.uploads) },
 		{ name: "objects.themes", facet: themesFacet() },
@@ -304,11 +335,20 @@ export async function startServer<P extends Principal>(options: AppOptions<P>, c
 			throw error;
 		}
 	}
-	async function underLock(address: Address, operation: string, held: string, ctx: Context, work: () => Promise<void>): Promise<void> {
+	async function underLock(
+		address: Address,
+		operation: string,
+		held: string,
+		ctx: Context,
+		work: () => Promise<void>,
+	): Promise<void> {
 		const lock = await addressLock(address, ctx);
 		if (lock === undefined) throw new Error(`${operation}: ${address.key} ${held}`);
-		try { await work(); }
-		finally { await lock.release(); }
+		try {
+			await work();
+		} finally {
+			await lock.release();
+		}
 	}
 	function pool(address: Address): Workers<HostKind> {
 		const pool = workers.get(address.kind);
@@ -373,37 +413,42 @@ export async function startServer<P extends Principal>(options: AppOptions<P>, c
 					api: api.versions[0] ?? "",
 					address: { kind: address.kind, key: address.key },
 				};
-			const staging = await mkdtemp(join(dirname(target), ".objects-server-")), server = join(staging, "server.archive");
+			const staging = await mkdtemp(join(dirname(target), ".objects-server-")),
+				server = join(staging, "server.archive");
 			try {
 				await pipeline(encodeJsonl(host.exportHostData(address, ctx)), createWriteStream(server, { mode: 0o600 }));
-			for (let attempt = 1; ; attempt++) {
-				if (worker.state.value[address.key]?.status === "running") {
-					const data = await host.get(HostData, { address: addressParam(address) }, ctx);
-					try {
-						await data.exportTo({ path: target, manifest: JSON.stringify(manifest), server }, ctx);
-					} finally {
-						data.release();
+				for (let attempt = 1; ; attempt++) {
+					if (worker.state.value[address.key]?.status === "running") {
+						const data = await host.get(HostData, { address: addressParam(address) }, ctx);
+						try {
+							await data.exportTo({ path: target, manifest: JSON.stringify(manifest), server }, ctx);
+						} finally {
+							data.release();
+						}
+						return;
 					}
-					return;
-				}
-				const locked = await addressLock(address, ctx);
-				if (locked) {
-					try {
-						await packData(workerDirectory(dataDir, address), manifest, server, target, ctx);
-					} finally {
-						await locked.release();
+					const locked = await addressLock(address, ctx);
+					if (locked) {
+						try {
+							await packData(workerDirectory(dataDir, address), manifest, server, target, ctx);
+						} finally {
+							await locked.release();
+						}
+						return;
 					}
-					return;
+					if (attempt === 5) throw new Error(`exportData: the worker at ${address.key} keeps starting; try again`);
 				}
-				if (attempt === 5) throw new Error(`exportData: the worker at ${address.key} keeps starting; try again`);
+			} finally {
+				await rm(staging, { recursive: true, force: true });
 			}
-			} finally { await rm(staging, { recursive: true, force: true }); }
 		},
 		async importData(archive, address, ctx, importOptions = {}) {
 			pool(address);
-			const dir = workerDirectory(dataDir, address), existing = importOptions.existing ?? "refuse";
+			const dir = workerDirectory(dataDir, address),
+				existing = importOptions.existing ?? "refuse";
 			await underLock(address, "importData", "has data (its worker runs)", ctx, async () => {
-				if (existing === "refuse" && await exists(dir)) throw new Error(`importData: ${dir} exists already (an address is imported once)`);
+				if (existing === "refuse" && (await exists(dir)))
+					throw new Error(`importData: ${dir} exists already (an address is imported once)`);
 				const { staging } = await unpackStaging(
 					resolve(archive),
 					dirname(dir),
@@ -412,25 +457,32 @@ export async function startServer<P extends Principal>(options: AppOptions<P>, c
 							throw new Error(`importData: not a format ${ARCHIVE_FORMAT} archive`);
 						if (manifest.app !== options.name)
 							throw new Error(`importData: an archive of "${manifest.app}", not "${options.name}"`);
-						if (manifest.address?.kind !== address.kind) throw new Error(`importData: an archive of a ${String(manifest.address?.kind)}, not a ${address.kind}`);
+						if (manifest.address?.kind !== address.kind)
+							throw new Error(`importData: an archive of a ${String(manifest.address?.kind)}, not a ${address.kind}`);
 					},
 					{ bytes: limits.importBytes, entries: limits.importEntries },
 					ctx,
 				);
-				const aside = existing === "replace" && await exists(dir) ? `${dir}.aside-${randomUUID()}` : undefined;
+				const aside = existing === "replace" && (await exists(dir)) ? `${dir}.aside-${randomUUID()}` : undefined;
 				let placed = false;
 				try {
 					if (aside !== undefined) await rename(dir, aside);
 					await rename(staging, dir);
 					placed = true;
-					await host.importHostData(decodeJsonl(createReadStream(join(dir, "server.archive"))), ctx, { address, existing });
+					await host.importHostData(decodeJsonl(createReadStream(join(dir, "server.archive"))), ctx, {
+						address,
+						existing,
+					});
 				} catch (error) {
 					if (isObjectsError(error) && error.code === "unavailable" && error.reason === "storage_failed") {
 						// Undoing an uncertain commit could pair the old worker directory with newly committed server data.
-						throw new Error(`importData: ${address.key}: the server's commit has an unknown outcome; nothing was undone (the new directory is in place${aside === undefined ? "" : `, the old one at ${aside}`}). Run the import again with existing: "replace" once the server's store is back.`, { cause: error });
+						throw new Error(
+							`importData: ${address.key}: the server's commit has an unknown outcome; nothing was undone (the new directory is in place${aside === undefined ? "" : `, the old one at ${aside}`}). Run the import again with existing: "replace" once the server's store is back.`,
+							{ cause: error },
+						);
 					}
 					await rm(placed ? dir : staging, { recursive: true, force: true });
-					if (aside !== undefined && await exists(aside)) await rename(aside, dir);
+					if (aside !== undefined && (await exists(aside))) await rename(aside, dir);
 					throw error;
 				}
 				await rm(join(dir, "server.archive"), { force: true }).catch(() => {});

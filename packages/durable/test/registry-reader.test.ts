@@ -8,16 +8,37 @@ it("reads composed snapshots and wakes subscribers synchronously only for values
 	const registry = createRegistry();
 	let observer: NativeObserver<RegistrySnapshot> | undefined;
 	const source: RegistryValue<RegistrySnapshot> = {
-		get value() { return registry.snapshot(); },
-		async watch() { return new NativeWatch(registry.snapshot(), () => {}, () => {}); },
+		get value() {
+			return registry.snapshot();
+		},
+		async watch() {
+			return new NativeWatch(
+				registry.snapshot(),
+				() => {},
+				() => {},
+			);
+		},
 		observe(target, receivedContext) {
 			expect(receivedContext).toBe(context);
 			observer = target;
-			return { value: registry.snapshot(), detach() { observer = undefined; } };
+			return {
+				value: registry.snapshot(),
+				detach() {
+					observer = undefined;
+				},
+			};
 		},
 	};
-	const reader = registryReader(source, context), seen: string[][] = [];
-	const detach = reader.subscribe(() => seen.push(reader.snapshot().installed().map((extension) => extension.name)));
+	const reader = registryReader(source, context),
+		seen: string[][] = [];
+	const detach = reader.subscribe(() =>
+		seen.push(
+			reader
+				.snapshot()
+				.installed()
+				.map((extension) => extension.name),
+		),
+	);
 	registry.install(defineExtension({ name: "first" }));
 	observer!.advance({ kind: "value", value: registry.snapshot() }, context);
 	expect(seen).toEqual([["first"]]);

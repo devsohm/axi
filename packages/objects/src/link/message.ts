@@ -22,7 +22,12 @@ const part = Type.Unsafe<Part>({});
 const segments = opt(Type.Unsafe<readonly Uint8Array[]>({}));
 export const NAME_LENGTH = 256;
 export const CARRIER = { keys: 8, length: 256 } as const;
-const trace = opt(Type.Record(Type.String(), Type.String({ maxLength: CARRIER.length, pattern: "^[\\x20-\\x7e]*$" }), { propertyNames: { maxLength: CARRIER.length, pattern: "^[\\x21-\\x7e]+$" }, maxProperties: CARRIER.keys }));
+const trace = opt(
+	Type.Record(Type.String(), Type.String({ maxLength: CARRIER.length, pattern: "^[\\x20-\\x7e]*$" }), {
+		propertyNames: { maxLength: CARRIER.length, pattern: "^[\\x21-\\x7e]+$" },
+		maxProperties: CARRIER.keys,
+	}),
+);
 const address = obj({ kind: str({ max: NAME_LENGTH }), params: unknown() });
 const principal = Type.Object({ kind: str() });
 const incarnation = str({

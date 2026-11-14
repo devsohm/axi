@@ -89,7 +89,8 @@ test.each([new Error("Cannot resolve directory"), "Cannot resolve directory"])(
 			});
 			info.mockRestore();
 			expect(await env.exec([process.execPath, "-e", "process.exit(0)"], { cwd: tmpdir() }, context)).toMatchObject({
-				ok: true, value: { exitCode: 0 },
+				ok: true,
+				value: { exitCode: 0 },
 			});
 		} finally {
 			info.mockRestore();

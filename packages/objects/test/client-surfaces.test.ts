@@ -113,12 +113,15 @@ it("keeps page state scoped to a host and unsubscribes its readers", async () =>
 it("reports duplicate plugin names before the loaded-set cache can merge them", async () => {
 	const host = createHost({ onError() {} });
 	const entries = ["first", "second"].map((digest) => ({
-		name: "repeated", digest,
+		name: "repeated",
+		digest,
 		prepare: () => ({ kind: "facet" as const, digest, facet: defineFacet(() => {}) }),
 	}));
 	try {
 		const { report } = await LoadedFacets.load(host, [], entries, context);
-		expect(report.failed).toEqual([{ plugin: "repeated", error: expect.objectContaining({ message: 'plugin "repeated" is loaded twice' }) }]);
+		expect(report.failed).toEqual([
+			{ plugin: "repeated", error: expect.objectContaining({ message: 'plugin "repeated" is loaded twice' }) },
+		]);
 	} finally {
 		await host.close(context);
 	}
@@ -210,14 +213,34 @@ it("keeps connection hook receivers and reads the current retry callback after a
 	const receivers: unknown[] = [];
 	let closed: (() => void) | undefined;
 	let originalRetries = 0;
-	const link = { onClose(fn: () => void) { closed = fn; }, close() { closed?.(); } };
+	const link = {
+		onClose(fn: () => void) {
+			closed = fn;
+		},
+		close() {
+			closed?.();
+		},
+	};
 	const options = {
-		open: function (this: unknown) { receivers.push(this); return link; },
-		onState: function (this: unknown) { receivers.push(this); },
-		canRetry: async () => { originalRetries++; return false; },
+		open: function (this: unknown) {
+			receivers.push(this);
+			return link;
+		},
+		onState: function (this: unknown) {
+			receivers.push(this);
+		},
+		canRetry: async () => {
+			originalRetries++;
+			return false;
+		},
 		environment: {
-			now: Date.now, online: () => true, onWake: () => () => {},
-			after(ms, fn) { const timer = setTimeout(fn, ms); return () => clearTimeout(timer); },
+			now: Date.now,
+			online: () => true,
+			onWake: () => () => {},
+			after(ms, fn) {
+				const timer = setTimeout(fn, ms);
+				return () => clearTimeout(timer);
+			},
 		},
 	} satisfies LoopOptions;
 	const handle = keepConnected(options);

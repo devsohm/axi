@@ -76,16 +76,28 @@ export class Job implements JobHandle<JsonValue, unknown, JsonValue | undefined>
 		const { documents, token, host } = this.#owner;
 		const parent = context.telemetry;
 		if (untraced(parent)) return documents.tx((tx) => this.stage(tx, args, context, options), token, context);
-		return parent.startSpan({ name: "objects.job", attributes: {
-			"objects.host": host.spanHost, object: documents.label.slice(0, 256), job: this.#definition.name, phase: "intent",
-		} }, async (span) => {
-			const traced = withTelemetry(span, context);
-			try {
-				const run = await documents.tx((tx) => this.stage(tx, args, traced, options), token, traced);
-				span.setAttributes({ outcome: "ok", "job.id": run.id });
-				return run;
-			} catch (error) { span.setAttributes({ outcome: ended(span, "job_failed", error, context.abortSignal) }); throw error; }
-		});
+		return parent.startSpan(
+			{
+				name: "objects.job",
+				attributes: {
+					"objects.host": host.spanHost,
+					object: documents.label.slice(0, 256),
+					job: this.#definition.name,
+					phase: "intent",
+				},
+			},
+			async (span) => {
+				const traced = withTelemetry(span, context);
+				try {
+					const run = await documents.tx((tx) => this.stage(tx, args, traced, options), token, traced);
+					span.setAttributes({ outcome: "ok", "job.id": run.id });
+					return run;
+				} catch (error) {
+					span.setAttributes({ outcome: ended(span, "job_failed", error, context.abortSignal) });
+					throw error;
+				}
+			},
+		);
 	}
 	outcome(id: string, context: Context): Promise<AnyOutcome> {
 		return this.#records.outcome(id, context);
@@ -278,7 +290,13 @@ export class Job implements JobHandle<JsonValue, unknown, JsonValue | undefined>
 		const { host, documents, context } = this.#owner;
 		const parent = parentOf(run.trace, host.telemetry ?? context.telemetry);
 		if (untraced(parent)) return;
-		return new OpenSpan(parent, "objects.job", { "objects.host": host.spanHost, object: documents.label.slice(0, 256), job: this.#definition.name, phase, "job.id": run.id });
+		return new OpenSpan(parent, "objects.job", {
+			"objects.host": host.spanHost,
+			object: documents.label.slice(0, 256),
+			job: this.#definition.name,
+			phase,
+			"job.id": run.id,
+		});
 	}
 	#state(run: JobRun, invocation: Invocation): RunState<JsonObject> | undefined {
 		const records = this.#records,
@@ -308,7 +326,10 @@ export class Job implements JobHandle<JsonValue, unknown, JsonValue | undefined>
 					if (input === undefined || input.kind === "immediate") persistence = { kind: "immediate" };
 					else {
 						const { withinMs } = input;
-						if (input.kind !== "deferred" || (withinMs !== undefined && !(typeof withinMs === "number" && withinMs >= 0)))
+						if (
+							input.kind !== "deferred" ||
+							(withinMs !== undefined && !(typeof withinMs === "number" && withinMs >= 0))
+						)
 							throw new ObjectsError({
 								code: "invalid",
 								reason: "args",
@@ -349,7 +370,9 @@ export class JobContext extends CallContext {
 		this.jobId = jobId;
 		if (state !== undefined) this.state = state;
 	}
-	override traced(span: TelemetrySpan): Ctx { return new JobSpanContext(this, span); }
+	override traced(span: TelemetrySpan): Ctx {
+		return new JobSpanContext(this, span);
+	}
 }
 class JobSpanContext extends SpanCtx {
 	readonly jobId: string;
@@ -359,5 +382,7 @@ class JobSpanContext extends SpanCtx {
 		this.jobId = parent.jobId;
 		if (parent.state !== undefined) this.state = parent.state;
 	}
-	override traced(span: TelemetrySpan): Ctx { return new JobSpanContext(this, span); }
+	override traced(span: TelemetrySpan): Ctx {
+		return new JobSpanContext(this, span);
+	}
 }

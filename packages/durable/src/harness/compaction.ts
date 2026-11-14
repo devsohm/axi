@@ -242,7 +242,11 @@ export async function createCompaction(
 	});
 	return taskId;
 }
-export function compactionPolicy(settings: Settings, model: ModelRef, conversation?: CompactionSettings): CompactionPolicy {
+export function compactionPolicy(
+	settings: Settings,
+	model: ModelRef,
+	conversation?: CompactionSettings,
+): CompactionPolicy {
 	const { modelOverrides, ...policy } = settings.compaction,
 		key = `${model.provider}/${model.modelId}`,
 		local = conversation?.modelOverrides?.[key];
@@ -419,6 +423,9 @@ async function failCutOff(runtime: Runtime, task: { readonly restarts?: number }
 	const message = `Compaction was interrupted ${cutOffCount(task)}`;
 	await runtime.commit(async (tx) => {
 		failCompactionStatus(await tx.doc(LiveDoc, runtime.conversationId), runtime.taskId, message);
-		return { status: "terminal", outcome: { status: "failed", error: { message, detail: { reason: "restart_limit" } } } };
+		return {
+			status: "terminal",
+			outcome: { status: "failed", error: { message, detail: { reason: "restart_limit" } } },
+		};
 	}, context);
 }

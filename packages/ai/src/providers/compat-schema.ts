@@ -115,7 +115,12 @@ export const AnthropicAllowedFallbackModelSchema = Type.Object(
 const kwargs = (description: string) =>
 	Type.Optional(Type.Record(Type.String(), ChatTemplateKwargValueSchema, { description }));
 const affinity = (description: string) => Type.Optional(Type.Union(SessionAffinityFormatSchema.anyOf, { description }));
-const cacheKeyMode = () => Type.Optional(Type.Union([Type.Literal("auto"), Type.Literal("enabled"), Type.Literal("disabled")], { description: "Select automatic endpoint detection, enable prompt cache keys, or omit them." }));
+const cacheKeyMode = () =>
+	Type.Optional(
+		Type.Union([Type.Literal("auto"), Type.Literal("enabled"), Type.Literal("disabled")], {
+			description: "Select automatic endpoint detection, enable prompt cache keys, or omit them.",
+		}),
+	);
 export const OpenAICompletionsCompatSchema = Type.Object(
 	{
 		supportsStore: bool("Send the store field when supported; otherwise detect support from the URL."),

@@ -24,7 +24,11 @@ export function cookie(name: string, value: string, options: CookieOptions): str
 export function readCookie(request: HttpRequest, name: string, secret: string): string | undefined {
 	return readSignedCookie(request, name, secret)?.value;
 }
-export function readSignedCookie(request: HttpRequest, name: string, secret: string): { readonly value: string; readonly expires: number | undefined } | undefined {
+export function readSignedCookie(
+	request: HttpRequest,
+	name: string,
+	secret: string,
+): { readonly value: string; readonly expires: number | undefined } | undefined {
 	for (const field of (request.headers.get("cookie") ?? "").split(";")) {
 		const equals = field.indexOf("=");
 		if (equals < 0 || field.slice(0, equals).trim() !== name) continue;

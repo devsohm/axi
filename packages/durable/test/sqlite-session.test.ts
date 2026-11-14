@@ -30,25 +30,38 @@ describe("SQLite-backed Session", () => {
 	it("close drains an admitted history read and rejects subsequent reads", async () => {
 		const database = await openNodeSqliteDatabase(":memory:");
 		const storage = await SqliteStorage.open(database);
-		const reading = Promise.withResolvers<void>(), release = Promise.withResolvers<void>();
-		const all = database.all.bind(database), close = vi.spyOn(database, "close");
+		const reading = Promise.withResolvers<void>(),
+			release = Promise.withResolvers<void>();
+		const all = database.all.bind(database),
+			close = vi.spyOn(database, "close");
 		try {
-			await commitWrites(storage, [
-				{ type: "conversation", value: { id: ROOT_CONVERSATION_ID } },
-				{ type: "entry", value: { id: idFromNumber<EntryId>(2), conversationId: ROOT_CONVERSATION_ID, kind: "saved" } },
-			], context);
-			vi.spyOn(database, "all").mockImplementation(async <Value extends object>(sql: string, ...params: SqliteValue[]) => {
-				if (/FROM entries\b/.test(sql)) {
-					reading.resolve();
-					await release.promise;
-				}
-				return all<Value>(sql, ...params);
-			});
+			await commitWrites(
+				storage,
+				[
+					{ type: "conversation", value: { id: ROOT_CONVERSATION_ID } },
+					{
+						type: "entry",
+						value: { id: idFromNumber<EntryId>(2), conversationId: ROOT_CONVERSATION_ID, kind: "saved" },
+					},
+				],
+				context,
+			);
+			vi.spyOn(database, "all").mockImplementation(
+				async <Value extends object>(sql: string, ...params: SqliteValue[]) => {
+					if (/FROM entries\b/.test(sql)) {
+						reading.resolve();
+						await release.promise;
+					}
+					return all<Value>(sql, ...params);
+				},
+			);
 			const page = storage.scanEntries({ conversationId: ROOT_CONVERSATION_ID }, 10, undefined, context);
 			await reading.promise;
 			const closing = storage.close(context);
 			expect(close).not.toHaveBeenCalled();
-			await expect(storage.scanEntries({ conversationId: ROOT_CONVERSATION_ID }, 10, undefined, context)).rejects.toThrow("SqliteStorage is closed");
+			await expect(
+				storage.scanEntries({ conversationId: ROOT_CONVERSATION_ID }, 10, undefined, context),
+			).rejects.toThrow("SqliteStorage is closed");
 			release.resolve();
 			expect((await page).items.map((entry) => entry.kind)).toEqual(["saved"]);
 			await closing;

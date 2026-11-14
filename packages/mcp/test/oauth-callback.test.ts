@@ -45,7 +45,9 @@ test("closing a completed login also closes an unused browser connection", async
 		await (await fetch(server.redirectUrl + "?state=browser&code=accepted")).text();
 		expect((await result).code).toBe("accepted");
 		closing = server.close();
-		const deadline = new Promise<boolean>(resolve => { timer = setTimeout(() => resolve(false), 300); });
+		const deadline = new Promise<boolean>((resolve) => {
+			timer = setTimeout(() => resolve(false), 300);
+		});
 		expect(await Promise.race([closing.then(() => true), deadline])).toBe(true);
 	} finally {
 		clearTimeout(timer);

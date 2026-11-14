@@ -97,8 +97,7 @@ export function remote<
 	const variants = entriesOf(declaration.variants, `${name}.variants`);
 	if (!variants.length) throw new Error(`${name}.variants: at least one variant is required`);
 	const address = declaration.hostAddress;
-	if (typeof address !== "function")
-		throw new Error(`${name}.hostAddress: expected a function of the params`);
+	if (typeof address !== "function") throw new Error(`${name}.hostAddress: expected a function of the params`);
 	const read = new Map(
 		variants.map(([variant, value]) => {
 			const path = `${name}.${variant}`;
@@ -114,10 +113,12 @@ export function remote<
 					return [member, snapshotSchema(schema, `${path}.state.${member}`)];
 				}),
 			);
-			const methodData = new Map(entriesOf(methods, `${path}.methods`).map(([member, method]) => {
-			if (!(method instanceof Method)) throw new Error(`${path}.methods.${member}: expected method(...)`);
-			return [member, readMethod(method, `${path}.methods.${member}`)];
-		}));
+			const methodData = new Map(
+				entriesOf(methods, `${path}.methods`).map(([member, method]) => {
+					if (!(method instanceof Method)) throw new Error(`${path}.methods.${member}: expected method(...)`);
+					return [member, readMethod(method, `${path}.methods.${member}`)];
+				}),
+			);
 			const eventData = new Map(
 				entriesOf(events, `${path}.events`).map(([member, schema]) => {
 					const at = `${path}.events.${member}`;
@@ -160,13 +161,27 @@ export function local<
 	}
 	return declare("local", name, declaration, new Map([[LOCAL, variant]]));
 }
-function declare<C extends Contract>(kind: Kind, name: string, declaration: { readonly version: number; readonly params: unknown }, variants: ReadonlyMap<string, VariantData>, hostAddress?: HostAddress): C {
+function declare<C extends Contract>(
+	kind: Kind,
+	name: string,
+	declaration: { readonly version: number; readonly params: unknown },
+	variants: ReadonlyMap<string, VariantData>,
+	hostAddress?: HostAddress,
+): C {
 	const selectedVersion = declaration.version;
-	if (!Number.isSafeInteger(selectedVersion) || selectedVersion < 1) throw new Error(`${name}.version: expected a positive integer`);
+	if (!Number.isSafeInteger(selectedVersion) || selectedVersion < 1)
+		throw new Error(`${name}.version: expected a positive integer`);
 	const kinds = new Map<string, MemberKind>();
 	checkMembers(variants, kinds, (variant, member, type) => memberPath(name, kind, variant, member, type));
 	const params = readParams(entriesOf(declaration.params, `${name}.params`), `${name}.params`);
-	return createContract({ kind, name, params, hostAddress, kinds, versions: [materialize(kind, params, selectedVersion, variants, [])] });
+	return createContract({
+		kind,
+		name,
+		params,
+		hostAddress,
+		kinds,
+		versions: [materialize(kind, params, selectedVersion, variants, [])],
+	});
 }
 export function keyedSnapshot(schema: unknown, key: KindShape | undefined, path: string): KeyedSnapshot {
 	const snapshot = snapshotSchema(schema, path);
@@ -180,7 +195,10 @@ export function eventSnapshot(schema: unknown, path: string): Snapshot {
 	return value;
 }
 export function readMethod(method: Method, path: string): MethodData {
-	return { args: snapshotArguments(method.args, `${path}.args`), result: snapshotSchema(method.result, `${path}.result`) };
+	return {
+		args: snapshotArguments(method.args, `${path}.args`),
+		result: snapshotSchema(method.result, `${path}.result`),
+	};
 }
 export function checkMembers(
 	variants: ReadonlyMap<string, VariantData>,
@@ -217,7 +235,8 @@ export function memberPath(base: string, kind: Kind, variant: string, member: st
 		: `${base}.${variant}.${memberKind === "event" ? "events" : memberKind === "method" ? "methods" : "state"}.${member}`;
 }
 export function checkKeys(source: unknown, allowed: readonly string[], path: string): void {
-	for (const [key] of entriesOf(source, path)) if (!allowed.includes(key)) throw new Error(`${path}: unknown key "${key}"`);
+	for (const [key] of entriesOf(source, path))
+		if (!allowed.includes(key)) throw new Error(`${path}: unknown key "${key}"`);
 }
 export function entriesOf(source: unknown, path: string): [string, unknown][] {
 	if (!source || typeof source !== "object" || Array.isArray(source)) throw new Error(`${path}: expected an object`);

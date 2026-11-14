@@ -9,16 +9,25 @@ import type { Snapshot } from "./snapshot.ts";
 
 export type Kind = "remote" | "local";
 export const LOCAL = "members";
-export type ContractShape = { readonly kind: Kind; readonly name: string; readonly params: Params; readonly history: History };
+export type ContractShape = {
+	readonly kind: Kind;
+	readonly name: string;
+	readonly params: Params;
+	readonly history: History;
+};
 export interface Contract<S extends ContractShape = ContractShape> {
-	readonly kind: S["kind"]; readonly name: S["name"]; readonly version: number;
-	readonly fingerprint: string; readonly "~shape"?: S;
+	readonly kind: S["kind"];
+	readonly name: S["name"];
+	readonly version: number;
+	readonly fingerprint: string;
+	readonly "~shape"?: S;
 }
 export type ShapeOf<C extends Contract> = NonNullable<C["~shape"]>;
 export type CurrentVariants<C extends Contract> = CurrentStep<ShapeOf<C>["history"]>["variants"];
 export type ParamsOf<C extends Contract> = { [F in keyof ShapeOf<C>["params"]]: Static<ShapeOf<C>["params"][F]> };
 type Call<M extends Method, X extends Context> = M["args"] extends TNull
-	? (context: X) => Promise<Static<M["result"]>> : (args: Static<M["args"]>, context: X) => Promise<Static<M["result"]>>;
+	? (context: X) => Promise<Static<M["result"]>>
+	: (args: Static<M["args"]>, context: X) => Promise<Static<M["result"]>>;
 export interface KeyedWatchable<T, Key = string> {
 	get(key: Key, context: Context): Promise<T | undefined>;
 	watch(key: Key, context: Context): Promise<WatchHandle<T> | undefined>;
@@ -55,8 +64,13 @@ export type VariantImplementation<V extends VariantShape, X extends Context = Co
 					: never;
 };
 type Implement<K extends Kind, V extends Variants, X extends Context> = K extends "local"
-	? VariantImplementation<V[typeof LOCAL], X> : { [N in keyof V]: { readonly variant: N; readonly members: VariantImplementation<V[N], X> } }[keyof V];
-export type Implementation<C extends Contract, X extends Context = Context> = Implement<ShapeOf<C>["kind"], CurrentVariants<C>, X>;
+	? VariantImplementation<V[typeof LOCAL], X>
+	: { [N in keyof V]: { readonly variant: N; readonly members: VariantImplementation<V[N], X> } }[keyof V];
+export type Implementation<C extends Contract, X extends Context = Context> = Implement<
+	ShapeOf<C>["kind"],
+	CurrentVariants<C>,
+	X
+>;
 export type MemberKind = "state" | "method" | "keyed" | "event";
 export type HostAddress = (params: ParamsOf<Contract>) => Address;
 export type MethodData = { readonly args: Snapshot; readonly result: Snapshot };
@@ -84,7 +98,12 @@ export type ContractData = {
 const declarations = new WeakMap<Contract, ContractData>();
 export function createContract<C extends Contract>(data: ContractData): C {
 	const latest = data.versions.at(-1)!;
-	const contract: Contract = { kind: data.kind, name: data.name, version: latest.version, fingerprint: latest.fingerprint };
+	const contract: Contract = {
+		kind: data.kind,
+		name: data.name,
+		version: latest.version,
+		fingerprint: latest.fingerprint,
+	};
 	declarations.set(contract, data);
 	return contract as C;
 }
@@ -95,13 +114,23 @@ export function contractData(contract: Contract): ContractData {
 }
 export function takesNoArgs(method: MethodData): boolean {
 	const node = method.args.normal;
-	return node !== null && typeof node === "object" && !Array.isArray(node) && node.type === "null" && Object.keys(node).length === 1;
+	return (
+		node !== null &&
+		typeof node === "object" &&
+		!Array.isArray(node) &&
+		node.type === "null" &&
+		Object.keys(node).length === 1
+	);
 }
-export function currentVariants(contract: Contract): ReadonlyMap<string, VariantData> { return contractData(contract).versions.at(-1)!.variants; }
+export function currentVariants(contract: Contract): ReadonlyMap<string, VariantData> {
+	return contractData(contract).versions.at(-1)!.variants;
+}
 export function variantsAt(contract: Contract, version: number): ReadonlyMap<string, VariantData> {
-	return contractData(contract).versions.find(item => item.version === version)!.variants;
+	return contractData(contract).versions.find((item) => item.version === version)!.variants;
 }
-export function variantOrder(contract: Contract): readonly string[] { return [...currentVariants(contract).keys()].sort(); }
+export function variantOrder(contract: Contract): readonly string[] {
+	return [...currentVariants(contract).keys()].sort();
+}
 export type VariantNames = {
 	readonly state: readonly string[];
 	readonly methods: readonly string[];

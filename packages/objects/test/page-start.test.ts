@@ -100,7 +100,10 @@ it.each([
 			connect: () => new WebSocket(`ws://127.0.0.1:${address.port}`),
 			modules: {},
 			telemetry,
-			get themes() { themeReads++; return themes; },
+			get themes() {
+				themeReads++;
+				return themes;
+			},
 			follow,
 			render,
 			canRetry,
@@ -125,7 +128,11 @@ it.each([
 			await vi.waitFor(() => expect(states).toContain("connected"));
 			expect(render).toHaveBeenCalledExactlyOnceWith(client.host);
 			expect(themeReads).toBe(1);
-			expect([element.lang, element.dir, element.style.colorScheme]).toEqual(["en", "ltr", themes === false ? "" : "dark"]);
+			expect([element.lang, element.dir, element.style.colorScheme]).toEqual([
+				"en",
+				"ltr",
+				themes === false ? "" : "dark",
+			]);
 			expect(removed).toHaveBeenCalledWith("load", watching, true);
 			expect(removed).toHaveBeenCalledWith("error", watching, true);
 			expect(intervals).toHaveLength(telemetry ? 1 : 0);
@@ -143,7 +150,8 @@ it.each([
 			for (const socket of sockets.clients) socket.close();
 			await vi.waitFor(() => expect(follow === false ? canRetry : fetchBase).toHaveBeenCalledOnce());
 			if (follow === false) expect(fetchBase).not.toHaveBeenCalled();
-			else expect(fetchBase).toHaveBeenCalledWith("/_objects/web/base", { cache: "no-store", credentials: "same-origin" });
+			else
+				expect(fetchBase).toHaveBeenCalledWith("/_objects/web/base", { cache: "no-store", credentials: "same-origin" });
 			expect(states).toEqual(["connecting", "connected", "waiting"]);
 			if (telemetry) {
 				expect(reload).toHaveBeenCalledOnce();

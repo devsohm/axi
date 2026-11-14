@@ -360,9 +360,19 @@ export class ProviderSide {
 		const old = message.old === true && this.link.trusted;
 		if (old) this.link.host.oldWork.open();
 		const scope = old ? asRemoteOldWork(this.link.context) : this.link.context;
-		const work = this.#run(message.call, running, method.name, args, parentOf(message.trace, this.link.host.telemetry), scope);
+		const work = this.#run(
+			message.call,
+			running,
+			method.name,
+			args,
+			parentOf(message.trace, this.link.host.telemetry),
+			scope,
+		);
 		if (old)
-			void work.then(() => this.link.host.oldWork.close(), () => this.link.host.oldWork.close());
+			void work.then(
+				() => this.link.host.oldWork.close(),
+				() => this.link.host.oldWork.close(),
+			);
 	}
 	async #run(
 		id: number,
@@ -374,12 +384,7 @@ export class ProviderSide {
 	): Promise<void> {
 		let reply: Reply;
 		try {
-			const result = await running.hold.call(
-				method,
-				args,
-				withAbortSignal(running.abort.signal, scope),
-				parent,
-			);
+			const result = await running.hold.call(method, args, withAbortSignal(running.abort.signal, scope), parent);
 			if (result == null) reply = { kind: "result", call: id };
 			else {
 				const payload = payloadPart(result, running.bytes);
@@ -476,7 +481,7 @@ export class ProviderSide {
 		this.#pending.clear();
 		this.#waited();
 		this.#preferBinding = this.#bindings.size > 0;
-		this.#sendState({ kind: "state", holds: holds.map(hold => hold.pendingEntry(this.link.context)) });
+		this.#sendState({ kind: "state", holds: holds.map((hold) => hold.pendingEntry(this.link.context)) });
 	}
 	#sendState(message: Extract<OriginMessage, { kind: "bound" | "state" }>): void {
 		this.#ownSent++;

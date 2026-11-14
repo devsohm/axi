@@ -22,26 +22,42 @@ export class RegistryContribution implements Dependent {
 		this.version = version;
 		this.#content = content;
 	}
-	invalidate(): void { this.record.contributionChanged() }
+	invalidate(): void {
+		this.record.contributionChanged();
+	}
 	sourceRetired(): void {}
-	follow(): void { this.#source()?.dependents.add(this) }
-	unfollow(): void { this.#source()?.dependents.delete(this) }
+	follow(): void {
+		this.#source()?.dependents.add(this);
+	}
+	unfollow(): void {
+		this.#source()?.dependents.delete(this);
+	}
 	entry(version: number, provider: RegistryProvider<unknown, unknown>): RegistryEntry<unknown> | undefined {
 		const adapt = this.version < version ? provider.accepts?.[this.version]?.contribution : undefined;
-		if (this.version > version || this.version < version && !adapt) {
+		if (this.version > version || (this.version < version && !adapt)) {
 			if (this.#excluded !== "refused") {
 				this.#excluded = "refused";
-				this.record.reportContribution({ kind: "contribution_refused", registry: this.record.name,
-					...this.#identity(), version: this.version });
+				this.record.reportContribution({
+					kind: "contribution_refused",
+					registry: this.record.name,
+					...this.#identity(),
+					version: this.version,
+				});
 			}
 			return undefined;
 		}
 		let value: unknown;
 		try {
 			const content = this.#content;
-			const raw = content.kind === "plain" ? content.value : content.kind === "json" ? content.source.value : content.source.current();
+			const raw =
+				content.kind === "plain"
+					? content.value
+					: content.kind === "json"
+						? content.source.value
+						: content.source.current();
 			if (!adapt) value = raw;
-			else if (this.#adapted && this.#adapted.from === raw && this.#adapted.adapter === adapt) value = this.#adapted.value;
+			else if (this.#adapted && this.#adapted.from === raw && this.#adapted.adapter === adapt)
+				value = this.#adapted.value;
 			else {
 				value = this.record.adapt(() => adapt(raw as never));
 				this.#adapted = { from: raw, adapter: adapt, value };
@@ -49,8 +65,12 @@ export class RegistryContribution implements Dependent {
 		} catch (error) {
 			if (this.#excluded !== "failed") {
 				this.#excluded = "failed";
-				this.record.reportContribution({ kind: "contribution_failed", registry: this.record.name,
-					...this.#identity(), error: handedOut(error) });
+				this.record.reportContribution({
+					kind: "contribution_failed",
+					registry: this.record.name,
+					...this.#identity(),
+					error: handedOut(error),
+				});
 			}
 			return undefined;
 		}
@@ -61,7 +81,11 @@ export class RegistryContribution implements Dependent {
 	}
 	#source(): Source | NativeSource | undefined {
 		const content = this.#content;
-		return content.kind === "native" ? content.source : content.kind === "json" && content.source instanceof Source ? content.source : undefined;
+		return content.kind === "native"
+			? content.source
+			: content.kind === "json" && content.source instanceof Source
+				? content.source
+				: undefined;
 	}
 	#identity(): { plugin: string; type?: string } {
 		const { plugin, type } = this.contributor;

@@ -6,5 +6,10 @@
 		"resolveJsonModule": true,
 		"allowImportingTsExtensions": true
 	},
-	"include": ["packages/*/src/**/*.ts", "packages/*/test/**/*.ts", "packages/ai/catalog/**/*.ts", "packages/ai/scripts/**/*.ts"]
+	"include": [
+		"packages/*/src/**/*.ts",
+		"packages/*/test/**/*.ts",
+		"packages/ai/catalog/**/*.ts",
+		"packages/ai/scripts/**/*.ts"
+	]
 }

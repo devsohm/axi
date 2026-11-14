@@ -116,7 +116,8 @@ test.each(["wrong-app", "wrong-format"] as const)(
 				api: "v1",
 				address: { kind: source.kind, key: source.key },
 			};
-			const server = join(directory, "server.jsonl"), chunks: Uint8Array[] = [];
+			const server = join(directory, "server.jsonl"),
+				chunks: Uint8Array[] = [];
 			for await (const chunk of encodeJsonl(app.host.exportHostData(source, context))) chunks.push(chunk);
 			await writeFile(server, Buffer.concat(chunks));
 			await packData(data, manifest, server, archive, context);

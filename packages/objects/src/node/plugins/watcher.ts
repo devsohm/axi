@@ -52,7 +52,11 @@ export class PluginWatcher extends Source {
 		this.#options = options;
 		this.#roots = options.roots.map(realDirectory);
 		for (const directory of this.#roots) this.#tree(directory);
-		this.#base = new BaseWatcher(options.base, () => this.#notify(), error => this.#failure(error));
+		this.#base = new BaseWatcher(
+			options.base,
+			() => this.#notify(),
+			(error) => this.#failure(error),
+		);
 		if (this.#unavailable) this.#base.close();
 	}
 	get value(): JsonValue {
@@ -201,7 +205,8 @@ export class PluginWatcher extends Source {
 				directory = lstatSync(path, { throwIfNoEntry: false })?.isDirectory() === true;
 			} catch {}
 			if (directory) {
-				if (this.#directories.has(path) && directoryIdentity(path) !== this.#identities.get(path)) this.#removeWatches(path);
+				if (this.#directories.has(path) && directoryIdentity(path) !== this.#identities.get(path))
+					this.#removeWatches(path);
 				this.#scan(path);
 			} else if (this.#directories.has(path)) this.#removeWatches(path);
 		}

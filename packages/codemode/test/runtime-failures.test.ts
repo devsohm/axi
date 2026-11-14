@@ -184,22 +184,31 @@ test("successful completion survives a channel shutdown rejection", async () => 
 		setImmediate(() => events.message({ type: "done", ok: true, value: "42", writes: "[]" }));
 		return {
 			post() {},
-			async stop() { throw new Error("transport already disconnected") },
+			async stop() {
+				throw new Error("transport already disconnected");
+			},
 		};
 	});
 	try {
 		expect(await sandbox.execute("return 42;")).toMatchObject({ ok: true, value: 42 });
-	} finally { await sandbox.close() }
+	} finally {
+		await sandbox.close();
+	}
 });
 
 test("remote startup failure is reported and settles the service", async () => {
 	const messages: CodemodeRemoteMessage[] = [];
 	await serveCodemodeRemote(
 		{ data: { code: "return 42;", tools: [], globals: [], memoryLimitBytes: undefined, store: {} } },
-		async (batch) => { messages.push(...batch); return null },
+		async (batch) => {
+			messages.push(...batch);
+			return null;
+		},
 		{ wasm: Promise.reject(new Error("module download failed")) },
 	);
-	expect(messages).toEqual([{ type: "failure", error: { kind: "sandbox", message: "Failed to load QuickJS: module download failed" } }]);
+	expect(messages).toEqual([
+		{ type: "failure", error: { kind: "sandbox", message: "Failed to load QuickJS: module download failed" } },
+	]);
 });
 
 test("the remote service caps computation and releases the runtime when exchange fails", async () => {

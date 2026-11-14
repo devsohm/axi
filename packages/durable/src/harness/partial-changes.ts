@@ -25,7 +25,12 @@ export class PartialChanges {
 			if (prior?.kind === kind) prior.text += event.delta;
 			else this.#blocks.set(event.contentIndex, { kind, text: event.delta });
 		} else if (event.type === "toolcall_start") {
-			this.#blocks.set(event.contentIndex, { kind: "tool", parser: new StreamingJsonParser(), changes: [], applied: false });
+			this.#blocks.set(event.contentIndex, {
+				kind: "tool",
+				parser: new StreamingJsonParser(),
+				changes: [],
+				applied: false,
+			});
 		} else if (event.type === "toolcall_delta") {
 			const block = this.#blocks.get(event.contentIndex);
 			if (block?.kind !== "tool") return;
@@ -83,7 +88,8 @@ export class PartialChanges {
 					continue;
 				}
 				let parent: Draft<JsonValue> = call.arguments;
-				for (let i = 0; i < change.path.length - 1; i++) parent = Reflect.get(parent as object, change.path[i]!) as Draft<JsonValue>;
+				for (let i = 0; i < change.path.length - 1; i++)
+					parent = Reflect.get(parent as object, change.path[i]!) as Draft<JsonValue>;
 				const key = change.path.at(-1)!;
 				if (change.kind === "set") Reflect.set(parent as object, key, change.value);
 				else if (Array.isArray(parent)) parent[Number(key)] = `${parent[Number(key)]}${change.text}`;

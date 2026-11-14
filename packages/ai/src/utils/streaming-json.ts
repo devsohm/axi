@@ -16,12 +16,33 @@ type Level = {
 	phase: "key" | "colon" | "value" | "next";
 	size: number;
 };
-type StringToken = { kind: "string"; key: boolean; text: string; escape: string; location: Location | undefined; path: JsonPath | undefined; change: Change | undefined };
+type StringToken = {
+	kind: "string";
+	key: boolean;
+	text: string;
+	escape: string;
+	location: Location | undefined;
+	path: JsonPath | undefined;
+	change: Change | undefined;
+};
 type Token = StringToken | { kind: "scalar"; text: string; location: Location | undefined };
-const ESCAPES: Readonly<Record<string, string>> = { '"': '"', "\\": "\\", "/": "/", b: "\b", f: "\f", n: "\n", r: "\r", t: "\t" };
+const ESCAPES: Readonly<Record<string, string>> = {
+	'"': '"',
+	"\\": "\\",
+	"/": "/",
+	b: "\b",
+	f: "\f",
+	n: "\n",
+	r: "\r",
+	t: "\t",
+};
 const NUMBER = /^-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?$/;
 const EXPONENT = /^(-?(?:0|[1-9]\d*)(?:\.\d+)?)[eE][+-]?$/;
-const LITERALS = [["true", true], ["false", false], ["null", null]] as const;
+const LITERALS = [
+	["true", true],
+	["false", false],
+	["null", null],
+] as const;
 const DELIMITERS = ' \t\n\r,:{}[]"';
 
 export class StreamingJsonParser {
@@ -45,7 +66,10 @@ export class StreamingJsonParser {
 				const token = this.#token;
 				const start = index;
 				while (index < text.length && !DELIMITERS.includes(text[index]!)) index++;
-				if (index > start) { token.text += text.slice(start, index); if (token.location !== undefined) this.#dirty = true; }
+				if (index > start) {
+					token.text += text.slice(start, index);
+					if (token.location !== undefined) this.#dirty = true;
+				}
 				if (index < text.length) {
 					this.#token = undefined;
 					const value = scalar(token.text, false);
@@ -63,12 +87,16 @@ export class StreamingJsonParser {
 	snapshot(): JsonValue | undefined {
 		if (!this.#dirty) return this.#snapshot;
 		const token = this.#token;
-		const pending = token?.kind === "scalar" && token.location !== undefined && token.text.length <= 64 ? scalar(token.text, true) : undefined;
+		const pending =
+			token?.kind === "scalar" && token.location !== undefined && token.text.length <= 64
+				? scalar(token.text, true)
+				: undefined;
 		const cost = this.#copyCost + (pending === undefined ? 0 : 1);
 		if (cost > this.#credit) return this.#snapshot;
 		this.#credit -= cost;
 		this.#dirty = false;
-		if (this.#levels.length === 0) this.#snapshot = pending !== undefined && token?.location?.kind === "root" ? pending : this.#root;
+		if (this.#levels.length === 0)
+			this.#snapshot = pending !== undefined && token?.location?.kind === "root" ? pending : this.#root;
 		else {
 			let child: JsonValue | undefined;
 			let location: Location | undefined;
@@ -88,7 +116,9 @@ export class StreamingJsonParser {
 		const parent = this.#levels.at(-1);
 		if (parent === undefined) return this.#root === undefined ? { kind: "root" } : undefined;
 		if (Array.isArray(parent.data)) return { kind: "item", key: parent.data.length };
-		return parent.key !== undefined && (parent.phase === "value" || parent.phase === "colon") ? { kind: "field", key: parent.key } : undefined;
+		return parent.key !== undefined && (parent.phase === "value" || parent.phase === "colon")
+			? { kind: "field", key: parent.key }
+			: undefined;
 	}
 	#path(location: Location | undefined): JsonPath | undefined {
 		if (location === undefined) return undefined;
@@ -98,16 +128,20 @@ export class StreamingJsonParser {
 	}
 	#readPunctuation(char: string): void {
 		const parent = this.#levels.at(-1);
-		if (' \t\n\r'.includes(char)) return;
+		if (" \t\n\r".includes(char)) return;
 		if (char === '"') {
-			const key = parent !== undefined && !Array.isArray(parent.data) && (parent.phase === "key" || parent.phase === "next");
+			const key =
+				parent !== undefined && !Array.isArray(parent.data) && (parent.phase === "key" || parent.phase === "next");
 			const location = key ? undefined : this.#location();
 			const path = key ? undefined : this.#path(location);
 			const token: StringToken = { kind: "string", key, text: "", escape: "", location, path, change: undefined };
 			this.#token = token;
 			if (!key) {
 				this.#put(location, "");
-				if (path !== undefined) { token.change = { kind: "set", path, value: "" }; this.#changes.push(token.change); }
+				if (path !== undefined) {
+					token.change = { kind: "set", path, value: "" };
+					this.#changes.push(token.change);
+				}
 			}
 		} else if (char === "{" || char === "[") {
 			const location = this.#location();
@@ -143,9 +177,15 @@ export class StreamingJsonParser {
 	#put(location: Location | undefined, value: JsonValue): void {
 		if (location === undefined) return;
 		this.#dirty = true;
-		if (location.kind === "root") { this.#root = value; return; }
+		if (location.kind === "root") {
+			this.#root = value;
+			return;
+		}
 		const parent = this.#levels.at(-1)!;
-		if (!Object.hasOwn(parent.data, location.key)) { parent.size++; this.#copyCost++; }
+		if (!Object.hasOwn(parent.data, location.key)) {
+			parent.size++;
+			this.#copyCost++;
+		}
 		put(parent.data, location, value);
 	}
 	#readString(token: StringToken, text: string, start: number): number {
@@ -156,25 +196,42 @@ export class StreamingJsonParser {
 				let decoded: string | undefined;
 				let consumed = true;
 				if (token.escape === "\\") {
-					if (Object.hasOwn(ESCAPES, char)) { decoded = ESCAPES[char]!; token.escape = ""; }
-					else if (char === "u") token.escape += char;
-					else { decoded = token.escape; token.escape = ""; consumed = false; }
+					if (Object.hasOwn(ESCAPES, char)) {
+						decoded = ESCAPES[char]!;
+						token.escape = "";
+					} else if (char === "u") token.escape += char;
+					else {
+						decoded = token.escape;
+						token.escape = "";
+						consumed = false;
+					}
 				} else if (/^[0-9a-f]$/i.test(char)) {
 					token.escape += char;
-					if (token.escape.length === 6) { decoded = String.fromCharCode(Number.parseInt(token.escape.slice(2), 16)); token.escape = ""; }
-				} else { decoded = token.escape; token.escape = ""; consumed = false; }
+					if (token.escape.length === 6) {
+						decoded = String.fromCharCode(Number.parseInt(token.escape.slice(2), 16));
+						token.escape = "";
+					}
+				} else {
+					decoded = token.escape;
+					token.escape = "";
+					consumed = false;
+				}
 				if (decoded !== undefined) this.#extendString(token, decoded);
 				run = consumed ? index + 1 : index;
 				if (consumed) continue;
 			}
 			if (char === '"' || char === "\\") {
 				if (index > run) this.#extendString(token, text.slice(run, index));
-				if (char === "\\") { token.escape = char; run = index + 1; }
-				else {
+				if (char === "\\") {
+					token.escape = char;
+					run = index + 1;
+				} else {
 					this.#token = undefined;
 					const parent = this.#levels.at(-1);
-					if (token.key && parent !== undefined) { parent.key = token.text; parent.phase = "colon"; }
-					else this.#completed();
+					if (token.key && parent !== undefined) {
+						parent.key = token.text;
+						parent.phase = "colon";
+					} else this.#completed();
 					return index + 1;
 				}
 			}
@@ -199,7 +256,10 @@ export class StreamingJsonParser {
 function scalar(text: string, partial: boolean): JsonValue | undefined {
 	for (const [literal, value] of LITERALS) if (partial ? literal.startsWith(text) : literal === text) return value;
 	if (NUMBER.test(text)) return Number(text);
-	if (partial) { const match = EXPONENT.exec(text); if (match !== null) return Number(match[1]); }
+	if (partial) {
+		const match = EXPONENT.exec(text);
+		if (match !== null) return Number(match[1]);
+	}
 	return undefined;
 }
 function put(container: Container, location: Location, value: JsonValue): void {
@@ -213,7 +273,9 @@ export class ToolCallArgumentsStream {
 	#parser = new StreamingJsonParser();
 	#last: JsonValue | undefined;
 	#arguments: ToolCall["arguments"] = {};
-	get text(): string { return this.#text; }
+	get text(): string {
+		return this.#text;
+	}
 	append(delta: string): ToolCall["arguments"] {
 		this.#text += delta;
 		this.#parser.append(delta);
@@ -228,12 +290,15 @@ export class ToolCallArgumentsStream {
 		this.#parser = new StreamingJsonParser();
 		return { delta: undefined, arguments: this.append(text) };
 	}
-	finish(): Pick<ToolCall, "arguments" | "argumentsError"> { return parseToolCallArguments(this.#text); }
+	finish(): Pick<ToolCall, "arguments" | "argumentsError"> {
+		return parseToolCallArguments(this.#text);
+	}
 	#partial(): ToolCall["arguments"] {
 		const value = this.#parser.snapshot();
 		if (value !== this.#last) {
 			this.#last = value;
-			this.#arguments = value !== null && typeof value === "object" && !Array.isArray(value) ? value as ToolCall["arguments"] : {};
+			this.#arguments =
+				value !== null && typeof value === "object" && !Array.isArray(value) ? (value as ToolCall["arguments"]) : {};
 		}
 		return this.#arguments;
 	}

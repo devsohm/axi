@@ -1,15 +1,5 @@
 import { expect, expectTypeOf, it } from "vitest";
-import {
-	bytes,
-	defineJob,
-	defineState,
-	int,
-	obj,
-	str,
-	type Ctx,
-	type JobCtx,
-	type RunState,
-} from "../src/index.ts";
+import { bytes, defineJob, defineState, int, obj, str, type Ctx, type JobCtx, type RunState } from "../src/index.ts";
 
 it("keeps the handler trace contract in a job context", () => {
 	type Principal = { readonly kind: "worker" };
@@ -46,9 +36,7 @@ it("snapshots job schemas and enforces the persistence requirements at declarati
 		description: "caller changed the schema",
 	});
 	expect(job.args.schema).toEqual(obj({ input: str() }));
-	expect(
-		Reflect.apply(job.accepts[1]!.args, undefined, [{ name: "target" }]),
-	).toEqual({ input: "target" });
+	expect(Reflect.apply(job.accepts[1]!.args, undefined, [{ name: "target" }])).toEqual({ input: "target" });
 	expect(() =>
 		defineJob("invalid", {
 			version: 1,

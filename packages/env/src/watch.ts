@@ -81,7 +81,9 @@ export class RemoteWatcher implements FileWatcher {
 								resolve();
 							} else if (event.kind === "change") {
 								if (event.mode === "polling") this.#mode = "polling";
-								this.#deliver(event.overflow === true ? overflowChange : { kind: "paths", paths: event.paths as string[] });
+								this.#deliver(
+									event.overflow === true ? overflowChange : { kind: "paths", paths: event.paths as string[] },
+								);
 							} else if (event.kind === "error") {
 								this.#deliver({
 									kind: "failed",

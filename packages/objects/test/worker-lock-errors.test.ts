@@ -25,7 +25,9 @@ it.each(["ECONNREFUSED", "ENOTSOCK"])("refuses a stale file lock after %s withou
 		return socket;
 	});
 	try {
-		await expect(lockAt({ kind: "file", address: "/missing/lock.sock" }, context)).rejects.toThrow("is a stale lock file");
+		await expect(lockAt({ kind: "file", address: "/missing/lock.sock" }, context)).rejects.toThrow(
+			"is a stale lock file",
+		);
 		expect(listen).toHaveBeenCalledTimes(1);
 	} finally {
 		vi.restoreAllMocks();

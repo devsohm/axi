@@ -46,7 +46,10 @@ async function fixture(backgroundTimers = false) {
 		return created;
 	};
 	const read = async (target: Conversation) => {
-		const id = await root.commit((tx) => tx.createTask(Read, target.id, { ownership: { kind: "conversation" } }), context);
+		const id = await root.commit(
+			(tx) => tx.createTask(Read, target.id, { ownership: { kind: "conversation" } }),
+			context,
+		);
 		await harness.waitForTask(id, context);
 	};
 	const state = (): unknown => Reflect.get(harness, SCHEDULER_IDLE_STATE);

@@ -81,19 +81,29 @@ it.each(["browser", "sandbox"] as const)("uses configured paths for a %s base an
 		"runtime/label.ts": 'export const label = "source-alias";',
 		"tsconfig.json": JSON.stringify({ compilerOptions: { paths: { "@app/runtime/*": ["./runtime/*.ts"] } } }),
 	});
-	const entry = join(root, "main.ts"), tsconfig = join(root, "tsconfig.json");
+	const entry = join(root, "main.ts"),
+		tsconfig = join(root, "tsconfig.json");
 	const base = await buildBase(entry, platform, "/base/", { tsconfig });
 	expect([...base.inputs.keys()].sort()).toEqual([entry, join(root, "runtime/label.ts")].sort());
 	expect(new TextDecoder().decode(base.files.get(base.script)!.bytes)).toContain('"source-alias"');
 	await expect(buildBase(entry, platform, "/base/", {})).rejects.toThrow('Could not resolve "@app/runtime/label"');
 	const host = createHost({ address: hostKind("server")(), principal: { kind: "server" }, onError() {} });
-	const plugins = createPlugins({ roots: [], kinds: {
-		web: { platform: "browser", hostPackages: [] }, tui: { platform: "node", hostPackages: [] },
-	}, onError() {} }, context);
+	const plugins = createPlugins(
+		{
+			roots: [],
+			kinds: {
+				web: { platform: "browser", hostPackages: [] },
+				tui: { platform: "node", hostPackages: [] },
+			},
+			onError() {},
+		},
+		context,
+	);
 	try {
-		const surface = platform === "browser"
-			? webSurface(host, { plugins, entry, tsconfig, routes: false })
-			: tuiSurface(host, { plugins, entry, tsconfig });
+		const surface =
+			platform === "browser"
+				? webSurface(host, { plugins, entry, tsconfig, routes: false })
+				: tuiSurface(host, { plugins, entry, tsconfig });
 		expect((await host.load([{ name: "view", facet: surface.facet }], context)).failed).toEqual([]);
 		expect(await surface.build()).toMatchObject({ kind: "built", inputs: base.inputs });
 	} finally {

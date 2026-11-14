@@ -54,14 +54,28 @@ it("calls an address callback without an internal receiver", async () => {
 	const Value = remote("callback.value", {
 		version: 1,
 		params: {},
-		hostAddress(this: unknown) { receivers.push(this); return Server(); },
+		hostAddress(this: unknown) {
+			receivers.push(this);
+			return Server();
+		},
 		variants: { value: { state: { value: int() } } },
 	});
 	const host = createHost({ address: Server(), principal: { kind: "service" }, onError() {} });
 	try {
-		await host.load([{ name: "value", facet: defineFacet((h) => h.serve(Value, () => ({
-			variant: "value", members: { value: constant(3) },
-		}))) }], context);
+		await host.load(
+			[
+				{
+					name: "value",
+					facet: defineFacet((h) =>
+						h.serve(Value, () => ({
+							variant: "value",
+							members: { value: constant(3) },
+						})),
+					),
+				},
+			],
+			context,
+		);
 		const value = await host.get(Value, {}, context);
 		value.release();
 		expect(receivers).toEqual([undefined]);
@@ -73,7 +87,9 @@ it("calls an address callback without an internal receiver", async () => {
 it("links a shared route and hold to their first trigger, and a joining getter to the open hold", async () => {
 	const Worker = hostKind("trace.worker");
 	const Value = remote("trace.value", {
-		version: 1, params: {}, hostAddress: () => Worker(),
+		version: 1,
+		params: {},
+		hostAddress: () => Worker(),
 		variants: { value: { state: { value: int() } } },
 	});
 	const telemetry = new InMemoryTelemetryContext();
@@ -83,9 +99,9 @@ it("links a shared route and hold to their first trigger, and a joining getter t
 	try {
 		await host.load([], context);
 		const first = await telemetry.startSpan({ name: "first" }, async (span) =>
-			host.hold(Value, {}, withTelemetry(span, context)));
-		await telemetry.startSpan({ name: "second" }, async (span) =>
-			host.hold(Value, {}, withTelemetry(span, context)));
+			host.hold(Value, {}, withTelemetry(span, context)),
+		);
+		await telemetry.startSpan({ name: "second" }, async (span) => host.hold(Value, {}, withTelemetry(span, context)));
 		pending.reject(new Error("worker unavailable"));
 		await vi.waitFor(() => expect(first.state.value.kind).toBe("failed"));
 		const spans = telemetry.getSpans();
@@ -94,11 +110,11 @@ it("links a shared route and hold to their first trigger, and a joining getter t
 		const waiting = spans.filter((span) => span.name === "objects.hold");
 		expect(waiting).toHaveLength(1);
 		expect(route.links[0]!.context).toEqual(waiting[0]!.context);
-		const firstGetter = spans.find(span => span.name === "first")!;
-		const secondGetter = spans.find(span => span.name === "second")!;
+		const firstGetter = spans.find((span) => span.name === "first")!;
+		const secondGetter = spans.find((span) => span.name === "second")!;
 		expect(waiting[0]!.parentId).toBeNull();
-		expect(waiting[0]!.links.map(link => link.context)).toEqual([firstGetter.context, route.context]);
-		expect(secondGetter.links.map(link => link.context)).toEqual([waiting[0]!.context]);
+		expect(waiting[0]!.links.map((link) => link.context)).toEqual([firstGetter.context, route.context]);
+		expect(secondGetter.links.map((link) => link.context)).toEqual([waiting[0]!.context]);
 	} finally {
 		pending.reject(new Error("test ended"));
 		await host.close(context);

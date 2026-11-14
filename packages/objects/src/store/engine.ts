@@ -116,11 +116,7 @@ export function createDocument(
 		},
 	};
 }
-export async function insertDocument(
-	step: Step,
-	record: DocumentRecord,
-	text: string | undefined,
-): Promise<void> {
+export async function insertDocument(step: Step, record: DocumentRecord, text: string | undefined): Promise<void> {
 	await step.run(
 		`INSERT INTO ${TABLES.documents} (id, owner, namespace, kind, key, history, created_at, retired_at, meta, host, revision, version, fingerprint) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		record.id,
@@ -137,17 +133,8 @@ export async function insertDocument(
 		record.version,
 		record.fingerprint,
 	);
-	if (text !== undefined)
-		await insertRevision(
-			step,
-			record.id,
-			record.createdAt,
-			"base",
-			record.version,
-			text,
-		);
-	if (record.retiredAt !== undefined)
-		await dropRetired(step, record.id, record.history);
+	if (text !== undefined) await insertRevision(step, record.id, record.createdAt, "base", record.version, text);
+	if (record.retiredAt !== undefined) await dropRetired(step, record.id, record.history);
 }
 export function insertRevision(
 	step: Step,
@@ -166,12 +153,7 @@ export function insertRevision(
 		text,
 	);
 }
-export function changeDocument(
-	id: number,
-	revision: number,
-	content: DocumentContent,
-	text: string,
-): StagedWrite {
+export function changeDocument(id: number, revision: number, content: DocumentContent, text: string): StagedWrite {
 	return {
 		order: "write",
 		async apply(step) {
@@ -188,8 +170,7 @@ export async function writeContent(
 	content: DocumentContent,
 	text: string,
 ): Promise<void> {
-	if (revision >= Number.MAX_SAFE_INTEGER)
-		throw new Error(`document ${id}: no revision past the safe range`);
+	if (revision >= Number.MAX_SAFE_INTEGER) throw new Error(`document ${id}: no revision past the safe range`);
 	await insertRevision(step, id, step.seq, content.kind, content.version, text);
 	let changes: number;
 	if (content.kind === "base")
@@ -207,14 +188,9 @@ export async function writeContent(
 			revision,
 			content.version,
 		);
-	if (changes !== 1)
-		throw new Error(`document ${id}: not live at revision ${revision}`);
+	if (changes !== 1) throw new Error(`document ${id}: not live at revision ${revision}`);
 	if (content.kind === "base" && history !== "rewindable")
-		await step.run(
-			`DELETE FROM ${TABLES.revisions} WHERE document_id = ? AND seq < ?`,
-			id,
-			step.seq,
-		);
+		await step.run(`DELETE FROM ${TABLES.revisions} WHERE document_id = ? AND seq < ?`, id, step.seq);
 }
 export function retireDocument(id: number, revision: number): StagedWrite {
 	return {
@@ -225,37 +201,21 @@ export function retireDocument(id: number, revision: number): StagedWrite {
 				id,
 				revision,
 			);
-			if (changes !== 1)
-				throw new Error(`document ${id}: not live at revision ${revision}`);
-			await step.run(
-				`DELETE FROM ${TABLES.revisions} WHERE document_id = ?`,
-				id,
-			);
+			if (changes !== 1) throw new Error(`document ${id}: not live at revision ${revision}`);
+			await step.run(`DELETE FROM ${TABLES.revisions} WHERE document_id = ?`, id);
 			return [{ kind: "document.retire", id, revision }];
 		},
 	};
 }
-async function dropRetired(
-	step: Step,
-	id: number,
-	history: DocumentHistory,
-): Promise<void> {
+async function dropRetired(step: Step, id: number, history: DocumentHistory): Promise<void> {
 	if (history !== "rewindable") {
-		if (history === "none")
-			await step.run(`DELETE FROM ${TABLES.documents} WHERE id = ?`, id);
+		if (history === "none") await step.run(`DELETE FROM ${TABLES.documents} WHERE id = ?`, id);
 		await step.run(`DELETE FROM ${TABLES.revisions} WHERE document_id = ?`, id);
 	}
 }
-export async function retireRecord(
-	step: Step,
-	record: DocumentRecord,
-): Promise<void> {
+export async function retireRecord(step: Step, record: DocumentRecord): Promise<void> {
 	if (record.history !== "none")
-		await step.run(
-			`UPDATE ${TABLES.documents} SET retired_at = ? WHERE id = ?`,
-			step.seq,
-			record.id,
-		);
+		await step.run(`UPDATE ${TABLES.documents} SET retired_at = ? WHERE id = ?`, step.seq, record.id);
 	await dropRetired(step, record.id, record.history);
 }
 type RecordRow = Omit<DocumentRecord, "createdAt" | "retiredAt" | "meta" | "key" | "host"> & {
@@ -288,10 +248,7 @@ export async function readDocument(
 	executor: Pick<SqliteExecutor, "get">,
 	id: number,
 ): Promise<DocumentRecord | undefined> {
-	const row = await executor.get<RecordRow>(
-		`SELECT ${RECORD_COLUMNS} FROM ${TABLES.documents} WHERE id = ?`,
-		id,
-	);
+	const row = await executor.get<RecordRow>(`SELECT ${RECORD_COLUMNS} FROM ${TABLES.documents} WHERE id = ?`, id);
 	return row && recordOf(row);
 }
 function findQuery(columns: string, historical: boolean): string {
@@ -300,16 +257,9 @@ function findQuery(columns: string, historical: boolean): string {
 		: "retired_at IS NULL";
 	return `SELECT ${columns} FROM ${TABLES.documents} WHERE owner = ? AND namespace = ? AND kind = ? AND key = ? AND ${filter}`;
 }
-const findStatements = [
-	findQuery(RECORD_COLUMNS, false),
-	findQuery(RECORD_COLUMNS, true),
-];
-const entryStatements = [
-	findQuery("meta", false),
-	findQuery("meta, retired_at", true),
-];
-const atParams = (at: DocumentPoint): readonly number[] =>
-	at === "current" ? [] : [at, at];
+const findStatements = [findQuery(RECORD_COLUMNS, false), findQuery(RECORD_COLUMNS, true)];
+const entryStatements = [findQuery("meta", false), findQuery("meta, retired_at", true)];
+const atParams = (at: DocumentPoint): readonly number[] => (at === "current" ? [] : [at, at]);
 export async function findDocument(
 	executor: Pick<SqliteExecutor, "get">,
 	address: DocumentAddress,
@@ -366,8 +316,7 @@ export async function loadContent(
 	let value = JSON.parse(base.content) as JsonValue;
 	for (let i = 1; i < revisions.length; i++) {
 		const delta = revisions[i]!;
-		if (delta.version !== base.version)
-			throw new Error(`document ${id}: a delta crosses a version`);
+		if (delta.version !== base.version) throw new Error(`document ${id}: a delta crosses a version`);
 		value = apply(value, JSON.parse(delta.content) as Op[]);
 	}
 	return {
@@ -399,27 +348,16 @@ export async function listDocumentKeys(
 	);
 	return rows.map((row) => row.key);
 }
-function listQuery(
-	columns: string,
-	scopedKind: boolean,
-	historical: boolean,
-): string {
+function listQuery(columns: string, scopedKind: boolean, historical: boolean): string {
 	return `SELECT ${columns} FROM ${TABLES.documents} WHERE owner = ? AND namespace = ? AND id > ?${scopedKind ? " AND kind = ?" : ""} AND ${historical ? "created_at <= ? AND (retired_at IS NULL OR retired_at > ?)" : "retired_at IS NULL"} ORDER BY id LIMIT ?`;
 }
 const listStatements = [false, true].flatMap((history) =>
 	[false, true].map((kind) => listQuery(RECORD_COLUMNS, kind, history)),
 );
 const listEntries = [false, true].flatMap((history) =>
-	[false, true].map((kind) =>
-		listQuery(history ? "meta, retired_at" : "meta", kind, history),
-	),
+	[false, true].map((kind) => listQuery(history ? "meta, retired_at" : "meta", kind, history)),
 );
-function scanArgs(
-	scope: DocumentScope,
-	at: DocumentPoint,
-	after: number,
-	limit: number,
-): SqliteValue[] {
+function scanArgs(scope: DocumentScope, at: DocumentPoint, after: number, limit: number): SqliteValue[] {
 	return [
 		scope.owner,
 		scope.namespace,
@@ -440,10 +378,7 @@ export async function listDocuments(
 	limit: number,
 ): Promise<DocumentRecord[]> {
 	return (
-		await executor.all<RecordRow>(
-			listStatements[scanIndex(scope, at)]!,
-			...scanArgs(scope, at, after, limit),
-		)
+		await executor.all<RecordRow>(listStatements[scanIndex(scope, at)]!, ...scanArgs(scope, at, after, limit))
 	).map(recordOf);
 }
 export function listDocumentEntries(
@@ -453,16 +388,9 @@ export function listDocumentEntries(
 	after: number,
 	limit: number,
 ): Promise<DocumentEntry[]> {
-	return executor.all<DocumentEntry>(
-		listEntries[scanIndex(scope, at)]!,
-		...scanArgs(scope, at, after, limit),
-	);
+	return executor.all<DocumentEntry>(listEntries[scanIndex(scope, at)]!, ...scanArgs(scope, at, after, limit));
 }
-export async function listRecords(
-	executor: SqliteExecutor,
-	after: number,
-	limit: number,
-): Promise<DocumentRecord[]> {
+export async function listRecords(executor: SqliteExecutor, after: number, limit: number): Promise<DocumentRecord[]> {
 	return (
 		await executor.all<RecordRow>(
 			`SELECT ${RECORD_COLUMNS} FROM ${TABLES.documents} WHERE id > ? ORDER BY id LIMIT ?`,

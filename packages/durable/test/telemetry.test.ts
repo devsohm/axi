@@ -27,9 +27,11 @@ test("a span-only telemetry adapter can observe durable phases without metrics o
 		name: "span-only",
 		version: 1,
 		initial: () => ({ phase: "run" }),
-		phases: { async run(_record, runtime, ctx) {
-			await runtime.commit(() => ({ status: "terminal", outcome: { status: "completed", result: 42 } }), ctx);
-		} },
+		phases: {
+			async run(_record, runtime, ctx) {
+				await runtime.commit(() => ({ status: "terminal", outcome: { status: "completed", result: 42 } }), ctx);
+			},
+		},
 		async abort(_record, runtime, ctx) {
 			await runtime.commit(() => ({ status: "terminal", outcome: { status: "aborted" } }), ctx);
 		},

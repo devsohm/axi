@@ -116,7 +116,7 @@ test("cross-kind imports report the full chain and shared source remains usable"
 test("an extensionless shared source can have the name of another facet kind", async () => {
 	await using f = await fixture({
 		"server.ts": "import value from './web'; export default {setup(){return value;}}",
-		"web": "export default 7;",
+		web: "export default 7;",
 	});
 	expect(await buildFacet(f.plugin, "server", node, context)).toMatchObject({ kind: "script" });
 });

@@ -41,10 +41,7 @@ export type StoredFields = {
 	readonly outcome?: AnyOutcome;
 };
 
-export function storedRun(
-	run: JobRun,
-	fields: StoredFields = {},
-): StoredRun {
+export function storedRun(run: JobRun, fields: StoredFields = {}): StoredRun {
 	const state = {
 		phase: run.phase,
 		restarts: run.restarts,
@@ -65,21 +62,15 @@ export function storedRun(
 		finishFailures: state.finishFailures,
 		...(state.abortMarked ? { abort: true as const } : {}),
 		...(state.blocked === undefined ? {} : { blocked: state.blocked }),
-		...(state.outcome === undefined
-			? {}
-			: { outcome: encodeOutcome(state.outcome) }),
+		...(state.outcome === undefined ? {} : { outcome: encodeOutcome(state.outcome) }),
 	};
 }
 function encodeOutcome(outcome: AnyOutcome): StoredOutcome {
-	if (outcome.kind === "done")
-		return { kind: "done", result: outcome.result as JsonValue };
+	if (outcome.kind === "done") return { kind: "done", result: outcome.result as JsonValue };
 	const error = outcome.error;
 	return {
 		kind: "failed",
-		error:
-			error.kind === "threw"
-				? { kind: "threw", error: wireError(error.error) }
-				: error,
+		error: error.kind === "threw" ? { kind: "threw", error: wireError(error.error) } : error,
 	};
 }
 export function outcomeOf(
@@ -88,12 +79,9 @@ export function outcomeOf(
 	args: JsonValue,
 	state: JsonValue | undefined,
 ): AnyOutcome {
-	if (stored.kind === "done")
-		return { kind: "done", id, args, state, result: stored.result };
+	if (stored.kind === "done") return { kind: "done", id, args, state, result: stored.result };
 	const error: JobError =
-		stored.error.kind === "threw"
-			? { kind: "threw", error: errorFromWire(stored.error.error) }
-			: stored.error;
+		stored.error.kind === "threw" ? { kind: "threw", error: errorFromWire(stored.error.error) } : stored.error;
 	return { kind: "failed", id, args, state, error };
 }
 export function recordOf(value: JsonObject): StoredRun {

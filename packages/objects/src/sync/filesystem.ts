@@ -17,7 +17,9 @@ const numberName = (value: number) => String(value).padStart(16, "0");
 const bodyOf = (value: unknown): SyncBody => {
 	// Capture metadata before filesystem waits let the caller change it.
 	const bytes = new TextEncoder().encode(JSON.stringify(value));
-	return (async function* () { yield bytes; })();
+	return (async function* () {
+		yield bytes;
+	})();
 };
 export function checkSessionId(sessionId: string): string {
 	if (sessionName.test(sessionId)) return sessionId;

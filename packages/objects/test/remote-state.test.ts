@@ -1,15 +1,6 @@
 import { expect, it } from "vitest";
 import { BACKGROUND_CONTEXT as context } from "../src/context/index.ts";
-import {
-	constant,
-	createHost,
-	defineFacet,
-	hostKind,
-	int,
-	memoryLinkPair,
-	method,
-	remote,
-} from "../src/index.ts";
+import { constant, createHost, defineFacet, hostKind, int, memoryLinkPair, method, remote } from "../src/index.ts";
 import { ObjectsError } from "../src/data/index.ts";
 import { CallWindow } from "../src/remote/calls.ts";
 import { Replica } from "../src/remote/replica.ts";

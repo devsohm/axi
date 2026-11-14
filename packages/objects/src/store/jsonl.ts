@@ -1,9 +1,7 @@
 import { invalid } from "../data/internal.ts";
 import type { ArchivePart } from "./archive.ts";
 
-export async function* encodeJsonl(
-	parts: AsyncIterable<ArchivePart>,
-): AsyncIterable<Uint8Array> {
+export async function* encodeJsonl(parts: AsyncIterable<ArchivePart>): AsyncIterable<Uint8Array> {
 	const encoder = new TextEncoder();
 	let buffer = "";
 	for await (const part of parts) {
@@ -15,17 +13,13 @@ export async function* encodeJsonl(
 	}
 	if (buffer) yield encoder.encode(buffer);
 }
-export async function* decodeJsonl(
-	bytes: AsyncIterable<Uint8Array>,
-): AsyncIterable<unknown> {
+export async function* decodeJsonl(bytes: AsyncIterable<Uint8Array>): AsyncIterable<unknown> {
 	const decoder = new TextDecoder("utf-8", { fatal: true });
 	let buffer = "",
 		number = 0;
 	const decode = (chunk?: Uint8Array): string => {
 		try {
-			return chunk === undefined
-				? decoder.decode()
-				: decoder.decode(chunk, { stream: true });
+			return chunk === undefined ? decoder.decode() : decoder.decode(chunk, { stream: true });
 		} catch {
 			throw invalid("args", `jsonl: line ${number + 1} is not UTF-8`);
 		}

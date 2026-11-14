@@ -1,36 +1,56 @@
 import { expect, it } from "vitest";
 import { BACKGROUND_CONTEXT as context } from "../src/context/index.ts";
-import {
-	evolve,
-	int,
-	keyed,
-	local,
-	method,
-	obj,
-	str,
-} from "../src/contracts/index.ts";
+import { evolve, int, keyed, local, method, obj, str } from "../src/contracts/index.ts";
 import { defineState } from "../src/documents/index.ts";
 import { createHost, defineFacet } from "../src/host/index.ts";
 import { constant } from "../src/state/index.ts";
 
 it("calls result mappings and removed-method replacements without a receiver", async () => {
-	const first = local("counter.receivers", { version: 1, params: {}, members: {
-		mapped: method(int(), int()), replaced: method(int(), int()),
-	} });
-	const current = evolve(first, (e) => e.method("mapped", obj({ n: int() }), obj({ n: int() })).removeMethod("replaced"));
+	const first = local("counter.receivers", {
+		version: 1,
+		params: {},
+		members: {
+			mapped: method(int(), int()),
+			replaced: method(int(), int()),
+		},
+	});
+	const current = evolve(first, (e) =>
+		e.method("mapped", obj({ n: int() }), obj({ n: int() })).removeMethod("replaced"),
+	);
 	const receivers: boolean[] = [];
 	const host = createHost({ onError() {} });
 	try {
-		await host.load([{ name: "counter", facet: defineFacet((h) => h.serve(current,
-			() => ({ mapped: async ({ n }) => ({ n: n + 1 }) }),
-			{ accepts: { 1: { methods: {
-				mapped: {
-					args: (n) => ({ n }),
-					result(this: unknown, value) { receivers.push(this === undefined); return value.n; },
+		await host.load(
+			[
+				{
+					name: "counter",
+					facet: defineFacet((h) =>
+						h.serve(current, () => ({ mapped: async ({ n }) => ({ n: n + 1 }) }), {
+							accepts: {
+								1: {
+									methods: {
+										mapped: {
+											args: (n) => ({ n }),
+											result(this: unknown, value) {
+												receivers.push(this === undefined);
+												return value.n;
+											},
+										},
+										replaced: {
+											async call(this: unknown, n) {
+												receivers.push(this === undefined);
+												return n + 2;
+											},
+										},
+									},
+								},
+							},
+						}),
+					),
 				},
-				replaced: { async call(this: unknown, n) { receivers.push(this === undefined); return n + 2; } },
-			} } } },
-		)) }], context);
+			],
+			context,
+		);
 		const ref = await host.get(first, {}, context);
 		expect(await ref.mapped(3, context)).toBe(4);
 		expect(await ref.replaced(3, context)).toBe(5);
@@ -143,9 +163,7 @@ it("reports a refused older member while continuing to serve the current contrac
 		params: {},
 		members: { value: int() },
 	});
-	const current = evolve(first, (e) =>
-		e.removeState("value").addState("total", int()),
-	);
+	const current = evolve(first, (e) => e.removeState("value").addState("total", int()));
 	const host = createHost({ onError: () => {} });
 	try {
 		await host.load(

@@ -1,11 +1,5 @@
 import { withoutAbortSignal, type Context } from "../context/index.ts";
-import {
-	track,
-	type Change,
-	type Draft,
-	type Prepared,
-	type Tracker,
-} from "../delta/index.ts";
+import { track, type Change, type Draft, type Prepared, type Tracker } from "../delta/index.ts";
 import { ObjectsError } from "../data/index.ts";
 import { asObjectsError } from "../data/internal.ts";
 import type { JobHandle, Outcome, Run, StartOptions } from "../jobs/index.ts";
@@ -18,28 +12,13 @@ import type { ObjectsStore } from "../store/store.ts";
 import type { KeyOf } from "../store/table.ts";
 import { TableChanges } from "../store/table-changes.ts";
 import { refreshOf } from "../store/live-query.ts";
-import {
-	TableHandle,
-	ROWS_PAGE,
-	type Page,
-	type PageOptions,
-	type Table,
-} from "../store/table-handle.ts";
+import { TableHandle, ROWS_PAGE, type Page, type PageOptions, type Table } from "../store/table-handle.ts";
 import type { CommitPersistence, JsonObject } from "./definition.ts";
 import type { Documents } from "./documents.ts";
 import type { SealToken } from "./fence.ts";
-import {
-	Keyed,
-	Singleton,
-	type KeyedHandle,
-	type SingletonHandle,
-} from "./handles.ts";
+import { Keyed, Singleton, type KeyedHandle, type SingletonHandle } from "./handles.ts";
 import type { KeyedSlot } from "./keyed-slot.ts";
-import {
-	checkReadable,
-	type Stored,
-	type StoredChange,
-} from "./persistence.ts";
+import { checkReadable, type Stored, type StoredChange } from "./persistence.ts";
 import type { DocumentSlot, SingletonSlot } from "./slot.ts";
 
 export interface Tx {
@@ -47,11 +26,7 @@ export interface Tx {
 	draft<T extends JsonObject, Key>(handle: KeyedHandle<T, Key>, key: NoInfer<Key>): Promise<Draft<T>>;
 	retire(handle: SingletonHandle<JsonObject>): Promise<void>;
 	retire<Key>(handle: KeyedHandle<JsonObject, Key>, key: NoInfer<Key>): Promise<void>;
-	start<A, R, S>(
-		job: JobHandle<A, R, S>,
-		args: A,
-		options?: StartOptions,
-	): Run<Outcome<A, R, S>>;
+	start<A, R, S>(job: JobHandle<A, R, S>, args: A, options?: StartOptions): Run<Outcome<A, R, S>>;
 	get<C extends Columns, K extends readonly string[]>(
 		table: Table<C, K>,
 		key: KeyOf<C, K>,
@@ -62,23 +37,14 @@ export interface Tx {
 		limit: number,
 		options?: PageOptions,
 	): Promise<Page<RowOf<C>>>;
-	rows<C extends Columns, K extends readonly string[]>(
-		table: Table<C, K>,
-		q: Query<C, K>,
-	): AsyncIterable<RowOf<C>>;
-	put<C extends Columns, K extends readonly string[]>(
-		table: Table<C, K>,
-		row: PutRowOf<C>,
-	): void;
+	rows<C extends Columns, K extends readonly string[]>(table: Table<C, K>, q: Query<C, K>): AsyncIterable<RowOf<C>>;
+	put<C extends Columns, K extends readonly string[]>(table: Table<C, K>, row: PutRowOf<C>): void;
 	update<C extends Columns, K extends readonly string[]>(
 		table: Table<C, K>,
 		key: KeyOf<C, K>,
 		set: SetOf<C, K> | ((row: ColumnRefs<C>) => SetOf<C, K>),
 	): void;
-	delete<C extends Columns, K extends readonly string[]>(
-		table: Table<C, K>,
-		key: KeyOf<C, K>,
-	): void;
+	delete<C extends Columns, K extends readonly string[]>(table: Table<C, K>, key: KeyOf<C, K>): void;
 	updateWhere<C extends Columns, K extends readonly string[]>(
 		table: Table<C, K>,
 		where: (row: ColumnRefs<C>) => Condition,
@@ -118,12 +84,7 @@ type Adoption = {
 		| undefined;
 };
 type StagingJob<A, R, S> = {
-	stage(
-		tx: Transaction,
-		args: A,
-		context: Context,
-		options: StartOptions,
-	): Run<Outcome<A, R, S>>;
+	stage(tx: Transaction, args: A, context: Context, options: StartOptions): Run<Outcome<A, R, S>>;
 };
 
 export class Transaction implements Tx {
@@ -134,20 +95,12 @@ export class Transaction implements Tx {
 	readonly #persistence: CommitPersistence;
 	readonly #entries = new Map<DocumentSlot, Map<string, Entry>>();
 	#staged: Map<object, Staged> | undefined;
-	#writes:
-		| { readonly store: ObjectsStore; readonly staged: StagedWrite[] }
-		| undefined;
+	#writes: { readonly store: ObjectsStore; readonly staged: StagedWrite[] } | undefined;
 	#tables: Map<TableHandle, TableChanges> | undefined;
 	#pending = 0;
 	#adoptions: readonly Adoption[] = [];
 	#rows = 0;
-	#phase:
-		| "open"
-		| "preparing"
-		| "stepping"
-		| "committed"
-		| "discarded"
-		| "cut" = "open";
+	#phase: "open" | "preparing" | "stepping" | "committed" | "discarded" | "cut" = "open";
 	#rejectQueued: ((error: unknown) => void) | undefined;
 	constructor(
 		documents: Documents,
@@ -192,9 +145,7 @@ export class Transaction implements Tx {
 			this.#assertOpen();
 		}
 		if (!entry.draft) {
-			const tracker =
-				(!entry.retire && slot.current(key)) ||
-				track(slot.initial(this.#context));
+			const tracker = (!entry.retire && slot.current(key)) || track(slot.initial(this.#context));
 			entry.draft = { tracker, change: tracker.beginChange() };
 		}
 		return entry.draft.change.state;
@@ -215,10 +166,7 @@ export class Transaction implements Tx {
 		if (found) {
 			try {
 				disk.persistence.checkHost(found.host, disk.definition.current);
-				checkReadable(
-					{ version: found.stored.version, fingerprint: found.fingerprint },
-					disk.definition.current,
-				);
+				checkReadable({ version: found.stored.version, fingerprint: found.fingerprint }, disk.definition.current);
 			} catch (error) {
 				const failure = asObjectsError(error, slot.owner.label);
 				slot.owner.fail(failure);
@@ -234,17 +182,8 @@ export class Transaction implements Tx {
 		entry.retire = true;
 		return entry;
 	}
-	start<A, R, S>(
-		job: JobHandle<A, R, S>,
-		args: A,
-		options: StartOptions = {},
-	): Run<Outcome<A, R, S>> {
-		return (job as JobHandle<A, R, S> & StagingJob<A, R, S>).stage(
-			this,
-			args,
-			this.#context,
-			options,
-		);
+	start<A, R, S>(job: JobHandle<A, R, S>, args: A, options: StartOptions = {}): Run<Outcome<A, R, S>> {
+		return (job as JobHandle<A, R, S> & StagingJob<A, R, S>).stage(this, args, this.#context, options);
 	}
 	get<C extends Columns, K extends readonly string[]>(
 		table: Table<C, K>,
@@ -252,11 +191,9 @@ export class Transaction implements Tx {
 	): Promise<RowOf<C> | undefined> {
 		const handle = this.#handle(table),
 			overlay = this.#tables?.get(handle);
-		return this.#track(
-			overlay
-				? overlay.get(key, this.#context)
-				: handle.get(key, this.#context),
-		) as Promise<RowOf<C> | undefined>;
+		return this.#track(overlay ? overlay.get(key, this.#context) : handle.get(key, this.#context)) as Promise<
+			RowOf<C> | undefined
+		>;
 	}
 	page<C extends Columns, K extends readonly string[]>(
 		table: Table<C, K>,
@@ -264,14 +201,9 @@ export class Transaction implements Tx {
 		limit: number,
 		options: PageOptions = {},
 	): Promise<Page<RowOf<C>>> {
-		return this.#track(
-			this.#handle(table).page(
-				q as unknown as Query,
-				limit,
-				this.#context,
-				options,
-			),
-		) as Promise<Page<RowOf<C>>>;
+		return this.#track(this.#handle(table).page(q as unknown as Query, limit, this.#context, options)) as Promise<
+			Page<RowOf<C>>
+		>;
 	}
 	async *rows<C extends Columns, K extends readonly string[]>(
 		table: Table<C, K>,
@@ -279,20 +211,12 @@ export class Transaction implements Tx {
 	): AsyncIterable<RowOf<C>> {
 		let after: string | undefined;
 		do {
-			const page = await this.page(
-				table,
-				q,
-				ROWS_PAGE,
-				after === undefined ? {} : { after },
-			);
+			const page = await this.page(table, q, ROWS_PAGE, after === undefined ? {} : { after });
 			yield* page.items;
 			after = page.next;
 		} while (after !== undefined);
 	}
-	put<C extends Columns, K extends readonly string[]>(
-		table: Table<C, K>,
-		row: PutRowOf<C>,
-	): void {
+	put<C extends Columns, K extends readonly string[]>(table: Table<C, K>, row: PutRowOf<C>): void {
 		this.#changes(table).put(row);
 	}
 	update<C extends Columns, K extends readonly string[]>(
@@ -302,10 +226,7 @@ export class Transaction implements Tx {
 	): void {
 		this.#changes(table).update(key, set);
 	}
-	delete<C extends Columns, K extends readonly string[]>(
-		table: Table<C, K>,
-		key: KeyOf<C, K>,
-	): void {
+	delete<C extends Columns, K extends readonly string[]>(table: Table<C, K>, key: KeyOf<C, K>): void {
 		this.#changes(table).delete(key);
 	}
 	updateWhere<C extends Columns, K extends readonly string[]>(
@@ -336,12 +257,13 @@ export class Transaction implements Tx {
 	commit(): void | Promise<void> {
 		this.#assertOpen();
 		if (this.#pending)
-			throw new Error(
-				`${this.documents.label}: the callback settled before its pending tx operations`,
-			);
+			throw new Error(`${this.documents.label}: the callback settled before its pending tx operations`);
 		if (this.#tables) {
 			const refresh = refreshOf(this.#tables.keys(), this.#context);
-			if (refresh) { this.#writes!.staged.push(refresh.write); this.stage(refresh, () => refresh); }
+			if (refresh) {
+				this.#writes!.staged.push(refresh.write);
+				this.stage(refresh, () => refresh);
+			}
 		}
 		this.#phase = "preparing";
 		this.#context.abortSignal?.throwIfAborted();
@@ -355,9 +277,7 @@ export class Transaction implements Tx {
 					prepared = undefined;
 				}
 				const { slot, key } = entry,
-					retires =
-						entry.retire &&
-						(slot.current(key) !== undefined || entry.found !== undefined);
+					retires = entry.retire && (slot.current(key) !== undefined || entry.found !== undefined);
 				if (!prepared && !retires) continue;
 				const disk = slot.persisted;
 				const stored = disk?.stage(
@@ -370,23 +290,15 @@ export class Transaction implements Tx {
 				changes.push({
 					entry,
 					retires,
-					write:
-						prepared && draft
-							? { tracker: draft.tracker, prepared, stored }
-							: undefined,
+					write: prepared && draft ? { tracker: draft.tracker, prepared, stored } : undefined,
 				});
 			}
 		this.#adoptions = changes;
-		if (this.#writes)
-			return this.#step(this.#writes.store, this.#writes.staged, changes);
+		if (this.#writes) return this.#step(this.#writes.store, this.#writes.staged, changes);
 		this.#adopt(changes);
 		this.#phase = "committed";
 	}
-	async #step(
-		store: ObjectsStore,
-		writes: readonly StagedWrite[],
-		changes: readonly Adoption[],
-	): Promise<void> {
+	async #step(store: ObjectsStore, writes: readonly StagedWrite[], changes: readonly Adoption[]): Promise<void> {
 		const interrupted = new Promise<never>((_resolve, reject) => {
 			this.#rejectQueued = reject;
 		});
@@ -397,12 +309,14 @@ export class Transaction implements Tx {
 					writes,
 					{
 						admit: () => {
-							if (this.#phase !== "preparing" || this.token.sealed)
-								return false;
+							if (this.#phase !== "preparing" || this.token.sealed) return false;
 							this.#phase = "stepping";
 							return true;
 						},
-						adopt: (_seq, _ids, rows) => { this.#rows = rows; this.#adopt(changes); },
+						adopt: (_seq, _ids, rows) => {
+							this.#rows = rows;
+							this.#adopt(changes);
+						},
 					},
 					withoutAbortSignal(this.#context),
 				),
@@ -422,13 +336,7 @@ export class Transaction implements Tx {
 		this.documents.batch.commit(() => {
 			for (const { entry, retires, write } of changes) {
 				if (retires) entry.slot.retire(entry.key);
-				if (write)
-					entry.slot.adopt(
-						entry.key,
-						write.tracker,
-						write.prepared,
-						write.stored,
-					);
+				if (write) entry.slot.adopt(entry.key, write.tracker, write.prepared, write.stored);
 			}
 			for (const staged of this.#staged?.values() ?? []) staged.adopt();
 		}, this.#context);
@@ -453,8 +361,7 @@ export class Transaction implements Tx {
 		}
 	}
 	#abort(): void {
-		for (const group of this.#entries.values())
-			for (const entry of group.values()) entry.draft?.change.abort();
+		for (const group of this.#entries.values()) for (const entry of group.values()) entry.draft?.change.abort();
 	}
 	#slot(handle: SingletonHandle<JsonObject> | KeyedHandle<JsonObject, unknown>): SingletonSlot | KeyedSlot {
 		const { slot, version } = handle as Singleton | Keyed;
@@ -464,9 +371,7 @@ export class Transaction implements Tx {
 	#entry(slot: DocumentSlot, key: string): Entry {
 		this.#assertOpen();
 		if (slot.owner !== this.documents)
-			throw new Error(
-				`${this.documents.label}: a transaction drafts only its own object's documents`,
-			);
+			throw new Error(`${this.documents.label}: a transaction drafts only its own object's documents`);
 		let entries = this.#entries.get(slot);
 		if (!entries) {
 			entries = new Map();
@@ -494,9 +399,7 @@ export class Transaction implements Tx {
 	#handle(table: object): TableHandle {
 		this.#assertOpen();
 		if (!(table instanceof TableHandle) || table.owner.scope !== this.documents)
-			throw new Error(
-				`${this.documents.label}: a transaction writes only its own object's tables`,
-			);
+			throw new Error(`${this.documents.label}: a transaction writes only its own object's tables`);
 		table.assertVersion();
 		return table;
 	}

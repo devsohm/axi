@@ -79,7 +79,12 @@ test.each(["available", "absent", "directory-failure", "write-failure"] as const
 				expect(saved).toContain("L".repeat(400));
 				expect(saved).toContain("console marker");
 				const details = result.details;
-				if (!details || typeof details !== "object" || !("fullOutputPath" in details) || typeof details.fullOutputPath !== "string")
+				if (
+					!details ||
+					typeof details !== "object" ||
+					!("fullOutputPath" in details) ||
+					typeof details.fullOutputPath !== "string"
+				)
 					throw new Error("Missing full output path");
 				expect(resolve(details.fullOutputPath)).toBe(join(directories[0]!, "output.txt"));
 				expect(text).toContain("Full output:");

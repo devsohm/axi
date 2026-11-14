@@ -249,8 +249,7 @@ function publish(mount: Mount, ops: Op[], context: Context, report: (error: unkn
 	mount.value = applyImmutable(mount.value, ops);
 	const frame = withoutAbortSignal(context);
 	const call: WatchCall<TaskGraph> = { kind: "value", value: mount.value, ops, retired: false };
-	for (const observer of [...mount.observers])
-		contained(() => observer.advance(call, frame), report);
+	for (const observer of [...mount.observers]) contained(() => observer.advance(call, frame), report);
 }
 
 function observedGraph(value: TaskGraph, observer: { detach(): void }): Observation<TaskGraph> {

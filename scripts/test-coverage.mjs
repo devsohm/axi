@@ -8,7 +8,10 @@ const map = read("docs/test-coverage.json");
 const workspaces = new Map(
 	read("package.json").workspaces.map((directory) => [directory, read(join(directory, "package.json")).name]),
 );
-if (map.packages.length !== workspaces.size || new Set(map.packages.map((pkg) => pkg.directory)).size !== workspaces.size)
+if (
+	map.packages.length !== workspaces.size ||
+	new Set(map.packages.map((pkg) => pkg.directory)).size !== workspaces.size
+)
 	throw new Error("The behavior map must list every workspace exactly once.");
 for (const pkg of map.packages) {
 	if (workspaces.get(pkg.directory) !== pkg.name || pkg.areas.length === 0)
@@ -32,9 +35,12 @@ const lines = [
 ];
 const measured = Object.entries(coverage).filter(([file]) => file !== "total");
 for (const pkg of map.packages)
-	if (!measured.some(([file, metrics]) =>
-		metrics.lines.covered > 0 && relative(root, file).replaceAll("\\", "/").startsWith(`${pkg.directory}/src/`),
-	))
+	if (
+		!measured.some(
+			([file, metrics]) =>
+				metrics.lines.covered > 0 && relative(root, file).replaceAll("\\", "/").startsWith(`${pkg.directory}/src/`),
+		)
+	)
 		throw new Error(`No measured source execution for ${pkg.name}`);
 lines.push(
 	"## Remaining execution coverage",

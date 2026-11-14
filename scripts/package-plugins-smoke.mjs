@@ -109,7 +109,9 @@ workerMain(async ({address,parent,plugins,onClose},context)=>{
 			self.contribute(httpModule.Http, {
 				routes: {
 					"GET /health": { public: true, handler: async () => ({ kind: "json", value: { ready: true } }) },
-					"GET /private-health": async () => { throw new Error("Anonymous request reached a private handler"); },
+					"GET /private-health": async () => {
+						throw new Error("Anonymous request reached a private handler");
+					},
 				},
 			}),
 		);

@@ -213,9 +213,12 @@ async function emitMessage(
 			partial.content = [...partial.content, call];
 			output.push({ type: "toolcall_start", contentIndex: index, partial: { ...partial } });
 			const argumentsStream = new ToolCallArgumentsStream();
-			if (!(await chunks(JSON.stringify(block.arguments), index, "toolcall", (part) => {
-				call.arguments = argumentsStream.append(part);
-			}))) return;
+			if (
+				!(await chunks(JSON.stringify(block.arguments), index, "toolcall", (part) => {
+					call.arguments = argumentsStream.append(part);
+				}))
+			)
+				return;
 			call.arguments = block.arguments;
 			output.push({ type: "toolcall_end", contentIndex: index, toolCall: block, partial: { ...partial } });
 		} else if (block.type === "text") {

@@ -1,11 +1,6 @@
 import type { JsonValue } from "@axi/objects/json";
 import { defineTable, int, json, str, unknown } from "@axi/objects";
-import type {
-	ConversationRecord,
-	EntryRecord,
-	SubmissionRecord,
-	TaskRecord,
-} from "../../types.ts";
+import type { ConversationRecord, EntryRecord, SubmissionRecord, TaskRecord } from "../../types.ts";
 
 const record = () => json(unknown(), { version: 1 });
 export const RecordIds = defineTable("record_ids", {
@@ -99,9 +94,7 @@ export function entryRow(value: EntryRecord): object {
 		record: value,
 	};
 }
-export function taskRow(
-	value: TaskRecord<JsonValue, JsonValue, JsonValue>,
-): object {
+export function taskRow(value: TaskRecord<JsonValue, JsonValue, JsonValue>): object {
 	return {
 		id: value.id,
 		conversation_id: value.conversationId,
@@ -116,8 +109,7 @@ export function submissionRow(value: SubmissionRecord): object {
 	return {
 		id: value.id,
 		conversation_id: value.conversationId,
-		request_id:
-			value.requestId === undefined ? "" : encodeIndexed(value.requestId),
+		request_id: value.requestId === undefined ? "" : encodeIndexed(value.requestId),
 		status: value.status,
 		record: value,
 	};

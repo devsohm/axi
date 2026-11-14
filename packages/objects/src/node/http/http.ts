@@ -1,7 +1,13 @@
 import { STATUS_CODES, type IncomingMessage } from "node:http";
 import type { Duplex } from "node:stream";
 import type { TelemetryContext } from "@axi/telemetry";
-import { awaitWithContext, withAbortSignal, withoutAbortSignal, withTelemetry, type Context } from "../../context/index.ts";
+import {
+	awaitWithContext,
+	withAbortSignal,
+	withoutAbortSignal,
+	withTelemetry,
+	type Context,
+} from "../../context/index.ts";
 import { local } from "../../contracts/index.ts";
 import { isObjectsError, type Principal } from "../../data/index.ts";
 import { defineFacet, type Host, type Facet, type Ctx } from "../../host/index.ts";
@@ -248,8 +254,15 @@ class ServerComponent<P extends Principal> implements HttpComponent<P>, Handler 
 		if (adapter === undefined || untraced(adapter)) return undefined;
 		const traceparent = admission.provenance.kind === "relayed" ? traceHeader(incoming, "traceparent", 256) : undefined;
 		const tracestate = traceparent === undefined ? undefined : traceHeader(incoming, "tracestate", 512);
-		const parent = traceparent === undefined ? adapter : parentOf({ traceparent, ...(tracestate === undefined ? {} : { tracestate }) }, adapter);
-		return new OpenSpan(parent, "objects.http", { "objects.host": hostAttribute(this.#host.address), method: incoming.method, route: match.pattern });
+		const parent =
+			traceparent === undefined
+				? adapter
+				: parentOf({ traceparent, ...(tracestate === undefined ? {} : { tracestate }) }, adapter);
+		return new OpenSpan(parent, "objects.http", {
+			"objects.host": hostAttribute(this.#host.address),
+			method: incoming.method,
+			route: match.pattern,
+		});
 	}
 	async #answer(
 		incoming: Incoming,
@@ -364,8 +377,12 @@ class ServerComponent<P extends Principal> implements HttpComponent<P>, Handler 
 				this.#host,
 				this.#context,
 				() => {
-					try { return links.opened?.(request, principal); }
-					catch (error) { this.#hook("links.opened", undefined, error); return undefined; }
+					try {
+						return links.opened?.(request, principal);
+					} catch (error) {
+						this.#hook("links.opened", undefined, error);
+						return undefined;
+					}
 				},
 			);
 		}

@@ -20,12 +20,7 @@ import {
 	type Loaded,
 } from "./persistence.ts";
 import { Resident } from "./residency.ts";
-import {
-	SlotDefinition,
-	type AnyDefinition,
-	type DocumentSlot,
-	type PersistedSlot,
-} from "./slot.ts";
+import { SlotDefinition, type AnyDefinition, type DocumentSlot, type PersistedSlot } from "./slot.ts";
 
 export type Access = { readonly token: SealToken; readonly version: number };
 export type ChangedDocument =
@@ -48,11 +43,7 @@ export class KeyedSlot implements DocumentSlot, PersistedSlot {
 	readonly #pins = new Map<string, KeySource>();
 	readonly #loading = new Map<string, SharedLoad>();
 	readonly #keyLabel: string;
-	constructor(
-		owner: Documents,
-		definition: AnyDefinition,
-		persistence: Persistence | undefined,
-	) {
+	constructor(owner: Documents, definition: AnyDefinition, persistence: Persistence | undefined) {
 		this.owner = owner;
 		this.definition = new SlotDefinition(definition);
 		this.#disk = persistence;
@@ -81,22 +72,14 @@ export class KeyedSlot implements DocumentSlot, PersistedSlot {
 					for await (const key of keys) yield addressOfKey(host, key);
 				})();
 	}
-	get(
-		raw: string,
-		access: Access,
-		context: Context,
-	): Promise<JsonObject | undefined> {
+	get(raw: string, access: Access, context: Context): Promise<JsonObject | undefined> {
 		try {
 			return this.#get(this.key(raw), access, context);
 		} catch (error) {
 			return Promise.reject(error);
 		}
 	}
-	async #get(
-		key: string,
-		access: Access,
-		context: Context,
-	): Promise<JsonObject | undefined> {
+	async #get(key: string, access: Access, context: Context): Promise<JsonObject | undefined> {
 		this.owner.assertLive();
 		this.definition.assertVersion(access.version);
 		const resident = this.#resident(key);
@@ -122,20 +105,13 @@ export class KeyedSlot implements DocumentSlot, PersistedSlot {
 		}
 		let after: string | undefined;
 		for (;;) {
-			const page = await this.owner.onLine(
-				() => disk.keys(after, KEYS_PAGE, context),
-				access.token,
-			);
+			const page = await this.owner.onLine(() => disk.keys(after, KEYS_PAGE, context), access.token);
 			yield* page;
 			if (page.length < KEYS_PAGE) return;
 			after = page.at(-1);
 		}
 	}
-	async watch(
-		raw: string,
-		access: Access,
-		context: Context,
-	): Promise<Watch<JsonObject> | undefined> {
+	async watch(raw: string, access: Access, context: Context): Promise<Watch<JsonObject> | undefined> {
 		const key = this.key(raw);
 		if ((await this.#get(key, access, context)) === undefined) return undefined;
 		const release = this.pin(key, context);
@@ -144,9 +120,7 @@ export class KeyedSlot implements DocumentSlot, PersistedSlot {
 			return undefined;
 		}
 		try {
-			const watch = this.#pins
-				.get(key)!
-				.openWatch(context) as Watch<JsonObject>;
+			const watch = this.#pins.get(key)!.openWatch(context) as Watch<JsonObject>;
 			void watch.closed.then(release);
 			return watch;
 		} catch (error) {
@@ -185,12 +159,10 @@ export class KeyedSlot implements DocumentSlot, PersistedSlot {
 	}
 	async ensure(raw: string, context: Context): Promise<void> {
 		const key = this.key(raw);
-		if (this.#pins.get(key)?.ready === false)
-			await this.owner.onLine(() => this.load(key, context));
+		if (this.#pins.get(key)?.ready === false) await this.owner.onLine(() => this.load(key, context));
 	}
 	async loadDeclared(context: Context): Promise<void> {
-		for (const [key, source] of this.#pins)
-			if (!source.ready) await this.load(key, context);
+		for (const [key, source] of this.#pins) if (!source.ready) await this.load(key, context);
 	}
 	async load(key: string, context: Context, token?: SealToken): Promise<void> {
 		if (this.#residents.has(key)) return;
@@ -198,20 +170,12 @@ export class KeyedSlot implements DocumentSlot, PersistedSlot {
 		if (token?.sealed) return;
 		let loaded: Loaded | undefined;
 		try {
-			loaded =
-				document &&
-				this.persistence.decode(document, this.definition.current, context);
+			loaded = document && this.persistence.decode(document, this.definition.current, context);
 		} catch (error) {
 			throw this.#fail(error);
 		}
 		if (loaded && !this.#residents.has(key)) {
-			const resident = new Resident(
-				this,
-				key,
-				track(loaded.value),
-				loaded.stored,
-				this.definition.current.version,
-			);
+			const resident = new Resident(this, key, track(loaded.value), loaded.stored, this.definition.current.version);
 			this.#residents.set(key, resident);
 			this.#touch(resident);
 		}
@@ -224,19 +188,8 @@ export class KeyedSlot implements DocumentSlot, PersistedSlot {
 	stored(key: string): Stored | undefined {
 		return this.#residents.get(key)?.stored;
 	}
-	stage(
-		key: string,
-		change: DocumentChange,
-		was: Stored | undefined,
-		writes: StagedWrite[],
-	): StoredChange {
-		return this.persistence.stage(
-			key,
-			this.definition.current,
-			was,
-			change,
-			writes,
-		);
+	stage(key: string, change: DocumentChange, was: Stored | undefined, writes: StagedWrite[]): StoredChange {
+		return this.persistence.stage(key, this.definition.current, was, change, writes);
 	}
 	hydrate(definition: AnyDefinition, context: Context): void {
 		const previous = this.definition.hydrated;
@@ -252,8 +205,7 @@ export class KeyedSlot implements DocumentSlot, PersistedSlot {
 			resident.version = definition.version;
 		}
 		this.owner.batch.commit(() => {
-			for (const source of this.#pins.values())
-				source.retake(definition.initial(context));
+			for (const source of this.#pins.values()) source.retake(definition.initial(context));
 		}, context);
 	}
 	current(key: string): Tracker<JsonObject> | undefined {
@@ -336,12 +288,10 @@ export class KeyedSlot implements DocumentSlot, PersistedSlot {
 		this.#pins.get(key)?.retire();
 	}
 	evict(resident: Resident): void {
-		if (this.#residents.get(resident.key) === resident)
-			this.#residents.delete(resident.key);
+		if (this.#residents.get(resident.key) === resident) this.#residents.delete(resident.key);
 	}
 	drop(): void {
-		for (const resident of this.#residents.values())
-			this.owner.residency.forget(resident);
+		for (const resident of this.#residents.values()) this.owner.residency.forget(resident);
 		this.#residents.clear();
 		for (const source of this.#pins.values()) source.end();
 		this.#pins.clear();
@@ -375,13 +325,7 @@ export class KeyedSlot implements DocumentSlot, PersistedSlot {
 	}
 	#migrate(resident: Resident, context: Context): Tracker<JsonObject> {
 		try {
-			return track(
-				this.definition.current.migrate(
-					resident.tracker.value,
-					resident.version,
-					context,
-				),
-			);
+			return track(this.definition.current.migrate(resident.tracker.value, resident.version, context));
 		} catch (error) {
 			throw this.#fail(error);
 		}
@@ -392,8 +336,7 @@ export class KeyedSlot implements DocumentSlot, PersistedSlot {
 		return failure;
 	}
 	#touch(resident: Resident): void {
-		if (this.#disk && !this.#pins.has(resident.key))
-			this.owner.residency.touch(resident);
+		if (this.#disk && !this.#pins.has(resident.key)) this.owner.residency.touch(resident);
 	}
 }
 
@@ -404,12 +347,7 @@ export class KeySource extends AddressSource {
 	pins = 0;
 	ready: boolean;
 	#initial: JsonObject;
-	constructor(
-		slot: KeyedSlot,
-		key: string,
-		initial: JsonObject,
-		ready: boolean,
-	) {
+	constructor(slot: KeyedSlot, key: string, initial: JsonObject, ready: boolean) {
 		super(slot.owner.batch);
 		this.owner = slot.owner;
 		this.#slot = slot;

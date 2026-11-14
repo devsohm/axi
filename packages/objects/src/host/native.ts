@@ -56,10 +56,17 @@ export class NativeHandle<T> implements Native<T>, NativeSlot {
 		this.#state = { kind: "opening" };
 		if (untraced(context.telemetry)) return this.#receive(await this.#opener(context));
 		const { host, type, position } = this.#owner;
-		await context.telemetry.startSpan({ name: "objects.open", attributes: { "objects.host": host, type, native: position } }, async (span) => {
-			try { await this.#receive(await this.#opener(withTelemetry(span, context))); }
-			catch (error) { ended(span, "open_failed", error, context.abortSignal); throw error; }
-		});
+		await context.telemetry.startSpan(
+			{ name: "objects.open", attributes: { "objects.host": host, type, native: position } },
+			async (span) => {
+				try {
+					await this.#receive(await this.#opener(withTelemetry(span, context)));
+				} catch (error) {
+					ended(span, "open_failed", error, context.abortSignal);
+					throw error;
+				}
+			},
+		);
 	}
 	async #receive(value: T): Promise<void> {
 		const state = this.#state;
@@ -79,11 +86,14 @@ export class NativeHandle<T> implements Native<T>, NativeSlot {
 	async #close(value: T, reason: NativeCloseReason): Promise<CloseFailed | undefined> {
 		const { host, type, position, telemetry, context } = this.#owner;
 		if (!telemetry || untraced(telemetry)) return this.#closeWithin(value, reason, context);
-		return telemetry.startSpan({ name: "objects.close", attributes: { "objects.host": host, type, native: position, reason: reason.kind } }, async (span) => {
-			const failure = await this.#closeWithin(value, reason, withTelemetry(span, context));
-			if (failure) spanFailed(span, "close_failed", failure.error);
-			return failure;
-		});
+		return telemetry.startSpan(
+			{ name: "objects.close", attributes: { "objects.host": host, type, native: position, reason: reason.kind } },
+			async (span) => {
+				const failure = await this.#closeWithin(value, reason, withTelemetry(span, context));
+				if (failure) spanFailed(span, "close_failed", failure.error);
+				return failure;
+			},
+		);
 	}
 	async #closeWithin(value: T, reason: NativeCloseReason, context: Context): Promise<CloseFailed | undefined> {
 		const { object, position } = this.#owner,

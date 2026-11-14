@@ -33,7 +33,9 @@ export class Derive extends Source implements Dependent {
 				this.batch.count("objects.derive.computes");
 				const inputs = this.#sources.map((source) => source.value);
 				let value: JsonValue;
-				try { value = this.#compute(inputs) } catch (error) {
+				try {
+					value = this.#compute(inputs);
+				} catch (error) {
 					if (!this.#failing) this.#report?.(handedOut(error));
 					this.#failing = true;
 					throw error;
@@ -42,11 +44,16 @@ export class Derive extends Source implements Dependent {
 				this.#last = value;
 				this.#status = { kind: "clean", value };
 				return value;
-			} catch (error) { this.#status = { kind: "failed", error }; throw error }
+			} catch (error) {
+				this.#status = { kind: "failed", error };
+				throw error;
+			}
 		});
 	}
 	override start(): WatchStart {
-		try { return { kind: "value", value: this.value } } catch (error) {
+		try {
+			return { kind: "value", value: this.value };
+		} catch (error) {
 			if (this.#status.kind !== "failed") throw error;
 			return { kind: "failed", error, last: this.#last === missing ? undefined : this.#last };
 		}
@@ -55,10 +62,12 @@ export class Derive extends Source implements Dependent {
 		this.#report = report;
 		this.#sources = (this.#declared ?? []).map(resolve);
 		this.#declared = undefined;
-		for (const source of this.#sources) if (source instanceof Source || source instanceof NativeSource) source.dependents.add(this);
+		for (const source of this.#sources)
+			if (source instanceof Source || source instanceof NativeSource) source.dependents.add(this);
 	}
 	detach(error: Error): void {
-		for (const source of this.#sources) if (source instanceof Source || source instanceof NativeSource) source.dependents.delete(this);
+		for (const source of this.#sources)
+			if (source instanceof Source || source instanceof NativeSource) source.dependents.delete(this);
 		this.#sources = [];
 		this.#declared = undefined;
 		this.#status = { kind: "detached", error };
@@ -82,7 +91,9 @@ export class Derive extends Source implements Dependent {
 		const before = this.#previous;
 		this.#previous = undefined;
 		let after: JsonValue;
-		try { after = this.value } catch (error) {
+		try {
+			after = this.value;
+		} catch (error) {
 			if (before !== missing) this.failWatches(error, context);
 			return;
 		}
@@ -99,12 +110,13 @@ export class Derive extends Source implements Dependent {
 
 export function mapShared<E, R extends JsonValue>(map: (element: E) => R): (elements: readonly E[]) => R[] {
 	const cache = new WeakMap<object, R>();
-	return (elements) => elements.map((element) => {
-		if (typeof element !== "object" || element === null) return map(element);
-		const saved = cache.get(element);
-		if (saved !== undefined) return saved;
-		const result = map(element);
-		cache.set(element, result);
-		return result;
-	});
+	return (elements) =>
+		elements.map((element) => {
+			if (typeof element !== "object" || element === null) return map(element);
+			const saved = cache.get(element);
+			if (saved !== undefined) return saved;
+			const result = map(element);
+			cache.set(element, result);
+			return result;
+		});
 }

@@ -90,48 +90,63 @@ it("calls the worker output callback without binding an options object", async (
 	}
 });
 
-it.skipIf(process.platform === "win32")("waits for a killed worker's queued lock cleanup before close resolves", async () => {
-	await using f = await setup();
-	const ref = await f.host.get(Control, { id: "close-drain" }, context);
-	await vi.waitFor(() => expect(f.workers.state.value["runner|close-drain"]?.status).toBe("running"));
-	const worker = f.workers.state.value["runner|close-drain"];
-	if (!worker || !("pid" in worker)) throw new Error("Worker did not start");
-	const entered = Promise.withResolvers<void>(), gate = Promise.withResolvers<boolean>();
-	vi.mocked(clearStaleLock).mockImplementationOnce(() => { entered.resolve(); return gate.promise; });
-	let finished = false;
-	process.kill(worker.pid, "SIGKILL");
-	const closing = f.workers.close(context).then(() => { finished = true; });
-	try {
-		await entered.promise;
-		await new Promise<void>((resolve) => setImmediate(resolve));
-		expect(finished).toBe(false);
-		gate.resolve(false);
-		await closing;
-		expect(finished).toBe(true);
-	} finally {
-		gate.resolve(false);
-		await closing;
-		ref.release();
-	}
-});
+it.skipIf(process.platform === "win32")(
+	"waits for a killed worker's queued lock cleanup before close resolves",
+	async () => {
+		await using f = await setup();
+		const ref = await f.host.get(Control, { id: "close-drain" }, context);
+		await vi.waitFor(() => expect(f.workers.state.value["runner|close-drain"]?.status).toBe("running"));
+		const worker = f.workers.state.value["runner|close-drain"];
+		if (!worker || !("pid" in worker)) throw new Error("Worker did not start");
+		const entered = Promise.withResolvers<void>(),
+			gate = Promise.withResolvers<boolean>();
+		vi.mocked(clearStaleLock).mockImplementationOnce(() => {
+			entered.resolve();
+			return gate.promise;
+		});
+		let finished = false;
+		process.kill(worker.pid, "SIGKILL");
+		const closing = f.workers.close(context).then(() => {
+			finished = true;
+		});
+		try {
+			await entered.promise;
+			await new Promise<void>((resolve) => setImmediate(resolve));
+			expect(finished).toBe(false);
+			gate.resolve(false);
+			await closing;
+			expect(finished).toBe(true);
+		} finally {
+			gate.resolve(false);
+			await closing;
+			ref.release();
+		}
+	},
+);
 
-it.skipIf(process.platform === "win32")("does not claim a lock for exit cleanup when its pre-start clearance fails", async () => {
-	await using f = await setup();
-	const calls = vi.mocked(clearStaleLock).mock.calls.length;
-	const failure = new Error("Cannot clear the lock");
-	vi.mocked(clearStaleLock).mockRejectedValueOnce(failure);
-	const ref = f.host.hold(Control, { id: "lock-refused" }, context);
-	try {
-		await vi.waitFor(() => expect(f.workers.state.value["runner|lock-refused"]).toMatchObject({
-			status: "failed", error: { code: "unavailable", message: "worker failed to start" },
-		}));
-		await f.workers.close(context);
-		expect(vi.mocked(clearStaleLock).mock.calls.length - calls).toBe(1);
-		expect(f.errors).toMatchObject([{ kind: "worker_failed", error: failure }]);
-	} finally {
-		ref.release();
-	}
-});
+it.skipIf(process.platform === "win32")(
+	"does not claim a lock for exit cleanup when its pre-start clearance fails",
+	async () => {
+		await using f = await setup();
+		const calls = vi.mocked(clearStaleLock).mock.calls.length;
+		const failure = new Error("Cannot clear the lock");
+		vi.mocked(clearStaleLock).mockRejectedValueOnce(failure);
+		const ref = f.host.hold(Control, { id: "lock-refused" }, context);
+		try {
+			await vi.waitFor(() =>
+				expect(f.workers.state.value["runner|lock-refused"]).toMatchObject({
+					status: "failed",
+					error: { code: "unavailable", message: "worker failed to start" },
+				}),
+			);
+			await f.workers.close(context);
+			expect(vi.mocked(clearStaleLock).mock.calls.length - calls).toBe(1);
+			expect(f.errors).toMatchObject([{ kind: "worker_failed", error: failure }]);
+		} finally {
+			ref.release();
+		}
+	},
+);
 
 it("starts a process on demand, carries start data and stops it after its last reference goes idle", async () => {
 	await using f = await setup();

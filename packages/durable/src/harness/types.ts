@@ -71,8 +71,20 @@ export type SubmissionDraft = {
 			readonly whenIdle?: "reject";
 			readonly entry?: InputEntry;
 	  }
-	| { readonly type: "continue"; readonly content?: never; readonly entry?: never; readonly whenBusy?: never; readonly whenIdle?: never }
-	| { readonly type: "write"; readonly entry: EntryDraft; readonly content?: never; readonly whenBusy?: never; readonly whenIdle?: never }
+	| {
+			readonly type: "continue";
+			readonly content?: never;
+			readonly entry?: never;
+			readonly whenBusy?: never;
+			readonly whenIdle?: never;
+	  }
+	| {
+			readonly type: "write";
+			readonly entry: EntryDraft;
+			readonly content?: never;
+			readonly whenBusy?: never;
+			readonly whenIdle?: never;
+	  }
 );
 export type InputSubmissionDraft = Extract<SubmissionDraft, { readonly type: "input" }>;
 export type SettledSubmissionRecord = SubmissionRecord & { readonly status: "done" | "unanswered" };
@@ -471,7 +483,12 @@ export interface HookApi extends DocumentReader {
 	memo<T extends JsonValue>(name: string, context: Context): Promise<T | undefined>;
 	memo<T extends JsonValue>(name: string, candidate: T, context: Context): Promise<T>;
 }
-export type RunSummary = { readonly reason: "answer" | "terminate"; readonly first: EntryId; readonly answer: EntryId; readonly last: EntryId };
+export type RunSummary = {
+	readonly reason: "answer" | "terminate";
+	readonly first: EntryId;
+	readonly answer: EntryId;
+	readonly last: EntryId;
+};
 export type HookTask = { readonly task: AnyTask; readonly input: JsonValue };
 export type YieldDecision = { readonly continue?: UserInput };
 export type AfterToolsDecision = { readonly terminate?: true };

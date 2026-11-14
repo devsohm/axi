@@ -47,9 +47,7 @@ export class StoreExport implements AsyncIterableIterator<ArchivePart> {
 		let value: IteratorResult<ArchivePart>;
 		try {
 			const pending = this.#iterator.next();
-			value = await (this.#release
-				? pending
-				: awaitWithContext(pending, this.#context));
+			value = await (this.#release ? pending : awaitWithContext(pending, this.#context));
 		} catch (error) {
 			if (this.#context.abortSignal?.aborted) this.#finish("aborted");
 			this.#check();
@@ -119,9 +117,7 @@ async function* parts(
 			yield { kind: "table", ...table };
 			writes++;
 			const key = record.key.map(quote).join(", "),
-				columns = recordedPut(record.table, record.columns)
-					.physical.map(quote)
-					.join(", ");
+				columns = recordedPut(record.table, record.columns).physical.map(quote).join(", ");
 			let after: SqliteValue[] | undefined;
 			const host = selection.kind === "host" ? [`${quote(hostColumn(record, kindOfKey(selection.key))!)} = ?`] : [];
 			const params = selection.kind === "host" ? [selection.key] : [];
@@ -165,8 +161,7 @@ async function* parts(
 				let lastSeq = 0;
 				for (;;) {
 					const revisions = await store.read(
-						(executor) =>
-							listRevisions(executor, record.id, lastSeq, EXPORT_PAGE),
+						(executor) => listRevisions(executor, record.id, lastSeq, EXPORT_PAGE),
 						context,
 					);
 					for (const revision of revisions) {

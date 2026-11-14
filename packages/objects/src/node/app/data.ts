@@ -17,8 +17,7 @@ export function addressParam(address: Address): string {
 export function hostDataFacet<P extends Principal>(store: Store, files: string, server: P): Facet<P> {
 	return defineFacet<P>((host) =>
 		host.serve(HostData, (_params, principal) => {
-			if (!samePrincipal(principal, server, BACKGROUND_CONTEXT))
-				throw forbidden("objects.app.data: the server's only");
+			if (!samePrincipal(principal, server, BACKGROUND_CONTEXT)) throw forbidden("objects.app.data: the server's only");
 			return {
 				variant: "main",
 				members: {

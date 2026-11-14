@@ -1021,9 +1021,7 @@ export class SessionImpl implements T.Session {
 		offClose = this.subscribeClose(() => {
 			detach();
 			observer.end(
-				observer instanceof Watch && this.#failure === undefined
-					? NORMAL_END
-					: sessionObserverEnd(this.#failure),
+				observer instanceof Watch && this.#failure === undefined ? NORMAL_END : sessionObserverEnd(this.#failure),
 			);
 		});
 		return observer;

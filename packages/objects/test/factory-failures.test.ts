@@ -103,49 +103,52 @@ const failures = [
 	},
 ];
 
-test.each(failures)("$name fails activation and permits a corrected factory reload", async ({ declare, store: needsStore, message }) => {
-	const store = needsStore
-		? await openStore(sqliteBackend(await openNodeSqliteDatabase(":memory:")), context)
-		: undefined;
-	const host = createHost({ store, onError() {} });
-	try {
-		await host.load(
-			[
-				{
-					name: "checked",
-					facet: defineFacet((h) =>
-						h.serve(Value, (_params, self: StoreSelf) => {
-							declare(self);
-							return { value: constant(1) };
-						}),
-					),
-				},
-			],
-			context,
-		);
-		const ref = host.hold(Value, {}, context);
+test.each(failures)(
+	"$name fails activation and permits a corrected factory reload",
+	async ({ declare, store: needsStore, message }) => {
+		const store = needsStore
+			? await openStore(sqliteBackend(await openNodeSqliteDatabase(":memory:")), context)
+			: undefined;
+		const host = createHost({ store, onError() {} });
 		try {
-			await vi.waitFor(() =>
-				expect(ref.state.value).toMatchObject({
-					kind: "failed",
-					cause: { error: { message: expect.stringContaining(message) } },
-				}),
-			);
-			const reload = await host.reload(
-				[{ name: "checked", facet: defineFacet((h) => h.serve(Value, () => ({ value: constant(7) }))) }],
+			await host.load(
+				[
+					{
+						name: "checked",
+						facet: defineFacet((h) =>
+							h.serve(Value, (_params, self: StoreSelf) => {
+								declare(self);
+								return { value: constant(1) };
+							}),
+						),
+					},
+				],
 				context,
 			);
-			expect(reload.failed).toEqual([]);
-			await vi.waitFor(() => expect(ref.state.value.kind).toBe("live"));
-			expect(ref.value.value).toBe(7);
+			const ref = host.hold(Value, {}, context);
+			try {
+				await vi.waitFor(() =>
+					expect(ref.state.value).toMatchObject({
+						kind: "failed",
+						cause: { error: { message: expect.stringContaining(message) } },
+					}),
+				);
+				const reload = await host.reload(
+					[{ name: "checked", facet: defineFacet((h) => h.serve(Value, () => ({ value: constant(7) }))) }],
+					context,
+				);
+				expect(reload.failed).toEqual([]);
+				await vi.waitFor(() => expect(ref.state.value.kind).toBe("live"));
+				expect(ref.value.value).toBe(7);
+			} finally {
+				ref.release();
+			}
 		} finally {
-			ref.release();
+			await host.close(context);
+			await store?.close(context);
 		}
-	} finally {
-		await host.close(context);
-		await store?.close(context);
-	}
-});
+	},
+);
 
 test.each(failures)(
 	"$name rejects a replacement before changing its live provider",

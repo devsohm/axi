@@ -48,7 +48,10 @@ function equalities(filter: TraceQuery["attributes"], column: string, parameters
 	return clauses.join(" AND ") || "1";
 }
 export async function getTrace(db: SqliteDatabase, traceId: string): Promise<StoredTrace | undefined> {
-	const rows = await db.all<Row>("SELECT * FROM telemetry_spans WHERE trace_id = ? ORDER BY started_us, length(id), id", traceId);
+	const rows = await db.all<Row>(
+		"SELECT * FROM telemetry_spans WHERE trace_id = ? ORDER BY started_us, length(id), id",
+		traceId,
+	);
 	return rows.length ? { traceId, spans: rows.map(decode) } : undefined;
 }
 export async function findTraces(

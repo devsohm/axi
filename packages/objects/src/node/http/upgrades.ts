@@ -62,7 +62,11 @@ export class Upgrades {
 		message: IncomingMessage,
 		stream: Duplex,
 		head: Buffer,
-		admission: Omit<Admission<P>, "principal"> & { readonly principal: P | undefined; readonly match: SocketMatch; readonly request: HttpRequest },
+		admission: Omit<Admission<P>, "principal"> & {
+			readonly principal: P | undefined;
+			readonly match: SocketMatch;
+			readonly request: HttpRequest;
+		},
 		host: Host<P>,
 		context: Context,
 		failed: (failure: SocketFailure) => void,

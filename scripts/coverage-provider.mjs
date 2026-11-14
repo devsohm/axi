@@ -59,7 +59,10 @@ export default {
 			for (const name of readdirSync(directory)) {
 				const raw = provider.createCoverageMap();
 				raw.merge(JSON.parse(readFileSync(join(directory, name), "utf8")));
-				const report = normalizeCoveragePaths(await createSourceMapStore().transformCoverage(raw), provider.createCoverageMap()).toJSON();
+				const report = normalizeCoveragePaths(
+					await createSourceMapStore().transformCoverage(raw),
+					provider.createCoverageMap(),
+				).toJSON();
 				for (const file of Object.keys(report)) {
 					if (!provider.isIncluded(file)) throw new Error(`Unexpected child coverage: ${file}`);
 					if (map.files().includes(file)) {
@@ -86,10 +89,7 @@ export default {
 					if (file.endsWith(".d.ts")) continue;
 					const absolute = join(root, file).replaceAll("\\", "/");
 					if (map.files().includes(absolute)) continue;
-					instrumenter.instrumentSync(
-						transformSource(readFileSync(absolute, "utf8"), absolute).code,
-						absolute,
-					);
+					instrumenter.instrumentSync(transformSource(readFileSync(absolute, "utf8"), absolute).code, absolute);
 					const empty = instrumenter.lastFileCoverage();
 					if (
 						Object.keys(empty.statementMap).length ||

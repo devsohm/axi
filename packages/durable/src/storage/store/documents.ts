@@ -27,10 +27,7 @@ export function namespaceOf(scope: DocumentRecord["scope"]): string {
 			? `conversation:${scope.conversationId}`
 			: `task:${scope.taskId}`;
 }
-export function addressOf(
-	address: DocumentAddress | DocumentCreate,
-	owner: string,
-): EngineAddress {
+export function addressOf(address: DocumentAddress | DocumentCreate, owner: string): EngineAddress {
 	return {
 		owner,
 		namespace: namespaceOf(address.scope),
@@ -38,12 +35,8 @@ export function addressOf(
 		...(address.key === undefined ? {} : { key: encodeIndexed(address.key) }),
 	};
 }
-export function historyOf(
-	record: DocumentCreate | DocumentRecord,
-): DocumentHistory {
-	return record.scope.kind === "conversation" && record.history === "rewindable"
-		? "rewindable"
-		: "latest";
+export function historyOf(record: DocumentCreate | DocumentRecord): DocumentHistory {
+	return record.scope.kind === "conversation" && record.history === "rewindable" ? "rewindable" : "latest";
 }
 export function engineRecord(
 	create: DocumentCreate,
@@ -64,10 +57,7 @@ export function engineRecord(
 		fingerprint: "",
 	};
 }
-function ownedHere(
-	record: { readonly owner: string; readonly namespace: string },
-	owner: string,
-): boolean {
+function ownedHere(record: { readonly owner: string; readonly namespace: string }, owner: string): boolean {
 	return (
 		record.owner === owner &&
 		(record.namespace === "session" ||
@@ -75,10 +65,7 @@ function ownedHere(
 			record.namespace.startsWith("task:"))
 	);
 }
-export function durableRecord(
-	record: EngineRecord,
-	owner: string,
-): DocumentRecord | undefined {
+export function durableRecord(record: EngineRecord, owner: string): DocumentRecord | undefined {
 	return record.meta === undefined || !ownedHere(record, owner)
 		? undefined
 		: recordOfEntry({
@@ -88,15 +75,12 @@ export function durableRecord(
 }
 export function recordOfEntry(entry: DocumentEntry): DocumentRecord {
 	const value = JSON.parse(entry.meta!) as DocumentRecord;
-	return entry.retired_at == null
-		? value
-		: { ...value, retiredAt: seqFromNumber(entry.retired_at) };
+	return entry.retired_at == null ? value : { ...value, retiredAt: seqFromNumber(entry.retired_at) };
 }
 export function aliveAt(record: DocumentRecord, at: DocumentPoint): boolean {
 	return at === "current"
 		? record.retiredAt === undefined
-		: record.createdAt <= at &&
-				(record.retiredAt === undefined || at < record.retiredAt);
+		: record.createdAt <= at && (record.retiredAt === undefined || at < record.retiredAt);
 }
 export type DocumentRead =
 	| { readonly kind: "found"; readonly document: StoredDocument | undefined }
@@ -108,11 +92,9 @@ export async function readAt(
 	owner: string,
 ): Promise<DocumentRead> {
 	const entry = await readDocumentEntry(executor, id);
-	if (!entry || entry.meta === null || !ownedHere(entry, owner))
-		return { kind: "found", document: undefined };
+	if (!entry || entry.meta === null || !ownedHere(entry, owner)) return { kind: "found", document: undefined };
 	const record = recordOfEntry(entry);
-	if (at !== "current" && entry.history !== "rewindable")
-		return { kind: "current_only", id };
+	if (at !== "current" && entry.history !== "rewindable") return { kind: "current_only", id };
 	if (!aliveAt(record, at)) return { kind: "found", document: undefined };
 	const content = await loadContent(executor, id, at);
 	return {

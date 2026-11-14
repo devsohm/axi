@@ -127,7 +127,8 @@ test("tool validation distinguishes unknown tools, broken JSON and schema failur
 
 test("invalid tool arguments report their received type and each missing field", () => {
 	const inspect: Tool = {
-		name: "inspect", description: "Inspect coordinates",
+		name: "inspect",
+		description: "Inspect coordinates",
 		parameters: Type.Object({ x: Type.Number(), y: Type.Number() }),
 	};
 	const call: ToolCall = { type: "toolCall", id: "inspect-1", name: "inspect", arguments: { x: "bad", y: 1 } };
@@ -150,7 +151,11 @@ test("tool constraint diagnostics explain the limit and allowed values", () => {
 		[Type.Array(Type.Number(), { minItems: 2 }), [1], "expected at least 2 items"],
 		[{ enum: ["up", "down"] }, "sideways", 'expected one of ["up","down"]'],
 	] as const) {
-		const inspect: Tool = { name: "inspect", description: "Inspect an input", parameters: Type.Object({ value: schema }) };
+		const inspect: Tool = {
+			name: "inspect",
+			description: "Inspect an input",
+			parameters: Type.Object({ value: schema }),
+		};
 		const call: ToolCall = { type: "toolCall", id: "inspect-2", name: "inspect", arguments: { value } };
 		expect(() => validateToolArguments(inspect, call)).toThrow(`  - value: ${expected}`);
 	}
@@ -159,7 +164,11 @@ test("tool constraint diagnostics explain the limit and allowed values", () => {
 test("tool diagnostics select the intended union member and report invalid fields before extras", () => {
 	const point = Type.Object({ x: Type.Number() }, { additionalProperties: false });
 	const named = Type.Object({ name: Type.String() }, { additionalProperties: false });
-	const inspect: Tool = { name: "inspect", description: "Inspect a location", parameters: Type.Object({ value: Type.Union([named, point]) }) };
+	const inspect: Tool = {
+		name: "inspect",
+		description: "Inspect a location",
+		parameters: Type.Object({ value: Type.Union([named, point]) }),
+	};
 	const call: ToolCall = { type: "toolCall", id: "inspect-3", name: "inspect", arguments: { value: { x: "bad" } } };
 	expect(() => validateToolArguments(inspect, call)).toThrow(
 		'Validation failed for tool "inspect":\n  - value.x: expected number, got string\n\nReceived arguments:\n{\n  "value": {\n    "x": "bad"\n  }\n}',
@@ -168,31 +177,54 @@ test("tool diagnostics select the intended union member and report invalid field
 	expect(() => validateToolArguments(direct, { ...call, arguments: { value: { x: "bad", z: 2 } } })).toThrow(
 		"  - value.x: expected number, got string\n  - value.z: unknown field",
 	);
-	const tagged: Tool = { ...inspect, parameters: Type.Object({ value: Type.Union([
-		Type.Object({ kind: Type.Literal("a"), title: Type.String() }, { additionalProperties: false }),
-		Type.Object({ kind: Type.Literal("b"), count: Type.Number() }, { additionalProperties: false }),
-	]) }) };
-	expect(() => validateToolArguments(tagged, { ...call, arguments: { value: { kind: "other", count: 1 } } }))
-		.toThrow('  - value.kind: expected one of ["a","b"]');
-	expect(() => validateToolArguments(tagged, { ...call, arguments: { value: { kind: "a", count: 1 } } }))
-		.toThrow("  - value.title: missing\n  - value.count: unknown field");
-	const tied: Tool = { ...inspect, parameters: Type.Object({ value: Type.Union([
-		Type.Object({ field: Type.Number(), veryLongMissingField: Type.String() }, { additionalProperties: false }),
-		Type.Object({ field: Type.Integer() }, { additionalProperties: false }),
-	]) }) };
-	expect(() => validateToolArguments(tied, { ...call, arguments: { value: { field: [] } } }))
-		.toThrow("  - value.veryLongMissingField: missing\n  - value.field: expected number, got array");
+	const tagged: Tool = {
+		...inspect,
+		parameters: Type.Object({
+			value: Type.Union([
+				Type.Object({ kind: Type.Literal("a"), title: Type.String() }, { additionalProperties: false }),
+				Type.Object({ kind: Type.Literal("b"), count: Type.Number() }, { additionalProperties: false }),
+			]),
+		}),
+	};
+	expect(() => validateToolArguments(tagged, { ...call, arguments: { value: { kind: "other", count: 1 } } })).toThrow(
+		'  - value.kind: expected one of ["a","b"]',
+	);
+	expect(() => validateToolArguments(tagged, { ...call, arguments: { value: { kind: "a", count: 1 } } })).toThrow(
+		"  - value.title: missing\n  - value.count: unknown field",
+	);
+	const tied: Tool = {
+		...inspect,
+		parameters: Type.Object({
+			value: Type.Union([
+				Type.Object({ field: Type.Number(), veryLongMissingField: Type.String() }, { additionalProperties: false }),
+				Type.Object({ field: Type.Integer() }, { additionalProperties: false }),
+			]),
+		}),
+	};
+	expect(() => validateToolArguments(tied, { ...call, arguments: { value: { field: [] } } })).toThrow(
+		"  - value.veryLongMissingField: missing\n  - value.field: expected number, got array",
+	);
 });
 
 test("invalid values in referenced unions retain validation diagnostics", () => {
-	const inspect: Tool = { name: "inspect", description: "Inspect a referenced value", parameters: {
-		type: "object", $defs: { choice: { anyOf: [{ type: "number" }, { type: "boolean" }] },
-			container: { type: "object", properties: { nested: { $ref: "#/$defs/choice" } }, required: ["nested"] } },
-		properties: { value: { $ref: "#/$defs/container" } }, required: ["value"],
-	} };
+	const inspect: Tool = {
+		name: "inspect",
+		description: "Inspect a referenced value",
+		parameters: {
+			type: "object",
+			$defs: {
+				choice: { anyOf: [{ type: "number" }, { type: "boolean" }] },
+				container: { type: "object", properties: { nested: { $ref: "#/$defs/choice" } }, required: ["nested"] },
+			},
+			properties: { value: { $ref: "#/$defs/container" } },
+			required: ["value"],
+		},
+	};
 	const call: ToolCall = { type: "toolCall", id: "inspect-4", name: "inspect", arguments: { value: { nested: {} } } };
 	expect(() => validateToolArguments(inspect, call)).toThrow("  - value.nested: expected number, got object");
-	expect(validateToolArguments(inspect, { ...call, arguments: { value: { nested: 2 } } })).toEqual({ value: { nested: 2 } });
+	expect(validateToolArguments(inspect, { ...call, arguments: { value: { nested: 2 } } })).toEqual({
+		value: { nested: 2 },
+	});
 });
 
 test("serialized tool schemas retain required-value conversions and caller ownership", () => {
@@ -748,8 +780,9 @@ test("local references belong to their enclosing schema resource", () => {
 	};
 	expect(validateToolArguments(convert, call)).toEqual({ scoped: 3.8, outer: "42" });
 	expect(call.arguments).toEqual({ scoped: "3.8", outer: 42 });
-	expect(() => validateToolArguments(convert, { ...call, arguments: { scoped: "bad", outer: 42 } }))
-		.toThrow("scoped: expected number, got string");
+	expect(() => validateToolArguments(convert, { ...call, arguments: { scoped: "bad", outer: 42 } })).toThrow(
+		"scoped: expected number, got string",
+	);
 	const missing = {
 		...convert,
 		parameters: {
@@ -762,26 +795,42 @@ test("local references belong to their enclosing schema resource", () => {
 });
 
 test("local reference fragments decode URI escapes before JSON Pointer escapes", () => {
-	for (const [key, ref] of [["a b", "a%20b"], ["α", "%CE%B1"], ["a/b", "a~1b"], ["a~b", "a~0b"], ["%20", "%2520"]]) {
+	for (const [key, ref] of [
+		["a b", "a%20b"],
+		["α", "%CE%B1"],
+		["a/b", "a~1b"],
+		["a~b", "a~0b"],
+		["%20", "%2520"],
+	]) {
 		const inspect: Tool = {
-			name: "inspect", description: "Read a referenced number",
-			parameters: { type: "object", $defs: { [key]: { type: "number" } }, properties: { value: { $ref: `#/$defs/${ref}` } } },
+			name: "inspect",
+			description: "Read a referenced number",
+			parameters: {
+				type: "object",
+				$defs: { [key]: { type: "number" } },
+				properties: { value: { $ref: `#/$defs/${ref}` } },
+			},
 		};
 		const call: ToolCall = { type: "toolCall", id: "fragment", name: "inspect", arguments: { value: "4.5" } };
 		expect(validateToolArguments(inspect, call)).toEqual({ value: 4.5 });
 		expect(call.arguments).toEqual({ value: "4.5" });
-		expect(() => validateToolArguments(inspect, { ...call, arguments: { value: [] } })).toThrow("value: expected number, got array");
+		expect(() => validateToolArguments(inspect, { ...call, arguments: { value: [] } })).toThrow(
+			"value: expected number, got array",
+		);
 	}
 });
 
 test("unresolved or malformed reference fragments fail only when their field is present", () => {
 	for (const ref of ["#/$defs/missing", "#/$defs/%", "#/$defs/%CE"]) {
 		const inspect: Tool = {
-			name: "inspect", description: "Read an optional reference",
+			name: "inspect",
+			description: "Read an optional reference",
 			parameters: { type: "object", properties: { value: { $ref: ref } } },
 		};
 		const call: ToolCall = { type: "toolCall", id: "missing-fragment", name: "inspect", arguments: {} };
 		expect(validateToolArguments(inspect, call)).toEqual({});
-		expect(() => validateToolArguments(inspect, { ...call, arguments: { value: 4 } })).toThrow(`value: unresolved reference ${ref}`);
+		expect(() => validateToolArguments(inspect, { ...call, arguments: { value: 4 } })).toThrow(
+			`value: unresolved reference ${ref}`,
+		);
 	}
 });

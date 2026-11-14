@@ -7,8 +7,14 @@ export type TranscriptItem =
 	| { readonly kind: "entry"; readonly entry: EntryRecord }
 	| { readonly kind: "gap"; readonly after: EntryId; readonly upTo: EntryId }
 	| { readonly kind: "earlier" };
-export type TranscriptView = Omit<ConversationView, "entries" | "before"> & { readonly items: readonly TranscriptItem[] };
-export type EntryLoader = (query: Omit<EntryQuery, "conversationId">, limit: number, context: Context) => Promise<Page<EntryRecord, Cursor>>;
+export type TranscriptView = Omit<ConversationView, "entries" | "before"> & {
+	readonly items: readonly TranscriptItem[];
+};
+export type EntryLoader = (
+	query: Omit<EntryQuery, "conversationId">,
+	limit: number,
+	context: Context,
+) => Promise<Page<EntryRecord, Cursor>>;
 export type ConversationTranscriptOptions = { readonly pageSize?: number };
 type Gap = Extract<TranscriptItem, { kind: "gap" }>;
 type Row = Extract<TranscriptItem, { kind: "entry" }>;
@@ -27,7 +33,8 @@ export class ConversationTranscript {
 	#view: TranscriptView | undefined;
 	constructor(load: EntryLoader, options?: ConversationTranscriptOptions) {
 		this.#pageSize = options?.pageSize ?? 50;
-		if (!Number.isSafeInteger(this.#pageSize) || this.#pageSize < 1) throw new RangeError(`Page size must be an integer >= 1, got ${this.#pageSize}`);
+		if (!Number.isSafeInteger(this.#pageSize) || this.#pageSize < 1)
+			throw new RangeError(`Page size must be an integer >= 1, got ${this.#pageSize}`);
 		this.#loader = load;
 	}
 	get newest(): EntryId | undefined {
@@ -49,7 +56,11 @@ export class ConversationTranscript {
 		const low = this.#bounds!.after;
 		if (low === -Infinity) return Promise.resolve(this.#result());
 		return this.#once("earlier", async () => {
-			const page = await this.#loader({ maxEntryId: idFromNumber<EntryId>(low), order: "descending" }, this.#pageSize, context);
+			const page = await this.#loader(
+				{ maxEntryId: idFromNumber<EntryId>(low), order: "descending" },
+				this.#pageSize,
+				context,
+			);
 			const entries = [...page.items].reverse();
 			const from = page.next === undefined || entries.length === 0 ? -Infinity : entries[0]!.id - 1;
 			this.#cover(from, low, entries);
@@ -58,10 +69,20 @@ export class ConversationTranscript {
 	}
 	fillGap(gap: Gap, context: Context): Promise<TranscriptView> {
 		if (this.#last === undefined) return Promise.reject(new Error("ConversationTranscript: merge a view first"));
-		const current = this.#items.find((item): item is Gap => item.kind === "gap" && item.after < gap.upTo && gap.after < item.upTo);
+		const current = this.#items.find(
+			(item): item is Gap => item.kind === "gap" && item.after < gap.upTo && gap.after < item.upTo,
+		);
 		if (current === undefined) return Promise.resolve(this.#result());
 		return this.#once(`gap:${current.after}:${current.upTo}`, async () => {
-			const page = await this.#loader({ minEntryId: idFromNumber<EntryId>(current.after + 1), maxEntryId: idFromNumber<EntryId>(current.upTo - 1), order: "ascending" }, this.#pageSize, context);
+			const page = await this.#loader(
+				{
+					minEntryId: idFromNumber<EntryId>(current.after + 1),
+					maxEntryId: idFromNumber<EntryId>(current.upTo - 1),
+					order: "ascending",
+				},
+				this.#pageSize,
+				context,
+			);
 			const through = page.next === undefined || page.items.length === 0 ? current.upTo - 1 : page.items.at(-1)!.id;
 			this.#cover(current.after, through, page.items);
 			return this.#result();
@@ -72,16 +93,19 @@ export class ConversationTranscript {
 		if (current !== undefined) return current;
 		const pending = Promise.resolve().then(load);
 		this.#loading.set(key, pending);
-		const release = () => { if (this.#loading.get(key) === pending) this.#loading.delete(key); };
+		const release = () => {
+			if (this.#loading.get(key) === pending) this.#loading.delete(key);
+		};
 		pending.then(release, release);
 		return pending;
 	}
 	#cover(after: number, through: number, entries: readonly EntryRecord[]): void {
 		const fresh: Row[] = [];
-		for (const entry of entries) if (!this.#ids.has(entry.id)) {
-			this.#ids.add(entry.id);
-			fresh.push({ kind: "entry", entry });
-		}
+		for (const entry of entries)
+			if (!this.#ids.has(entry.id)) {
+				this.#ids.add(entry.id);
+				fresh.push({ kind: "entry", entry });
+			}
 		const previous = this.#bounds;
 		const noHistory = this.#rows.length === 0 && this.#gaps.length === 0;
 		this.#rows = mergeRows(this.#rows, fresh);
@@ -91,7 +115,7 @@ export class ConversationTranscript {
 			this.#gaps.push(gapOf(previous.through, entries[0]?.id ?? after + 1));
 			this.#bounds = { after: previous.after, through };
 		} else if (through !== -Infinity && through < previous.after) {
-			const next = this.#rows.find(row => row.entry.id > through)?.entry.id ?? previous.after + 1;
+			const next = this.#rows.find((row) => row.entry.id > through)?.entry.id ?? previous.after + 1;
 			this.#gaps.unshift(gapOf(through, next));
 			this.#bounds = { after, through: previous.through };
 		} else {
@@ -103,7 +127,7 @@ export class ConversationTranscript {
 						continue;
 					}
 					if (after > gap.after) {
-						const next = this.#rows.find(row => row.entry.id > after)?.entry.id ?? after + 1;
+						const next = this.#rows.find((row) => row.entry.id > after)?.entry.id ?? after + 1;
 						remaining.push(gapOf(gap.after, Math.min(gap.upTo, next)));
 					}
 					if (through + 1 < gap.upTo) remaining.push(gapOf(through, gap.upTo));
@@ -120,11 +144,17 @@ export class ConversationTranscript {
 			items.push(row);
 		}
 		items.push(...gaps.slice(next));
-		if (items.length !== this.#items.length || items.some((item, index) => !sameItem(item, this.#items[index]!))) this.#items = items;
+		if (items.length !== this.#items.length || items.some((item, index) => !sameItem(item, this.#items[index]!)))
+			this.#items = items;
 	}
 	#result(): TranscriptView {
 		const last = this.#last!;
-		if (this.#view?.items === this.#items && this.#view.docs === last.docs && this.#view.conversation === last.conversation) return this.#view;
+		if (
+			this.#view?.items === this.#items &&
+			this.#view.docs === last.docs &&
+			this.#view.conversation === last.conversation
+		)
+			return this.#view;
 		this.#view = { conversation: last.conversation, docs: last.docs, items: this.#items };
 		return this.#view;
 	}

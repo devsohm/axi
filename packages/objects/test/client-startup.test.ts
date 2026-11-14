@@ -1,37 +1,74 @@
 import { expect, it, vi } from "vitest";
 import { BACKGROUND_CONTEXT as context } from "../src/context/index.ts";
 import {
-	createHost, defineFacet, hostKind, memoryLinkPair, startClient, Translations, translationsFacet, WebScripts,
-	type Link, type RegisteredScript, type ScriptEntry, type ScriptSet,
+	createHost,
+	defineFacet,
+	hostKind,
+	memoryLinkPair,
+	startClient,
+	Translations,
+	translationsFacet,
+	WebScripts,
+	type Link,
+	type RegisteredScript,
+	type ScriptEntry,
+	type ScriptSet,
 } from "../src/index.ts";
 import { publishTo, scriptsFacet } from "../src/node/surfaces/current.ts";
 
 function script(revision: string): RegisteredScript {
 	return {
-		plugin: "status", digest: revision,
+		plugin: "status",
+		digest: revision,
 		run(_require, module) {
-			module.exports = { default: defineFacet((_host, self) => self.contribute(Translations, [
-				{ namespace: "connection", locale: "en", messages: { status: revision } },
-			])) };
+			module.exports = {
+				default: defineFacet((_host, self) =>
+					self.contribute(Translations, [{ namespace: "connection", locale: "en", messages: { status: revision } }]),
+				),
+			};
 		},
 	};
 }
 function set(revision: string, base = "application"): ScriptSet {
-	return { base, combined: "/plugins.js", plugins: [{ name: "status", digest: revision, url: `/status-${revision}.js` }] };
+	return {
+		base,
+		combined: "/plugins.js",
+		plugins: [{ name: "status", digest: revision, url: `/status-${revision}.js` }],
+	};
 }
 async function setup(options: { offline?: boolean; follow?: boolean; shown?: string } = {}) {
 	const server = createHost({ address: hostKind("server")(), principal: { kind: "server" }, onError() {} });
-	await server.load([{ name: "scripts", facet: scriptsFacet("web", { set: set(options.shown ?? "initial") }) }], context);
-	const links: Link[] = [], fetchScript = vi.fn(async (entry: ScriptEntry) => script(entry.digest)),
-		serverBase = vi.fn(async () => "new-application"), outdated = vi.fn();
+	await server.load(
+		[{ name: "scripts", facet: scriptsFacet("web", { set: set(options.shown ?? "initial") }) }],
+		context,
+	);
+	const links: Link[] = [],
+		fetchScript = vi.fn(async (entry: ScriptEntry) => script(entry.digest)),
+		serverBase = vi.fn(async () => "new-application"),
+		outdated = vi.fn();
 	let baseReads = 0;
 	const client = await startClient({
-		scripts: WebScripts, base: "application", initial: [script("initial")], modules: {},
-		core: [{ name: "translations", facet: translationsFacet() }], follow: options.follow,
-		fetchScript, get serverBase() { baseReads++; return serverBase; }, outdated, onError() {},
+		scripts: WebScripts,
+		base: "application",
+		initial: [script("initial")],
+		modules: {},
+		core: [{ name: "translations", facet: translationsFacet() }],
+		follow: options.follow,
+		fetchScript,
+		get serverBase() {
+			baseReads++;
+			return serverBase;
+		},
+		outdated,
+		onError() {},
 		environment: {
-			now: Date.now, online: () => true, onWake: () => () => {},
-			after(ms, run) { const timer = setTimeout(run, ms); return () => clearTimeout(timer); },
+			now: Date.now,
+			online: () => true,
+			onWake: () => () => {},
+			after(ms, run) {
+				const timer = setTimeout(run, ms);
+				return () => clearTimeout(timer);
+			},
 		},
 		open(events) {
 			const [client, remote] = memoryLinkPair();
@@ -45,10 +82,17 @@ async function setup(options: { offline?: boolean; follow?: boolean; shown?: str
 	});
 	const registry = await client.host.registry(Translations, context);
 	return {
-		server, links, fetchScript, serverBase, outdated,
+		server,
+		links,
+		fetchScript,
+		serverBase,
+		outdated,
 		baseReads: () => baseReads,
 		status: () => registry.value.catalogs.get("connection")?.get("en")?.value.messages.status,
-		async close() { await client.stop(context); await server.close(context); },
+		async close() {
+			await client.stop(context);
+			await server.close(context);
+		},
 	};
 }
 

@@ -22,10 +22,7 @@ export type TableEdit =
 			readonly name: string;
 			readonly columns: readonly string[];
 	  };
-export type AlterEdit = Extract<
-	TableEdit,
-	{ readonly kind: "rename" | "add" | "drop" | "json" }
->;
+export type AlterEdit = Extract<TableEdit, { readonly kind: "rename" | "add" | "drop" | "json" }>;
 export type DataStep =
 	| {
 			readonly kind: "rows";
@@ -50,20 +47,12 @@ export type TablePlan =
 			readonly versions: readonly TableDefinition[];
 			readonly first: "begin" | "resume";
 	  };
-export function planTable(
-	definition: TableDefinition,
-	recorded: TableRecord | undefined,
-	what: string,
-): TablePlan {
+export function planTable(definition: TableDefinition, recorded: TableRecord | undefined, what: string): TablePlan {
 	if (!recorded) return { kind: "create" };
 	if (recorded.version > definition.version)
-		throw new Error(
-			`${what}: the store has version ${recorded.version}, newer than the code's ${definition.version}`,
-		);
+		throw new Error(`${what}: the store has version ${recorded.version}, newer than the code's ${definition.version}`);
 	const versions = historyOf(definition);
-	const found = versions.find(
-		(version) => version.version === recorded.version,
-	);
+	const found = versions.find((version) => version.version === recorded.version);
 	if (!found)
 		throw new Error(
 			`${what}: the store has version ${recorded.version}, older than the history's base ${versions[0]!.version}`,
@@ -72,19 +61,14 @@ export function planTable(
 		throw new Error(
 			`${what}: version ${recorded.version} is recorded with another definition (a history edited in place)`,
 		);
-	if (recorded.state === "ready" && recorded.version === definition.version)
-		return { kind: "ready" };
+	if (recorded.state === "ready" && recorded.version === definition.version) return { kind: "ready" };
 	const resuming = recorded.state === "migrating";
 	if (resuming && !found.evolution?.migration.step)
-		throw new Error(
-			`${what}: version ${recorded.version} is recorded migrating, but has no data step to resume`,
-		);
+		throw new Error(`${what}: version ${recorded.version} is recorded migrating, but has no data step to resume`);
 	return {
 		kind: "migrate",
 		versions: versions.filter((version) =>
-			resuming
-				? version.version >= recorded.version
-				: version.version > recorded.version,
+			resuming ? version.version >= recorded.version : version.version > recorded.version,
 		),
 		first: resuming ? "resume" : "begin",
 	};

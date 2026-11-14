@@ -28,12 +28,20 @@ export abstract class Source implements Watchable<JsonValue> {
 	protected readonly batch: Batch;
 	readonly #watches = new Set<Watch<JsonValue>>();
 	readonly #subscribers = new Set<Subscriber>();
-	constructor(batch: Batch) { this.batch = batch }
+	constructor(batch: Batch) {
+		this.batch = batch;
+	}
 	abstract get value(): JsonValue;
 	abstract deliver(context: Context): void;
-	get watched(): boolean { return this.#watches.size > 0 || this.#subscribers.size > 0 }
-	start(): WatchStart { return { kind: "value", value: this.value } }
-	async watch(context: Context): Promise<Watch<JsonValue>> { return this.openWatch(context) }
+	get watched(): boolean {
+		return this.#watches.size > 0 || this.#subscribers.size > 0;
+	}
+	start(): WatchStart {
+		return { kind: "value", value: this.value };
+	}
+	async watch(context: Context): Promise<Watch<JsonValue>> {
+		return this.openWatch(context);
+	}
 	openWatch(context: Context): Watch<JsonValue> {
 		this.batch.assertOutside("watch");
 		const initial = this.start();
@@ -43,14 +51,24 @@ export abstract class Source implements Watchable<JsonValue> {
 			if (initial.last === undefined) throw initial.error;
 			value = initial.last;
 		}
-		const watch = new Watch(value, () => { this.#watches.delete(watch) }, this.batch.reportListener);
+		const watch = new Watch(
+			value,
+			() => {
+				this.#watches.delete(watch);
+			},
+			this.batch.reportListener,
+		);
 		this.#watches.add(watch);
 		if (context.abortSignal) watch.observeAbort(context.abortSignal);
 		if (initial.kind === "failed") watch.fail(initial.error, context);
 		return watch;
 	}
-	subscribe(subscriber: Subscriber): void { this.#subscribers.add(subscriber) }
-	unsubscribe(subscriber: Subscriber): void { this.#subscribers.delete(subscriber) }
+	subscribe(subscriber: Subscriber): void {
+		this.#subscribers.add(subscriber);
+	}
+	unsubscribe(subscriber: Subscriber): void {
+		this.#subscribers.delete(subscriber);
+	}
 	protected changed(): void {
 		if (this.watched) this.batch.changed(this);
 		for (const dependent of this.dependents) dependent.invalidate();
@@ -85,12 +103,22 @@ export abstract class Source implements Watchable<JsonValue> {
 
 export class Constant<T extends JsonValue = JsonValue> implements Watchable<T> {
 	readonly value: T;
-	constructor(value: T) { this.value = value }
-	async watch(context: Context): Promise<Watch<T>> { return this.openWatch(context) }
+	constructor(value: T) {
+		this.value = value;
+	}
+	async watch(context: Context): Promise<Watch<T>> {
+		return this.openWatch(context);
+	}
 	openWatch(context: Context): Watch<T> {
-		const watch = new Watch(this.value, () => {}, () => {});
+		const watch = new Watch(
+			this.value,
+			() => {},
+			() => {},
+		);
 		if (context.abortSignal) watch.observeAbort(context.abortSignal);
 		return watch;
 	}
 }
-export function constant<const T extends JsonValue>(value: T): Watchable<T> { return new Constant(value) }
+export function constant<const T extends JsonValue>(value: T): Watchable<T> {
+	return new Constant(value);
+}

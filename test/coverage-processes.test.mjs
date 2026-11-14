@@ -42,7 +42,10 @@ test("coverage treats Windows path separators as one file without dropping execu
 		path,
 		statementMap: { 0: { start: { line: 1, column: 0 }, end: { line: 1, column: 8 } } },
 		s: { 0: count },
-		fnMap: {}, f: {}, branchMap: {}, b: {},
+		fnMap: {},
+		f: {},
+		branchMap: {},
+		b: {},
 	});
 	const source = istanbul.createCoverageMap({ [windows]: record(windows, 2), [portable]: record(portable, 3) });
 	const result = normalizeCoveragePaths(source, istanbul.createCoverageMap({}));
@@ -110,7 +113,10 @@ test("coverage keeps parent, child and worker execution separate before creditin
 			);
 		}
 		await writeFile(join(directory, "src/target.ts"), "export const value = 23;");
-		await writeFile(join(directory, "src/native.ts"), "export function onlyNative(flag: boolean): number { if (flag) return 29; return -1; }\nexport function unusedNative(): number { return 0; }\n");
+		await writeFile(
+			join(directory, "src/native.ts"),
+			"export function onlyNative(flag: boolean): number { if (flag) return 29; return -1; }\nexport function unusedNative(): number { return 0; }\n",
+		);
 		await writeFile(
 			join(directory, "test/child.mjs"),
 			'import { choose, load, cleanup } from "../src/child.ts"; process.on("exit", cleanup); await load(); (await import("../src/child.ts?reload")).choose(true); process.emitWarning("fixture application warning"); console.log(choose(true));',

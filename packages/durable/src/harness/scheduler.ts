@@ -517,8 +517,7 @@ export class TaskScheduler {
 	wake(): Wake {
 		if (this.#options.readOnly) return { active: false };
 		const now = this.#options.now();
-		const active =
-			this.#runs.size > 0 || this.#reconcileCount > 0 || this.#hasReconcileWork() || this.#canRunNow(now);
+		const active = this.#runs.size > 0 || this.#reconcileCount > 0 || this.#hasReconcileWork() || this.#canRunNow(now);
 		let at: number | undefined;
 		for (const id of this.#sleeping) {
 			const task = this.#tree.live.get(id);
@@ -1759,8 +1758,7 @@ export class TaskScheduler {
 						if (!this.#inactive(id)) {
 							this.#contexts.set(id, { range, idleSince: undefined });
 							this.#expiryOrder.delete(id);
-						}
-						else if (this.#retention() > 0) {
+						} else if (this.#retention() > 0) {
 							const idleSince = kept?.idleSince ?? o.now();
 							const expiresAt =
 								kept?.idleSince !== undefined && kept.expiresAt !== undefined

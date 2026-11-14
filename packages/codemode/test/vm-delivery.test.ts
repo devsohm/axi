@@ -152,8 +152,13 @@ test("failure to read the host's script source reports a crash and leaves a disp
 		shouldInterrupt: () => false,
 		post: (message) => messages.push(message),
 		data: {
-			get code(): string { throw new Error("Source unavailable"); },
-			tools: [], globals: [], store: {}, memoryLimitBytes: undefined,
+			get code(): string {
+				throw new Error("Source unavailable");
+			},
+			tools: [],
+			globals: [],
+			store: {},
+			memoryLimitBytes: undefined,
 		},
 	});
 	try {

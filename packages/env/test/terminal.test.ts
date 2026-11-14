@@ -54,7 +54,9 @@ test.skipIf(process.platform === "win32")("terminal environment isolation reache
 			argv: [process.execPath, "-e", "process.stdout.write(process.env.AXI_TERMINAL_VALUE ?? 'missing')"],
 			env: { AXI_TERMINAL_VALUE: "isolated" },
 			inheritEnv: false,
-			onData: (bytes) => { output += Buffer.from(bytes).toString(); },
+			onData: (bytes) => {
+				output += Buffer.from(bytes).toString();
+			},
 		});
 		expect(await terminal.exited).toBe(0);
 		expect(output).toBe("isolated");

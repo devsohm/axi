@@ -42,7 +42,9 @@ function setup(implementation: AnyJobImplementation) {
 		label: "test",
 		context,
 		telemetry: context.telemetry,
-		report(error) { errors.push(error); },
+		report(error) {
+			errors.push(error);
+		},
 		batch,
 		store: undefined,
 		fail(error) {
@@ -109,7 +111,11 @@ it("rejects job start setup failures through the returned promise", async () => 
 	try {
 		app.job.live();
 		const request = withTelemetry(context.telemetry, context);
-		Object.defineProperty(request, "telemetry", { get() { throw failure; } });
+		Object.defineProperty(request, "telemetry", {
+			get() {
+				throw failure;
+			},
+		});
 		await expect(app.job.start({}, request)).rejects.toBe(failure);
 	} finally {
 		await app.close();
@@ -124,7 +130,12 @@ it("retains the telemetry context selected for a job start", async () => {
 		app.job.live();
 		await telemetry.startSpan({ name: "request" }, async (span) => {
 			const request = withTelemetry(span, context);
-			Object.defineProperty(request, "telemetry", { get() { reads++; return span; } });
+			Object.defineProperty(request, "telemetry", {
+				get() {
+					reads++;
+					return span;
+				},
+			});
 			const run = await app.job.start({}, request);
 			expect(await run.outcome(context)).toMatchObject({ kind: "done" });
 			expect(reads).toBe(1);
@@ -139,9 +150,21 @@ it.each([0, 100, Infinity])("captures a job state persistence deadline once: %s"
 	const app = setup({
 		async run(_args, ctx) {
 			if (!ctx.state) throw new Error("Missing run state");
-			await ctx.state.change((draft) => { draft.output = "saved"; }, ctx, {
-				persistence: { kind: "deferred", get withinMs() { reads++; return withinMs; } },
-			});
+			await ctx.state.change(
+				(draft) => {
+					draft.output = "saved";
+				},
+				ctx,
+				{
+					persistence: {
+						kind: "deferred",
+						get withinMs() {
+							reads++;
+							return withinMs;
+						},
+					},
+				},
+			);
 			return "done";
 		},
 	});

@@ -35,8 +35,7 @@ export class Running extends Source {
 	add(entry: JsonValue): void {
 		const entries = this.#current();
 		this.#entries = [...entries, entry];
-		if (this.#mark())
-			this.#pendingOps.push(["p", [], entries.length, 0, [entry]]);
+		if (this.#mark()) this.#pendingOps.push(["p", [], entries.length, 0, [entry]]);
 	}
 	replace(before: JsonValue, after: JsonValue): void {
 		const index = this.#replace(before, after);
@@ -44,8 +43,7 @@ export class Running extends Source {
 	}
 	stateChanged(before: JsonValue, after: JsonValue, ops: readonly Op[]): void {
 		const index = this.#replace(before, after);
-		if (this.#mark())
-			for (const op of ops) this.#pendingOps.push(nested(index, op));
+		if (this.#mark()) for (const op of ops) this.#pendingOps.push(nested(index, op));
 	}
 	remove(entry: JsonValue): void {
 		const entries = this.#current(),

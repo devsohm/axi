@@ -42,17 +42,12 @@ it("handshakes before sending work and retains ordered messages through repeated
 	channel.send({ kind: "ack" });
 	channel.start();
 	await flushed();
-	expect(outgoing).toEqual([
-		{ kind: "hello", protocol: 1, incarnation, calls: 256 },
-	]);
-	peer.send(
-		textCodec.encode({ kind: "hello", protocol: 1, incarnation, calls: 7 }),
-	);
+	expect(outgoing).toEqual([{ kind: "hello", protocol: 1, incarnation, calls: 256 }]);
+	peer.send(textCodec.encode({ kind: "hello", protocol: 1, incarnation, calls: 7 }));
 	await flushed();
 	expect(channel.peerCalls).toBe(7);
 	expect(outgoing.at(-1)).toEqual({ kind: "ack" });
-	for (const hold of [0, 1, 0, 2])
-		peer.send(textCodec.encode({ kind: "release", hold }));
+	for (const hold of [0, 1, 0, 2]) peer.send(textCodec.encode({ kind: "release", hold }));
 	await flushed();
 	expect(seen).toEqual(["open"]);
 	gates[0]!.resolve();
@@ -104,12 +99,17 @@ it("reports a malformed handshake once and closes a peer that stays silent", asy
 	}
 });
 it("keeps heartbeat probes outside outgoing application-byte accounting", async () => {
-	const [local, peer] = memoryLinkPair(), add = vi.fn();
+	const [local, peer] = memoryLinkPair(),
+		add = vi.fn();
 	const channel = new Channel(
 		local,
 		{ opened() {}, message() {}, closed() {} },
 		{
-			codec: textCodec, incarnation, calls: 256, trusted: true, report() {},
+			codec: textCodec,
+			incarnation,
+			calls: 256,
+			trusted: true,
+			report() {},
 			metrics: objectsMetrics({ ...NOOP_TELEMETRY_METRICS, counter: () => ({ add }) }),
 		},
 		context,

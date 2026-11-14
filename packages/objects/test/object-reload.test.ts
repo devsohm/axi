@@ -29,26 +29,37 @@ it("stops removed objects before restarting retained objects in the same reload"
 	const events: string[] = [];
 	const plugin = (name: string, type: typeof First | typeof Second, n: number) => ({
 		name,
-		facet: defineFacet((h) => h.serve(type, (_, self) => {
-			self.onLive((ctx) => new Promise<void>((resolve) => {
-				events.push(`started:${name}`);
-				ctx.abortSignal?.addEventListener("abort", () => {
-					events.push(`stopped:${name}`);
-					resolve();
-				}, { once: true });
-			}));
-			return { value: constant(n) };
-		})),
+		facet: defineFacet((h) =>
+			h.serve(type, (_, self) => {
+				self.onLive(
+					(ctx) =>
+						new Promise<void>((resolve) => {
+							events.push(`started:${name}`);
+							ctx.abortSignal?.addEventListener(
+								"abort",
+								() => {
+									events.push(`stopped:${name}`);
+									resolve();
+								},
+								{ once: true },
+							);
+						}),
+				);
+				return { value: constant(n) };
+			}),
+		),
 	});
 	const host = createHost({ onError() {} });
 	try {
 		await host.load([plugin("first", First, 1), plugin("second", Second, 1)], context);
-		const first = await host.get(First, {}, context), second = await host.get(Second, {}, context);
+		const first = await host.get(First, {}, context),
+			second = await host.get(Second, {}, context);
 		await vi.waitFor(() => expect(events).toContain("started:second"));
 		events.length = 0;
 		await host.reload([plugin("first", First, 2)], context);
 		expect(events.filter((event) => event.startsWith("stopped:"))).toEqual(["stopped:second", "stopped:first"]);
-		first.release(); second.release();
+		first.release();
+		second.release();
 	} finally {
 		await host.close(context);
 	}
@@ -56,11 +67,14 @@ it("stops removed objects before restarting retained objects in the same reload"
 
 it("keeps void declaration results unchanged while staging a replacement factory", async () => {
 	const Value = local("reload.declaration-results", { version: 1, params: {}, members: { value: int() } });
-	const plugin = (n: number) => defineFacet((h) => h.serve(Value, (_, self) => {
-		const results = [self.onLive(async () => {}), self.on(constant(1), async () => {})];
-		if (results.some((result) => result !== undefined)) throw new Error("declaration returned a handle");
-		return { value: constant(n) };
-	}));
+	const plugin = (n: number) =>
+		defineFacet((h) =>
+			h.serve(Value, (_, self) => {
+				const results = [self.onLive(async () => {}), self.on(constant(1), async () => {})];
+				if (results.some((result) => result !== undefined)) throw new Error("declaration returned a handle");
+				return { value: constant(n) };
+			}),
+		);
 	const host = createHost({ onError() {} });
 	try {
 		await host.load([{ name: "value", facet: plugin(1) }], context);
@@ -334,7 +348,9 @@ it("aborts an in-memory job on reload and maps its outcome for the replacement",
 		await host.reload([{ name: "worker", facet: next }], context);
 		gate.resolve();
 		await vi.waitFor(() =>
-			expect(finished).toMatchObject([{ kind: "failed", args: { value: 10, priority: 2 }, error: { kind: "aborted", reason: "reload" } }]),
+			expect(finished).toMatchObject([
+				{ kind: "failed", args: { value: 10, priority: 2 }, error: { kind: "aborted", reason: "reload" } },
+			]),
 		);
 	} finally {
 		gate.resolve();

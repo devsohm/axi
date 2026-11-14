@@ -88,7 +88,19 @@ if (step.local) {
 	return {
 		directory,
 		target,
-		async plan(steps: { stdout?: string; stderr?: string; code?: number; local?: boolean; stream?: boolean; peer?: boolean; hostKey?: string; hold?: boolean; closeInput?: boolean }[]) {
+		async plan(
+			steps: {
+				stdout?: string;
+				stderr?: string;
+				code?: number;
+				local?: boolean;
+				stream?: boolean;
+				peer?: boolean;
+				hostKey?: string;
+				hold?: boolean;
+				closeInput?: boolean;
+			}[],
+		) {
 			await writeFile(plan, JSON.stringify(steps));
 			await writeFile(join(directory, "calls.jsonl"), "");
 		},
@@ -112,15 +124,23 @@ test.skipIf(process.platform === "win32").each(["eager", "lazy"])(
 		try {
 			await peer.plan([
 				{ stdout: `AXI-ENV-PROBE\nLinux\nx86_64\nGNU/Linux\n${home}\n-\n-\n` },
-				{ local: true }, { local: true }, { stream: true },
-				{ local: true }, { stream: true },
+				{ local: true },
+				{ local: true },
+				{ stream: true },
+				{ local: true },
+				{ stream: true },
 			]);
 			const client = mode === "eager" ? await connectSsh(options) : sshConnection(options);
 			const { connection } = client;
 			try {
 				if (typeof client.remote === "function") expect(client.remote()).toBeUndefined();
 				const first = await connection.info();
-				const env = new RemoteExecutionEnv({ connection, id: "ssh-restart", cwd: peer.directory, shellPath: "/bin/sh" });
+				const env = new RemoteExecutionEnv({
+					connection,
+					id: "ssh-restart",
+					cwd: peer.directory,
+					shellPath: "/bin/sh",
+				});
 				getOrThrow(await env.writeFile("retained.txt", "saved before disconnect", context));
 				process.kill(first.pid, "SIGTERM");
 				await vi.waitFor(async () => expect((await connection.info()).pid).not.toBe(first.pid), { timeout: 5000 });
@@ -145,9 +165,13 @@ test.skipIf(process.platform === "win32").each([
 ] as const)("a Windows %s SSH peer starts the verified daemon under %s", async (shell, home) => {
 	const peer = await peerFixture();
 	const binary = localDaemon();
-	const digest = createHash("sha256").update(await readFile(binary)).digest("hex").slice(0, 32);
+	const digest = createHash("sha256")
+		.update(await readFile(binary))
+		.digest("hex")
+		.slice(0, 32);
 	const file = `${home}\\.axi\\mobile\\tools\\axi-env-${digest}.exe`;
-	const executable = shell === "powershell" ? `& '${file.replaceAll("'", "''")}'` : file.includes(" ") ? `"${file}"` : file;
+	const executable =
+		shell === "powershell" ? `& '${file.replaceAll("'", "''")}'` : file.includes(" ") ? `"${file}"` : file;
 	try {
 		await peer.plan([
 			{ stdout: `AXI-ENV-PROBE\nWindows\nx64\n-\n${home}\n-\n-\n` },
@@ -164,8 +188,12 @@ test.skipIf(process.platform === "win32").each([
 			expect(calls).toHaveLength(4);
 			const args = calls[3]!.args;
 			expect(args.slice(args.indexOf("--") + 2, -1)).toEqual([executable, "serve", "--token"]);
-		} finally { connection.close(); }
-	} finally { await peer.close(); }
+		} finally {
+			connection.close();
+		}
+	} finally {
+		await peer.close();
+	}
 });
 
 test.skipIf(process.platform === "win32")(
@@ -176,7 +204,10 @@ test.skipIf(process.platform === "win32")(
 		try {
 			await peer.plan([{ hold: true }, { hold: true }]);
 			const pending = detectPlatform(peer.target);
-			const outcome = pending.then(() => undefined, (error: unknown) => error);
+			const outcome = pending.then(
+				() => undefined,
+				(error: unknown) => error,
+			);
 			await vi.waitFor(async () => expect(await peer.calls()).toHaveLength(1), { timeout: 5000 });
 			await vi.advanceTimersByTimeAsync(60_000);
 			await vi.waitFor(async () => expect(await peer.calls()).toHaveLength(2), { timeout: 5000 });
@@ -204,9 +235,7 @@ test("a refused host-key change does not block a queued update or later removal"
 		const accepted = acceptHostKey(next, ["two ssh-ed25519 AQAB"]);
 		await expect(refused).rejects.toBeInstanceOf(HostKeyChangedError);
 		await accepted;
-		expect((await readFile(file, "utf8")).trim().split("\n")).toEqual([
-			"one ssh-ed25519 AAAA", "two ssh-ed25519 AQAB",
-		]);
+		expect((await readFile(file, "utf8")).trim().split("\n")).toEqual(["one ssh-ed25519 AAAA", "two ssh-ed25519 AQAB"]);
 		await forgetHostKey(original);
 		await forgetHostKey(next);
 		expect(await readFile(file, "utf8")).toBe("");
@@ -224,7 +253,10 @@ test.skipIf(process.platform === "win32")(
 			await writeFile(binary, Buffer.alloc(4 * 1024 * 1024, 7));
 			const remote = { platform: "linux", arch: "x64", home: "/remote", warnings: [] } satisfies RemotePlatform;
 			await peer.plan([{ stdout: "missing\n" }, { closeInput: true, stderr: "upload declined", code: 19 }]);
-			await expect(deployDaemon(peer.target, remote, binary)).rejects.toMatchObject({ exitCode: 19, stderr: "upload declined" });
+			await expect(deployDaemon(peer.target, remote, binary)).rejects.toMatchObject({
+				exitCode: 19,
+				stderr: "upload declined",
+			});
 			await peer.plan([{ stdout: "present\n" }]);
 			expect(await deployDaemon(peer.target, remote, binary)).toMatch(/^\/remote\/\.axi\/mobile\/tools\/axi-env-/);
 			expect(await peer.calls()).toHaveLength(1);

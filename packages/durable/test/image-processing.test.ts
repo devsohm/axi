@@ -52,41 +52,44 @@ function oriented(jpeg: Uint8Array, orientation: number, little: boolean): Uint8
 	return Uint8Array.from(Buffer.concat([jpeg.subarray(0, 2), header, payload, jpeg.subarray(2)]));
 }
 
-test.each([false, true])("JPEG orientation preserves pixel positions and EXIF byte order (worker=%s)", async (worker) => {
-	const processor = await createNodePhotonImages({ worker, idleMs: 0 });
-	const source = fixture();
-	try {
-		const bytes = source.get_bytes_jpeg(95);
-		const expected = [
-			["red", "green", "blue", "white"],
-			["green", "red", "white", "blue"],
-			["white", "blue", "green", "red"],
-			["blue", "white", "red", "green"],
-			["red", "blue", "green", "white"],
-			["blue", "red", "white", "green"],
-			["white", "green", "blue", "red"],
-			["green", "white", "red", "blue"],
-		];
-		for (const little of [false, true])
-			for (let orientation = 1; orientation <= 8; orientation++) {
-				const prepared = await processor.prepare(oriented(bytes, orientation, little), "image/jpeg", {
-					maxWidth: 100,
-					maxHeight: 100,
-					maxBytes: 100_000,
-				});
-				if (!prepared) throw new Error(`Orientation ${orientation} could not be prepared`);
-				const decoded = PhotonImage.new_from_byteslice(Buffer.from(prepared.data, "base64"));
-				try {
-					expect([decoded.get_width(), decoded.get_height()]).toEqual(orientation < 5 ? [24, 16] : [16, 24]);
-					expect(corners(decoded)).toEqual(expected[orientation - 1]);
-				} finally {
-					decoded.free();
+test.each([false, true])(
+	"JPEG orientation preserves pixel positions and EXIF byte order (worker=%s)",
+	async (worker) => {
+		const processor = await createNodePhotonImages({ worker, idleMs: 0 });
+		const source = fixture();
+		try {
+			const bytes = source.get_bytes_jpeg(95);
+			const expected = [
+				["red", "green", "blue", "white"],
+				["green", "red", "white", "blue"],
+				["white", "blue", "green", "red"],
+				["blue", "white", "red", "green"],
+				["red", "blue", "green", "white"],
+				["blue", "red", "white", "green"],
+				["white", "green", "blue", "red"],
+				["green", "white", "red", "blue"],
+			];
+			for (const little of [false, true])
+				for (let orientation = 1; orientation <= 8; orientation++) {
+					const prepared = await processor.prepare(oriented(bytes, orientation, little), "image/jpeg", {
+						maxWidth: 100,
+						maxHeight: 100,
+						maxBytes: 100_000,
+					});
+					if (!prepared) throw new Error(`Orientation ${orientation} could not be prepared`);
+					const decoded = PhotonImage.new_from_byteslice(Buffer.from(prepared.data, "base64"));
+					try {
+						expect([decoded.get_width(), decoded.get_height()]).toEqual(orientation < 5 ? [24, 16] : [16, 24]);
+						expect(corners(decoded)).toEqual(expected[orientation - 1]);
+					} finally {
+						decoded.free();
+					}
 				}
-			}
-	} finally {
-		source.free();
-	}
-});
+		} finally {
+			source.free();
+		}
+	},
+);
 
 test.each([false, true])("image preparation respects dimensions and byte limits (worker=%s)", async (worker) => {
 	const processor = await createNodePhotonImages({ worker, idleMs: 0 });
@@ -132,7 +135,7 @@ test("concurrent worker requests retain their own image limits and leave input b
 			if (!prepared) throw new Error(`No image for width ${width}`);
 			const image = PhotonImage.new_from_byteslice(Buffer.from(prepared.data, "base64"));
 			try {
-				expect([image.get_width(), image.get_height()]).toEqual([width, Math.round(width * 2 / 3)]);
+				expect([image.get_width(), image.get_height()]).toEqual([width, Math.round((width * 2) / 3)]);
 			} finally {
 				image.free();
 			}

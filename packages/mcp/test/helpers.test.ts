@@ -34,8 +34,22 @@ test("configuration validation selects a transport and preserves application fie
 		expect(validateMcpServerConfig("test", value).kind).toBe("invalid");
 	expect(isMcpServerOverride({ enabled: false })).toBe(true);
 	expect(isMcpServerOverride({ command: "x" })).toBe(false);
-	expect(isMcpServerOverride({ command: "x", get url(): never { throw new Error("Unused URL"); } })).toBe(false);
-	expect(isMcpServerOverride({ url: "https://example.test/mcp", get type(): never { throw new Error("Unused transport"); } })).toBe(false);
+	expect(
+		isMcpServerOverride({
+			command: "x",
+			get url(): never {
+				throw new Error("Unused URL");
+			},
+		}),
+	).toBe(false);
+	expect(
+		isMcpServerOverride({
+			url: "https://example.test/mcp",
+			get type(): never {
+				throw new Error("Unused transport");
+			},
+		}),
+	).toBe(false);
 	expect(normalizeMcpInputSchema({ required: ["path"] })).toEqual({
 		type: "object",
 		properties: {},
@@ -66,7 +80,9 @@ test("large model output keeps both ends and images and saves the entire origina
 test("pipe transport captures framing options once at construction", () => {
 	let reads = 0;
 	const transport = new PipeTransport({
-		async open() { throw new Error("No process should start"); },
+		async open() {
+			throw new Error("No process should start");
+		},
 		get maxMessageBytes() {
 			if (++reads > 1) throw new Error("Framing options were read again");
 			return 64;

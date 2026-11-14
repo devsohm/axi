@@ -105,8 +105,8 @@ export class OwnershipTree {
 						if (stored === undefined) return;
 						task = {
 							conversationId: stored.conversationId,
-								background: stored.background,
-								...(stored.owner === undefined ? {} : { owner: stored.owner }),
+							background: stored.background,
+							...(stored.owner === undefined ? {} : { owner: stored.owner }),
 						};
 						this.#ended.set(node, task);
 						this.#pin(node);

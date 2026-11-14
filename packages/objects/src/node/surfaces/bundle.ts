@@ -12,7 +12,12 @@ export type BaseBundle = {
 	readonly files: ReadonlyMap<string, ServedFile>;
 	readonly inputs: BaseInputs;
 };
-export async function buildBase(entry: string, platform: BasePlatform, prefix: string, resolution: BaseResolution): Promise<BaseBundle> {
+export async function buildBase(
+	entry: string,
+	platform: BasePlatform,
+	prefix: string,
+	resolution: BaseResolution,
+): Promise<BaseBundle> {
 	const browser = platform === "browser";
 	const inputs = new Map<string, string>();
 	const selected = resolution.conditions ?? processConditions(process.execArgv, process.env.NODE_OPTIONS);
@@ -69,7 +74,8 @@ export function conditionsOf(args: readonly string[]): string[] {
 }
 export function processConditions(execArgv: readonly string[], nodeOptions: string | undefined): string[] {
 	const tokens: string[] = [];
-	let token: string | undefined, quote = false;
+	let token: string | undefined,
+		quote = false;
 	const text = nodeOptions ?? "";
 	for (let index = 0; index < text.length; index++) {
 		const char = text[index]!;

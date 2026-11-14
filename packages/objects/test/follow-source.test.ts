@@ -31,10 +31,7 @@ function runtime(batch: Batch) {
 		ends,
 		detached: () => detached,
 		set(n: number, retired = false) {
-			observer!.advance(
-				{ kind: "value", value: { n }, ops: [["s", ["n"], n]], retired },
-				context,
-			);
+			observer!.advance({ kind: "value", value: { n }, ops: [["s", ["n"], n]], retired }, context);
 		},
 		end() {
 			observer!.end({ kind: "ended" });
@@ -42,13 +39,7 @@ function runtime(batch: Batch) {
 	};
 }
 const number = (value: unknown): number => {
-	if (
-		value &&
-		typeof value === "object" &&
-		"n" in value &&
-		typeof value.n === "number"
-	)
-		return value.n;
+	if (value && typeof value === "object" && "n" in value && typeof value.n === "number") return value.n;
 	throw new Error("Invalid runtime value");
 };
 it("publishes two followed values as one derived update inside and outside a batch", async () => {

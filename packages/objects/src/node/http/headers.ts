@@ -66,7 +66,13 @@ function makePolicy(admission: Admitted | undefined, router: Router | undefined)
 	const framers = [...(router?.framers ?? []), ...(admission?.framer === undefined ? [] : [admission.framer])];
 	const directives = new Map<string, readonly string[]>([
 		["default-src", ["'none'"]],
-		["script-src", [...(admission && router?.scripts?.length ? router.scripts.map((path) => admission.origin + path) : ["'self'"]), "\0nonce\0"]],
+		[
+			"script-src",
+			[
+				...(admission && router?.scripts?.length ? router.scripts.map((path) => admission.origin + path) : ["'self'"]),
+				"\0nonce\0",
+			],
+		],
 		["connect-src", ["'self'", ...(admission ? [admission.origin.replace(/^http/, "ws")] : [])]],
 		["base-uri", ["'none'"]],
 		["form-action", ["'self'"]],

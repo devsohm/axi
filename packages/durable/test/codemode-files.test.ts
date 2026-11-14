@@ -69,7 +69,12 @@ return {saved: 2};`;
 		if (truncated) {
 			const fullOutputPath = join(dirname(path), "output.txt");
 			const details = message.details;
-			if (!details || typeof details !== "object" || !("fullOutputPath" in details) || typeof details.fullOutputPath !== "string")
+			if (
+				!details ||
+				typeof details !== "object" ||
+				!("fullOutputPath" in details) ||
+				typeof details.fullOutputPath !== "string"
+			)
 				throw new Error("Missing full output path");
 			expect(resolve(details.fullOutputPath)).toBe(fullOutputPath);
 			expect(text).toContain("truncated output");

@@ -1,11 +1,7 @@
 import { expect, it } from "vitest";
 import { BACKGROUND_CONTEXT as context } from "../src/context/index.ts";
 import { ObjectsError, PluginError } from "../src/data/index.ts";
-import {
-	checkMessage,
-	errorFromWire,
-	wireError,
-} from "../src/link/internal.ts";
+import { checkMessage, errorFromWire, wireError } from "../src/link/internal.ts";
 
 it("accepts the protocol's message envelopes and enforces identifiers and allowed fields", () => {
 	const good: unknown[] = [
@@ -49,9 +45,7 @@ it("preserves public error fields through JSON while leaving private causes behi
 		message: "invalid args",
 	});
 	expect(restored.cause).toBeUndefined();
-	const plugin = errorFromWire(
-		wireError(new PluginError("limit", "over quota", { remaining: 0 })),
-	);
+	const plugin = errorFromWire(wireError(new PluginError("limit", "over quota", { remaining: 0 })));
 	expect(plugin).toMatchObject({
 		code: "limit",
 		message: "over quota",

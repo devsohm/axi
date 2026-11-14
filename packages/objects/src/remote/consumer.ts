@@ -55,7 +55,14 @@ export class ConsumerSide {
 		});
 		return hold;
 	}
-	call(hold: number, method: number, data: MethodData, args: unknown, owner: object, context: Context): Promise<unknown> {
+	call(
+		hold: number,
+		method: number,
+		data: MethodData,
+		args: unknown,
+		owner: object,
+		context: Context,
+	): Promise<unknown> {
 		const signal = context.abortSignal;
 		signal?.throwIfAborted();
 		const payload = takesNoArgs(data) ? undefined : payloadPart(args, data.args.bytes);
@@ -109,7 +116,7 @@ export class ConsumerSide {
 		this.forget(hold, error);
 	}
 	cancelCalls(hold: number, owner: object, label: string): void {
-		const queued = this.#window.removeWhere(call => call.hold === hold && call.owner === owner);
+		const queued = this.#window.removeWhere((call) => call.hold === hold && call.owner === owner);
 		const active = [...this.#requests].filter(([, call]) => call.hold === hold && call.owner === owner).reverse();
 		if (!queued.length && !active.length) return;
 		// Cancel later wire calls before an earlier cancellation frees a relay's send slot.

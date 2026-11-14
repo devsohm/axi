@@ -40,7 +40,7 @@ export function ownerFacet<P extends Principal>(link: OwnerLink, owner: P): Face
 						const signIns = await context.get(SignIns, {}),
 							issued = await signIns.issue(
 								{
-								principal: owner,
+									principal: owner,
 									label: "owner browser",
 									kind: "browser",
 									secure: request.provenance.kind !== "local",
@@ -63,11 +63,8 @@ export async function ownerTokenFile<P extends Principal>(
 	const previous = await readSecret(path);
 	return host.root(async (ctx) => {
 		const signIns = await ctx.get(SignIns, {}),
-			principal = previous === undefined ? undefined : (await signIns.verify(previous, ctx)) as P | null;
-		if (
-			previous !== undefined &&
-			samePrincipal(principal ?? undefined, owner, ctx)
-		) {
+			principal = previous === undefined ? undefined : ((await signIns.verify(previous, ctx)) as P | null);
+		if (previous !== undefined && samePrincipal(principal ?? undefined, owner, ctx)) {
 			await chmod(path, 0o600);
 			return previous;
 		}
