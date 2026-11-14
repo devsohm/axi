@@ -3,7 +3,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { BACKGROUND_CONTEXT as context } from "@axi/objects/context";
-import type { SqliteExecutor } from "@axi/objects/sqlite";
+import type { SqliteExecutor, SqliteValue } from "@axi/objects/sqlite";
 import { describe, expect, it, vi } from "vitest";
 import {
 	createSession,
@@ -27,6 +27,39 @@ const State = defineDoc({
 	initial: () => ({ count: 0, items: [] as string[] }),
 });
 describe("SQLite-backed Session", () => {
+	it("close drains an admitted history read and rejects subsequent reads", async () => {
+		const database = await openNodeSqliteDatabase(":memory:");
+		const storage = await SqliteStorage.open(database);
+		const reading = Promise.withResolvers<void>(), release = Promise.withResolvers<void>();
+		const all = database.all.bind(database), close = vi.spyOn(database, "close");
+		try {
+			await commitWrites(storage, [
+				{ type: "conversation", value: { id: ROOT_CONVERSATION_ID } },
+				{ type: "entry", value: { id: idFromNumber<EntryId>(2), conversationId: ROOT_CONVERSATION_ID, kind: "saved" } },
+			], context);
+			vi.spyOn(database, "all").mockImplementation(async <Value extends object>(sql: string, ...params: SqliteValue[]) => {
+				if (/FROM entries\b/.test(sql)) {
+					reading.resolve();
+					await release.promise;
+				}
+				return all<Value>(sql, ...params);
+			});
+			const page = storage.scanEntries({ conversationId: ROOT_CONVERSATION_ID }, 10, undefined, context);
+			await reading.promise;
+			const closing = storage.close(context);
+			expect(close).not.toHaveBeenCalled();
+			await expect(storage.scanEntries({ conversationId: ROOT_CONVERSATION_ID }, 10, undefined, context)).rejects.toThrow("SqliteStorage is closed");
+			release.resolve();
+			expect((await page).items.map((entry) => entry.kind)).toEqual(["saved"]);
+			await closing;
+			expect(close).toHaveBeenCalledOnce();
+			await storage.close(context);
+			expect(close).toHaveBeenCalledOnce();
+		} finally {
+			release.resolve();
+			await storage.close(context);
+		}
+	});
 	it.each(["scanConversations", "scanTasks", "scanSubmissions"] as const)(
 		"%s checks lifecycle and cursor state before reading filters",
 		async (method) => {

@@ -453,6 +453,39 @@ test("a changed redirect discards unusable registration and tokens before regist
 	expect((await state.load())?.oauthState).toBe(result.state);
 });
 
+test("sign-in replaces partial credentials that have no usable client registration", async () => {
+	const state = store();
+	await state.save({
+		...initial(),
+		discovery: {
+			authorizationServerUrl: metadata.issuer,
+			authorizationServerMetadata: { ...metadata, registration_endpoint: "https://issuer.invalid/register" },
+		},
+		tokens: { access_token: "orphaned-token", token_type: "Bearer" },
+		tokensExpireAt: 10,
+		oauthState: "abandoned-sign-in",
+	});
+	const register = vi.fn(async (url: string | URL) => {
+		expect(String(url)).toBe("https://issuer.invalid/register");
+		expect((await state.load())?.tokens).toBeUndefined();
+		return Response.json({ client_id: "replacement-client", redirect_uris: ["http://localhost/login"] });
+	});
+	vi.stubGlobal("fetch", register);
+	const result = await startMcpSignIn({
+		serverUrl: initial().serverUrl,
+		store: state,
+		clientName: "test",
+		settings: { clientRegistration: "dcr" },
+		redirectUrl: "http://localhost/login",
+	});
+	if (result.kind !== "redirect") throw new Error("Missing browser step");
+	expect(register).toHaveBeenCalledOnce();
+	expect(new URL(result.authorizationUrl).searchParams.get("client_id")).toBe("replacement-client");
+	expect((await state.load())?.tokensExpireAt).toBeUndefined();
+	expect((await state.load())?.oauthState).toBe(result.state);
+	expect(result.state).not.toBe("abandoned-sign-in");
+});
+
 test("explicit client metadata registration discards a previous dynamic registration and skips its refresh", async () => {
 	const state = store();
 	await state.save({

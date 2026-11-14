@@ -13,6 +13,7 @@ type Row = { record: string };
 type Revision = { seq: number; kind: "base" | "delta"; version: number; content: string };
 type Metadata = { next_id: string; next_seq: number };
 type StoredTask = T.TaskRecord<JsonValue, JsonValue, JsonValue>;
+type SqliteReader = Pick<SqliteExecutor, "get" | "all">;
 import { addressValues, currentOnly, decode, encode, scopeValues, type Action } from "./rows.ts";
 import { CommitState, PendingRows } from "./commit.ts";
 function alive(record: T.DocumentRecord, point: T.DocumentPoint): boolean {
@@ -90,10 +91,7 @@ export class SqliteStorage implements T.Storage {
 					throw error;
 				}
 			};
-			const reader: SqliteExecutor = {
-				exec: (sql) => check(() => tx.exec(sql)),
-				run: (sql, ...params) => check(() => tx.run(sql, ...params)),
-				runCounted: (sql, ...params) => check(() => tx.runCounted(sql, ...params)),
+			const reader: SqliteReader = {
 				get: <Value extends object>(sql: string, ...params: SqliteValue[]) =>
 					check(() => tx.get<Value>(sql, ...params)),
 				all: <Value extends object>(sql: string, ...params: SqliteValue[]) =>
@@ -143,7 +141,7 @@ export class SqliteStorage implements T.Storage {
 		for (const [index, seq] of seqs.entries()) receive(index, seq);
 		return refusal ? { stored: seqs.length, refused: refusal.error } : { stored: seqs.length };
 	}
-	async #record<Value>(db: SqliteExecutor, table: string, id: number): Promise<Value | undefined> {
+	async #record<Value>(db: SqliteReader, table: string, id: number): Promise<Value | undefined> {
 		const row = await db.get<Row>(`SELECT record FROM ${table} WHERE id = ?`, id);
 		return row ? decode<Value>(row.record) : undefined;
 	}
@@ -404,7 +402,7 @@ export class SqliteStorage implements T.Storage {
 		this.#open();
 		return this.#db.transaction((tx) => this.#materialize(tx, id, at));
 	}
-	async #materialize(tx: SqliteExecutor, id: T.DocumentId, at: T.DocumentPoint): Promise<T.StoredDocument | undefined> {
+	async #materialize(tx: SqliteReader, id: T.DocumentId, at: T.DocumentPoint): Promise<T.StoredDocument | undefined> {
 		const record = await this.#record<T.DocumentRecord>(tx, this.#schema.tables.documents, id);
 		if (!record) return undefined;
 		if (at !== "current" && currentOnly(record))
@@ -465,7 +463,7 @@ export class SqliteStorage implements T.Storage {
 		}
 		return actions;
 	}
-	async #resolveCopies(tx: SqliteExecutor, actions: Map<T.DocumentId, Action>): Promise<void> {
+	async #resolveCopies(tx: SqliteReader, actions: Map<T.DocumentId, Action>): Promise<void> {
 		for (const [id, action] of actions) {
 			if (action.copy) {
 				try {

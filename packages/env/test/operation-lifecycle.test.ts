@@ -33,6 +33,29 @@ test("temporary remote files preserve requested names and are independently writ
 	}
 });
 
+test("a temporary-file write failure reports its resolved path and leaves the connection usable", async () => {
+	const connection = new Connection({ command: [localDaemon()] });
+	const env = new RemoteExecutionEnv({ connection, id: "temporary-file-failure", cwd: tmpdir() });
+	const paths: string[] = [];
+	try {
+		const failed = await env.createTempFile({ prefix: "missing/", suffix: ".log" }, context);
+		expect(failed.ok).toBe(false);
+		if (failed.ok) throw new Error("Expected the missing parent to reject the write");
+		if (failed.error.path === undefined) throw new Error("Missing resolved failure path");
+		expect(failed.error.code).toBe("not_found");
+		expect(basename(dirname(failed.error.path))).toBe("missing");
+		expect(basename(failed.error.path)).toMatch(/^[\da-f-]+\.log$/);
+		paths.push(dirname(dirname(failed.error.path)));
+		const path = getOrThrow(await env.createTempFile(undefined, context));
+		paths.push(dirname(path));
+		getOrThrow(await env.writeFile(path, "still connected", context));
+		expect(await readFile(path, "utf8")).toBe("still connected");
+	} finally {
+		connection.close();
+		for (const path of paths) await rm(path, { recursive: true, force: true });
+	}
+});
+
 test("remote directory listings retain metadata and apply POSIX byte ordering", async () => {
 	const cwd = await mkdtemp(join(tmpdir(), "axi-directory-order-"));
 	const connection = new Connection({ command: [localDaemon()] }),

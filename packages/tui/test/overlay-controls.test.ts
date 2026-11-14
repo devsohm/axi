@@ -109,6 +109,31 @@ test("a temporary focus blocker can resume either its dialog or an explicitly ch
 	}
 });
 
+test("temporary focus moves through nested mounted inputs before returning to its overlay", () => {
+	const { ui, terminal } = setup();
+	const outer = new Container(), inner = new Container();
+	const draft = new Input(), first = new Input(), second = new Input(), dialog = new Input();
+	outer.addChild(inner);
+	for (const input of [draft, first, second]) inner.addChild(input);
+	ui.addChild(outer);
+	ui.setFocus(draft);
+	ui.start();
+	const overlay = ui.showOverlay(dialog);
+	ui.setFocus(first);
+	ui.setFocus(second);
+	terminal.input("temporary");
+	expect(ui.getFocusedComponent()).toBe(second);
+	expect(second.getValue()).toBe("temporary");
+	expect(first.focused).toBe(false);
+	ui.setFocus(null);
+	terminal.input("dialog");
+	expect(dialog.getValue()).toBe("dialog");
+	overlay.hide();
+	terminal.input("draft");
+	expect(ui.getFocusedComponent()).toBe(draft);
+	expect(draft.getValue()).toBe("draft");
+});
+
 test("all overlay anchors honor margins, offsets, height limits and viewport bounds", () => {
 	const { ui } = setup();
 	const anchors = [

@@ -27,7 +27,7 @@ const lines = [
 	"",
 	map.description,
 	"",
-	"Line coverage measures execution, not complete behavior. Native code, subprocess internals and type-only contracts are outside this measurement.",
+	"Execution coverage includes instrumented TypeScript in the parent, child processes, worker threads, browser and workerd. It does not prove complete behavior. Native code and type-only contracts require separate checks.",
 	"",
 ];
 const measured = Object.entries(coverage).filter(([file]) => file !== "total");

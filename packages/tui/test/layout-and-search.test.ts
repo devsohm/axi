@@ -34,6 +34,20 @@ test("a fixed dock stays below a growing, scrollable transcript", () => {
 	expect(frame()).toEqual(["four", "five", "input"]);
 });
 
+test("a horizontal row inside a scroller uses the tallest intrinsic child", () => {
+	const row = new HStack([
+		{ component: new Text("one\ntwo\nthree", 0, 0), basis: 5, shrink: 0 },
+		{ component: new Text("side", 0, 0), basis: 4, shrink: 0 },
+	], { gap: 1, align: "end" });
+	const scroll = new ScrollView(row);
+	const render = () => renderLayoutFrame(scroll, 12, 2, () => {});
+	const initial = render();
+	expect(initial.root.children[0]!.rect.height).toBe(3);
+	expect(initial.lines.map((line) => stripTerminalSequences(line).trimEnd())).toEqual(["one", "two"]);
+	scroll.scrollToEnd();
+	expect(render().lines.map((line) => stripTerminalSequences(line).trimEnd())).toEqual(["two", "three side"]);
+});
+
 test("transcript search maps normalized text to Unicode terminal cells and reuses unchanged results", () => {
 	const lines = ["before 界", "🙂 after"];
 	expect(findAltScreenSearchMatches(lines, "界 🙂")).toEqual([
