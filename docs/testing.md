@@ -45,6 +45,8 @@ Vitest builds the local Env daemon before running tests, including filtered runs
 
 Coverage output is in `coverage/index.html` and `coverage/coverage-summary.json`. Istanbul measures the TypeScript code exercised by the JavaScript suite. The test loader also records source executions in Node child processes and worker threads that inherit its environment. Forced termination can prevent the final snapshot. The Chromium fixture and the workerd integration test report their instrumented source execution to the same collector. Rust, C, visual correctness and live-provider availability require separate checks.
 
+The compiled sandbox fixture starts its real JavaScript worker and reports the bundled host's execution to the collector. This covers worker discovery from a built module as well as from a TypeScript source module. Its bundle uses the same source instrumentation and counter maps as the source tests.
+
 The JavaScript runner selects package tests from the root manifest's eight workspaces and integration tests from `test/*.test.ts`. Measured source files come from the eight workspaces. It resolves workspace package exports to their TypeScript source files. Package imports and direct source imports therefore share one module instance. The resolver honors the package's export restrictions before selecting the source file. Installed archive checks run separately with Node's normal package resolution and exercise the built JavaScript.
 
 The regular coverage command enforces minimum execution coverage of 90% lines,

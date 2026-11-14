@@ -76,6 +76,48 @@ test("cancelling working-directory resolution does not cancel shared daemon star
 	}
 });
 
+test.each([new Error("Cannot resolve directory"), "Cannot resolve directory"])(
+	"working-directory resolution preserves a startup failure %j and permits retry",
+	async (failure) => {
+		const connection = new Connection({ command: [localDaemon()] });
+		const env = new RemoteExecutionEnv({ connection, id: "failed-cwd", cwd: tmpdir() });
+		const info = vi.spyOn(connection, "info").mockRejectedValueOnce(failure);
+		try {
+			expect(await env.exec("must not run", { cwd: "nested" }, context)).toMatchObject({
+				ok: false,
+				error: { code: "unknown", message: "Cannot resolve directory" },
+			});
+			info.mockRestore();
+			expect(await env.exec([process.execPath, "-e", "process.exit(0)"], { cwd: tmpdir() }, context)).toMatchObject({
+				ok: true, value: { exitCode: 0 },
+			});
+		} finally {
+			info.mockRestore();
+			connection.close();
+		}
+	},
+);
+
+test("a cancelled command retains cancellation when its timeout expires before remote acknowledgement", async () => {
+	const connection = new Connection({
+		command: [process.execPath, fileURLToPath(new URL("./fixtures/peer.ts", import.meta.url)), "--silent"],
+	});
+	const env = new RemoteExecutionEnv({ connection, id: "cancel-before-deadline", cwd: "/project" });
+	const controller = new AbortController();
+	vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+	try {
+		const session = await connection.session();
+		const pending = env.exec("ignored", { timeout: 0.025 }, withAbortSignal(controller.signal, context));
+		controller.abort();
+		await vi.advanceTimersByTimeAsync(1000);
+		expect(await pending).toMatchObject({ ok: false, error: { code: "aborted", message: "aborted" } });
+		expect(await connection.session()).toBe(session);
+	} finally {
+		connection.close();
+		vi.useRealTimers();
+	}
+});
+
 test.each([new Error("Transport unavailable"), "Transport unavailable"])(
 	"execution converts a transport rejection %j and permits a later command",
 	async (failure) => {

@@ -137,6 +137,20 @@ it("closing from request admission rejects the request without sending it to a c
 	}
 });
 
+it("closing as shared startup completes rejects another caller waiting to send", async () => {
+	const connection = new Connection({ command });
+	try {
+		const closing = connection.session().then(() => connection.close());
+		const request = expect(connection.request("hold", {})).rejects.toMatchObject({
+			code: "unknown", message: "Connection closed",
+		});
+		await Promise.all([closing, request]);
+		await expect(connection.info()).rejects.toMatchObject({ message: "Connection closed" });
+	} finally {
+		connection.close();
+	}
+});
+
 it("cancelling during request admission keeps the shared connection usable", async () => {
 	const connection = new Connection({ command });
 	const controller = new AbortController();

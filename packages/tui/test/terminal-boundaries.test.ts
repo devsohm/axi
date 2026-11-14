@@ -75,6 +75,8 @@ test("loader cancellation state belongs to its own controller", () => {
 	try {
 		expect(loader.signal.aborted).toBe(true);
 		expect(loader.aborted).toBe(false);
+		loader.handleInput("x");
+		expect(loader.aborted).toBe(false);
 		loader.handleInput("\x1b");
 		expect(loader.aborted).toBe(true);
 	} finally {

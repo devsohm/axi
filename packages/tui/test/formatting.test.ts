@@ -256,6 +256,28 @@ test("image components select text, Kitty and iTerm rendering without losing dim
 	expect(image.render(30).join("")).toContain("\x1b]1337;File=");
 });
 
+test("unknown image dimensions use the fallback size and repeated rendering reuses the frame", () => {
+	setCapabilities({ images: null, trueColor: true, hyperlinks: false });
+	const color = vi.fn(plain);
+	const image = new Image("unrecognized", "image/unknown", { fallbackColor: color });
+	const expected = ["[Image: [image/unknown] 800x600]"];
+	expect(image.render(80)).toEqual(expected);
+	expect(image.render(80)).toEqual(expected);
+	expect(color).toHaveBeenCalledTimes(1);
+	image.invalidate();
+	expect(image.render(80)).toEqual(expected);
+	expect(color).toHaveBeenCalledTimes(2);
+});
+
+test("a one-cell iTerm image needs no cursor movement", () => {
+	setCapabilities({ images: "iterm2", trueColor: true, hyperlinks: false });
+	const image = new Image(png, "image/png", { fallbackColor: plain }, { maxWidthCells: 1, maxHeightCells: 1 });
+	const lines = image.render(10);
+	expect(lines).toHaveLength(1);
+	expect(lines[0]).toContain("\x1b]1337;File=");
+	expect(lines[0]).not.toMatch(/\x1b\[\d+A/);
+});
+
 test("Kitty conversion caches successful and rejected images and evicts older entries", () => {
 	setCapabilities({ images: "kitty", trueColor: true, hyperlinks: false });
 	const transcode = vi.fn((data: string) => (data === "rejected" ? null : png));
